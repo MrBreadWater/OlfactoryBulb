@@ -230,7 +230,11 @@ class OlfactoryBulb:
         h.dt = self.params.sim_dt
         h.tstop = tstop
 
-        if self.nranks == 1:
+            # Gap junctions are connected through ParallelContext transfer variables.
+        # Even on a single rank, those models need the psolve path instead of h.run().
+        uses_parallel_transfer = self.nranks > 1 or len(self.gjs) > 0
+
+        if not uses_parallel_transfer:
             h.cvode_active(0)
             h.cvode.cache_efficient(1)
             h.run()
@@ -337,6 +341,9 @@ class OlfactoryBulb:
         :param in_name: A part of a cell class name (e.g. 'Mitral') used to select a cell to which the GJ is added
         :param g_gap: The conductance of the gap junctions
         """
+
+        if g_gap <= 0:
+            return
 
         model_inputsegs = self.get_model_inputsegs()
 
