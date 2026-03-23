@@ -21,6 +21,12 @@ from olfactorybulb.paramsets.base import *
 from olfactorybulb.paramsets.case_studies import *
 from olfactorybulb.paramsets.sensitivity import *
 
+CELL_MODEL_FACTORIES = {
+    name: value
+    for name, value in globals().items()
+    if isinstance(value, type)
+}
+
 
 class OlfactoryBulb:
     """
@@ -46,6 +52,14 @@ class OlfactoryBulb:
 
         self.gj_source_gids = set()
         self.gjs = []
+        self._stable_hash_cache = {}
+        self._segment_cache = {}
+        self._rank_section_name_cache = {}
+        self._model_inputsegs_cache = None
+        self._model_nseg_count_cache = {}
+        self._odor_glom_intensities_cache = {}
+        self._glom_input_seg_cache = None
+        self._gap_junction_seg_cache = {}
 
         # Just use the BlenderNEURON package functions (e.g. no server/client)
         self.bn_server = NeuronNode(server_end='Package')
@@ -65,8 +79,10 @@ class OlfactoryBulb:
         self.v_vectors = {}
         self.input_vectors = []
 
+        cell_groups = []
         for cell_type in ['MC', 'GC', 'TC']:
-            self.load_cells(cell_type)
+            cell_groups.append(self.load_cells(cell_type))
+        self.finish_loading_cells(cell_groups)
 
         if self.mpirank == 0:
             complexities = np.array([c[0] for c in self.rank_complexities])
@@ -90,7 +106,8 @@ class OlfactoryBulb:
         for syn_mech, syn_values in params.synapse_properties.items():
             if hasattr(h, syn_mech):
                 for syn_attrib, attrib_value in syn_values.items():
-                    [setattr(s, syn_attrib, attrib_value) for s in getattr(h, syn_mech)]
+                    for synapse in getattr(h, syn_mech):
+                        setattr(synapse, syn_attrib, attrib_value)
 
         # Add glomerular inputs
         for time, odor_info in params.input_odors.items():
@@ -165,14 +182,14 @@ class OlfactoryBulb:
         for seg_name, seg_gid, single_rank_seg_name in input_segs:
             # Randomize spikes to each tufted segment
             seed_source = "%s|%s|%s|%s" % (self.rnd_seed, time, single_rank_seg_name, intensity)
-            np.random.seed(self.stable_hash(seed_source))
+            rng = np.random.RandomState(self.stable_hash(seed_source))
 
             # Odor is modeled as a gaussian spike train representing OSN spikes during inhalation
             # exhalation is assumed to not generate OSN spikes
-            spike_times = self.get_gaussian_spike_train(spike_count, time, inhale_duration)
+            spike_times = self.get_gaussian_spike_train(spike_count, time, inhale_duration, rng=rng)
 
             # Create synapse point process
-            seg = eval(seg_name.replace('(1)', '(.999)'))
+            seg = self.resolve_segment(seg_name)
             syn = h.Exp2Syn(seg)
             syn.tau1 = self.params.input_syn_tau1
             syn.tau2 = self.params.input_syn_tau2
@@ -214,7 +231,27 @@ class OlfactoryBulb:
         :return: The hash code as an integer
         """
 
-        return int(sha1(source.encode()).hexdigest(), 16) % (10 ** digits)
+        key = (source, digits)
+        cached = self._stable_hash_cache.get(key)
+        if cached is None:
+            cached = int(sha1(source.encode()).hexdigest(), 16) % (10 ** digits)
+            self._stable_hash_cache[key] = cached
+        return cached
+
+    def resolve_segment(self, seg_name):
+        normalized_name = seg_name.replace('(1)', '(.999)')
+        seg = self._segment_cache.get(normalized_name)
+        if seg is None:
+            seg = eval(normalized_name, {"h": self.h})
+            self._segment_cache[normalized_name] = seg
+        return seg
+
+    def rank_section_name(self, cell_name):
+        cached = self._rank_section_name_cache.get(cell_name)
+        if cached is None:
+            cached = self.bn_server.rank_section_name(cell_name)
+            self._rank_section_name_cache[cell_name] = cached
+        return cached
 
     def run(self, tstop):
         """
@@ -265,12 +302,12 @@ class OlfactoryBulb:
         Sets up the NEURON simulation to report the simulation time
         """
 
-        if self.mpirank == 0:
+        if self.mpirank == 0 and getattr(self.params, "enable_status_report", True) and sys.stdout.isatty():
             h = self.h
 
             collector_stim = h.NetStim(0.5)
             collector_stim.start = 0
-            collector_stim.interval = 1
+            collector_stim.interval = getattr(self.params, "status_report_interval", 25)
             collector_stim.number = 1e9
             collector_stim.noise = 0
 
@@ -320,6 +357,9 @@ class OlfactoryBulb:
         :return: A dict that maps the cell model's class name to the name of the root tufted dendrite section
         """
 
+        if self._model_inputsegs_cache is not None:
+            return self._model_inputsegs_cache
+
         # Get all the different cell models used in the slice
         input_models = set()
         for cells in self.glom_cells.values():
@@ -332,7 +372,82 @@ class OlfactoryBulb:
                                .select(CellModel.class_name, CellModel.tufted_dend_root) \
                                .where(CellModel.class_name.in_(list(input_models)))}
 
+        self._model_inputsegs_cache = model_inputsegs
         return model_inputsegs
+
+    def get_odor_glom_intensities(self, odor):
+        cached = self._odor_glom_intensities_cache.get(odor)
+        if cached is None:
+            cached = {g.glom_id: g.intensity
+                      for g in OdorGlom
+                          .select(OdorGlom.glom_id, OdorGlom.intensity)
+                          .join(Odor)
+                          .where(Odor.name == odor)}
+            self._odor_glom_intensities_cache[odor] = cached
+        return cached
+
+    def get_glom_input_seg_cache(self):
+        if self._glom_input_seg_cache is not None:
+            return self._glom_input_seg_cache
+
+        model_inputsegs = self.get_model_inputsegs()
+        cache = {}
+
+        for glom_id, cells in self.glom_cells.items():
+            input_segs = []
+            for cell in cells:
+                rank_cell = self.rank_section_name(cell)
+
+                # Add inputs only to cells that are on this rank
+                if rank_cell is None:
+                    continue
+
+                model_class = rank_cell[:rank_cell.find('[')]
+                input_seg = model_inputsegs[model_class]
+                seg_address = 'h.' + rank_cell + '.' + input_seg
+
+                single_rank_address = 'h.' + cell + '.' + input_seg
+                single_rank_gid = self.stable_hash(single_rank_address)
+
+                input_segs.append((seg_address, single_rank_gid, single_rank_address))
+
+            cache[int(glom_id)] = input_segs
+
+        self._glom_input_seg_cache = cache
+        return cache
+
+    def get_gap_junction_seg_cache(self, in_name):
+        cached = self._gap_junction_seg_cache.get(in_name)
+        if cached is not None:
+            return cached
+
+        model_inputsegs = self.get_model_inputsegs()
+        cache = {}
+
+        for glom_id, cells in self.glom_cells.items():
+            input_segs = []
+            for cell in cells:
+                if in_name not in cell:
+                    continue
+
+                model_class = cell[:cell.find('[')]
+                input_seg = model_inputsegs[model_class]
+
+                single_rank_address = 'h.' + cell + '.' + input_seg
+                single_rank_gid = self.stable_hash(single_rank_address)
+
+                rank_cell = self.rank_section_name(cell)
+                if rank_cell is not None:
+                    seg_address = 'h.' + rank_cell + '.' + input_seg
+                else:
+                    seg_address = None
+
+                input_segs.append((seg_address, single_rank_gid))
+
+            cache[glom_id] = input_segs
+
+        self._gap_junction_seg_cache[in_name] = cache
+        return cache
 
     def add_gap_junctions(self, in_name, g_gap):
         """
@@ -345,34 +460,9 @@ class OlfactoryBulb:
         if g_gap <= 0:
             return
 
-        model_inputsegs = self.get_model_inputsegs()
-
-        for glom_id, cells in self.glom_cells.items():
-
-            input_segs = []
-            for cell in cells:
-                if in_name not in cell:
-                    continue
-
-                model_class = cell[:cell.find('[')]
-                input_seg = model_inputsegs[model_class]
-
-                single_rank_address = 'h.' + cell + '.' + input_seg
-                single_rank_gid = self.stable_hash(single_rank_address)
-
-                rank_cell = self.bn_server.rank_section_name(cell)
-
-                if rank_cell is not None:
-                    seg_address = 'h.' + rank_cell + '.' + input_seg
-                else:
-                    seg_address = None
-
-                input_segs.append((seg_address, single_rank_gid))
-
+        for glom_id, input_segs in self.get_gap_junction_seg_cache(in_name).items():
             if len(input_segs) > 0:
                 self.create_gap_junctions_between(input_segs, g_gap)
-
-        self.pc.setup_transfer()
 
     def create_gap_junctions_between(self, input_segs, g_gap):
         """
@@ -416,7 +506,7 @@ class OlfactoryBulb:
         seg_2_name, seg_2_gid = seg_2_info
 
         if seg_1_name is not None:
-            seg1 = eval(seg_1_name.replace('(1)', '(.999)'))
+            seg1 = self.resolve_segment(seg_1_name)
 
             if seg_1_gid not in self.gj_source_gids:
                 self.pc.source_var(seg1._ref_v, seg_1_gid, sec=seg1.sec)
@@ -428,7 +518,7 @@ class OlfactoryBulb:
             self.gjs.append(gap1)
 
         if seg_2_name is not None:
-            seg2 = eval(seg_2_name.replace('(1)', '(.999)'))
+            seg2 = self.resolve_segment(seg_2_name)
 
             if seg_2_gid not in self.gj_source_gids:
                 self.pc.source_var(seg2._ref_v, seg_2_gid, sec=seg2.sec)
@@ -449,35 +539,10 @@ class OlfactoryBulb:
         :param rel_conc: Relative concentration 0-1
         """
 
-        model_inputsegs = self.get_model_inputsegs()
-
         # Get input odor glomeruli
-        glom_intensities = {g.glom_id: g.intensity
-                            for g in OdorGlom
-                                .select(OdorGlom.glom_id, OdorGlom.intensity)
-                                .join(Odor)
-                                .where(Odor.name == odor)}
+        glom_intensities = self.get_odor_glom_intensities(odor)
 
-        for glom_id, cells in self.glom_cells.items():
-            glom_id = int(glom_id)
-
-            input_segs = []
-            for cell in cells:
-                rank_cell = self.bn_server.rank_section_name(cell)
-
-                # Add inputs only to cells that are on this rank
-                if rank_cell is None:
-                    continue
-
-                model_class = rank_cell[:rank_cell.find('[')]
-                input_seg = model_inputsegs[model_class]
-                seg_address = 'h.' + rank_cell + '.' + input_seg
-
-                single_rank_address = 'h.' + cell + '.' + input_seg
-                single_rank_gid = int(sha1(single_rank_address.encode()).hexdigest(), 16) % (10 ** 9)
-
-                input_segs.append((seg_address, single_rank_gid, single_rank_address))
-
+        for glom_id, input_segs in self.get_glom_input_seg_cache().items():
             if len(input_segs) > 0:
                 glom_intensity = glom_intensities[glom_id] * rel_conc
                 self.stim_glom_segments(t, input_segs, glom_intensity)
@@ -490,7 +555,7 @@ class OlfactoryBulb:
         with open(os.path.join(self.slice_dir, 'glom_cells.json')) as f:
             self.glom_cells = json.load(f)
 
-    def get_gaussian_spike_train(self, spikes=50, start_time=100, duration=10):
+    def get_gaussian_spike_train(self, spikes=50, start_time=100, duration=10, rng=None):
         """
         Gets a spike train from a gaussian probability distribution whose 99% range starts
         at the specified time and lasts for the specified duration.
@@ -505,7 +570,10 @@ class OlfactoryBulb:
         # and ends at start_time + duration
         normal_stdev = duration / (2.576 * 2)
 
-        times = np.random.normal(start_time + (duration / 2.0), normal_stdev, spikes)
+        if rng is None:
+            rng = np.random
+
+        times = rng.normal(start_time + (duration / 2.0), normal_stdev, spikes)
 
         # Remove any spikes outside this range
         times = times[np.where((times > start_time) & (times < start_time + duration))]
@@ -537,7 +605,12 @@ class OlfactoryBulb:
             min_complexity, min_complexity_rank = heappop(self.rank_complexities)
 
             # Cell nseg count is used as a proxy for complexity
-            nsegs = self.get_nseg_count(root)
+            model_name = root['name']
+            model_name = model_name[0:model_name.find('[')]
+            nsegs = self._model_nseg_count_cache.get(model_name)
+            if nsegs is None:
+                nsegs = self.get_nseg_count(root)
+                self._model_nseg_count_cache[model_name] = nsegs
 
             # Add to rank complexity and push back onto the heap
             heappush(self.rank_complexities, (min_complexity + nsegs, min_complexity_rank))
@@ -545,8 +618,7 @@ class OlfactoryBulb:
             # Assign cell to least busy rank
             cell_rank = min_complexity_rank
 
-            name = root['name']
-            name = name[0:name.find('[')]
+            name = model_name
 
             count = rank_cell_counts[cell_rank].get(name, 0)
 
@@ -561,15 +633,19 @@ class OlfactoryBulb:
         # Load that many base instances of each model
         self.cells[cell_type] = []
         for cell_model_name, count in rank_cell_counts[self.mpirank].items():
-            cell_models = [eval(cell_model_name + '()') for _ in range(count)]
+            cell_factory = CELL_MODEL_FACTORIES[cell_model_name]
+            cell_models = [cell_factory() for _ in range(count)]
             self.cells[cell_type].extend(cell_models)
 
-        # Update section index with the new cells
+        return group_dict
+
+    def finish_loading_cells(self, group_dicts):
+        # Update section index once after all base cells exist on this rank.
         self.bn_server.update_section_index()
 
-        # Apply the cell json file onto the base instances
+        # Initialize BlenderNEURON groups once, then apply the saved cell json.
         self.bn_server.init_mpi(self.pc, self.mpimap)
-        self.bn_server.update_groups([group_dict])
+        self.bn_server.update_groups(group_dicts)
 
     def record_from_somas(self, cell_type):
         """
