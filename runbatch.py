@@ -19,4 +19,5 @@ cores = str(max(2, multiprocessing.cpu_count()))
 
 for i, params in enumerate(paramsets):
     print('Starting paramset: ' + params + ' (%s/%s)...' % (i+1, len(paramsets)))
-    os.system('mpiexec -np '+cores+' python initslice.py -paramset '+params+' -mpi')
+    #os.system('mpiexec -np '+cores+' python initslice.py -paramset '+params+' -mpi')
+    os.system('mpiexec -n ' + cores + ' nrniv -mpi -python initslice.py -paramset ' + params + ' -mpi')
