@@ -61,6 +61,7 @@ def build_params(paramset_name):
         file_mode=env_flag("OB_CORENRN_FILE_MODE", False),
         verbose=env_int("OB_CORENRN_VERBOSE", 0),
         cell_permute=env_int("OB_CORENRN_CELL_PERMUTE", 2 if coreneuron_gpu else 0),
+        warp_balance=env_int("OB_CORENRN_WARP_BALANCE", 128 if coreneuron_gpu else 0),
     )
 
     parallel_timeout = env_float("OB_PARALLEL_TIMEOUT", None)
@@ -83,6 +84,18 @@ def build_params(paramset_name):
     return params
 
 
+def configure_corenrn_defaults(params):
+    coreneuron_cfg = getattr(params, "coreneuron", None)
+    if coreneuron_cfg is None or not getattr(coreneuron_cfg, "enable", False):
+        return
+
+    from neuron import coreneuron
+
+    warp_balance = getattr(coreneuron_cfg, "warp_balance", None)
+    if warp_balance is not None:
+        coreneuron.warp_balance = int(warp_balance)
+
+
 if '-paramset' in sys.argv:
     paramset = sys.argv[sys.argv.index("-paramset") + 1]
 else:
@@ -93,4 +106,6 @@ if '-mpi' in sys.argv:
 else:
     configure_output_env(paramset)
 
-ob = OB(build_params(paramset))
+params = build_params(paramset)
+configure_corenrn_defaults(params)
+ob = OB(params)

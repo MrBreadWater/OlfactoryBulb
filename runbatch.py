@@ -10,6 +10,7 @@ Environment overrides:
     OB_USE_CORENRN        Enable CoreNEURON for `initslice.py`.
     OB_USE_CORENRN_GPU    Enable CoreNEURON GPU mode for `initslice.py`.
     OB_CORENRN_CELL_PERMUTE  CoreNEURON cell permutation mode.
+    OB_CORENRN_WARP_BALANCE  CoreNEURON warp-balance setting.
     When launched from the OBGPU env, the default is the rank-1 GPU scientific mode.
 """
 
@@ -61,17 +62,19 @@ def main():
         base_env.setdefault("OB_USE_CORENRN", "1")
         base_env.setdefault("OB_USE_CORENRN_GPU", "1")
         base_env.setdefault("OB_CORENRN_CELL_PERMUTE", "2")
+        base_env.setdefault("OB_CORENRN_WARP_BALANCE", "128")
         base_env.setdefault("OB_RUNTIME_MODE", "scientific")
 
     for i, params in enumerate(paramsets):
         runtime_mode = base_env.get("OB_RUNTIME_MODE", "scientific")
+        warp_balance = base_env.get("OB_CORENRN_WARP_BALANCE", "0")
         mode = "CoreNEURON GPU" if env_flag("OB_USE_CORENRN_GPU", using_modern_gpu_env()) else "NEURON"
         run_env = base_env.copy()
         run_timestamp = make_timestamp()
         run_label = label_with_timestamp(params, timestamp=run_timestamp)
         run_env["OB_RUN_TIMESTAMP"] = run_timestamp
         run_env["OB_RESULT_LABEL"] = run_label
-        print('Starting paramset: %s (%s/%s) with %s MPI ranks [%s, %s] -> %s...' % (params, i + 1, len(paramsets), mpi_ranks, mode, runtime_mode, run_label))
+        print('Starting paramset: %s (%s/%s) with %s MPI ranks [%s, %s, warp=%s] -> %s...' % (params, i + 1, len(paramsets), mpi_ranks, mode, runtime_mode, warp_balance, run_label))
         command = [
             mpiexec,
             "-n",

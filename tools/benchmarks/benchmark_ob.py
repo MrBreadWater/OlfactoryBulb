@@ -106,6 +106,7 @@ def main():
     parser.add_argument("--coreneuron-gpu", action="store_true")
     parser.add_argument("--coreneuron-file-mode", action="store_true")
     parser.add_argument("--coreneuron-verbose", type=int, default=0)
+    parser.add_argument("--coreneuron-warp-balance", type=int, default=None)
     parser.add_argument("--runtime-mode", choices=["scientific", "exploratory"], default=None)
     parser.add_argument("--input-event-strategy", choices=["vecstim", "scheduled", "patternstim"], default=None)
     parser.add_argument("--force-gid-synapses", choices=["true", "false"], default=None)
@@ -116,6 +117,11 @@ def main():
     parser.add_argument("--overrides-file", default=None)
     args, _unknown = parser.parse_known_args()
     overrides_json = json.loads(args.overrides_json) if args.overrides_json is not None else None
+    if args.coreneuron_warp_balance is None:
+        if args.coreneuron_gpu:
+            args.coreneuron_warp_balance = int(os.environ.get("OB_CORENRN_WARP_BALANCE", "128"))
+        else:
+            args.coreneuron_warp_balance = 0
 
     if args.repo_root is not None:
         repo_root = Path(args.repo_root).resolve()
@@ -154,6 +160,7 @@ def main():
         file_mode=args.coreneuron_file_mode,
         verbose=args.coreneuron_verbose,
         cell_permute=None,
+        warp_balance=args.coreneuron_warp_balance,
     )
     if args.input_event_strategy is not None:
         params.input_event_strategy = args.input_event_strategy
@@ -193,6 +200,8 @@ def main():
         coreneuron.gpu = args.coreneuron_gpu
         coreneuron.file_mode = args.coreneuron_file_mode
         coreneuron.verbose = args.coreneuron_verbose
+        if args.coreneuron_warp_balance is not None:
+            coreneuron.warp_balance = args.coreneuron_warp_balance
         cell_permute_override = os.environ.get("OB_CORENRN_CELL_PERMUTE")
         if cell_permute_override is not None:
             cell_permute_value = int(cell_permute_override)
@@ -200,6 +209,7 @@ def main():
             cell_permute_value = 2 if args.coreneuron_gpu else 0
         coreneuron.cell_permute = cell_permute_value
         params.coreneuron.cell_permute = cell_permute_value
+        params.coreneuron.warp_balance = getattr(coreneuron, "warp_balance", None)
 
     run_start = time.perf_counter()
     ob.run(ob.params.tstop)
@@ -257,6 +267,7 @@ def main():
                     "file_mode": args.coreneuron_file_mode,
                     "verbose": args.coreneuron_verbose,
                     "cell_permute": int(getattr(coreneuron, "cell_permute", 0)),
+                    "warp_balance": getattr(coreneuron, "warp_balance", None) if coreneuron is not None else None,
                 },
                 "parallel_timeout": getattr(ob.params, "parallel_timeout", None),
             },
