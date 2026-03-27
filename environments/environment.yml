@@ -1,0 +1,76 @@
+name: OB
+channels:
+  - conda-forge
+  - defaults
+
+# Curated environment spec for the OlfactoryBulb repo on Python 3.8.
+# Intent:
+# - Keep the core scientific stack on the older compatible line used by this codebase.
+# - Pin NEURON-adjacent and neuroinformatics packages more tightly.
+# - Avoid over-pinning generic tooling where newer patch/minor releases are fine.
+#
+# Runtime notes discovered during verification on linux-aarch64:
+# - NEURON mechanisms must be compiled from the repo root with:
+#     OMPI_CC=gcc OMPI_CXX=g++ nrnivmodl prev_ob_models/Birgiolas2020/Mechanisms
+# - MPI works reliably here when launched as:
+#     mpiexec -n <N> nrniv -mpi -python your_script.py
+#   not:
+#     mpiexec -n <N> python your_script.py
+# - CUDA awareness is enabled by the conda activation hook in the live OB env, but
+#   forcing OMPI_MCA_pml=ucx was removed because it broke MPI startup on this host.
+dependencies:
+  - python=3.8.*
+  - pip>=24,<25
+  - setuptools<60
+  - wheel
+
+  - numpy=1.18.5
+  - pandas=1.0.3
+  - scipy=1.4.1
+
+  - matplotlib=3.5.*
+  - cython>=0.29,<3.1
+  - jupyterlab=4.3.*
+
+  - openmpi=5.0.*
+  - mpi4py=4.0.*
+  - ucx=1.16.*
+
+  - peewee>=3.13,<3.18
+  - numba=0.55.*
+  - dask=2023.2.*
+  - networkx=3.1.*
+  - pytables=3.7.*
+  - pylems=0.6.7
+
+  - lxml
+  - gitpython
+  - cerberus
+  - requests
+  - validators
+  - tqdm
+  - execnet
+  - lmfit
+  - backports.tempfile
+  - autoconf
+  - automake
+  - libtool
+  - m4
+  - pkg-config
+
+  - pip:
+      - airspeed==0.6.1
+      - blenderneuron==2.0.4
+      - cypy==0.2.0
+      - deap>=1.4,<1.5
+      - elephant==0.4.1
+      - jsonpickle==0.9.6
+      - lfpsimpy==0.1.1
+      - libneuroml==0.6.7
+      - natsort>=8,<9
+      - neo==0.6.1
+      - neuronunit==0.19
+      - pysqlite3>=0.5,<0.6
+      - pyneuroml==0.5.5
+      - quantities==0.12.1
+      - sciunit==0.2.0.2
