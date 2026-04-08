@@ -83,8 +83,29 @@ def deep_update_mapping(target, overrides):
             target[key] = value
 
 
+def normalize_input_odors(value):
+    if not isinstance(value, dict):
+        return value
+
+    normalized = {}
+    for key, entry in value.items():
+        try:
+            time_key = float(key)
+        except (TypeError, ValueError):
+            time_key = key
+        else:
+            if isinstance(time_key, float) and time_key.is_integer():
+                time_key = int(time_key)
+
+        normalized[time_key] = entry
+
+    return normalized
+
+
 def apply_param_overrides(params, overrides):
     for key, value in overrides.items():
+        if key == "input_odors":
+            value = normalize_input_odors(value)
         current = getattr(params, key, None)
         if isinstance(value, dict):
             if isinstance(current, dict):

@@ -1,0 +1,33 @@
+import argparse
+import sys
+from pathlib import Path
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--repo-root", required=True)
+    parser.add_argument("--script", default=str(Path(__file__).resolve().with_name("benchmark_ob.py")))
+    args, rest = parser.parse_known_args()
+
+    repo_root = str(Path(args.repo_root).resolve())
+    script_path = str(Path(args.script).resolve())
+
+    cleaned = []
+    for entry in sys.path:
+        if not entry:
+            continue
+        resolved = str(Path(entry).resolve())
+        if resolved in {str(Path("/home/alek/OlfactoryBulb").resolve()), repo_root}:
+            continue
+        cleaned.append(entry)
+
+    sys.path[:] = [repo_root] + cleaned
+    sys.argv = [script_path] + rest
+
+    code = Path(script_path).read_text()
+    glb = {"__name__": "__main__", "__file__": script_path}
+    exec(compile(code, script_path, "exec"), glb)
+
+
+if __name__ == "__main__":
+    main()

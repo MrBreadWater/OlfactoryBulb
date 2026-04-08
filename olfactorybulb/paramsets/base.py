@@ -19,6 +19,8 @@ class SilentNetwork:
     status_report_interval = 25  # ms
     enable_status_report = True
     enable_lfp = True
+    record_gc_output_events = False
+    keep_native_lfp_debug_files = False
     parallel_timeout = None  # Use NEURON's default MPI timeout unless overridden.
     legacy_parallel_dt = True  # Preserve the original multi-rank stdinit() timestep behavior.
     runtime_mode = "scientific"

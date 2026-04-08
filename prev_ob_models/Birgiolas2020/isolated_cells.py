@@ -1,4 +1,4 @@
-from prev_ob_models.utils import RunInClassDirectory, IsolatedCell
+from prev_ob_models.utils import RunInClassDirectory, IsolatedCell, load_mechanisms_from_candidates
 import os, sys
 import importlib
 
@@ -10,7 +10,12 @@ class OlfactoryBulbCell(IsolatedCell):
             from neuron import h, load_mechanisms
 
             # Load the channels - from Mechanisms subfolder
-            load_mechanisms("Mechanisms")
+            load_mechanisms_from_candidates(
+                load_mechanisms,
+                __file__,
+                "Mechanisms",
+                sentinel_mechanisms=("AmpaNmdaSyn", "GabaSyn", "GapJunction", "VecStim"),
+            )
 
             h.load_file("stdrun.hoc")
             h.celsius = 35
