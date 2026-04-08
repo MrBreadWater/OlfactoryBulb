@@ -1,3 +1,7 @@
+"""Recompute file summaries inside an existing benchmark directory."""
+
+from __future__ import annotations
+
 import argparse
 import json
 from pathlib import Path
@@ -5,7 +9,8 @@ from pathlib import Path
 from benchmark_ob import summarize_pickle
 
 
-def main():
+def main() -> None:
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser()
     parser.add_argument("benchmark_dir")
     args = parser.parse_args()

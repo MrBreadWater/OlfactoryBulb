@@ -4,6 +4,8 @@ This is a helper file for running multi-core/MPI simulations. For example:
 mpiexec -n 2 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
 """
 
+from __future__ import annotations
+
 import os
 import sys
 from types import SimpleNamespace
@@ -16,35 +18,40 @@ from olfactorybulb.model import OlfactoryBulb as OB
 from olfactorybulb.output_paths import configure_output_env
 
 
-def env_flag(name, default=False):
+def env_flag(name: str, default: bool = False) -> bool:
+    """Parse a boolean environment variable using the project's shell conventions."""
     raw = os.environ.get(name)
     if raw is None:
         return default
     return raw.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
-def env_int(name, default=None):
+def env_int(name: str, default: int | None = None) -> int | None:
+    """Return an integer environment variable or ``default`` when unset."""
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
     return int(raw)
 
 
-def env_float(name, default=None):
+def env_float(name: str, default: float | None = None) -> float | None:
+    """Return a float environment variable or ``default`` when unset."""
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
     return float(raw)
 
 
-def env_choice(name, default=None):
+def env_choice(name: str, default: str | None = None) -> str | None:
+    """Return a lower-cased string environment variable or ``default`` when unset."""
     raw = os.environ.get(name)
     if raw is None or raw == "":
         return default
     return raw.strip().lower()
 
 
-def build_params(paramset_name):
+def build_params(paramset_name: str):
+    """Instantiate a paramset and apply runtime overrides sourced from the environment."""
     params = getattr(obmodel, paramset_name)()
     runtime_mode = env_choice("OB_RUNTIME_MODE", getattr(params, "runtime_mode", "scientific"))
     if runtime_mode not in {"scientific", "exploratory"}:
@@ -84,7 +91,8 @@ def build_params(paramset_name):
     return params
 
 
-def configure_corenrn_defaults(params):
+def configure_corenrn_defaults(params) -> None:
+    """Apply selected CoreNEURON defaults directly to the runtime before the model is built."""
     coreneuron_cfg = getattr(params, "coreneuron", None)
     if coreneuron_cfg is None or not getattr(coreneuron_cfg, "enable", False):
         return

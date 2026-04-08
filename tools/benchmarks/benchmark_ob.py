@@ -1,3 +1,7 @@
+"""Run a timestamped benchmark simulation and summarize the saved outputs."""
+
+from __future__ import annotations
+
 import argparse
 import hashlib
 import json
@@ -8,11 +12,13 @@ import sys
 import time
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from olfactorybulb.output_paths import configure_output_env
 
 
-def sha256_file(path):
+def sha256_file(path: str | Path) -> str:
+    """Return the SHA-256 digest for a file on disk."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
@@ -20,11 +26,13 @@ def sha256_file(path):
     return h.hexdigest()
 
 
-def sha256_bytes(data):
+def sha256_bytes(data: bytes) -> str:
+    """Return the SHA-256 digest for an in-memory byte payload."""
     return hashlib.sha256(data).hexdigest()
 
 
-def canonicalize(obj):
+def canonicalize(obj: Any) -> Any:
+    """Recursively normalize containers so order-insensitive comparisons are reproducible."""
     if isinstance(obj, tuple):
         return tuple(canonicalize(x) for x in obj)
 
@@ -39,7 +47,8 @@ def canonicalize(obj):
     return obj
 
 
-def summarize_pickle(path):
+def summarize_pickle(path: str | Path) -> dict[str, Any]:
+    """Summarize a saved pickle with stable hashes for regression comparisons."""
     with open(path, "rb") as f:
         obj = pickle.load(f)
 
@@ -67,11 +76,13 @@ def summarize_pickle(path):
     }
 
 
-def rank0_path(base_dir, label):
+def rank0_path(base_dir: str | Path, label: str) -> Path:
+    """Return the rank-0 results directory for a benchmark label."""
     return Path(base_dir) / label
 
 
-def deep_update_mapping(target, overrides):
+def deep_update_mapping(target: dict[str, Any], overrides: dict[str, Any]) -> None:
+    """Merge nested override dictionaries into a target mapping in place."""
     for key, value in overrides.items():
         if isinstance(value, dict):
             current = target.get(key)
@@ -83,7 +94,8 @@ def deep_update_mapping(target, overrides):
             target[key] = value
 
 
-def normalize_input_odors(value):
+def normalize_input_odors(value: Any) -> Any:
+    """Convert JSON-decoded odor onset keys back to numeric timestamps when possible."""
     if not isinstance(value, dict):
         return value
 
@@ -102,7 +114,8 @@ def normalize_input_odors(value):
     return normalized
 
 
-def apply_param_overrides(params, overrides):
+def apply_param_overrides(params: Any, overrides: dict[str, Any]) -> None:
+    """Apply nested CLI overrides to a paramset instance."""
     for key, value in overrides.items():
         if key == "input_odors":
             value = normalize_input_odors(value)
@@ -116,7 +129,8 @@ def apply_param_overrides(params, overrides):
             setattr(params, key, value)
 
 
-def main():
+def main() -> None:
+    """Entry point for the benchmark runner."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--paramset", default="GammaSignature")

@@ -1,3 +1,7 @@
+"""Compare historical old-source outputs against modern parity outputs."""
+
+from __future__ import annotations
+
 import argparse
 import json
 import pickle
@@ -22,12 +26,14 @@ SKIP_FIRST_N_SNIFFS = 1
 NUM_SNIFFS = 8
 
 
-def load_pickle(path):
+def load_pickle(path: str | Path):
+    """Load a pickle artifact from disk."""
     with open(path, "rb") as f:
         return pickle.load(f)
 
 
 def interpolate(x, y, dt):
+    """Interpolate a trace onto a uniform grid."""
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
     f = interp1d(x, y, kind="linear")
@@ -36,16 +42,19 @@ def interpolate(x, y, dt):
 
 
 def butter_bandpass(lowcut, highcut, fs, order=5):
+    """Build a Butterworth band-pass filter."""
     nyq = 0.5 * fs
     return butter(order, [lowcut / nyq, highcut / nyq], btype="band")
 
 
 def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    """Apply the Butterworth band-pass filter."""
     b, a = butter_bandpass(lowcut, highcut, fs, order=order)
     return lfilter(b, a, data)
 
 
 def load_wavelet(result_dir):
+    """Load and reproduce the legacy wavelet pipeline for one result directory."""
     t, lfp = load_pickle(result_dir / "lfp.pkl")
     t = np.asarray(t, dtype=float)
     lfp = np.asarray(lfp, dtype=float)
@@ -65,6 +74,7 @@ def load_wavelet(result_dir):
 
 
 def build_raw_report(old_dir, new_dir):
+    """Build direct raw-output comparison metrics."""
     old_inputs = load_pickle(old_dir / "input_times.pkl")
     new_inputs = load_pickle(new_dir / "input_times.pkl")
     old_inputs_sorted = sorted(
@@ -166,6 +176,7 @@ def build_raw_report(old_dir, new_dir):
 
 
 def build_wavelet_report(old_dir, new_dir):
+    """Build wavelet/time-frequency comparison metrics."""
     old_t, old_lfp, old_bp, _freqs, old_power, old_avg = load_wavelet(old_dir)
     new_t, new_lfp, new_bp, _freqs2, new_power, new_avg = load_wavelet(new_dir)
     n = min(len(old_lfp), len(new_lfp))
@@ -185,6 +196,7 @@ def build_wavelet_report(old_dir, new_dir):
 
 
 def main():
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser()
     parser.add_argument("old_dir")
     parser.add_argument("new_dir")

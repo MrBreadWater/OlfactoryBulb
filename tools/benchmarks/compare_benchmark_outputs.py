@@ -1,18 +1,23 @@
+"""Compare standard benchmark artifacts such as soma traces and LFP."""
+
+from __future__ import annotations
+
 import argparse
 import json
-import math
 import pickle
 from pathlib import Path
 
 import numpy as np
 
 
-def load_pickle(path):
+def load_pickle(path: str | Path):
+    """Load a pickle artifact from disk."""
     with open(path, "rb") as f:
         return pickle.load(f)
 
 
-def max_abs_diff(a, b):
+def max_abs_diff(a, b) -> float | None:
+    """Return the maximum absolute difference when array shapes match."""
     a = np.asarray(a, dtype=float)
     b = np.asarray(b, dtype=float)
     if a.shape != b.shape:
@@ -20,7 +25,8 @@ def max_abs_diff(a, b):
     return float(np.max(np.abs(a - b))) if a.size else 0.0
 
 
-def compare_soma_vs(before_path, after_path):
+def compare_soma_vs(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
+    """Compare saved soma traces by cell label."""
     before = {cell: (np.asarray(t), np.asarray(v)) for cell, t, v in load_pickle(before_path)}
     after = {cell: (np.asarray(t), np.asarray(v)) for cell, t, v in load_pickle(after_path)}
     common = sorted(set(before) & set(after))
@@ -51,7 +57,8 @@ def compare_soma_vs(before_path, after_path):
     }
 
 
-def compare_input_times(before_path, after_path):
+def compare_input_times(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
+    """Compare saved input times by target segment."""
     before = {seg: np.asarray(times) for seg, times in load_pickle(before_path)}
     after = {seg: np.asarray(times) for seg, times in load_pickle(after_path)}
     common = sorted(set(before) & set(after))
@@ -76,7 +83,8 @@ def compare_input_times(before_path, after_path):
     }
 
 
-def compare_lfp(before_path, after_path):
+def compare_lfp(before_path: str | Path, after_path: str | Path) -> dict[str, object]:
+    """Compare saved LFP traces."""
     bt, bv = load_pickle(before_path)
     at, av = load_pickle(after_path)
     return {
@@ -87,7 +95,8 @@ def compare_lfp(before_path, after_path):
     }
 
 
-def main():
+def main() -> None:
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser()
     parser.add_argument("before_dir")
     parser.add_argument("after_dir")

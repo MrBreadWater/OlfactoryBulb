@@ -1,9 +1,14 @@
+"""Run ``benchmark_ob.py`` while forcing the target repository to the front of ``sys.path``."""
+
+from __future__ import annotations
+
 import argparse
 import sys
 from pathlib import Path
 
 
-def main():
+def main() -> None:
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--script", default=str(Path(__file__).resolve().with_name("benchmark_ob.py")))

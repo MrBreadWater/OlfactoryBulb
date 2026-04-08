@@ -1,3 +1,11 @@
+"""Launch the original Blender/NEURON slice-construction workflow.
+
+This entrypoint is intentionally thin. The actual slice-building logic lives in
+``olfactorybulb.slicebuilder`` and in the paired Blender scene/script. The file
+is kept because the docs still reference it for manual slice regeneration.
+"""
+
+
 def build_slice():
     """
     To build the model of the slice, most of the work is performed in Blender.
@@ -20,8 +28,6 @@ def build_slice():
     Once the script starts, monitor the console output for progress. After all the cells are
     positioned, connected, and saved, the Blender window will open, showing the model.
     """
-
-
     import os
     from olfactorybulb.slicebuilder.nrn import SliceBuilderNRN
 
@@ -30,6 +36,7 @@ def build_slice():
 
     # Start Blender and build the model
     os.system("blender blender-files/ob-gloms-fast.blend --python olfactorybulb/slicebuilder/blender.py")
+
 
 if __name__ == '__main__':
     build_slice()

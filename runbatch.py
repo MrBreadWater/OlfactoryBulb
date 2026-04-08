@@ -14,6 +14,8 @@ Environment overrides:
     When launched from the OBGPU env, the default is the rank-1 GPU scientific mode.
 """
 
+from __future__ import annotations
+
 import multiprocessing
 import os
 import subprocess
@@ -28,18 +30,21 @@ paramsets = [
     "GammaSignature_EqualTCMCInputs"
 ]
 
-def using_modern_gpu_env():
+def using_modern_gpu_env() -> bool:
+    """Return True when the active conda environment is the maintained OBGPU stack."""
     return os.environ.get("CONDA_DEFAULT_ENV", "") == "OBGPU"
 
 
-def env_flag(name, default=False):
+def env_flag(name: str, default: bool = False) -> bool:
+    """Parse a boolean environment variable using shell-friendly truthy/falsey strings."""
     raw = os.environ.get(name)
     if raw is None:
         return default
     return raw.strip().lower() not in {"", "0", "false", "no", "off"}
 
 
-def get_mpi_ranks():
+def get_mpi_ranks() -> int:
+    """Return the MPI rank count for batch runs, with a GPU-friendly default of one rank."""
     raw = os.environ.get("OB_MPI_RANKS")
     if raw is None:
         if env_flag("OB_USE_CORENRN_GPU", using_modern_gpu_env()):
@@ -49,7 +54,8 @@ def get_mpi_ranks():
     return max(2, int(raw))
 
 
-def main():
+def main() -> None:
+    """Launch each configured paramset sequentially with the current runtime defaults."""
     mpi_ranks = get_mpi_ranks()
     mpiexec = os.environ.get("OB_MPIEXEC", "mpiexec")
     base_env = os.environ.copy()

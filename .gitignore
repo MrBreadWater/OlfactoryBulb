@@ -117,3 +117,24 @@ x86_64/
 blender-files/delete/
 
 doctrees/
+
+# Local IDE / remote development state
+.jupyter-ai-state/
+.codex/
+253_31033_139-pycharm-support-libs/
+261_22158_220-pycharm-support-libs/
+
+# Local build / runtime artifacts
+.obsolete-builds/
+aarch64/
+corenrn_data/
+notebook_outputs/
+results/benchmarks/
+results/comparisons/
+results/debug_*/
+results/notebook_runs/
+results/profiles/
+results/tmp_*/
+
+# Local archives
+*.zip

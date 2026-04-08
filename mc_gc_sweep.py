@@ -1,8 +1,13 @@
+"""Helpers for MC↔GC two-cell parameter sweeps and notebook-friendly animations."""
+
+from __future__ import annotations
+
 import json
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -149,10 +154,12 @@ np.savez(
 
 
 def _repo_root() -> Path:
+    """Return the repository root inferred from this module's location."""
     return Path(__file__).resolve().parent
 
 
-def build_config(preset="tuned", overrides=None):
+def build_config(preset: str = "tuned", overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a sweep configuration from a named preset and optional overrides."""
     if preset not in PRESETS:
         raise ValueError(f"Unknown preset {preset!r}. Available presets: {sorted(PRESETS)}")
     config = dict(PRESETS[preset])
@@ -161,7 +168,8 @@ def build_config(preset="tuned", overrides=None):
     return config
 
 
-def run_single_simulation(config):
+def run_single_simulation(config: dict[str, Any]) -> dict[str, np.ndarray]:
+    """Run one two-cell sweep simulation in a subprocess and return its saved arrays."""
     with tempfile.NamedTemporaryFile(suffix=".npz", delete=False) as tmp:
         output_path = Path(tmp.name)
 
@@ -184,7 +192,13 @@ def run_single_simulation(config):
         output_path.unlink(missing_ok=True)
 
 
-def run_parameter_sweep(parameter_name, values, preset="tuned", overrides=None):
+def run_parameter_sweep(
+    parameter_name: str,
+    values: list[Any],
+    preset: str = "tuned",
+    overrides: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
+    """Run a one-parameter sweep and attach the swept value to each returned frame."""
     base_config = build_config(preset=preset, overrides=overrides)
     results = []
     for value in values:
@@ -198,18 +212,25 @@ def run_parameter_sweep(parameter_name, values, preset="tuned", overrides=None):
     return results
 
 
-def _format_value(value):
+def _format_value(value: Any) -> str:
+    """Format a sweep value compactly for plot titles."""
     if isinstance(value, float):
         return f"{value:.4g}"
     return str(value)
 
 
-def _validate_results(results):
+def _validate_results(results: list[dict[str, Any]]) -> None:
+    """Raise when a sweep result set is empty."""
     if not results:
         raise ValueError("No sweep results were provided.")
 
 
-def animate_trace_sweep(results, parameter_name=None, interval=800):
+def animate_trace_sweep(
+    results: list[dict[str, Any]],
+    parameter_name: str | None = None,
+    interval: int = 800,
+):
+    """Animate voltage and current traces across a sweep."""
     _validate_results(results)
     parameter_name = parameter_name or results[0]["swept_parameter"]
 
@@ -278,6 +299,7 @@ def compute_spectrogram(
     lowpass_hz=100,
     butter_order=3,
 ):
+    """Compute a uniformly sampled spectrogram for a single time-series signal."""
     time_ms = np.asarray(time_ms, dtype=float)
     signal = np.asarray(signal, dtype=float)
     if time_ms.ndim != 1 or signal.ndim != 1:
@@ -346,6 +368,7 @@ def animate_spectrogram_sweep(
     log_floor=1e-4,
     interval=800,
 ):
+    """Animate a selected signal's spectrogram across sweep conditions."""
     _validate_results(results)
     parameter_name = parameter_name or results[0]["swept_parameter"]
 
@@ -397,15 +420,13 @@ def animate_spectrogram_sweep(
     return anim
 
 
-def _safe_output_name(name):
+def _safe_output_name(name: str) -> str:
+    """Return a filesystem-safe basename for saved sweep artifacts."""
     return "".join(ch if (ch.isalnum() or ch in ("-", "_", ".")) else "_" for ch in str(name)).strip("._")
 
 
 def display_animation(anim, name, fps=2, output_dir="notebook_outputs"):
-    """
-    Display an animation with a PyCharm-friendly path first.
-    Tries animated GIF output, then falls back to HTML5 video / JS HTML.
-    """
+    """Save and display a sweep animation, preferring a GIF for PyCharm/Jupyter compatibility."""
     output_dir = str(output_dir)
     output_path_root = Path(output_dir)
     if not label_has_timestamp(output_path_root.name):

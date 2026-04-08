@@ -1,4 +1,11 @@
-# Run with: mpiexec -n 2 python testmpi.py -mpi
+"""Minimal MPI/gap-junction smoke test for NEURON.
+
+This script is a standalone debug/probe utility rather than part of the normal
+OBGPU workflow. It is kept as a quick sanity check for parallel transfer setup.
+Run with:
+
+``mpiexec -n 2 nrniv -mpi -python testmpi.py -mpi``
+"""
 
 import sys
 

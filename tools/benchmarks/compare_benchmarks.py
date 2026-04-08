@@ -1,26 +1,34 @@
+"""Compare two benchmark summaries and report timing/file-hash deltas."""
+
+from __future__ import annotations
+
 import argparse
 import json
 from pathlib import Path
 
 
-def load_summary(path):
+def load_summary(path: str | Path) -> dict:
+    """Load a benchmark summary JSON file."""
     with open(path) as f:
         return json.load(f)
 
 
-def pct_change(before, after):
+def pct_change(before: float, after: float) -> float | None:
+    """Return percent change from ``before`` to ``after``."""
     if before == 0:
         return None
     return ((after - before) / before) * 100.0
 
 
-def speedup(before, after):
+def speedup(before: float, after: float) -> float | None:
+    """Return multiplicative speedup ``before / after``."""
     if after == 0:
         return None
     return before / after
 
 
-def main():
+def main() -> None:
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser()
     parser.add_argument("before")
     parser.add_argument("after")

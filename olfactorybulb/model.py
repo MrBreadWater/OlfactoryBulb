@@ -1,3 +1,18 @@
+"""Build and run the olfactory bulb network model.
+
+This module is the main simulation entrypoint used by the current OBGPU
+workflow. It combines:
+
+- cell instantiation from the Birgiolas 2020 templates
+- JSON-driven slice connectivity
+- odor/input scheduling
+- optional CoreNEURON/GPU execution
+- output saving for soma voltages, LFP, and notebook analysis helpers
+
+The file is historically dense because it grew around both the original NEURON
+workflow and the newer CoreNEURON/OBGPU parity work.
+"""
+
 try:
     import cPickle # Python 2
 except:

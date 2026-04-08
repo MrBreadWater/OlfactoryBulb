@@ -1,3 +1,12 @@
+"""Notebook-facing helpers for running, loading, and analyzing OBGPU simulations.
+
+This module is the maintained convenience layer for the interactive notebooks in
+``notebooks/``. It keeps heavy NEURON work in subprocesses when possible so
+notebook reruns do not corrupt the live HOC state.
+"""
+
+from __future__ import annotations
+
 import json
 import os
 import pickle
@@ -10,6 +19,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -67,6 +77,8 @@ CONTROL_HELP = {
 
 @dataclass
 class RunRecord:
+    """Metadata and captured stdout/stderr for a timestamped notebook run."""
+
     label: str
     timestamp: str
     result_dir: Path
@@ -82,11 +94,13 @@ _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
 
 
-def make_timestamp():
+def make_timestamp() -> str:
+    """Return a timestamp string using the notebook-run naming convention."""
     return datetime.now().strftime(TIMESTAMP_FORMAT)
 
 
-def build_run_config(**overrides):
+def build_run_config(**overrides: Any) -> dict[str, Any]:
+    """Build a normalized notebook control dictionary."""
     mode = overrides.pop("mode", "fast")
     base = {
         "mode": mode,
@@ -144,7 +158,8 @@ def build_run_config(**overrides):
     return base
 
 
-def make_label(config, timestamp=None):
+def make_label(config: dict[str, Any], timestamp: str | None = None) -> str:
+    """Build the timestamped notebook label for a run configuration."""
     timestamp = timestamp or make_timestamp()
     mode = str(config.get("mode", "run"))
     paramset = str(config.get("paramset", "Paramset"))
@@ -152,7 +167,8 @@ def make_label(config, timestamp=None):
     return f"{prefix}_{paramset}_{mode}_{timestamp}"
 
 
-def deep_update(target, source):
+def deep_update(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
+    """Recursively merge ``source`` into ``target`` in place."""
     for key, value in source.items():
         if isinstance(value, dict) and isinstance(target.get(key), dict):
             deep_update(target[key], value)
@@ -161,7 +177,8 @@ def deep_update(target, source):
     return target
 
 
-def normalize_input_odors(value):
+def normalize_input_odors(value: Any) -> Any:
+    """Convert JSON-decoded odor schedules back to numeric onset keys when possible."""
     if not isinstance(value, dict):
         return value
 
@@ -180,7 +197,8 @@ def normalize_input_odors(value):
     return normalized
 
 
-def build_param_overrides(config):
+def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
+    """Translate notebook controls into model param overrides."""
     overrides = {
         "sim_dt": float(config["sim_dt_ms"]),
         "recording_period": float(config.get("recording_period_ms", config["sim_dt_ms"])),
@@ -243,15 +261,18 @@ def build_param_overrides(config):
     return overrides
 
 
-def available_controls():
+def available_controls() -> dict[str, str]:
+    """Return the notebook control catalog."""
     return dict(CONTROL_HELP)
 
 
-def print_available_controls():
+def print_available_controls() -> None:
+    """Pretty-print the notebook control catalog."""
     print(json.dumps(available_controls(), indent=2, sort_keys=True))
 
 
-def build_run_command(config, label):
+def build_run_command(config: dict[str, Any], label: str) -> list[str]:
+    """Build the benchmark subprocess command for a notebook run."""
     command = [
         "mpiexec",
         "-n",
@@ -289,7 +310,8 @@ def build_run_command(config, label):
     return command
 
 
-def _json_ready(value):
+def _json_ready(value: Any) -> Any:
+    """Convert arrays, scalars, and paths into JSON-serializable equivalents."""
     if isinstance(value, Path):
         return str(value)
     if isinstance(value, np.ndarray):
@@ -304,6 +326,7 @@ def _json_ready(value):
 
 
 def _write_notebook_run_info(result_dir, *, config, label, timestamp, command, env, completed, summary=None):
+    """Persist normalized config, effective params, and subprocess metadata for a run."""
     result_dir = Path(result_dir)
     result_dir.mkdir(parents=True, exist_ok=True)
 
@@ -345,7 +368,8 @@ def _write_notebook_run_info(result_dir, *, config, label, timestamp, command, e
     return run_info_path
 
 
-def run_simulation(config=None):
+def run_simulation(config: dict[str, Any] | None = None) -> RunRecord:
+    """Run one timestamped notebook simulation and return its recorded metadata."""
     config = build_run_config(**(config or {}))
     timestamp = make_timestamp()
     label = make_label(config, timestamp=timestamp)
@@ -423,7 +447,11 @@ def run_simulation(config=None):
     )
 
 
-def list_notebook_runs(prefix=None, results_base=DEFAULT_RESULTS_BASE):
+def list_notebook_runs(
+    prefix: str | None = None,
+    results_base: str | Path = DEFAULT_RESULTS_BASE,
+) -> list[Path]:
+    """List saved notebook-run directories, optionally filtered by label prefix."""
     results_base = Path(results_base)
     if not results_base.exists():
         return []
@@ -433,7 +461,8 @@ def list_notebook_runs(prefix=None, results_base=DEFAULT_RESULTS_BASE):
     return sorted(runs)
 
 
-def _read_json_if_present(path):
+def _read_json_if_present(path: str | Path) -> dict[str, Any] | None:
+    """Return parsed JSON when a file exists and is non-empty."""
     path = Path(path)
     if not path.exists() or path.stat().st_size == 0:
         return None
@@ -441,7 +470,13 @@ def _read_json_if_present(path):
         return json.load(f)
 
 
-def resolve_notebook_run(run_or_dir=None, prefix=None, index=-1, results_base=DEFAULT_RESULTS_BASE):
+def resolve_notebook_run(
+    run_or_dir: str | os.PathLike[str] | RunRecord | None = None,
+    prefix: str | None = None,
+    index: int = -1,
+    results_base: str | Path = DEFAULT_RESULTS_BASE,
+) -> Path:
+    """Resolve a run identifier, path, or prefix/index pair into a run directory."""
     if run_or_dir is not None:
         return Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
 
@@ -451,7 +486,13 @@ def resolve_notebook_run(run_or_dir=None, prefix=None, index=-1, results_base=DE
     return runs[index]
 
 
-def load_run_record(run_or_dir=None, prefix=None, index=-1, results_base=DEFAULT_RESULTS_BASE):
+def load_run_record(
+    run_or_dir: str | os.PathLike[str] | RunRecord | None = None,
+    prefix: str | None = None,
+    index: int = -1,
+    results_base: str | Path = DEFAULT_RESULTS_BASE,
+) -> RunRecord:
+    """Load notebook-run metadata from a timestamped results directory."""
     result_dir = resolve_notebook_run(
         run_or_dir=run_or_dir,
         prefix=prefix,
@@ -493,14 +534,16 @@ def load_run_record(run_or_dir=None, prefix=None, index=-1, results_base=DEFAULT
     )
 
 
-def _path_parts(path):
+def _path_parts(path: Any) -> list[str]:
+    """Split a dotted or indexed override path into addressable components."""
     if isinstance(path, (list, tuple)):
         return list(path)
     text = str(path).replace("[", ".").replace("]", "")
     return [part for part in text.split(".") if part]
 
 
-def set_path_value(obj, path, value):
+def set_path_value(obj: Any, path: Any, value: Any) -> None:
+    """Assign ``value`` inside a nested dict/list structure addressed by ``path``."""
     parts = _path_parts(path)
     current = obj
     for index, part in enumerate(parts[:-1]):
@@ -524,7 +567,12 @@ def set_path_value(obj, path, value):
         current[final] = value
 
 
-def run_parameter_sweep(base_config, sweep_path, values):
+def run_parameter_sweep(
+    base_config: dict[str, Any],
+    sweep_path: str | list[str],
+    values: list[Any] | tuple[Any, ...],
+) -> dict[str, Any]:
+    """Run a one-parameter sweep by repeatedly calling :func:`run_and_load`."""
     base_config = build_run_config(**deepcopy(base_config))
     items = []
     for value in values:
@@ -542,12 +590,14 @@ def run_parameter_sweep(base_config, sweep_path, values):
     return {"path": sweep_path, "values": list(values), "items": items}
 
 
-def load_pickle(path):
+def load_pickle(path: str | Path) -> Any:
+    """Load a pickle file from disk."""
     with open(path, "rb") as f:
         return pickle.load(f)
 
 
-def load_result(run_or_dir):
+def load_result(run_or_dir: RunRecord | str | Path) -> dict[str, Any]:
+    """Load the standard saved outputs for a notebook run directory."""
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
     summary = _read_json_if_present(result_dir / "summary.json")
     run_info = _read_json_if_present(result_dir / "run_info.json")
@@ -584,7 +634,13 @@ def load_result(run_or_dir):
     return result
 
 
-def load_run_pair(run_or_dir=None, prefix=None, index=-1, results_base=DEFAULT_RESULTS_BASE):
+def load_run_pair(
+    run_or_dir: RunRecord | str | Path | None = None,
+    prefix: str | None = None,
+    index: int = -1,
+    results_base: str | Path = DEFAULT_RESULTS_BASE,
+) -> tuple[RunRecord, dict[str, Any]]:
+    """Resolve a saved run and load its standard result payload."""
     run = load_run_record(
         run_or_dir=run_or_dir,
         prefix=prefix,
@@ -594,27 +650,32 @@ def load_run_pair(run_or_dir=None, prefix=None, index=-1, results_base=DEFAULT_R
     return run, load_result(run)
 
 
-def run_and_load(config=None):
+def run_and_load(config: dict[str, Any] | None = None) -> tuple[RunRecord, dict[str, Any]]:
+    """Run a simulation and immediately load its outputs from disk."""
     run = run_simulation(config)
     return run, load_result(run)
 
 
-def normalize_cell_name(name):
+def normalize_cell_name(name: Any) -> str:
+    """Strip HOC prefixes and section suffixes down to a canonical cell label."""
     return str(name).removeprefix("h.").split(".", 1)[0]
 
 
-def cell_type_of(name):
+def cell_type_of(name: Any) -> str:
+    """Infer the cell family prefix such as ``MC`` or ``GC`` from a label."""
     match = re.match(r"([A-Z]+)", normalize_cell_name(name))
     if not match:
         raise ValueError(f"Could not infer cell type from {name!r}")
     return match.group(1)
 
 
-def get_slice_dir(slice_name="DorsalColumnSlice"):
+def get_slice_dir(slice_name: str = "DorsalColumnSlice") -> Path:
+    """Return the on-disk directory for a named slice export."""
     return REPO_ROOT / "olfactorybulb" / "slices" / str(slice_name)
 
 
-def load_slice_connectivity(slice_name="DorsalColumnSlice"):
+def load_slice_connectivity(slice_name: str = "DorsalColumnSlice") -> dict[str, Any]:
+    """Load the static glomerular and reciprocal connectivity JSON for a slice."""
     slice_dir = get_slice_dir(slice_name)
     with open(slice_dir / "glom_cells.json") as f:
         glom_cells = json.load(f)
@@ -634,7 +695,8 @@ def load_slice_connectivity(slice_name="DorsalColumnSlice"):
     }
 
 
-def find_cell_drivers(cell_name, slice_name="DorsalColumnSlice"):
+def find_cell_drivers(cell_name: str, slice_name: str = "DorsalColumnSlice") -> dict[str, Any]:
+    """Summarize glomerular peers and reciprocal GC inputs for one cell."""
     target = normalize_cell_name(cell_name)
     target_type = cell_type_of(target)
     connectivity = load_slice_connectivity(slice_name=slice_name)
@@ -688,7 +750,12 @@ def find_cell_drivers(cell_name, slice_name="DorsalColumnSlice"):
     }
 
 
-def print_cell_drivers(cell_name, slice_name="DorsalColumnSlice", max_sources=10):
+def print_cell_drivers(
+    cell_name: str,
+    slice_name: str = "DorsalColumnSlice",
+    max_sources: int = 10,
+) -> None:
+    """Print a compact textual summary of the drivers returned by ``find_cell_drivers``."""
     info = find_cell_drivers(cell_name, slice_name=slice_name)
     print(f"Target: {info['target_cell']} ({info['target_type']})")
     print(f"Slice: {info['slice_name']}")
@@ -717,7 +784,8 @@ def print_cell_drivers(cell_name, slice_name="DorsalColumnSlice", max_sources=10
         print(top_sections)
 
 
-def _apply_param_override_object(params, overrides):
+def _apply_param_override_object(params: Any, overrides: dict[str, Any]) -> None:
+    """Apply notebook-style override dictionaries onto a paramset object."""
     for key, value in overrides.items():
         if key == "input_odors":
             value = normalize_input_odors(value)
@@ -730,7 +798,8 @@ def _apply_param_override_object(params, overrides):
             setattr(params, key, deepcopy(value))
 
 
-def _is_snapshot_value(name, value):
+def _is_snapshot_value(name: str, value: Any) -> bool:
+    """Return ``True`` when a param attribute should be included in a JSON snapshot."""
     if name.startswith("_"):
         return False
     if isinstance(value, (staticmethod, classmethod, property)):
@@ -740,7 +809,8 @@ def _is_snapshot_value(name, value):
     return True
 
 
-def snapshot_param_object(params):
+def snapshot_param_object(params: Any) -> dict[str, Any]:
+    """Capture a JSON-ready snapshot of a paramset instance and its class defaults."""
     snapshot = {}
 
     for cls in reversed(type(params).__mro__):
@@ -758,14 +828,16 @@ def snapshot_param_object(params):
     return _json_ready(snapshot)
 
 
-def resolve_paramset_defaults(paramset_name):
+def resolve_paramset_defaults(paramset_name: str) -> dict[str, Any]:
+    """Instantiate a paramset and snapshot its clean inherited defaults."""
     import olfactorybulb.model as obmodel
 
     params = getattr(obmodel, str(paramset_name))()
     return snapshot_param_object(params)
 
 
-def resolve_effective_params(config):
+def resolve_effective_params(config: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolve the effective params used by a notebook run configuration."""
     import olfactorybulb.model as obmodel
 
     config = build_run_config(**(config or {}))
@@ -797,7 +869,8 @@ def resolve_effective_params(config):
     }
 
 
-def flatten_for_diff(value, prefix=""):
+def flatten_for_diff(value: Any, prefix: str = "") -> dict[str, Any]:
+    """Flatten nested dicts into ``path -> value`` pairs for diff reporting."""
     items = {}
     if isinstance(value, dict):
         for key in sorted(value.keys(), key=lambda item: str(item)):
@@ -808,7 +881,8 @@ def flatten_for_diff(value, prefix=""):
     return items
 
 
-def diff_values(before, after):
+def diff_values(before: Any, after: Any) -> list[dict[str, Any]]:
+    """Return value changes between two nested JSON-like structures."""
     before_flat = flatten_for_diff(before)
     after_flat = flatten_for_diff(after)
     keys = sorted(set(before_flat) | set(after_flat))
@@ -827,14 +901,16 @@ def diff_values(before, after):
     return changes
 
 
-def _format_diff_value(value, max_len=160):
+def _format_diff_value(value: Any, max_len: int = 160) -> str:
+    """Render a compact JSON string for a diff value."""
     text = json.dumps(_json_ready(value), sort_keys=True)
     if len(text) > max_len:
         return text[: max_len - 3] + "..."
     return text
 
 
-def print_diff_section(title, changes, max_items=None):
+def print_diff_section(title: str, changes: list[dict[str, Any]], max_items: int | None = None) -> None:
+    """Print a human-readable diff section for notebook summaries."""
     print(f"\n{title}:")
     if not changes:
         print("  (no differences)")
@@ -854,7 +930,8 @@ def print_diff_section(title, changes, max_items=None):
         print(f"- ... {remaining} more differences")
 
 
-def extract_runtime_control_snapshot(config):
+def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
+    """Extract notebook-only runtime and analysis controls from a run config."""
     runtime_keys = [
         "mode",
         "nranks",
@@ -884,16 +961,22 @@ def extract_runtime_control_snapshot(config):
 
 
 def build_live_inspection_model(
-    paramset="GammaSignature",
+    paramset: str = "GammaSignature",
     *,
-    extra_overrides=None,
-    enable_lfp=False,
-    record_from_somas=(),
-    use_corenrn=False,
-    use_gpu=False,
-    runtime_mode="scientific",
-    reuse_existing=True,
-):
+    extra_overrides: dict[str, Any] | None = None,
+    enable_lfp: bool = False,
+    record_from_somas: tuple[str, ...] | list[str] = (),
+    use_corenrn: bool = False,
+    use_gpu: bool = False,
+    runtime_mode: str = "scientific",
+    reuse_existing: bool = True,
+) -> Any:
+    """Build one live model inside the kernel for morphology/connectivity inspection.
+
+    The notebook runner normally keeps NEURON in a subprocess to avoid kernel
+    corruption. This function intentionally breaks that rule for read-only
+    inspection workflows and therefore only permits one model build per kernel.
+    """
     global _LIVE_INSPECTION_MODEL, _LIVE_INSPECTION_SIGNATURE
 
     extra_overrides = deepcopy(extra_overrides or {})
@@ -943,7 +1026,8 @@ def build_live_inspection_model(
     return model
 
 
-def get_live_cell(model, cell_name):
+def get_live_cell(model: Any, cell_name: str) -> Any:
+    """Return a live cell object from a live inspection model."""
     target = normalize_cell_name(cell_name)
     target_type = cell_type_of(target)
     for cell in model.cells.get(target_type, []):
@@ -952,7 +1036,8 @@ def get_live_cell(model, cell_name):
     raise KeyError(f"Cell {target!r} not found in live model")
 
 
-def get_live_section(model, section_name):
+def get_live_section(model: Any, section_name: str) -> Any:
+    """Resolve a section string like ``TC5[12].dend[3]`` in a live model."""
     section_name = str(section_name).removeprefix("h.")
     if "(" not in section_name:
         seg_expr = f"h.{section_name}(0.5)"
@@ -961,7 +1046,8 @@ def get_live_section(model, section_name):
     return model.resolve_segment(seg_expr).sec
 
 
-def get_section_parent_chain(model, section_name):
+def get_section_parent_chain(model: Any, section_name: str) -> list[str]:
+    """Return the parent-section chain from a section back to the root."""
     sec = get_live_section(model, section_name)
     chain = []
     while sec is not None:
@@ -971,7 +1057,8 @@ def get_section_parent_chain(model, section_name):
     return chain
 
 
-def get_cell_section_parent_map(model, cell_name):
+def get_cell_section_parent_map(model: Any, cell_name: str) -> dict[str, str | None]:
+    """Map every section of one cell to its parent section."""
     cell = get_live_cell(model, cell_name)
     parent_map = {}
     for sec in cell.soma.wholetree():
@@ -980,7 +1067,8 @@ def get_cell_section_parent_map(model, cell_name):
     return parent_map
 
 
-def result_overview(result):
+def result_overview(result: dict[str, Any]) -> dict[str, Any]:
+    """Summarize the key dimensions and timing fields of a loaded result."""
     summary = result.get("summary") or {}
     params = summary.get("params", {})
     timings = summary.get("timing_seconds", {})
@@ -1002,7 +1090,12 @@ def result_overview(result):
     }
 
 
-def uniform_trace(t, y, dt_ms=None):
+def uniform_trace(
+    t: np.ndarray | list[float],
+    y: np.ndarray | list[float],
+    dt_ms: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Interpolate a trace onto a uniform time grid suitable for spectral analysis."""
     t = np.asarray(t, dtype=float)
     y = np.asarray(y, dtype=float)
     if len(t) < 2:
@@ -1014,7 +1107,14 @@ def uniform_trace(t, y, dt_ms=None):
     return grid, interp(grid)
 
 
-def butter_bandpass_filter(signal, lowcut_hz, highcut_hz, fs_hz, order=4):
+def butter_bandpass_filter(
+    signal: np.ndarray | list[float],
+    lowcut_hz: float,
+    highcut_hz: float,
+    fs_hz: float,
+    order: int = 4,
+) -> np.ndarray:
+    """Apply a Butterworth band-pass filter, falling back to causal filtering if needed."""
     signal = np.asarray(signal, dtype=float)
     nyquist = 0.5 * fs_hz
     b, a = butter(order, [lowcut_hz / nyquist, highcut_hz / nyquist], btype="band")
@@ -1024,13 +1124,28 @@ def butter_bandpass_filter(signal, lowcut_hz, highcut_hz, fs_hz, order=4):
     return filtfilt(b, a, signal)
 
 
-def compute_lfp_bandpassed(result, dt_ms=None, lowcut_hz=30.0, highcut_hz=120.0, order=4):
+def compute_lfp_bandpassed(
+    result: dict[str, Any],
+    dt_ms: float | None = None,
+    lowcut_hz: float = 30.0,
+    highcut_hz: float = 120.0,
+    order: int = 4,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return the saved LFP resampled and band-pass filtered."""
     t, lfp = uniform_trace(result["lfp_t"], result["lfp"], dt_ms=dt_ms)
     fs_hz = 1000.0 / float(np.median(np.diff(t)))
     return t, butter_bandpass_filter(lfp, lowcut_hz, highcut_hz, fs_hz, order=order)
 
 
-def compute_spectrogram(signal_t, signal_y, dt_ms=None, max_freq_hz=150.0, nperseg=512, noverlap=448):
+def compute_spectrogram(
+    signal_t: np.ndarray | list[float],
+    signal_y: np.ndarray | list[float],
+    dt_ms: float | None = None,
+    max_freq_hz: float = 150.0,
+    nperseg: int = 512,
+    noverlap: int = 448,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Compute a standard spectrogram on a uniform time base."""
     t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
     if len(t) < 4:
         raise ValueError("Trace is too short for spectral analysis")
@@ -1050,16 +1165,17 @@ def compute_spectrogram(signal_t, signal_y, dt_ms=None, max_freq_hz=150.0, npers
 
 
 def compute_wavelet_map(
-    signal_t,
-    signal_y,
-    dt_ms=0.1,
-    lowcut_hz=30.0,
-    highcut_hz=120.0,
-    wavelet="cgau5",
-    scale_low=3.0,
-    scale_high=32.0,
-    n_scales=50,
-):
+    signal_t: np.ndarray | list[float],
+    signal_y: np.ndarray | list[float],
+    dt_ms: float = 0.1,
+    lowcut_hz: float = 30.0,
+    highcut_hz: float = 120.0,
+    wavelet: str = "cgau5",
+    scale_low: float = 3.0,
+    scale_high: float = 32.0,
+    n_scales: int = 50,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Compute the legacy-style continuous wavelet map used in the notebooks."""
     t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
     fs_hz = 1000.0 / dt_ms
     y_bp = butter_bandpass_filter(y, lowcut_hz, highcut_hz, fs_hz, order=4)
@@ -1070,11 +1186,12 @@ def compute_wavelet_map(
 
 
 def compute_wavelet_band_power(
-    signal_t,
-    signal_y,
-    bands=None,
-    dt_ms=0.1,
-):
+    signal_t: np.ndarray | list[float],
+    signal_y: np.ndarray | list[float],
+    bands: dict[str, tuple[float, float]] | None = None,
+    dt_ms: float = 0.1,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    """Collapse wavelet power into named frequency-band time series."""
     if bands is None:
         bands = {
             "beta": (15.0, 35.0),
@@ -1092,7 +1209,12 @@ def compute_wavelet_band_power(
     return t, freqs, power, traces
 
 
-def load_legacy_wavelet_analysis(result, dt=0.1, sniff_count=8):
+def load_legacy_wavelet_analysis(
+    result: dict[str, Any],
+    dt: float = 0.1,
+    sniff_count: int = 8,
+) -> dict[str, Any]:
+    """Reproduce the legacy LFP wavelet-analysis pipeline for one result."""
     input_times = sorted(result["input_times"], key=lambda row: row[0])
     events = {}
     for seg_name, seg_times in input_times:
@@ -1137,7 +1259,15 @@ def load_legacy_wavelet_analysis(result, dt=0.1, sniff_count=8):
     }
 
 
-def plot_legacy_sniff_average(t_average, frequencies, lfp_wavelet_power_average, show=True, yaxis=True, xlabel=True):
+def plot_legacy_sniff_average(
+    t_average: np.ndarray,
+    frequencies: np.ndarray,
+    lfp_wavelet_power_average: np.ndarray,
+    show: bool = True,
+    yaxis: bool = True,
+    xlabel: bool = True,
+) -> None:
+    """Plot the sniff-averaged legacy wavelet view used in older notebooks."""
     if show:
         plt.subplots(figsize=(4, 5))
 
@@ -1158,7 +1288,13 @@ def plot_legacy_sniff_average(t_average, frequencies, lfp_wavelet_power_average,
         plt.show()
 
 
-def show_legacy_plots(result, sniff_count=8, dt=0.1, fig_width=27):
+def show_legacy_plots(
+    result: dict[str, Any],
+    sniff_count: int = 8,
+    dt: float = 0.1,
+    fig_width: float = 27,
+) -> dict[str, Any]:
+    """Render the legacy voltage, LFP, and wavelet figure set for one run."""
     legacy = load_legacy_wavelet_analysis(result, dt=dt, sniff_count=sniff_count)
 
     i = 0
@@ -1222,7 +1358,12 @@ def show_legacy_plots(result, sniff_count=8, dt=0.1, fig_width=27):
     return legacy
 
 
-def detect_spikes(t, v, threshold=0.0):
+def detect_spikes(
+    t: np.ndarray | list[float],
+    v: np.ndarray | list[float],
+    threshold: float = 0.0,
+) -> np.ndarray:
+    """Detect upward threshold crossings from a soma voltage trace."""
     t = np.asarray(t, dtype=float)
     v = np.asarray(v, dtype=float)
     if len(t) < 2:
@@ -1231,7 +1372,12 @@ def detect_spikes(t, v, threshold=0.0):
     return t[crossings]
 
 
-def calculate_instantaneous_frequency(t, v, threshold=0.0):
+def calculate_instantaneous_frequency(
+    t: np.ndarray | list[float],
+    v: np.ndarray | list[float],
+    threshold: float = 0.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Convert spike times from one trace into instantaneous frequency samples."""
     spikes = detect_spikes(t, v, threshold=threshold)
     if len(spikes) < 2:
         return np.array([]), np.array([])
@@ -1240,7 +1386,8 @@ def calculate_instantaneous_frequency(t, v, threshold=0.0):
     return t_freq, spiking_hz
 
 
-def calculate_event_frequency(times):
+def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
+    """Convert event times into midpoint/frequency samples."""
     times = np.asarray(times, dtype=float)
     if len(times) < 2:
         return np.array([]), np.array([])
@@ -1249,7 +1396,13 @@ def calculate_event_frequency(times):
     return t_freq, event_hz
 
 
-def plot_spiking_frequencies(result, indices=None, ax=None, threshold=0.0):
+def plot_spiking_frequencies(
+    result: dict[str, Any],
+    indices: list[int] | range | None = None,
+    ax: Any = None,
+    threshold: float = 0.0,
+) -> Any:
+    """Plot instantaneous firing-rate traces for selected saved soma voltages."""
     ax = ax or plt.subplots(figsize=(10, 6))[1]
     soma_vs = result["soma_vs"]
     if indices is None:
@@ -1269,7 +1422,8 @@ def plot_spiking_frequencies(result, indices=None, ax=None, threshold=0.0):
     return ax
 
 
-def split_traces_by_type(result):
+def split_traces_by_type(result: dict[str, Any]) -> dict[str, list[tuple[str, np.ndarray, np.ndarray]]]:
+    """Group saved soma traces by cell family prefix."""
     grouped = {"MC": [], "TC": [], "GC": [], "other": []}
     for label, t, v in result["soma_vs"]:
         bucket = "other"
@@ -1281,7 +1435,11 @@ def split_traces_by_type(result):
     return grouped
 
 
-def filter_gc_output_events(result, target_types=None):
+def filter_gc_output_events(
+    result: dict[str, Any],
+    target_types: list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """Filter saved GC inhibitory-output events by destination cell family."""
     events = list(result.get("gc_output_events", []))
     if not target_types:
         return events
@@ -1295,7 +1453,13 @@ def filter_gc_output_events(result, target_types=None):
     return filtered
 
 
-def collect_gc_output_frequency_samples(result, indices=None, target_types=None, modulus=None):
+def collect_gc_output_frequency_samples(
+    result: dict[str, Any],
+    indices: list[int] | range | None = None,
+    target_types: list[str] | tuple[str, ...] | None = None,
+    modulus: float | None = None,
+) -> dict[str, Any]:
+    """Collect instantaneous GC inhibitory-output frequency samples for KDE plots."""
     events = filter_gc_output_events(result, target_types=target_types)
     if indices is None:
         indices = range(len(events))
@@ -1332,7 +1496,8 @@ def collect_gc_output_frequency_samples(result, indices=None, target_types=None,
     }
 
 
-def _resolve_event_tstop(result, event_series):
+def _resolve_event_tstop(result: dict[str, Any], event_series: list[np.ndarray]) -> float:
+    """Infer the latest relevant time from LFP, soma traces, or event series."""
     if len(result.get("lfp_t", [])) > 0:
         return float(result["lfp_t"][-1])
 
@@ -1346,7 +1511,8 @@ def _resolve_event_tstop(result, event_series):
     return t_stop
 
 
-def _smooth_rate(rate_hz, *, bin_ms, smooth_sigma_ms):
+def _smooth_rate(rate_hz: np.ndarray, *, bin_ms: float, smooth_sigma_ms: float) -> np.ndarray:
+    """Gaussian-smooth a binned rate trace."""
     if smooth_sigma_ms and smooth_sigma_ms > 0:
         sigma_bins = float(smooth_sigma_ms) / float(bin_ms)
         radius = max(1, int(round(4.0 * sigma_bins)))
@@ -1357,7 +1523,15 @@ def _smooth_rate(rate_hz, *, bin_ms, smooth_sigma_ms):
     return rate_hz
 
 
-def _event_rate_from_series(event_series, *, t_stop, bin_ms, smooth_sigma_ms, denominator=1.0):
+def _event_rate_from_series(
+    event_series: list[np.ndarray],
+    *,
+    t_stop: float,
+    bin_ms: float,
+    smooth_sigma_ms: float,
+    denominator: float = 1.0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Bin one or more event series into a smoothed population-rate trace."""
     if t_stop <= 0.0:
         return np.array([]), np.array([])
 
@@ -1384,7 +1558,8 @@ def _event_rate_from_series(event_series, *, t_stop, bin_ms, smooth_sigma_ms, de
     return centers, rate_hz
 
 
-def _gc_rate_normalizer(events, normalization):
+def _gc_rate_normalizer(events: list[dict[str, Any]], normalization: str) -> tuple[float, str]:
+    """Return the denominator and ylabel for GC-output rate normalization."""
     normalization = str(normalization or "per_target_cell")
     if normalization == "total":
         return 1.0, "events/s"
@@ -1400,13 +1575,14 @@ def _gc_rate_normalizer(events, normalization):
 
 
 def compute_gc_output_rate(
-    result,
-    bin_ms=5.0,
-    smooth_sigma_ms=10.0,
-    target_types=None,
-    normalization="per_target_cell",
-    return_metadata=False,
-):
+    result: dict[str, Any],
+    bin_ms: float = 5.0,
+    smooth_sigma_ms: float = 10.0,
+    target_types: list[str] | tuple[str, ...] | None = None,
+    normalization: str = "per_target_cell",
+    return_metadata: bool = False,
+) -> Any:
+    """Compute a GC inhibitory-output rate trace with configurable normalization."""
     events = filter_gc_output_events(result, target_types=target_types)
     event_series = [np.asarray(entry.get("times", []), dtype=float) for entry in events]
     t_stop = _resolve_event_tstop(result, event_series)
@@ -1430,7 +1606,11 @@ def compute_gc_output_rate(
     return centers, rate_hz
 
 
-def filter_input_events(result, target_types=None):
+def filter_input_events(
+    result: dict[str, Any],
+    target_types: list[str] | tuple[str, ...] | None = None,
+) -> list[tuple[str, Any]]:
+    """Filter odor-input event rows by destination cell family."""
     rows = list(result.get("input_times", []))
     if not target_types:
         return rows
@@ -1444,7 +1624,8 @@ def filter_input_events(result, target_types=None):
     return filtered
 
 
-def _input_rate_normalizer(rows, normalization):
+def _input_rate_normalizer(rows: list[tuple[str, Any]], normalization: str) -> tuple[float, str]:
+    """Return the denominator and ylabel for odor-input rate normalization."""
     normalization = str(normalization or "per_target_cell")
     if normalization == "total":
         return 1.0, "events/s"
@@ -1457,13 +1638,14 @@ def _input_rate_normalizer(rows, normalization):
 
 
 def compute_input_rate(
-    result,
-    bin_ms=5.0,
-    smooth_sigma_ms=10.0,
-    target_types=None,
-    normalization="per_target_cell",
-    return_metadata=False,
-):
+    result: dict[str, Any],
+    bin_ms: float = 5.0,
+    smooth_sigma_ms: float = 10.0,
+    target_types: list[str] | tuple[str, ...] | None = None,
+    normalization: str = "per_target_cell",
+    return_metadata: bool = False,
+) -> Any:
+    """Compute an odor-input event-rate trace with configurable normalization."""
     rows = filter_input_events(result, target_types=target_types)
     event_series = [np.asarray(times, dtype=float) for _section_name, times in rows]
     t_stop = _resolve_event_tstop(result, event_series)
@@ -1486,7 +1668,8 @@ def compute_input_rate(
     return centers, rate_hz
 
 
-def _rate_series_label(base_label, metadata):
+def _rate_series_label(base_label: str, metadata: dict[str, Any]) -> str:
+    """Append denominator information to a plotted rate-series label."""
     normalization = str(metadata.get("normalization", ""))
     if normalization == "per_target_cell":
         return f"{base_label} (n={metadata.get('n_target_cells', 0)} cells)"
@@ -1501,7 +1684,12 @@ def _rate_series_label(base_label, metadata):
     return base_label
 
 
-def get_named_signal(result, signal="lfp", dt_ms=None):
+def get_named_signal(
+    result: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resolve one named analysis signal into a uniform time/value trace."""
     if signal == "lfp":
         return uniform_trace(result["lfp_t"], result["lfp"], dt_ms=dt_ms)
 
@@ -1557,7 +1745,8 @@ def get_named_signal(result, signal="lfp", dt_ms=None):
     raise KeyError(f"Unsupported signal {signal!r}")
 
 
-def _recommended_raster_fontsize(n_rows, *, default=7.0):
+def _recommended_raster_fontsize(n_rows: int, *, default: float = 7.0) -> float:
+    """Choose a compact but readable y-label font size for dense rasters."""
     if n_rows >= 140:
         return 5.0
     if n_rows >= 80:
@@ -1565,20 +1754,38 @@ def _recommended_raster_fontsize(n_rows, *, default=7.0):
     return float(default)
 
 
-def _recommended_raster_height(n_rows, *, min_height=4.0):
+def _recommended_raster_height(n_rows: int, *, min_height: float = 4.0) -> float:
+    """Estimate a reasonable figure height for a raster plot."""
     if n_rows <= 0:
         return float(min_height)
     return max(float(min_height), 0.06 * float(n_rows) + 1.5)
 
 
-def _ensure_raster_axis(ax, n_rows, *, width=14.0, min_height=4.0, per_row_height=0.22):
+def _ensure_raster_axis(
+    ax: Any,
+    n_rows: int,
+    *,
+    width: float = 14.0,
+    min_height: float = 4.0,
+    per_row_height: float = 0.22,
+) -> Any:
+    """Create a raster axis sized to the current row count when needed."""
     if ax is None:
         height = max(min_height, per_row_height * max(int(n_rows), 1) + 1.0)
         _fig, ax = plt.subplots(figsize=(width, height))
     return ax
 
 
-def _style_raster_axis(ax, labels, *, ylabel, title, fontsize=7, line_spacing=1.4):
+def _style_raster_axis(
+    ax: Any,
+    labels: list[str],
+    *,
+    ylabel: str,
+    title: str,
+    fontsize: float = 7,
+    line_spacing: float = 1.4,
+) -> np.ndarray:
+    """Apply shared styling and row offsets to a raster axis."""
     n_rows = len(labels)
     offsets = np.arange(n_rows, dtype=float) * float(line_spacing)
     ax.set_yticks(offsets)
@@ -1592,7 +1799,16 @@ def _style_raster_axis(ax, labels, *, ylabel, title, fontsize=7, line_spacing=1.
     return offsets
 
 
-def _fit_raster_labels(ax, offsets, *, min_fontsize=4.5, target_ratio=0.9, min_height=4.0, max_iter=8):
+def _fit_raster_labels(
+    ax: Any,
+    offsets: np.ndarray,
+    *,
+    min_fontsize: float = 4.5,
+    target_ratio: float = 0.9,
+    min_height: float = 4.0,
+    max_iter: int = 8,
+) -> Any:
+    """Shrink labels or grow the figure until label height fits the row spacing."""
     if len(offsets) < 2:
         return ax
 
@@ -1646,7 +1862,13 @@ def _fit_raster_labels(ax, offsets, *, min_fontsize=4.5, target_ratio=0.9, min_h
     return ax
 
 
-def plot_input_raster(result, ax=None, max_segments=80, target_types=None):
+def plot_input_raster(
+    result: dict[str, Any],
+    ax: Any = None,
+    max_segments: int = 80,
+    target_types: list[str] | tuple[str, ...] | None = None,
+) -> Any:
+    """Plot the saved odor-input event raster."""
     rows = sorted(filter_input_events(result, target_types=target_types), key=lambda row: row[0])[:max_segments]
     ax = _ensure_raster_axis(ax, len(rows), width=14.0, min_height=4.0, per_row_height=0.10)
     if not rows:
@@ -1668,12 +1890,13 @@ def plot_input_raster(result, ax=None, max_segments=80, target_types=None):
 
 
 def plot_input_rate(
-    result,
-    bin_ms=5.0,
-    smooth_sigma_ms=10.0,
-    normalization="per_target_cell",
-    ax=None,
-):
+    result: dict[str, Any],
+    bin_ms: float = 5.0,
+    smooth_sigma_ms: float = 10.0,
+    normalization: str = "per_target_cell",
+    ax: Any = None,
+) -> Any:
+    """Plot normalized odor-input event-rate traces over time."""
     ax = ax or plt.subplots(figsize=(14, 4))[1]
     traces = [
         ("All inputs", None, "black"),
@@ -1707,7 +1930,8 @@ def plot_input_rate(
     return ax
 
 
-def plot_voltage_traces(result, max_per_type=4, ax=None):
+def plot_voltage_traces(result: dict[str, Any], max_per_type: int = 4, ax: Any = None) -> Any:
+    """Plot a small representative subset of saved soma voltages."""
     ax = ax or plt.subplots(figsize=(14, 8))[1]
     grouped = split_traces_by_type(result)
     offset = 0.0
@@ -1724,7 +1948,13 @@ def plot_voltage_traces(result, max_per_type=4, ax=None):
     return ax
 
 
-def plot_spike_raster(result, threshold=0.0, max_cells_per_type=24, ax=None):
+def plot_spike_raster(
+    result: dict[str, Any],
+    threshold: float = 0.0,
+    max_cells_per_type: int = 24,
+    ax: Any = None,
+) -> Any:
+    """Plot a soma-spike raster derived from the saved voltage traces."""
     grouped = split_traces_by_type(result)
     rows = []
     for cell_type in ("MC", "TC", "GC"):
@@ -1752,14 +1982,15 @@ def plot_spike_raster(result, threshold=0.0, max_cells_per_type=24, ax=None):
 
 
 def plot_gc_output_event_raster(
-    result,
-    max_connections=120,
-    target_types=None,
-    ax=None,
+    result: dict[str, Any],
+    max_connections: int = 120,
+    target_types: list[str] | tuple[str, ...] | None = None,
+    ax: Any = None,
     *,
-    fontsize=7,
-    line_spacing=1.4,
-):
+    fontsize: float = 7,
+    line_spacing: float = 1.4,
+) -> Any:
+    """Plot the saved reciprocal GC inhibitory-output event raster."""
     rows = filter_gc_output_events(result, target_types=target_types)[:max_connections]
     ax = _ensure_raster_axis(ax, len(rows), width=16.0, min_height=4.5, per_row_height=0.10)
     if not rows:
@@ -1784,7 +2015,14 @@ def plot_gc_output_event_raster(
     return ax
 
 
-def plot_gc_output_rate(result, bin_ms=5.0, smooth_sigma_ms=10.0, normalization="per_target_cell", ax=None):
+def plot_gc_output_rate(
+    result: dict[str, Any],
+    bin_ms: float = 5.0,
+    smooth_sigma_ms: float = 10.0,
+    normalization: str = "per_target_cell",
+    ax: Any = None,
+) -> Any:
+    """Plot normalized GC inhibitory-output rate traces over time."""
     ax = ax or plt.subplots(figsize=(14, 4))[1]
     traces = [
         ("All targets", None, "black"),
@@ -1819,12 +2057,13 @@ def plot_gc_output_rate(result, bin_ms=5.0, smooth_sigma_ms=10.0, normalization=
 
 
 def plot_input_overview(
-    result,
-    bin_ms=5.0,
-    smooth_sigma_ms=10.0,
-    max_segments=120,
-    normalization="per_target_cell",
-):
+    result: dict[str, Any],
+    bin_ms: float = 5.0,
+    smooth_sigma_ms: float = 10.0,
+    max_segments: int = 120,
+    normalization: str = "per_target_cell",
+) -> tuple[Any, Any]:
+    """Render the standard input raster + input-rate overview figure."""
     rows = sorted(result.get("input_times", []), key=lambda row: row[0])[:max_segments]
     n_rows = len(rows)
     label_fontsize = _recommended_raster_fontsize(n_rows)
@@ -1859,7 +2098,14 @@ def plot_input_overview(
     return fig, axes
 
 
-def plot_gc_output_overview(result, bin_ms=5.0, smooth_sigma_ms=10.0, max_connections=120, normalization="per_target_cell"):
+def plot_gc_output_overview(
+    result: dict[str, Any],
+    bin_ms: float = 5.0,
+    smooth_sigma_ms: float = 10.0,
+    max_connections: int = 120,
+    normalization: str = "per_target_cell",
+) -> tuple[Any, Any]:
+    """Render the standard GC output raster + rate overview figure."""
     rows = filter_gc_output_events(result)[:max_connections]
     n_rows = len(rows)
     label_fontsize = _recommended_raster_fontsize(n_rows)
@@ -1903,7 +2149,13 @@ def plot_gc_output_overview(result, bin_ms=5.0, smooth_sigma_ms=10.0, max_connec
     return fig, axes
 
 
-def plot_lfp_overview(result, dt_ms=0.1, lowcut_hz=30.0, highcut_hz=120.0):
+def plot_lfp_overview(
+    result: dict[str, Any],
+    dt_ms: float = 0.1,
+    lowcut_hz: float = 30.0,
+    highcut_hz: float = 120.0,
+) -> tuple[Any, Any]:
+    """Plot raw LFP, band-passed LFP, and a Welch PSD summary."""
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=False)
     t = result["lfp_t"]
     lfp = result["lfp"]
@@ -1927,7 +2179,13 @@ def plot_lfp_overview(result, dt_ms=0.1, lowcut_hz=30.0, highcut_hz=120.0):
     return fig, axes
 
 
-def plot_named_signal(result, signal="lfp", dt_ms=0.1, ax=None):
+def plot_named_signal(
+    result: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    ax: Any = None,
+) -> Any:
+    """Plot one named analysis signal as a time trace."""
     ax = ax or plt.subplots(figsize=(14, 4))[1]
     t, y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
     ax.plot(t, y, linewidth=1.0)
@@ -1937,7 +2195,16 @@ def plot_named_signal(result, signal="lfp", dt_ms=0.1, ax=None):
     return ax
 
 
-def plot_spectrogram(result, signal="lfp", dt_ms=0.1, max_freq_hz=150.0, nperseg=512, noverlap=448, ax=None):
+def plot_spectrogram(
+    result: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    max_freq_hz: float = 150.0,
+    nperseg: int = 512,
+    noverlap: int = 448,
+    ax: Any = None,
+) -> Any:
+    """Plot a spectrogram for a named analysis signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
     ax = ax or plt.subplots(figsize=(14, 5))[1]
     times_ms, freqs, power = compute_spectrogram(
@@ -1956,7 +2223,13 @@ def plot_spectrogram(result, signal="lfp", dt_ms=0.1, max_freq_hz=150.0, nperseg
     return ax
 
 
-def plot_wavelet(result, signal="lfp", dt_ms=0.1, ax=None):
+def plot_wavelet(
+    result: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    ax: Any = None,
+) -> Any:
+    """Plot the continuous wavelet power map for a named signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
     ax = ax or plt.subplots(figsize=(14, 5))[1]
     t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
@@ -1968,7 +2241,14 @@ def plot_wavelet(result, signal="lfp", dt_ms=0.1, ax=None):
     return ax
 
 
-def plot_wavelet_band_power(result, signal="lfp", dt_ms=0.1, bands=None, ax=None):
+def plot_wavelet_band_power(
+    result: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    bands: dict[str, tuple[float, float]] | None = None,
+    ax: Any = None,
+) -> Any:
+    """Plot band-collapsed wavelet power traces over time."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
     ax = ax or plt.subplots(figsize=(14, 4))[1]
     t, _freqs, _power, traces = compute_wavelet_band_power(signal_t, signal_y, bands=bands, dt_ms=dt_ms)
@@ -1981,17 +2261,25 @@ def plot_wavelet_band_power(result, signal="lfp", dt_ms=0.1, bands=None, ax=None
     return ax
 
 
-def _format_sweep_value(value):
+def _format_sweep_value(value: Any) -> str:
+    """Format a sweep value compactly for figure titles."""
     if isinstance(value, float):
         return f"{value:.4g}"
     return str(value)
 
 
-def _safe_name(name):
+def _safe_name(name: Any) -> str:
+    """Make a filesystem-safe artifact basename."""
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name)).strip("._") or "animation"
 
 
-def animate_lfp_sweep(sweep, signal="lfp", dt_ms=0.1, interval=1000):
+def animate_lfp_sweep(
+    sweep: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    interval: int = 1000,
+) -> animation.FuncAnimation:
+    """Animate trace-style outputs across a one-parameter sweep."""
     if signal != "lfp":
         traces = [get_named_signal(item["result"], signal=signal, dt_ms=dt_ms) for item in sweep["items"]]
         y_min = min(float(np.min(y)) for _t, y in traces)
@@ -2041,14 +2329,15 @@ def animate_lfp_sweep(sweep, signal="lfp", dt_ms=0.1, interval=1000):
 
 
 def animate_spectrogram_sweep(
-    sweep,
-    signal="lfp",
-    dt_ms=0.1,
-    max_freq_hz=150.0,
-    nperseg=512,
-    noverlap=448,
-    interval=1000,
-):
+    sweep: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    max_freq_hz: float = 150.0,
+    nperseg: int = 512,
+    noverlap: int = 448,
+    interval: int = 1000,
+) -> animation.FuncAnimation:
+    """Animate spectrograms across a one-parameter sweep."""
     specs = []
     vmin = None
     vmax = None
@@ -2083,7 +2372,13 @@ def animate_spectrogram_sweep(
     return anim
 
 
-def animate_wavelet_sweep(sweep, signal="lfp", dt_ms=0.1, interval=1000):
+def animate_wavelet_sweep(
+    sweep: dict[str, Any],
+    signal: str = "lfp",
+    dt_ms: float = 0.1,
+    interval: int = 1000,
+) -> animation.FuncAnimation:
+    """Animate wavelet maps across a one-parameter sweep."""
     maps = []
     for item in sweep["items"]:
         if signal == "lfp":
@@ -2111,7 +2406,13 @@ def animate_wavelet_sweep(sweep, signal="lfp", dt_ms=0.1, interval=1000):
     return anim
 
 
-def animate_sniff_average_sweep(sweep, dt_ms=0.1, sniff_count=8, interval=1000):
+def animate_sniff_average_sweep(
+    sweep: dict[str, Any],
+    dt_ms: float = 0.1,
+    sniff_count: int = 8,
+    interval: int = 1000,
+) -> animation.FuncAnimation:
+    """Animate sniff-averaged wavelet views across a sweep."""
     maps = [load_legacy_wavelet_analysis(item["result"], dt=dt_ms, sniff_count=sniff_count) for item in sweep["items"]]
     fig, ax = plt.subplots(figsize=(5, 5))
 
@@ -2136,7 +2437,13 @@ def animate_sniff_average_sweep(sweep, dt_ms=0.1, sniff_count=8, interval=1000):
     return anim
 
 
-def save_animation(anim, name, output_dir=None, fps=2):
+def save_animation(
+    anim: animation.FuncAnimation,
+    name: str,
+    output_dir: str | Path | None = None,
+    fps: int = 2,
+) -> Path:
+    """Save an animation as a GIF and return the written path."""
     output_dir = Path(output_dir or (DEFAULT_RESULTS_BASE / "animations" / make_timestamp()))
     output_dir.mkdir(parents=True, exist_ok=True)
     gif_path = output_dir / f"{_safe_name(name)}.gif"
@@ -2145,7 +2452,15 @@ def save_animation(anim, name, output_dir=None, fps=2):
     return gif_path
 
 
-def save_figure(name, fig=None, run_or_result=None, output_dir=None, dpi=200, close=False):
+def save_figure(
+    name: str,
+    fig: Any = None,
+    run_or_result: RunRecord | dict[str, Any] | None = None,
+    output_dir: str | Path | None = None,
+    dpi: int = 200,
+    close: bool = False,
+) -> Path:
+    """Save a Matplotlib figure near a run directory or in a timestamped folder."""
     fig = fig or plt.gcf()
 
     if output_dir is None and run_or_result is not None:
@@ -2166,7 +2481,8 @@ def save_figure(name, fig=None, run_or_result=None, output_dir=None, dpi=200, cl
     return png_path
 
 
-def show_all_outputs(result, config=None):
+def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = None) -> None:
+    """Render the standard notebook figure set for one loaded result."""
     config = config or {}
     dt_ms = float(config.get("analysis_dt_ms", 0.1))
     input_bin_ms = float(config.get("input_bin_ms", 5.0))
@@ -2220,7 +2536,12 @@ def show_all_outputs(result, config=None):
     plt.show()
 
 
-def print_run_summary(run, result, config=None):
+def print_run_summary(
+    run: RunRecord,
+    result: dict[str, Any],
+    config: dict[str, Any] | None = None,
+) -> None:
+    """Print a concise run summary plus param/runtime diffs for notebook use."""
     info = result_overview(result)
     print(json.dumps(info, indent=2, sort_keys=True))
     config = config or run.config or (result.get("run_info") or {}).get("config") or {}
