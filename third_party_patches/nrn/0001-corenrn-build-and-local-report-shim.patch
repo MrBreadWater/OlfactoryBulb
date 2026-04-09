@@ -1,0 +1,562 @@
+diff --git a/cmake/coreneuron/OpenAccHelper.cmake b/cmake/coreneuron/OpenAccHelper.cmake
+index 6df39ad93..92fee2c88 100644
+--- a/cmake/coreneuron/OpenAccHelper.cmake
++++ b/cmake/coreneuron/OpenAccHelper.cmake
+@@ -66,7 +66,13 @@ if(CORENRN_ENABLE_GPU)
+   # Make sure that OpenACC code is generated for the same compute capabilities as the explicit CUDA
+   # code. Otherwise there may be confusing linker errors. We cannot rely on nvcc and nvc++ using the
+   # same default compute capabilities as each other, particularly on GPU-less build machines.
+-  foreach(compute_capability ${CMAKE_CUDA_ARCHITECTURES})
++  if(NOT DEFINED CORENRN_NVHPC_COMPUTE_CAPABILITIES)
++    set(CORENRN_NVHPC_COMPUTE_CAPABILITIES
++        "${CMAKE_CUDA_ARCHITECTURES}"
++        CACHE STRING
++              "Compute capabilities to target in NVHPC OpenACC/OpenMP offload code.")
++  endif()
++  foreach(compute_capability ${CORENRN_NVHPC_COMPUTE_CAPABILITIES})
+     string(APPEND NVHPC_ACC_COMP_FLAGS ",cc${compute_capability}")
+   endforeach()
+   if(CORENRN_ACCELERATOR_OFFLOAD STREQUAL "OpenMP")
+diff --git a/src/coreneuron/CMakeLists.txt b/src/coreneuron/CMakeLists.txt
+index 23190b1cf..a6fe2c476 100644
+--- a/src/coreneuron/CMakeLists.txt
++++ b/src/coreneuron/CMakeLists.txt
+@@ -33,6 +33,9 @@ option(CORENRN_ENABLE_OPENMP "Build the CORE NEURON with OpenMP implementation"
+ option(CORENRN_ENABLE_OPENMP_OFFLOAD "Prefer OpenMP target offload to OpenACC" ON)
+ option(CORENRN_ENABLE_TIMEOUT "Enable nrn_timeout implementation" ON)
+ option(CORENRN_ENABLE_REPORTING "Enable use of libsonata for soma reports" OFF)
++option(CORENRN_ENABLE_LOCAL_REPORT_SHIM
++       "Use the bundled lightweight report shim instead of an external SONATA writer"
++       ON)
+ option(CORENRN_ENABLE_HOC_EXP "Enable wrapping exp with hoc_exp()" OFF)
+ option(CORENRN_ENABLE_SPLAYTREE_QUEUING "Enable use of Splay tree for spike queuing" ON)
+ option(CORENRN_ENABLE_NET_RECEIVE_BUFFER "Enable event buffering in net_receive function" ON)
+@@ -195,16 +198,33 @@ if(NOT CORENRN_ENABLE_TIMEOUT)
+ endif()
+ 
+ if(CORENRN_ENABLE_REPORTING)
+-  find_package(sonata REQUIRED)
+-
+-  if(TARGET sonata::sonata_report)
++  if(CORENRN_ENABLE_LOCAL_REPORT_SHIM)
++    add_library(corenrn-sonata-report-shim STATIC
++                ${PROJECT_SOURCE_DIR}/src/coreneuron/io/reports/shim/sonata_report_shim.cpp)
++    target_include_directories(
++      corenrn-sonata-report-shim
++      PUBLIC ${PROJECT_SOURCE_DIR}/src
++             ${PROJECT_SOURCE_DIR}/src/coreneuron/io/reports/shim)
++    target_link_libraries(corenrn-sonata-report-shim PUBLIC ${MPI_CXX_LIBRARIES})
++    set_target_properties(corenrn-sonata-report-shim PROPERTIES POSITION_INDEPENDENT_CODE ON)
++    add_library(sonata::sonata_report ALIAS corenrn-sonata-report-shim)
++    # Use the concrete target name here so nrnivmodl-core's extracted link flags
++    # resolve to a real library instead of the alias string "-lsonata::sonata_report".
++    set(sonatareport_LIBRARY corenrn-sonata-report-shim)
++    install(TARGETS corenrn-sonata-report-shim DESTINATION ${NRN_INSTALL_DATA_PREFIX}lib)
+     list(APPEND CORENRN_COMPILE_DEFS ENABLE_SONATA_REPORTS)
+-    set(ENABLE_SONATA_REPORTS_TESTS ON)
++    set(ENABLE_SONATA_REPORTS_TESTS OFF)
+   else()
+-    message(SEND_ERROR "SONATA library was found but without reporting support")
++    find_package(sonata REQUIRED)
++
++    if(TARGET sonata::sonata_report)
++      set(sonatareport_LIBRARY sonata::sonata_report)
++      list(APPEND CORENRN_COMPILE_DEFS ENABLE_SONATA_REPORTS)
++      set(ENABLE_SONATA_REPORTS_TESTS ON)
++    else()
++      message(SEND_ERROR "SONATA library was found but without reporting support")
++    endif()
+   endif()
+-
+-  include_directories(${sonatareport_INCLUDE_DIR})
+ endif()
+ 
+ if(CORENRN_ENABLE_PRCELLSTATE)
+diff --git a/src/coreneuron/io/reports/report_handler.cpp b/src/coreneuron/io/reports/report_handler.cpp
+index 040efac0e..25ab8ffbe 100644
+--- a/src/coreneuron/io/reports/report_handler.cpp
++++ b/src/coreneuron/io/reports/report_handler.cpp
+@@ -340,6 +340,26 @@ static std::vector<int> get_intersection_ids(const NrnThread& nt, std::vector<in
+     return intersection_ids;
+ }
+ 
++static std::vector<int> get_mapping_intersection_ids(const NrnThread& nt,
++                                                     const std::vector<int>& target_gids) {
++    std::vector<int> intersection_ids;
++    const auto* mapinfo = static_cast<NrnThreadMappingInfo*>(nt.mapping);
++    if (!mapinfo) {
++        return intersection_ids;
++    }
++
++    intersection_ids.reserve(target_gids.size());
++    for (auto i = 0; i < target_gids.size(); ++i) {
++        const auto gid = target_gids[i];
++        if (mapinfo->get_cell_mapping(gid) != nullptr) {
++            intersection_ids.push_back(i);
++        }
++    }
++
++    intersection_ids.shrink_to_fit();
++    return intersection_ids;
++}
++
+ /// loop over the points of a compartment set and to return VarsToReport
+ static VarsToReport get_compartment_set_vars_to_report(const NrnThread& nt,
+                                                        const std::vector<int>& intersection_ids,
+@@ -681,8 +701,13 @@ void ReportHandler::create_report(ReportConfiguration& report_config,
+         }
+         case ReportType::LFP: {
+             mapinfo->prepare_lfp();
++            const std::vector<int> mapping_intersection_ids =
++                get_mapping_intersection_ids(nt, report_config.target);
+             vars_to_report =
+-                get_lfp_vars_to_report(nt, intersection_ids, report_config, mapinfo->_lfp.data());
++                get_lfp_vars_to_report(nt,
++                                       mapping_intersection_ids,
++                                       report_config,
++                                       mapinfo->_lfp.data());
+             register_section_report(nt, report_config, vars_to_report, is_soma_target);
+             break;
+         }
+diff --git a/src/coreneuron/io/reports/sonata_report_handler.cpp b/src/coreneuron/io/reports/sonata_report_handler.cpp
+index 7b5933418..6f58ad953 100644
+--- a/src/coreneuron/io/reports/sonata_report_handler.cpp
++++ b/src/coreneuron/io/reports/sonata_report_handler.cpp
+@@ -7,10 +7,13 @@
+ */
+ 
+ #include "sonata_report_handler.hpp"
++#include <cstdlib>
++#include <fstream>
+ #include "coreneuron/network/netcvode.hpp"
+ #include "coreneuron/network/netcon.hpp"
+ #include "coreneuron/io/nrnsection_mapping.hpp"
+ #include "coreneuron/mechanism/mech_mapping.hpp"
++#include "coreneuron/mpi/nrnmpi.h"
+ #ifdef ENABLE_SONATA_REPORTS
+ #include "bbp/sonata/reports.h"
+ #endif  // ENABLE_SONATA_REPORTS
+@@ -60,6 +63,7 @@ std::pair<std::string, int> SonataReportHandler::get_population_info(int gid) {
+ void SonataReportHandler::register_report(const NrnThread& nt,
+                                           const ReportConfiguration& report_conf,
+                                           const VarsToReport& vars_to_report) {
++    const bool debug_sonata_lfp = std::getenv("OB_DEBUG_SONATA_LFP") != nullptr;
+     const auto type_str = to_string(report_conf.type);
+     sonata_create_report(report_conf.output_path.data(),
+                          report_conf.start,
+@@ -69,11 +73,32 @@ void SonataReportHandler::register_report(const NrnThread& nt,
+                          type_str.data());
+     sonata_set_report_max_buffer_size_hint(report_conf.output_path.data(), report_conf.buffer_size);
+ 
+-    for (const auto& kv: vars_to_report) {
+-        uint64_t gid = kv.first;
+-        const std::vector<VarWithMapping>& vars = kv.second;
+-        if (!vars.size())
++    if (debug_sonata_lfp && report_conf.type == ReportType::LFP) {
++        std::ofstream out("/tmp/sonata_lfp_register_rank" + std::to_string(nrnmpi_myid) + ".txt");
++        out << "vars_to_report=" << vars_to_report.size() << "\n";
++        for (const auto gid: report_conf.target) {
++            const auto it = vars_to_report.find(gid);
++            if (it == vars_to_report.end()) {
++                continue;
++            }
++            out << "gid=" << it->first << " vars=" << it->second.size();
++            if (!it->second.empty()) {
++                out << " first_id=" << it->second.front().id;
++            }
++            out << "\n";
++        }
++    }
++
++    for (const auto gid: report_conf.target) {
++        const auto it = vars_to_report.find(gid);
++        if (it == vars_to_report.end()) {
+             continue;
++        }
++
++        const std::vector<VarWithMapping>& vars = it->second;
++        if (!vars.size()) {
++            continue;
++        }
+ 
+         const auto& pop_info = get_population_info(gid);
+         std::string population_name = pop_info.first;
+diff --git a/src/coreneuron/network/partrans.cpp b/src/coreneuron/network/partrans.cpp
+index 28fee5d86..e650f4006 100644
+--- a/src/coreneuron/network/partrans.cpp
++++ b/src/coreneuron/network/partrans.cpp
+@@ -119,7 +119,7 @@ void nrnthread_v_transfer(NrnThread* _nt) {
+     int n_insrc_buf = insrcdspl_[nrnmpi_numprocs];
+     int ndata = _nt->_ndata;
+ #endif
+-    nrn_pragma_acc(parallel loop copyin(tar_indices [0:ntar])
++    nrn_pragma_acc(parallel loop copyin(tar_indices [0:ntar]) \
+                        present(insrc_indices [0:ntar],
+                                tar_data [0:ndata],
+                                insrc_buf_ [0:n_insrc_buf]) if (_nt->compute_gpu)
+diff --git a/src/coreneuron/io/reports/shim/sonata_report_shim.cpp b/src/coreneuron/io/reports/shim/sonata_report_shim.cpp
+new file mode 100644
+index 000000000..a1e4cc2af
+--- /dev/null
++++ b/src/coreneuron/io/reports/shim/sonata_report_shim.cpp
+@@ -0,0 +1,360 @@
++#include "bbp/sonata/reports.h"
++
++#include <cmath>
++#include <cstdint>
++#include <algorithm>
++#include <fstream>
++#include <iostream>
++#include <map>
++#include <string>
++#include <unordered_map>
++#include <utility>
++#include <vector>
++
++#include "coreneuron/mpi/nrnmpi.h"
++#include "coreneuron/mpi/core/nrnmpi.hpp"
++
++extern void nrnmpi_int_allgatherv(int* s, int* r, int* n, int* dspl);
++extern void nrnmpi_dbl_allgatherv(double* s, double* r, int* n, int* dspl);
++
++namespace {
++
++using coreneuron::nrnmpi_int_allgather;
++using coreneuron::nrnmpi_myid;
++using coreneuron::nrnmpi_numprocs;
++
++struct ReportState {
++    std::string output_path;
++    std::string unit;
++    std::string type;
++    double start{0.0};
++    double stop{0.0};
++    double report_dt{0.0};
++    double atomic_step{0.025};
++    int reporting_period{1};
++    int max_buffer_hint_mb{0};
++    std::map<std::uint64_t, std::vector<double*>> gid_ptrs;
++    std::vector<int> local_gids;
++    std::vector<int> gids;
++    std::vector<double> times;
++    std::vector<double> local_rows;
++    bool flushed{false};
++};
++
++std::unordered_map<std::string, ReportState> g_reports;
++double g_atomic_step = 0.025;
++int g_default_buffer_hint_mb = 4;
++
++void ensure_global_gid_order(ReportState& report) {
++    if (!report.gids.empty()) {
++        return;
++    }
++
++    std::vector<int> local_counts(static_cast<std::size_t>(std::max(nrnmpi_numprocs, 1)), 0);
++    int local_count = static_cast<int>(report.local_gids.size());
++    if (nrnmpi_numprocs > 1) {
++        nrnmpi_int_allgather(&local_count, local_counts.data(), 1);
++    } else {
++        local_counts[0] = local_count;
++    }
++
++    int max_count = 0;
++    for (int count: local_counts) {
++        max_count = std::max(max_count, count);
++    }
++
++    std::vector<int> send(static_cast<std::size_t>(std::max(max_count, 1)), -1);
++    for (std::size_t i = 0; i < report.local_gids.size(); ++i) {
++        send[i] = report.local_gids[i];
++    }
++
++    std::vector<int> recv(send.size() * static_cast<std::size_t>(std::max(nrnmpi_numprocs, 1)), -1);
++    if (nrnmpi_numprocs > 1) {
++        nrnmpi_int_allgather(send.data(), recv.data(), max_count);
++    } else {
++        recv = send;
++    }
++
++    std::unordered_map<int, bool> seen;
++    for (int gid_value: recv) {
++        if (gid_value >= 0 && !seen[gid_value]) {
++            seen[gid_value] = true;
++            report.gids.push_back(gid_value);
++        }
++    }
++}
++
++std::vector<double> gather_report_values(const ReportState& report) {
++    std::vector<double> local(report.local_gids.size(), 0.0);
++    for (std::size_t i = 0; i < report.local_gids.size(); ++i) {
++        const auto it = report.gid_ptrs.find(static_cast<std::uint64_t>(report.local_gids[i]));
++        if (it == report.gid_ptrs.end()) {
++            continue;
++        }
++        const auto& ptrs = it->second;
++        double sum = 0.0;
++        for (double* value_ptr: ptrs) {
++            if (value_ptr) {
++                sum += *value_ptr;
++            }
++        }
++        local[i] = sum;
++    }
++
++    return local;
++}
++
++void flush_report(ReportState& report) {
++    if (report.flushed) {
++        return;
++    }
++
++    ensure_global_gid_order(report);
++
++    std::vector<int> local_gid_counts(static_cast<std::size_t>(std::max(nrnmpi_numprocs, 1)), 0);
++    int local_gid_count = static_cast<int>(report.local_gids.size());
++    if (nrnmpi_numprocs > 1) {
++        nrnmpi_int_allgather(&local_gid_count, local_gid_counts.data(), 1);
++    } else {
++        local_gid_counts[0] = local_gid_count;
++    }
++
++    std::vector<int> gid_displs(local_gid_counts.size(), 0);
++    int total_gid_count = 0;
++    for (std::size_t i = 0; i < local_gid_counts.size(); ++i) {
++        gid_displs[i] = total_gid_count;
++        total_gid_count += local_gid_counts[i];
++    }
++
++    std::vector<int> all_local_gids(static_cast<std::size_t>(std::max(total_gid_count, 1)), -1);
++    if (total_gid_count > 0) {
++        int* send_gids = local_gid_count ? report.local_gids.data() : all_local_gids.data();
++        if (nrnmpi_numprocs > 1) {
++            nrnmpi_int_allgatherv(send_gids,
++                                  all_local_gids.data(),
++                                  local_gid_counts.data(),
++                                  gid_displs.data());
++        } else {
++            std::copy(report.local_gids.begin(), report.local_gids.end(), all_local_gids.begin());
++        }
++    }
++
++    std::vector<int> local_row_counts(static_cast<std::size_t>(std::max(nrnmpi_numprocs, 1)), 0);
++    int local_row_count = static_cast<int>(report.times.size());
++    if (nrnmpi_numprocs > 1) {
++        nrnmpi_int_allgather(&local_row_count, local_row_counts.data(), 1);
++    } else {
++        local_row_counts[0] = local_row_count;
++    }
++
++    const int expected_row_count = local_row_counts.empty() ? 0 : local_row_counts.front();
++    for (int row_count: local_row_counts) {
++        if (row_count != expected_row_count) {
++            std::cerr << "[WARNING] Report row counts diverged across ranks for "
++                      << report.output_path << '\n';
++            report.flushed = true;
++            return;
++        }
++    }
++
++    std::vector<int> local_value_counts(local_gid_counts.size(), 0);
++    std::vector<int> value_displs(local_gid_counts.size(), 0);
++    int total_value_count = 0;
++    for (std::size_t i = 0; i < local_gid_counts.size(); ++i) {
++        local_value_counts[i] = local_gid_counts[i] * expected_row_count;
++        value_displs[i] = total_value_count;
++        total_value_count += local_value_counts[i];
++    }
++
++    std::vector<double> all_local_rows(static_cast<std::size_t>(std::max(total_value_count, 1)), 0.0);
++    if (total_value_count > 0) {
++        double* send_values = report.local_rows.empty() ? all_local_rows.data() : report.local_rows.data();
++        if (nrnmpi_numprocs > 1) {
++            nrnmpi_dbl_allgatherv(send_values,
++                                  all_local_rows.data(),
++                                  local_value_counts.data(),
++                                  value_displs.data());
++        } else {
++            std::copy(report.local_rows.begin(), report.local_rows.end(), all_local_rows.begin());
++        }
++    }
++
++    if (nrnmpi_myid != 0) {
++        report.flushed = true;
++        return;
++    }
++
++    std::ofstream out(report.output_path);
++    if (!out) {
++        std::cerr << "[WARNING] Could not open report output path: " << report.output_path << '\n';
++        return;
++    }
++
++    out << "# coreneuron-report-shim v1\n";
++    out << "# type\t" << report.type << '\n';
++    out << "# unit\t" << report.unit << '\n';
++    out << "# atomic_step_ms\t" << report.atomic_step << '\n';
++    out << "# report_dt_ms\t" << report.report_dt << '\n';
++    out << "# columns\ttime_ms";
++    for (int gid: report.gids) {
++        out << "\tg" << gid;
++    }
++    out << '\n';
++
++    std::unordered_map<int, int> gid_to_column;
++    gid_to_column.reserve(report.gids.size());
++    for (std::size_t i = 0; i < report.gids.size(); ++i) {
++        gid_to_column[report.gids[i]] = static_cast<int>(i);
++    }
++
++    std::vector<double> row_buffer(report.gids.size(), 0.0);
++    for (int row = 0; row < expected_row_count; ++row) {
++        std::fill(row_buffer.begin(), row_buffer.end(), 0.0);
++        for (std::size_t rank = 0; rank < local_gid_counts.size(); ++rank) {
++            const int gid_count = local_gid_counts[rank];
++            const int gid_offset = gid_displs[rank];
++            const int value_offset = value_displs[rank] + row * gid_count;
++            for (int j = 0; j < gid_count; ++j) {
++                const int gid = all_local_gids[gid_offset + j];
++                const auto column = gid_to_column.find(gid);
++                if (column == gid_to_column.end()) {
++                    continue;
++                }
++                row_buffer[column->second] += all_local_rows[value_offset + j];
++            }
++        }
++
++        out << report.times[static_cast<std::size_t>(row)];
++        for (double value: row_buffer) {
++            out << '\t' << value;
++        }
++        out << '\n';
++    }
++
++    report.flushed = true;
++}
++
++}  // namespace
++
++void sonata_set_atomic_step(double dt) {
++    g_atomic_step = dt;
++}
++
++void sonata_create_report(const char* output_path,
++                          double start,
++                          double stop,
++                          double report_dt,
++                          const char* unit,
++                          const char* type) {
++    auto& report = g_reports[output_path];
++    if (!report.output_path.empty()) {
++        report.start = start;
++        report.stop = stop;
++        report.report_dt = report_dt;
++        report.unit = unit ? unit : "";
++        report.type = type ? type : "";
++        report.atomic_step = g_atomic_step;
++        report.reporting_period =
++            std::max(1, static_cast<int>(std::llround(report_dt / std::max(g_atomic_step, 1e-12))));
++        return;
++    }
++    report.output_path = output_path;
++    report.start = start;
++    report.stop = stop;
++    report.report_dt = report_dt;
++    report.unit = unit ? unit : "";
++    report.type = type ? type : "";
++    report.atomic_step = g_atomic_step;
++    report.reporting_period =
++        std::max(1, static_cast<int>(std::llround(report_dt / std::max(g_atomic_step, 1e-12))));
++    report.max_buffer_hint_mb = g_default_buffer_hint_mb;
++    report.gid_ptrs.clear();
++    report.local_gids.clear();
++    report.gids.clear();
++    report.times.clear();
++    report.local_rows.clear();
++    report.flushed = false;
++}
++
++void sonata_set_report_max_buffer_size_hint(const char* output_path, int hint_mb) {
++    auto it = g_reports.find(output_path);
++    if (it != g_reports.end()) {
++        it->second.max_buffer_hint_mb = hint_mb;
++    }
++}
++
++void sonata_add_node(const char* output_path,
++                     const char* /*population_name*/,
++                     int /*population_offset*/,
++                     std::uint64_t gid) {
++    auto& report = g_reports[output_path];
++    if (report.output_path.empty()) {
++        report.output_path = output_path;
++        report.atomic_step = g_atomic_step;
++    }
++    const int gid_value = static_cast<int>(gid);
++    if (std::find(report.local_gids.begin(), report.local_gids.end(), gid_value) ==
++        report.local_gids.end()) {
++        report.local_gids.push_back(gid_value);
++    }
++}
++
++void sonata_add_element(const char* output_path,
++                        const char* /*population_name*/,
++                        std::uint64_t gid,
++                        std::uint32_t /*element_id*/,
++                        double* value_ptr) {
++    g_reports[output_path].gid_ptrs[gid].push_back(value_ptr);
++}
++
++void sonata_record_node_data(double step,
++                             std::size_t gid_count,
++                             const int* gids,
++                             const char* output_path) {
++    auto it = g_reports.find(output_path);
++    if (it == g_reports.end()) {
++        return;
++    }
++
++    auto& report = it->second;
++    long long rounded_step = std::llround(step);
++    if (rounded_step % report.reporting_period != 0) {
++        return;
++    }
++
++    auto global_values = gather_report_values(report);
++    report.times.push_back(static_cast<double>(rounded_step) * report.atomic_step);
++    report.local_rows.insert(report.local_rows.end(), global_values.begin(), global_values.end());
++}
++
++void sonata_check_and_flush(double /*t*/) {}
++
++void sonata_set_min_steps_to_record(int /*steps*/) {}
++
++void sonata_setup_communicators() {}
++
++void sonata_prepare_datasets() {}
++
++void sonata_set_max_buffer_size_hint(int hint_mb) {
++    g_default_buffer_hint_mb = hint_mb;
++}
++
++void sonata_flush(double /*t*/) {
++    for (auto& [path, report]: g_reports) {
++        (void) path;
++        flush_report(report);
++    }
++}
++
++void sonata_create_spikefile(const char* /*outpath*/, const char* /*filename*/) {}
++
++void sonata_add_spikes_population(const char* /*population_name*/,
++                                  int /*population_offset*/,
++                                  const double* /*times*/,
++                                  std::size_t /*n_times*/,
++                                  const int* /*gids*/,
++                                  std::size_t /*n_gids*/) {}
++
++void sonata_write_spike_populations() {}
++
++void sonata_close_spikefile() {}

@@ -1,0 +1,21 @@
+{
+  "upstream_repo": "https://github.com/neuronsimulator/nrn.git",
+  "upstream_ref": "b12a5412428af65c302166785a9753cd48b84b0a",
+  "patches": [
+    {
+      "file": "0001-corenrn-build-and-local-report-shim.patch",
+      "category": "required",
+      "description": "Enable the local SONATA report shim and LFP gid-order fixes."
+    },
+    {
+      "file": "0002-gpu-lfp-and-data-return.patch",
+      "category": "required",
+      "description": "Keep GPU LFP parity and final CoreNEURON data return correct."
+    },
+    {
+      "file": "0003-nvhpc-compatibility.patch",
+      "category": "required",
+      "description": "Apply NVHPC/Eigen/Python compatibility fixes needed by OBGPU."
+    }
+  ]
+}

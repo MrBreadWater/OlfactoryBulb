@@ -1,0 +1,36 @@
+name: OBGPU
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - ipykernel
+  - cython
+  - jupyterlab
+  - openmpi
+  - mpi4py
+  - peewee
+  - lmfit
+  - requests
+  - validators
+  - gitpython
+  - networkx
+  - pytables
+  - lxml
+  - cerberus
+  - execnet
+  - backports.tempfile
+  - cmake
+  - ninja
+  - flex
+  - bison
+  - patchelf
+  - pip:
+      - blenderneuron==2.0.4
+      - lfpsimpy==0.1.1
+      - natsort==8.4.0

@@ -1,0 +1,283 @@
+diff --git a/src/coreneuron/io/core2nrn_data_return.cpp b/src/coreneuron/io/core2nrn_data_return.cpp
+index 1ec5fc520..6531bab45 100644
+--- a/src/coreneuron/io/core2nrn_data_return.cpp
++++ b/src/coreneuron/io/core2nrn_data_return.cpp
+@@ -16,6 +16,8 @@
+ #include "coreneuron/io/core2nrn_data_return.hpp"
+ #include "coreneuron/network/netcvode.hpp"
+ #include "coreneuron/permute/node_permute.h"
++#include "coreneuron/gpu/nrn_acc_manager.hpp"
++#include "coreneuron/utils/offload.hpp"
+ #include "coreneuron/utils/nrnoc_aux.hpp"
+ #include "coreneuron/utils/vrecitem.h"
+ #include "coreneuron/io/mem_layout_util.hpp"
+@@ -314,6 +316,14 @@ void core2nrn_data_return() {
+         double* data = nullptr;
+         NrnThread& nt = nrn_threads[tid];
+         std::vector<double*> mdata{};
++
++        // GPU runs keep voltage and fast-imem state resident on device during solve.
++        // Synchronize once here, at end-of-run return, before copying back into NEURON.
++        if (nt.compute_gpu) {
++            nrn_pragma_acc(wait(nt.stream_id))
++            update_nrnthreads_on_host(&nt, 1);
++        }
++
+         n = (*nrn2core_type_return_)(0, tid, data, mdata);  // 0 means time
+         if (n) {                                            // not the empty thread
+             data[0] = nt._t;
+diff --git a/src/coreneuron/io/reports/report_event.cpp b/src/coreneuron/io/reports/report_event.cpp
+index bb01d3cc3..6bee4eaaf 100644
+--- a/src/coreneuron/io/reports/report_event.cpp
++++ b/src/coreneuron/io/reports/report_event.cpp
+@@ -7,10 +7,13 @@
+ */
+ 
+ #include "report_event.hpp"
++#include <fstream>
+ #include "coreneuron/sim/multicore.hpp"
+ #include "coreneuron/io/reports/nrnreport.hpp"
+ #include "coreneuron/utils/nrn_assert.h"
++#include "coreneuron/utils/offload.hpp"
+ #include "coreneuron/io/nrnsection_mapping.hpp"
++#include "coreneuron/mpi/nrnmpi.h"
+ #ifdef ENABLE_SONATA_REPORTS
+ #include "bbp/sonata/reports.h"
+ #endif  // ENABLE_SONATA_REPORTS
+@@ -18,6 +21,23 @@
+ namespace coreneuron {
+ 
+ #ifdef ENABLE_SONATA_REPORTS
++ReportEvent::~ReportEvent() {
++    if (lfp_gpu_cache_ready_) {
++        if (!lfp_values_.empty()) {
++            cnrn_target_delete(lfp_values_.data(), lfp_values_.size());
++        }
++        if (!lfp_segment_ids_.empty()) {
++            cnrn_target_delete(lfp_segment_ids_.data(), lfp_segment_ids_.size());
++        }
++        if (!lfp_output_indices_.empty()) {
++            cnrn_target_delete(lfp_output_indices_.data(), lfp_output_indices_.size());
++        }
++        if (!lfp_factors_.empty()) {
++            cnrn_target_delete(lfp_factors_.data(), lfp_factors_.size());
++        }
++    }
++}
++
+ ReportEvent::ReportEvent(double dt,
+                          double tstart,
+                          const VarsToReport& filtered_gids,
+@@ -38,6 +58,84 @@ ReportEvent::ReportEvent(double dt,
+         gids_to_report.push_back(gid.first);
+     }
+     std::sort(gids_to_report.begin(), gids_to_report.end());
++    if (report_type == ReportType::LFP) {
++        std::ofstream out(report_path + ".rank" + std::to_string(nrnmpi_myid) + ".gids.txt");
++        for (const auto gid: gids_to_report) {
++            out << gid << "\n";
++        }
++    }
++}
++
++void ReportEvent::prepare_lfp_cache(NrnThread* nt) {
++    if (lfp_cache_ready_) {
++        return;
++    }
++
++    auto* mapinfo = static_cast<NrnThreadMappingInfo*>(nt->mapping);
++    nrn_assert(mapinfo);
++
++    lfp_output_ptrs_.clear();
++    lfp_segment_ids_.clear();
++    lfp_output_indices_.clear();
++    lfp_factors_.clear();
++
++    for (const auto gid: gids_to_report) {
++        const auto vars_it = vars_to_report.find(gid);
++        if (vars_it == vars_to_report.end()) {
++            continue;
++        }
++
++        const auto& cell_mapping = mapinfo->get_cell_mapping(gid);
++        nrn_assert(cell_mapping != nullptr);
++
++        const int num_electrodes = cell_mapping->num_electrodes();
++        std::vector<double*> ordered_output_ptrs(num_electrodes, nullptr);
++        for (const auto& output: vars_it->second) {
++            nrn_assert(output.id >= 0);
++            nrn_assert(output.id < num_electrodes);
++            ordered_output_ptrs[output.id] = output.var_value;
++        }
++
++        const auto base_output_index = static_cast<int>(lfp_output_ptrs_.size());
++        lfp_output_ptrs_.insert(lfp_output_ptrs_.end(),
++                                ordered_output_ptrs.begin(),
++                                ordered_output_ptrs.end());
++
++        for (const auto& segment_factors: cell_mapping->lfp_factors) {
++            const int segment_id = segment_factors.first;
++            const auto& factors = segment_factors.second;
++            nrn_assert(static_cast<int>(factors.size()) == num_electrodes);
++            for (int electrode_id = 0; electrode_id < num_electrodes; ++electrode_id) {
++                const double factor = factors[electrode_id];
++                if (factor == 0.0) {
++                    continue;
++                }
++                lfp_segment_ids_.push_back(segment_id);
++                lfp_output_indices_.push_back(base_output_index + electrode_id);
++                lfp_factors_.push_back(factor);
++            }
++        }
++    }
++
++    lfp_values_.assign(lfp_output_ptrs_.size(), 0.0);
++
++    if (nt->compute_gpu) {
++        if (!lfp_values_.empty()) {
++            cnrn_target_copyin(lfp_values_.data(), lfp_values_.size());
++        }
++        if (!lfp_segment_ids_.empty()) {
++            cnrn_target_copyin(lfp_segment_ids_.data(), lfp_segment_ids_.size());
++        }
++        if (!lfp_output_indices_.empty()) {
++            cnrn_target_copyin(lfp_output_indices_.data(), lfp_output_indices_.size());
++        }
++        if (!lfp_factors_.empty()) {
++            cnrn_target_copyin(lfp_factors_.data(), lfp_factors_.size());
++        }
++        lfp_gpu_cache_ready_ = true;
++    }
++
++    lfp_cache_ready_ = true;
+ }
+ 
+ // Compute and store the weighted sum of currents for each segment,
+@@ -78,34 +176,49 @@ void ReportEvent::summation_alu(NrnThread* nt) {
+ }
+ 
+ void ReportEvent::lfp_calc(NrnThread* nt) {
+-    auto* mapinfo = static_cast<NrnThreadMappingInfo*>(nt->mapping);
++    prepare_lfp_cache(nt);
++
+     double* fast_imem_rhs = nt->nrn_fast_imem->nrn_sav_rhs;
+-    auto& summation_report = nt->summation_report_handler_->summation_reports_[report_path];
+-    for (const auto& kv: vars_to_report) {
+-        int gid = kv.first;
+-        const auto& to_report = kv.second;
+-        const auto& cell_mapping = mapinfo->get_cell_mapping(gid);
+-        int num_electrodes = cell_mapping->num_electrodes();
+-        std::vector<double> lfp_values(num_electrodes, 0.0);
+-        for (const auto& kv: cell_mapping->lfp_factors) {
+-            int segment_id = kv.first;
+-            const auto& factors = kv.second;
+-            int electrode_id = 0;
+-            for (const auto& factor: factors) {
+-                double iclamp = 0.0;
+-                for (const auto& value: summation_report.currents_[segment_id]) {
+-                    double current_value = *value.first;
+-                    int scale = value.second;
+-                    iclamp += current_value * scale;
+-                }
+-                lfp_values[electrode_id] += (fast_imem_rhs[segment_id] + iclamp) * factor;
+-                electrode_id++;
+-            }
++    if (nt->compute_gpu && !lfp_values_.empty()) {
++        auto* lfp_values = lfp_values_.data();
++        auto* segment_ids = lfp_segment_ids_.data();
++        auto* output_indices = lfp_output_indices_.data();
++        auto* factors = lfp_factors_.data();
++        const std::size_t num_outputs = lfp_values_.size();
++        const std::size_t num_terms = lfp_factors_.size();
++
++        nrn_pragma_acc(parallel loop present(lfp_values[0:num_outputs]) async(nt->stream_id))
++        for (std::size_t i = 0; i < num_outputs; ++i) {
++            lfp_values[i] = 0.0;
+         }
+-        for (int i = 0; i < to_report.size(); i++) {
+-            *(to_report[i].var_value) = lfp_values[i];
++
++        nrn_pragma_acc(parallel loop present(fast_imem_rhs[0:nt->end], \
++                                             segment_ids[0:num_terms], \
++                                             output_indices[0:num_terms], \
++                                             factors[0:num_terms], \
++                                             lfp_values[0:num_outputs]) async(nt->stream_id))
++        for (std::size_t i = 0; i < num_terms; ++i) {
++            const int output_index = output_indices[i];
++            const int segment_id = segment_ids[i];
++            const double value = fast_imem_rhs[segment_id] * factors[i];
++            nrn_pragma_acc(atomic update)
++            lfp_values[output_index] += value;
++        }
++
++        nrn_pragma_acc(update self(lfp_values[0:num_outputs]) async(nt->stream_id))
++        nrn_pragma_omp(target update from(lfp_values[0:num_outputs]))
++        nrn_pragma_acc(wait(nt->stream_id))
++    } else {
++        std::fill(lfp_values_.begin(), lfp_values_.end(), 0.0);
++        for (std::size_t i = 0; i < lfp_factors_.size(); ++i) {
++            lfp_values_[lfp_output_indices_[i]] += fast_imem_rhs[lfp_segment_ids_[i]] * lfp_factors_[i];
+         }
+     }
++
++    for (std::size_t i = 0; i < lfp_output_ptrs_.size(); ++i) {
++        nrn_assert(lfp_output_ptrs_[i] != nullptr);
++        *(lfp_output_ptrs_[i]) = lfp_values_[i];
++    }
+ }
+ 
+ /** on deliver, call ReportingLib and setup next event */
+diff --git a/src/coreneuron/io/reports/report_event.hpp b/src/coreneuron/io/reports/report_event.hpp
+index e019fe658..ff683aa86 100644
+--- a/src/coreneuron/io/reports/report_event.hpp
++++ b/src/coreneuron/io/reports/report_event.hpp
+@@ -9,6 +9,8 @@
+ #pragma once
+ 
+ #include <algorithm>
++#include <cstdint>
++#include <cstddef>
+ #include <unordered_map>
+ #include <vector>
+ #include <string>
+@@ -44,11 +46,14 @@ class ReportEvent: public DiscreteEvent {
+     bool require_checkpoint() override;
+     void summation_alu(NrnThread* nt);
+     void lfp_calc(NrnThread* nt);
++    ~ReportEvent() override;
+     int type() const override {
+         return ReportEventType;
+     }
+ 
+   private:
++    void prepare_lfp_cache(NrnThread* nt);
++
+     double dt;
+     double step;
+     std::string report_path;
+@@ -58,6 +63,13 @@ class ReportEvent: public DiscreteEvent {
+     double tstart;
+     VarsToReport vars_to_report;
+     ReportType report_type;
++    bool lfp_cache_ready_{false};
++    bool lfp_gpu_cache_ready_{false};
++    std::vector<double*> lfp_output_ptrs_;
++    std::vector<int> lfp_segment_ids_;
++    std::vector<int> lfp_output_indices_;
++    std::vector<double> lfp_factors_;
++    std::vector<double> lfp_values_;
+ };
+ #endif
+ 
+diff --git a/src/coreneuron/sim/fast_imem.cpp b/src/coreneuron/sim/fast_imem.cpp
+index d3b463a48..7ec5fc041 100644
+--- a/src/coreneuron/sim/fast_imem.cpp
++++ b/src/coreneuron/sim/fast_imem.cpp
+@@ -9,7 +9,6 @@
+ #include "coreneuron/nrnconf.h"
+ #include "coreneuron/sim/fast_imem.hpp"
+ #include "coreneuron/utils/memory.h"
+-#include "coreneuron/mpi/nrnmpi.h"
+ #include "coreneuron/utils/nrnoc_aux.hpp"
+ 
+ namespace coreneuron {

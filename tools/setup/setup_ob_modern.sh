@@ -4,13 +4,89 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_NAME="${ENV_NAME:-OBGPU}"
 ENABLE_GPU="${ENABLE_GPU:-0}"
-NRN_SRC_DIR="${REPO_ROOT}/external/nrn-9.0.1"
-NRN_BUILD_DIR=""
+PATCH_MANIFEST="${NRN_PATCH_MANIFEST:-${REPO_ROOT}/third_party_patches/nrn/manifest.json}"
+PATCH_DIR="$(cd "$(dirname "${PATCH_MANIFEST}")" && pwd)"
+NRN_SRC_DIR="${NRN_SRC_DIR:-${REPO_ROOT}/external/nrn-9.0.1}"
+NRN_BUILD_DIR="${NRN_BUILD_DIR:-}"
+
+if [[ ! -f "${PATCH_MANIFEST}" ]]; then
+  echo "Patch manifest not found: ${PATCH_MANIFEST}" >&2
+  exit 1
+fi
+
+mapfile -t manifest_lines < <(
+  python - "${PATCH_MANIFEST}" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1]) as f:
+    manifest = json.load(f)
+
+print(manifest["upstream_repo"])
+print(manifest["upstream_ref"])
+for patch in manifest.get("patches", []):
+    print(patch["file"])
+PY
+)
+
+if [[ "${#manifest_lines[@]}" -lt 2 ]]; then
+  echo "Patch manifest ${PATCH_MANIFEST} is missing upstream metadata" >&2
+  exit 1
+fi
+
+UPSTREAM_REPO="${manifest_lines[0]}"
+UPSTREAM_REF="${manifest_lines[1]}"
+PATCH_FILES=("${manifest_lines[@]:2}")
 
 if ! command -v conda >/dev/null 2>&1; then
   echo "conda is required on PATH" >&2
   exit 1
 fi
+
+prepare_nrn_source() {
+  if [[ ! -d "${NRN_SRC_DIR}/.git" ]]; then
+    git clone --recursive "${UPSTREAM_REPO}" "${NRN_SRC_DIR}"
+  fi
+
+  git -C "${NRN_SRC_DIR}" remote set-url origin "${UPSTREAM_REPO}"
+  if ! git -C "${NRN_SRC_DIR}" fetch --tags --force origin; then
+    echo "Warning: could not fetch ${UPSTREAM_REPO}; reusing local checkout if ${UPSTREAM_REF} exists." >&2
+  fi
+
+  if ! git -C "${NRN_SRC_DIR}" rev-parse --verify --quiet "${UPSTREAM_REF}^{commit}" >/dev/null; then
+    echo "Pinned upstream ref ${UPSTREAM_REF} is not available in ${NRN_SRC_DIR}" >&2
+    exit 1
+  fi
+
+  git -C "${NRN_SRC_DIR}" checkout --force "${UPSTREAM_REF}"
+  git -C "${NRN_SRC_DIR}" reset --hard "${UPSTREAM_REF}"
+  git -C "${NRN_SRC_DIR}" clean -fdx -e build-ob-modern -e build-ob-modern-gpu-*
+  git -C "${NRN_SRC_DIR}" submodule sync --recursive
+  git -C "${NRN_SRC_DIR}" submodule update --init --recursive --force
+
+  for patch_file in "${PATCH_FILES[@]}"; do
+    patch_path="${PATCH_DIR}/${patch_file}"
+    if [[ ! -f "${patch_path}" ]]; then
+      echo "Patch file not found: ${patch_path}" >&2
+      exit 1
+    fi
+    git -C "${NRN_SRC_DIR}" apply --whitespace=nowarn "${patch_path}"
+  done
+}
+
+find_latest_libnrnmech() {
+  python - "${REPO_ROOT}" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+candidates = [path for path in root.glob("*/libnrnmech.so") if path.is_file()]
+if not candidates:
+    raise SystemExit(1)
+candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
+print(candidates[0])
+PY
+}
 
 eval "$(conda shell.bash hook)"
 
@@ -24,9 +100,7 @@ conda activate "${ENV_NAME}"
 
 python -m pip install blenderneuron==2.0.4 lfpsimpy==0.1.1 natsort==8.4.0
 
-if [ ! -d "${NRN_SRC_DIR}" ]; then
-  git clone --branch 9.0.1 --recursive https://github.com/neuronsimulator/nrn.git "${NRN_SRC_DIR}"
-fi
+prepare_nrn_source
 
 export CC=gcc
 export CXX=g++
@@ -100,7 +174,7 @@ EOF
     exit 1
   fi
   GPU_BUILD_TAG="${GPU_BUILD_TAG:-${NVHPC_VERSION//./_}}"
-  NRN_BUILD_DIR="${NRN_SRC_DIR}/build-ob-modern-gpu-${GPU_BUILD_TAG}"
+  NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern-gpu-${GPU_BUILD_TAG}}"
 
   CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-$(
     python - <<'PY'
@@ -176,7 +250,7 @@ PY
     )
   fi
 else
-  NRN_BUILD_DIR="${NRN_SRC_DIR}/build-ob-modern"
+  NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern}"
 fi
 
 cmake_args=(
@@ -225,6 +299,12 @@ EOF
   OMPI_CC=gcc OMPI_CXX=g++ nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms
 )
 
-"${REPO_ROOT}/tools/setup/fix_nvhpc_libnrnmech.sh" "${REPO_ROOT}/aarch64/libnrnmech.so"
+if [[ "${ENABLE_GPU}" == "1" ]]; then
+  if libnrnmech_path="$(find_latest_libnrnmech)"; then
+    "${REPO_ROOT}/tools/setup/fix_nvhpc_libnrnmech.sh" "${libnrnmech_path}"
+  else
+    echo "Warning: could not locate a generated libnrnmech.so to repair." >&2
+  fi
+fi
 
-echo "OBGPU setup complete."
+echo "OBGPU setup complete from ${UPSTREAM_REF}."

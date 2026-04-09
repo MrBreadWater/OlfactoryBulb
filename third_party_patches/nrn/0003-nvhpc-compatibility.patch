@@ -1,0 +1,129 @@
+diff --git a/src/ivoc/ocmatrix.cpp b/src/ivoc/ocmatrix.cpp
+index 593bdef79..b943bb477 100644
+--- a/src/ivoc/ocmatrix.cpp
++++ b/src/ivoc/ocmatrix.cpp
+@@ -4,6 +4,10 @@
+ 
+ #define v_elem(v, i) (*(vector_vec(v) + i))
+ 
++#if defined(__NVCOMPILER)
++#define EIGEN_DONT_PARALLELIZE
++#define EIGEN_DONT_VECTORIZE 1
++#endif
+ #include <Eigen/Eigen>
+ #include <unsupported/Eigen/MatrixFunctions>
+ 
+diff --git a/src/ivoc/ocmatrix.h b/src/ivoc/ocmatrix.h
+index 9e874c86a..df56f90d4 100644
+--- a/src/ivoc/ocmatrix.h
++++ b/src/ivoc/ocmatrix.h
+@@ -4,6 +4,10 @@
+ #include <utility>
+ #include <vector>
+ 
++#if defined(__NVCOMPILER)
++#define EIGEN_DONT_PARALLELIZE
++#define EIGEN_DONT_VECTORIZE 1
++#endif
+ #include <Eigen/Eigen>
+ #include <Eigen/Sparse>
+ #include <Eigen/LU>
+diff --git a/src/nrniv/nonlinz.cpp b/src/nrniv/nonlinz.cpp
+index f0a24eac8..a36e1e962 100644
+--- a/src/nrniv/nonlinz.cpp
++++ b/src/nrniv/nonlinz.cpp
+@@ -8,10 +8,16 @@
+ #include "nrnmpi.h"
+ #include "membfunc.h"
+ 
++#if defined(__NVCOMPILER)
++#define EIGEN_DONT_PARALLELIZE
++#define EIGEN_DONT_VECTORIZE 1
++#endif
+ #include <Eigen/Sparse>
+ #include <complex>
+ 
+-using namespace std::complex_literals;
++namespace {
++constexpr std::complex<double> imag_unit{0.0, 1.0};
++}
+ 
+ extern void v_setup_vectors();
+ extern int nrndae_extra_eqn_count();
+@@ -301,7 +307,7 @@ void NonLinImpRep::didv() {
+     int n = mlc->nodecount;
+     for (i = 0; i < n; ++i) {
+         j = mlc->nodelist[i]->v_node_index;
+-        m_.coeffRef(j, j) += .001 * mlc->data(i, 0) * omega_ * 1i;
++        m_.coeffRef(j, j) += .001 * mlc->data(i, 0) * omega_ * imag_unit;
+     }
+     // di/dv terms
+     // because there may be several point processes of the same type
+@@ -458,7 +464,7 @@ void NonLinImpRep::dsds() {
+     NrnThread* nt = nrn_threads;
+     // jw term
+     for (i = neq_v_; i < neq_; ++i) {
+-        m_.coeffRef(i, i) += omega_ * 1i;
++        m_.coeffRef(i, i) += omega_ * imag_unit;
+     }
+     ieq = neq_v_;
+     for (NrnThreadMembList* tml = nt->tml; tml; tml = tml->next) {
+diff --git a/src/nrnpython/CMakeLists.txt b/src/nrnpython/CMakeLists.txt
+index fb7b1e171..eb10d97f6 100644
+--- a/src/nrnpython/CMakeLists.txt
++++ b/src/nrnpython/CMakeLists.txt
+@@ -22,6 +22,11 @@ endif()
+ add_library(rxdmath SHARED ${CMAKE_CURRENT_SOURCE_DIR}/rxdmath.cpp)
+ install(TARGETS rxdmath DESTINATION ${NRN_INSTALL_SHARE_LIB_DIR})
+ 
++set(NRNPYTHON_COMPILE_DEFS)
++if(NRN_HAVE_NVHPC_COMPILER)
++  list(APPEND NRNPYTHON_COMPILE_DEFS EIGEN_DONT_PARALLELIZE EIGEN_DONT_VECTORIZE=1)
++endif()
++
+ # =============================================================================
+ # nrnpython libraries (one lib per python)
+ # =============================================================================
+@@ -71,6 +76,9 @@ if(NRN_ENABLE_PYTHON_DYNAMIC)
+     target_include_directories(nrnpython${pyver} BEFORE PUBLIC ${pyinc} ${INCLUDE_DIRS})
+     target_link_libraries(nrnpython${pyver} PUBLIC nrniv_lib)
+     target_link_libraries(nrnpython${pyver} PRIVATE ${Readline_LIBRARY} ${nanobind_target})
++    if(NRNPYTHON_COMPILE_DEFS)
++      target_compile_definitions(nrnpython${pyver} PRIVATE ${NRNPYTHON_COMPILE_DEFS})
++    endif()
+     if(NRN_LINK_AGAINST_PYTHON)
+       target_link_libraries(nrnpython${pyver} PUBLIC ${pylib})
+     endif()
+@@ -123,6 +131,9 @@ else()
+   add_library(nrnpython OBJECT ${NRNPYTHON_FILES_LIST})
+   add_dependencies(nrnpython generated_source_files)
+   set_property(TARGET nrnpython PROPERTY POSITION_INDEPENDENT_CODE ON)
++  if(NRNPYTHON_COMPILE_DEFS)
++    target_compile_definitions(nrnpython PRIVATE ${NRNPYTHON_COMPILE_DEFS})
++  endif()
+   target_include_directories(nrnpython PUBLIC ${INCLUDE_DIRS})
+   target_include_directories(nrnpython PUBLIC "${NRN_DEFAULT_PYTHON_INCLUDES}")
+   # see nrn/issues/2358
+diff --git a/src/nrnpython/nrnpy_nrn.cpp b/src/nrnpython/nrnpy_nrn.cpp
+index 962fcb960..102ccc83e 100644
+--- a/src/nrnpython/nrnpy_nrn.cpp
++++ b/src/nrnpython/nrnpy_nrn.cpp
+@@ -1047,8 +1047,16 @@ NPySecObj* newpysechelp(Section* sec) {
+     NPySecObj* pysec = NULL;
+     if (auto* pv = sec->prop->dparam[PROP_PY_INDEX].get<void*>(); pv) {
+         pysec = static_cast<NPySecObj*>(pv);
+-        Py_INCREF(pysec);
+-        assert(pysec->sec_ == sec);
++        if (pysec->sec_ == sec) {
++            Py_INCREF(pysec);
++        } else {
++            pysec = (NPySecObj*) psection_type->tp_alloc(psection_type, 0);
++            pysec->sec_ = sec;
++            section_ref(sec);
++            pysec->name_ = 0;
++            pysec->cell_weakref_ = 0;
++            sec->prop->dparam[PROP_PY_INDEX] = static_cast<void*>(pysec);
++        }
+     } else {
+         pysec = (NPySecObj*) psection_type->tp_alloc(psection_type, 0);
+         pysec->sec_ = sec;

@@ -11,13 +11,16 @@ import json
 import os
 import pickle
 import re
+import shlex
 import subprocess
 import sys
+import time
+from base64 import b64encode
 from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any
 
@@ -72,6 +75,25 @@ CONTROL_HELP = {
     "extra_overrides": "Any raw paramset overrides not exposed above.",
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
     "wavelet_signal": "Signal for wavelet plots, e.g. 'lfp', 'mean_TC_voltage', or a soma label.",
+    "runner_backend": "Execution backend: 'local' or 'sol_slurm'.",
+    "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec'.",
+    "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'mpiexec' or 'srun'.",
+    "remote_host": "SSH target used by the Sol backend, e.g. 'user@sol.asu.edu'.",
+    "remote_repo_root": "Absolute repo path on Sol.",
+    "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
+    "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command.",
+    "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
+    "slurm_partition": "Optional Slurm partition for remote submission.",
+    "slurm_account": "Optional Slurm account for remote submission.",
+    "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
+    "slurm_gpus": "Optional GPU count requested from Slurm.",
+    "slurm_cpus_per_task": "Optional CPU count requested per Slurm task.",
+    "slurm_mem": "Optional Slurm memory request, e.g. '32G'.",
+    "slurm_extra_args": "Optional extra sbatch arguments passed as raw strings.",
+    "ssh_binary": "SSH client executable used by the remote backend.",
+    "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
+    "rsync_binary": "rsync executable used to sync remote results back locally.",
+    "rsync_options": "Extra rsync options used by the remote backend.",
 }
 
 
@@ -153,6 +175,25 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "max_voltage_traces_per_type": 4,
         "max_spike_raster_cells_per_type": 24,
         "extra_overrides": {},
+        "runner_backend": "local",
+        "mpi_exec": "mpiexec",
+        "remote_mpi_exec": None,
+        "remote_host": None,
+        "remote_repo_root": None,
+        "remote_results_root": None,
+        "remote_conda_activate_cmd": 'source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate OBGPU',
+        "remote_poll_interval_s": 10.0,
+        "slurm_partition": None,
+        "slurm_account": None,
+        "slurm_time": None,
+        "slurm_gpus": 1,
+        "slurm_cpus_per_task": None,
+        "slurm_mem": None,
+        "slurm_extra_args": [],
+        "ssh_binary": "ssh",
+        "ssh_options": [],
+        "rsync_binary": "rsync",
+        "rsync_options": ["-az"],
     }
     base.update(overrides)
     return base
@@ -271,24 +312,35 @@ def print_available_controls() -> None:
     print(json.dumps(available_controls(), indent=2, sort_keys=True))
 
 
-def build_run_command(config: dict[str, Any], label: str) -> list[str]:
+def build_run_command(
+    config: dict[str, Any],
+    label: str,
+    *,
+    repo_root: str | Path | None = None,
+    results_base: str | Path | None = None,
+    mpi_exec: str | None = None,
+) -> list[str]:
     """Build the benchmark subprocess command for a notebook run."""
+    repo_root = repo_root or REPO_ROOT
+    results_base = results_base or config.get("results_base", DEFAULT_RESULTS_BASE)
+    mpi_exec = mpi_exec or str(config.get("mpi_exec", "mpiexec"))
+    benchmark_script = Path(repo_root) / "tools" / "benchmarks" / "benchmark_ob.py"
     command = [
-        "mpiexec",
+        mpi_exec,
         "-n",
         str(int(config["nranks"])),
         "nrniv",
         "-mpi",
         "-python",
-        str(BENCHMARK_SCRIPT),
+        str(benchmark_script),
         "--repo-root",
-        str(REPO_ROOT),
+        str(repo_root),
         "--paramset",
         str(config["paramset"]),
         "--label",
         label,
         "--results-base",
-        str(config.get("results_base", DEFAULT_RESULTS_BASE)),
+        str(results_base),
         "--overrides-json",
         json.dumps(build_param_overrides(config), sort_keys=True),
     ]
@@ -310,6 +362,354 @@ def build_run_command(config: dict[str, Any], label: str) -> list[str]:
     return command
 
 
+def _shell_join(command: list[str] | tuple[str, ...]) -> str:
+    """Return a POSIX-safe shell rendering of a command list."""
+    return shlex.join([str(part) for part in command])
+
+
+def _remote_repo_root(config: dict[str, Any]) -> PurePosixPath:
+    """Return the configured repo root on the remote Sol host."""
+    remote_repo_root = config.get("remote_repo_root")
+    if not remote_repo_root:
+        raise ValueError("runner_backend='sol_slurm' requires remote_repo_root")
+    return PurePosixPath(str(remote_repo_root))
+
+
+def _remote_results_root(config: dict[str, Any]) -> PurePosixPath:
+    """Return the configured results root on the remote Sol host."""
+    configured = config.get("remote_results_root")
+    if configured:
+        return PurePosixPath(str(configured))
+    return _remote_repo_root(config) / "results" / "notebook_runs"
+
+
+def _require_remote_host(config: dict[str, Any]) -> str:
+    """Return the configured remote SSH target."""
+    remote_host = str(config.get("remote_host") or "").strip()
+    if not remote_host:
+        raise ValueError("runner_backend='sol_slurm' requires remote_host")
+    return remote_host
+
+
+def _ssh_prefix(config: dict[str, Any]) -> list[str]:
+    """Build the SSH command prefix used for Sol orchestration."""
+    prefix = [str(config.get("ssh_binary", "ssh"))]
+    prefix.extend(str(option) for option in config.get("ssh_options", []))
+    prefix.append(_require_remote_host(config))
+    return prefix
+
+
+def _run_ssh_shell(
+    config: dict[str, Any],
+    remote_shell_command: str,
+    *,
+    check: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    """Run one shell command on the remote Sol host over SSH."""
+    command = _ssh_prefix(config) + ["bash", "-lc", remote_shell_command]
+    return subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=check,
+    )
+
+
+def _sync_remote_result_dir(
+    config: dict[str, Any],
+    *,
+    remote_result_dir: PurePosixPath,
+    local_result_dir: Path,
+) -> subprocess.CompletedProcess[str]:
+    """Sync one remote result directory back into the local notebook results tree."""
+    local_result_dir.mkdir(parents=True, exist_ok=True)
+    command = [str(config.get("rsync_binary", "rsync"))]
+    command.extend(str(option) for option in config.get("rsync_options", ["-az"]))
+    ssh_command = [str(config.get("ssh_binary", "ssh"))]
+    ssh_command.extend(str(option) for option in config.get("ssh_options", []))
+    if len(ssh_command) > 1:
+        command.extend(["-e", _shell_join(ssh_command)])
+    command.extend(
+        [
+            f"{_require_remote_host(config)}:{remote_result_dir.as_posix().rstrip('/')}/",
+            str(local_result_dir) + "/",
+        ]
+    )
+    return subprocess.run(
+        command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _build_remote_submit_command(
+    config: dict[str, Any],
+    *,
+    label: str,
+    remote_repo_root: PurePosixPath,
+    remote_results_root: PurePosixPath,
+    benchmark_command: list[str],
+) -> str:
+    """Build the remote `submit_sol_run.py` invocation shell line."""
+    remote_helper = remote_repo_root / "tools" / "remote" / "submit_sol_run.py"
+    benchmark_b64 = b64encode(json.dumps(benchmark_command).encode("utf-8")).decode("ascii")
+    command = [
+        "python",
+        str(remote_helper),
+        "--repo-root",
+        remote_repo_root.as_posix(),
+        "--results-base",
+        remote_results_root.as_posix(),
+        "--label",
+        label,
+        "--benchmark-command-b64",
+        benchmark_b64,
+        "--conda-activate-cmd",
+        str(config.get("remote_conda_activate_cmd")),
+    ]
+
+    for key, flag in (
+        ("slurm_partition", "--partition"),
+        ("slurm_account", "--account"),
+        ("slurm_time", "--time"),
+        ("slurm_mem", "--mem"),
+    ):
+        value = config.get(key)
+        if value not in (None, ""):
+            command.extend([flag, str(value)])
+
+    for key, flag in (
+        ("slurm_gpus", "--gpus"),
+        ("slurm_cpus_per_task", "--cpus-per-task"),
+    ):
+        value = config.get(key)
+        if value not in (None, ""):
+            command.extend([flag, str(int(value))])
+
+    for extra in config.get("slurm_extra_args", []):
+        command.extend(["--sbatch-arg", str(extra)])
+
+    return _shell_join(command)
+
+
+def _build_remote_poll_command(
+    config: dict[str, Any],
+    *,
+    remote_repo_root: PurePosixPath,
+    remote_result_dir: PurePosixPath,
+    job_id: str,
+) -> str:
+    """Build the remote `poll_sol_run.py` invocation shell line."""
+    remote_helper = remote_repo_root / "tools" / "remote" / "poll_sol_run.py"
+    command = [
+        "python",
+        str(remote_helper),
+        "--job-id",
+        str(job_id),
+        "--result-dir",
+        remote_result_dir.as_posix(),
+    ]
+    return _shell_join(command)
+
+
+def _remote_submission_payload(
+    config: dict[str, Any],
+    *,
+    label: str,
+) -> tuple[PurePosixPath, PurePosixPath, list[str], dict[str, Any], str]:
+    """Prepare the remote paths and benchmark command for a Sol run."""
+    remote_repo_root = _remote_repo_root(config)
+    remote_results_root = _remote_results_root(config)
+    remote_mpi_exec = config.get("remote_mpi_exec") or config.get("mpi_exec", "mpiexec")
+    remote_command = build_run_command(
+        config,
+        label,
+        repo_root=remote_repo_root,
+        results_base=remote_results_root,
+        mpi_exec=str(remote_mpi_exec),
+    )
+    submit_command = _build_remote_submit_command(
+        config,
+        label=label,
+        remote_repo_root=remote_repo_root,
+        remote_results_root=remote_results_root,
+        benchmark_command=remote_command,
+    )
+    return (
+        remote_repo_root,
+        remote_results_root,
+        remote_command,
+        {
+            "runner_backend": "sol_slurm",
+            "remote_host": _require_remote_host(config),
+            "remote_repo_root": remote_repo_root.as_posix(),
+            "remote_results_root": remote_results_root.as_posix(),
+            "remote_mpi_exec": str(remote_mpi_exec),
+        },
+        submit_command,
+    )
+
+
+def _run_remote_simulation(
+    config: dict[str, Any],
+    *,
+    label: str,
+    timestamp: str,
+    local_result_dir: Path,
+) -> RunRecord:
+    """Submit one Sol Slurm job, wait for completion, sync results, and return a run record."""
+    (
+        remote_repo_root,
+        _remote_results_root_value,
+        remote_benchmark_command,
+        remote_metadata,
+        submit_shell,
+    ) = _remote_submission_payload(config, label=label)
+
+    submit_completed = _run_ssh_shell(config, submit_shell)
+    local_result_dir.mkdir(parents=True, exist_ok=True)
+    (local_result_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
+    (local_result_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
+
+    if submit_completed.returncode != 0:
+        completed = SimpleNamespace(
+            returncode=submit_completed.returncode,
+            stdout=submit_completed.stdout or "",
+            stderr=submit_completed.stderr or "",
+        )
+        _write_notebook_run_info(
+            local_result_dir,
+            config=config,
+            label=label,
+            timestamp=timestamp,
+            command=remote_benchmark_command,
+            env={},
+            completed=completed,
+            extra_payload={"remote": remote_metadata},
+        )
+        raise RuntimeError(
+            "Remote Sol submission failed.\n"
+            f"Result dir: {local_result_dir}\n"
+            f"Submit stderr:\n{submit_completed.stderr}"
+        )
+
+    try:
+        submission = json.loads((submit_completed.stdout or "").strip())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "Remote Sol submission did not return valid JSON.\n"
+            f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
+        ) from exc
+
+    remote_result_dir = PurePosixPath(submission["result_dir"])
+    poll_interval_s = max(float(config.get("remote_poll_interval_s", 10.0)), 1.0)
+    poll_transcript: list[dict[str, Any]] = []
+    final_status: dict[str, Any] | None = None
+
+    while True:
+        poll_shell = _build_remote_poll_command(
+            config,
+            remote_repo_root=remote_repo_root,
+            remote_result_dir=remote_result_dir,
+            job_id=str(submission["job_id"]),
+        )
+        poll_completed = _run_ssh_shell(config, poll_shell)
+        if poll_completed.returncode != 0:
+            raise RuntimeError(
+                "Remote Sol status poll failed.\n"
+                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+            )
+
+        try:
+            status = json.loads((poll_completed.stdout or "").strip())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "Remote Sol poll did not return valid JSON.\n"
+                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+            ) from exc
+
+        poll_transcript.append(status)
+        if status.get("done"):
+            final_status = status
+            break
+        time.sleep(poll_interval_s)
+
+    sync_completed = _sync_remote_result_dir(
+        config,
+        remote_result_dir=remote_result_dir,
+        local_result_dir=local_result_dir,
+    )
+    (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
+    (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+    if sync_completed.returncode != 0:
+        raise RuntimeError(
+            "Remote Sol result sync failed.\n"
+            f"Result dir: {local_result_dir}\n"
+            f"rsync stderr:\n{sync_completed.stderr}"
+        )
+
+    stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
+    stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
+    returncode = 0 if final_status and final_status.get("ok") else 1
+    completed = SimpleNamespace(returncode=returncode, stdout=stdout_text, stderr=stderr_text)
+
+    summary_path = local_result_dir / "summary.json"
+    summary = None
+    if summary_path.exists():
+        with open(summary_path) as f:
+            summary = json.load(f)
+
+    _write_notebook_run_info(
+        local_result_dir,
+        config=config,
+        label=label,
+        timestamp=timestamp,
+        command=remote_benchmark_command,
+        env={},
+        completed=completed,
+        summary=summary,
+        extra_payload={
+            "remote": {
+                **remote_metadata,
+                "job_id": submission.get("job_id"),
+                "remote_result_dir": str(remote_result_dir),
+                "submit_response": submission,
+                "final_status": final_status,
+                "poll_transcript": poll_transcript,
+            }
+        },
+    )
+
+    if returncode != 0:
+        stderr_tail = stderr_text.strip()[-4000:]
+        stdout_tail = stdout_text.strip()[-2000:]
+        raise RuntimeError(
+            "Remote Sol simulation failed.\n"
+            f"Result dir: {local_result_dir}\n"
+            f"Command: {_shell_join(remote_benchmark_command)}\n"
+            f"Stdout tail:\n{stdout_tail}\n\n"
+            f"Stderr tail:\n{stderr_tail}"
+        )
+
+    if summary is None:
+        raise FileNotFoundError(f"Expected synced benchmark summary at {summary_path}")
+
+    return RunRecord(
+        label=label,
+        timestamp=timestamp,
+        result_dir=local_result_dir,
+        summary=summary,
+        config=config,
+        overrides=build_param_overrides(config),
+        command=remote_benchmark_command,
+        stdout=stdout_text,
+        stderr=stderr_text,
+    )
+
+
 def _json_ready(value: Any) -> Any:
     """Convert arrays, scalars, and paths into JSON-serializable equivalents."""
     if isinstance(value, Path):
@@ -325,7 +725,18 @@ def _json_ready(value: Any) -> Any:
     return value
 
 
-def _write_notebook_run_info(result_dir, *, config, label, timestamp, command, env, completed, summary=None):
+def _write_notebook_run_info(
+    result_dir,
+    *,
+    config,
+    label,
+    timestamp,
+    command,
+    env,
+    completed,
+    summary=None,
+    extra_payload: dict[str, Any] | None = None,
+):
     """Persist normalized config, effective params, and subprocess metadata for a run."""
     result_dir = Path(result_dir)
     result_dir.mkdir(parents=True, exist_ok=True)
@@ -364,6 +775,9 @@ def _write_notebook_run_info(result_dir, *, config, label, timestamp, command, e
     if summary is not None:
         payload["summary"] = _json_ready(summary)
 
+    if extra_payload:
+        payload.update(_json_ready(extra_payload))
+
     run_info_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
     return run_info_path
 
@@ -374,6 +788,19 @@ def run_simulation(config: dict[str, Any] | None = None) -> RunRecord:
     timestamp = make_timestamp()
     label = make_label(config, timestamp=timestamp)
     result_dir = Path(config.get("results_base", DEFAULT_RESULTS_BASE)) / label
+    runner_backend = str(config.get("runner_backend", "local"))
+
+    if runner_backend == "sol_slurm":
+        return _run_remote_simulation(
+            config,
+            label=label,
+            timestamp=timestamp,
+            local_result_dir=result_dir,
+        )
+
+    if runner_backend != "local":
+        raise ValueError(f"Unsupported runner_backend={runner_backend!r}")
+
     env = os.environ.copy()
     env["PYTHONPATH"] = f"{REPO_ROOT}:{env.get('PYTHONPATH', '')}".rstrip(":")
     env["OB_RUN_TIMESTAMP"] = timestamp
@@ -432,6 +859,7 @@ def run_simulation(config: dict[str, Any] | None = None) -> RunRecord:
         env=env,
         completed=completed,
         summary=summary,
+        extra_payload={"remote": None},
     )
 
     return RunRecord(
@@ -934,7 +1362,9 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
     """Extract notebook-only runtime and analysis controls from a run config."""
     runtime_keys = [
         "mode",
+        "runner_backend",
         "nranks",
+        "mpi_exec",
         "use_corenrn",
         "use_gpu",
         "cell_permute",
@@ -956,6 +1386,23 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "input_max_segments",
         "input_rate_normalization",
         "sniff_count",
+        "remote_host",
+        "remote_repo_root",
+        "remote_results_root",
+        "remote_conda_activate_cmd",
+        "remote_poll_interval_s",
+        "remote_mpi_exec",
+        "slurm_partition",
+        "slurm_account",
+        "slurm_time",
+        "slurm_gpus",
+        "slurm_cpus_per_task",
+        "slurm_mem",
+        "slurm_extra_args",
+        "ssh_binary",
+        "ssh_options",
+        "rsync_binary",
+        "rsync_options",
     ]
     return {key: _json_ready(config.get(key)) for key in runtime_keys if key in config}
 
@@ -2545,6 +2992,7 @@ def print_run_summary(
     info = result_overview(result)
     print(json.dumps(info, indent=2, sort_keys=True))
     config = config or run.config or (result.get("run_info") or {}).get("config") or {}
+    remote_info = (result.get("run_info") or {}).get("remote")
     if config:
         normalized_config = build_run_config(**config)
         effective = (result.get("run_info") or {}).get("effective_params") or {}
@@ -2569,6 +3017,9 @@ def print_run_summary(
 
         print("\nRuntime and analysis controls:")
         print(json.dumps(extract_runtime_control_snapshot(normalized_config), indent=2, sort_keys=True))
+        if remote_info:
+            print("\nRemote execution metadata:")
+            print(json.dumps(remote_info, indent=2, sort_keys=True))
     print(f"\nResult directory: {run.result_dir}")
     print(f"Command: {' '.join(run.command)}")
 
