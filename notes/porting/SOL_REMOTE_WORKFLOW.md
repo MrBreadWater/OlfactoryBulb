@@ -45,6 +45,9 @@ The notebook helper layer now supports these remote controls:
 - `slurm_extra_args`
 - `ssh_binary`
 - `ssh_options`
+- `ssh_multiplex`
+- `ssh_control_path`
+- `ssh_control_persist_s`
 - `rsync_binary`
 - `rsync_options`
 
@@ -91,6 +94,20 @@ When the remote backend runs:
 - it checks out the requested ref before launching the simulation
 - it syncs back `git_ref.txt` and `git_commit.txt`
 - the resolved remote commit is recorded in `run_info.json`
+
+## SSH Authentication
+
+The remote backend now supports persistent SSH multiplexing so you do not need
+to re-enter Sol password + 2FA for every submit, poll, and sync step.
+
+The relevant controls are:
+
+- `ssh_multiplex=True`
+- `ssh_control_path=None` to use the default hashed socket path under `/tmp`
+- `ssh_control_persist_s=28800` to keep the shared control master alive for 8 hours
+
+With those defaults, the first remote action authenticates once, then later
+submit/poll/rsync steps reuse the same SSH control socket.
 
 ## Remote Helper Scripts
 

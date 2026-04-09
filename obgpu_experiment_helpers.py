@@ -20,6 +20,7 @@ from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
+from hashlib import sha1
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any
@@ -30,7 +31,12 @@ import numpy as np
 import pywt
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
-
+from modify_model import (
+    add_synaptic_connection,
+    modify_synaptic_connection,
+    perform_cell_type_swaps,
+    build_synapse_map
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -94,8 +100,14 @@ CONTROL_HELP = {
     "slurm_extra_args": "Optional extra sbatch arguments passed as raw strings.",
     "ssh_binary": "SSH client executable used by the remote backend.",
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
+    "ssh_multiplex": "When True, reuse a persistent SSH control socket so Sol auth happens once instead of on every submit/poll/sync step.",
+    "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under /tmp.",
+    "ssh_control_persist_s": "How long to keep the SSH control master alive after the last use.",
     "rsync_binary": "rsync executable used to sync remote results back locally.",
     "rsync_options": "Extra rsync options used by the remote backend.",
+    "add_connections": "Add new connections between existing neurons.",
+    "modify_connections": "Modify the synaptic weight between two specific neurons.",
+    "swap_cell_types": "A list of cells to swap to another cell type."
 }
 
 
@@ -196,8 +208,14 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "slurm_extra_args": [],
         "ssh_binary": "ssh",
         "ssh_options": [],
+        "ssh_multiplex": True,
+        "ssh_control_path": None,
+        "ssh_control_persist_s": 28800,
         "rsync_binary": "rsync",
         "rsync_options": ["-az"],
+        "add_connections": [],
+        "modify_connections": [],
+        "swap_cell_types": []
     }
     base.update(overrides)
     return base
@@ -315,6 +333,23 @@ def print_available_controls() -> None:
     """Pretty-print the notebook control catalog."""
     print(json.dumps(available_controls(), indent=2, sort_keys=True))
 
+def add_new_connections(ob, new_connections_config):
+    """Create new synaptic connections described by notebook config entries."""
+    for config in new_connections_config:
+        add_synaptic_connection(ob, config)
+
+def modify_existing_connections(ob, synapse_map, modifications_config):
+    """Apply in-place edits to existing synapses described by notebook config entries.
+
+    Each modification entry must provide a concrete ``synapse_key`` object that
+    can be resolved in ``synapse_map`` plus the netcon/synapse attribute updates
+    consumed by :func:`modify_synaptic_connection`.
+    """
+    for config in modifications_config:
+        synapse_key = config.get("synapse_key")
+        if synapse_key is None:
+            raise ValueError("Each modify_connections entry must include a 'synapse_key'")
+        modify_synaptic_connection(ob, synapse_map, synapse_key, config)
 
 def build_run_command(
     config: dict[str, Any],
@@ -418,10 +453,107 @@ def _require_remote_host(config: dict[str, Any]) -> str:
     return remote_host
 
 
+def _ssh_control_path(config: dict[str, Any]) -> Path | None:
+    """Return the shared SSH control-socket path for the remote backend."""
+    if not bool(config.get("ssh_multiplex", True)):
+        return None
+
+    configured = config.get("ssh_control_path")
+    if configured not in (None, ""):
+        return Path(str(configured)).expanduser()
+
+    host = _require_remote_host(config)
+    digest = sha1(host.encode("utf-8")).hexdigest()[:12]
+    return Path("/tmp") / f"obgpu-ssh-{digest}.sock"
+
+
+def _ssh_common_options(config: dict[str, Any]) -> list[str]:
+    """Return SSH options shared by submit, poll, and rsync operations."""
+    options = [str(option) for option in config.get("ssh_options", [])]
+    control_path = _ssh_control_path(config)
+    if control_path is not None:
+        options.extend(
+            [
+                "-o",
+                "ControlMaster=auto",
+                "-o",
+                f"ControlPath={control_path}",
+                "-o",
+                f"ControlPersist={int(config.get('ssh_control_persist_s', 28800))}s",
+            ]
+        )
+    return options
+
+
+def _ensure_ssh_master(config: dict[str, Any]) -> None:
+    """Ensure a reusable SSH control master exists for the configured remote host."""
+    control_path = _ssh_control_path(config)
+    if control_path is None:
+        return
+
+    control_path.parent.mkdir(parents=True, exist_ok=True)
+    host = _require_remote_host(config)
+    ssh_binary = str(config.get("ssh_binary", "ssh"))
+    user_options = [str(option) for option in config.get("ssh_options", [])]
+    persist_seconds = int(config.get("ssh_control_persist_s", 28800))
+
+    check_command = [
+        ssh_binary,
+        *user_options,
+        "-o",
+        f"ControlPath={control_path}",
+        "-O",
+        "check",
+        host,
+    ]
+    checked = subprocess.run(
+        check_command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if checked.returncode == 0:
+        return
+
+    if control_path.exists():
+        try:
+            control_path.unlink()
+        except OSError:
+            pass
+
+    start_command = [
+        ssh_binary,
+        *user_options,
+        "-o",
+        "ControlMaster=yes",
+        "-o",
+        f"ControlPath={control_path}",
+        "-o",
+        f"ControlPersist={persist_seconds}s",
+        "-MNf",
+        host,
+    ]
+    completed = subprocess.run(
+        start_command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "Could not establish a persistent SSH control master for the Sol backend.\n"
+            f"Host: {host}\n"
+            f"Stdout:\n{completed.stdout}\n\nStderr:\n{completed.stderr}"
+        )
+
+
 def _ssh_prefix(config: dict[str, Any]) -> list[str]:
     """Build the SSH command prefix used for Sol orchestration."""
+    _ensure_ssh_master(config)
     prefix = [str(config.get("ssh_binary", "ssh"))]
-    prefix.extend(str(option) for option in config.get("ssh_options", []))
+    prefix.extend(_ssh_common_options(config))
     prefix.append(_require_remote_host(config))
     return prefix
 
@@ -451,10 +583,11 @@ def _sync_remote_result_dir(
 ) -> subprocess.CompletedProcess[str]:
     """Sync one remote result directory back into the local notebook results tree."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
+    _ensure_ssh_master(config)
     command = [str(config.get("rsync_binary", "rsync"))]
     command.extend(str(option) for option in config.get("rsync_options", ["-az"]))
     ssh_command = [str(config.get("ssh_binary", "ssh"))]
-    ssh_command.extend(str(option) for option in config.get("ssh_options", []))
+    ssh_command.extend(_ssh_common_options(config))
     if len(ssh_command) > 1:
         command.extend(["-e", _shell_join(ssh_command)])
     command.extend(
@@ -1452,6 +1585,9 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "slurm_extra_args",
         "ssh_binary",
         "ssh_options",
+        "ssh_multiplex",
+        "ssh_control_path",
+        "ssh_control_persist_s",
         "rsync_binary",
         "rsync_options",
     ]
