@@ -4,6 +4,8 @@ set -euo pipefail
 repo_root=""
 result_dir=""
 conda_activate_cmd=""
+git_ref=""
+git_fetch="0"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,6 +19,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --conda-activate-cmd)
       conda_activate_cmd="$2"
+      shift 2
+      ;;
+    --git-ref)
+      git_ref="$2"
+      shift 2
+      ;;
+    --git-fetch)
+      git_fetch="$2"
       shift 2
       ;;
     --)
@@ -42,8 +52,22 @@ fi
 
 mkdir -p "${result_dir}"
 
-eval "${conda_activate_cmd}"
 cd "${repo_root}"
+
+if [[ "${git_fetch}" == "1" ]]; then
+  git fetch --tags --prune origin
+fi
+
+if [[ -n "${git_ref}" ]]; then
+  git checkout --force "${git_ref}"
+fi
+
+git rev-parse HEAD > "${result_dir}/git_commit.txt"
+if [[ -n "${git_ref}" ]]; then
+  printf '%s\n' "${git_ref}" > "${result_dir}/git_ref.txt"
+fi
+
+eval "${conda_activate_cmd}"
 
 {
   printf '%q ' "$@"

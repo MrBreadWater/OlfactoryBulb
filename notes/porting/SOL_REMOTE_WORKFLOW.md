@@ -32,6 +32,8 @@ The notebook helper layer now supports these remote controls:
 - `remote_repo_root`
 - `remote_results_root`
 - `remote_conda_activate_cmd`
+- `remote_git_ref`
+- `remote_git_fetch`
 - `remote_mpi_exec`
 - `remote_poll_interval_s`
 - `slurm_partition`
@@ -62,6 +64,7 @@ RUN_CONFIG = build_run_config(
     remote_repo_root="/path/on/sol/OlfactoryBulb",
     remote_results_root="/path/on/sol/OlfactoryBulb/results/notebook_runs",
     remote_conda_activate_cmd='source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate OBGPU',
+    remote_git_ref="0123abcd...",  # optional; defaults to the current local HEAD commit
     slurm_partition="gpu",
     slurm_time="02:00:00",
     slurm_gpus=1,
@@ -69,6 +72,25 @@ RUN_CONFIG = build_run_config(
 
 run, result = run_and_load(RUN_CONFIG)
 ```
+
+## Code Update Workflow
+
+Use committed code on Sol, not notebook-local dirty state.
+
+Recommended flow:
+
+1. commit locally
+2. push that commit to your remote
+3. either:
+   - leave `remote_git_ref=None` and let the notebook use the current local `HEAD` commit, or
+   - set `remote_git_ref` explicitly to the commit, tag, or branch you want Sol to run
+
+When the remote backend runs:
+
+- it can `git fetch` on Sol first when `remote_git_fetch=True`
+- it checks out the requested ref before launching the simulation
+- it syncs back `git_ref.txt` and `git_commit.txt`
+- the resolved remote commit is recorded in `run_info.json`
 
 ## Remote Helper Scripts
 

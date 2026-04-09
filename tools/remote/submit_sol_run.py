@@ -46,6 +46,8 @@ def write_batch_script(
     label: str,
     conda_activate_cmd: str,
     benchmark_command: list[str],
+    git_ref: str | None,
+    git_fetch: bool,
     args: argparse.Namespace,
 ) -> Path:
     """Write the Slurm batch script that launches one benchmark run."""
@@ -64,6 +66,10 @@ def write_batch_script(
                 str(result_dir),
                 "--conda-activate-cmd",
                 conda_activate_cmd,
+                "--git-ref",
+                git_ref or "",
+                "--git-fetch",
+                "1" if git_fetch else "0",
                 "--",
                 *benchmark_command,
             ]
@@ -99,6 +105,8 @@ def main() -> None:
     parser.add_argument("--label", required=True)
     parser.add_argument("--benchmark-command-b64", required=True)
     parser.add_argument("--conda-activate-cmd", required=True)
+    parser.add_argument("--git-ref", default=None)
+    parser.add_argument("--git-fetch", action="store_true")
     parser.add_argument("--partition", default=None)
     parser.add_argument("--account", default=None)
     parser.add_argument("--time", default=None)
@@ -120,6 +128,8 @@ def main() -> None:
         label=args.label,
         conda_activate_cmd=args.conda_activate_cmd,
         benchmark_command=benchmark_command,
+        git_ref=args.git_ref,
+        git_fetch=bool(args.git_fetch),
         args=args,
     )
 
@@ -133,6 +143,8 @@ def main() -> None:
         "stderr_path": str(result_dir / "stderr.txt"),
         "slurm_stdout_path": str(result_dir / "slurm-%j.out"),
         "benchmark_command": benchmark_command,
+        "git_ref": args.git_ref,
+        "git_fetch": bool(args.git_fetch),
     }
 
     if not args.dry_run:

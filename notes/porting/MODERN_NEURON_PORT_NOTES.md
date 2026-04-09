@@ -57,6 +57,7 @@ The intended Sol workflow is headless:
 
 - notebook stays local
 - notebook submits jobs to Sol through Slurm
+- notebook can pin each remote run to an explicit git ref
 - results sync back to local `results/notebook_runs/...`
 - analysis still runs locally on the synced results
 

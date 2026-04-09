@@ -82,6 +82,8 @@ CONTROL_HELP = {
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
     "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command.",
+    "remote_git_ref": "Git commit, tag, or branch to check out on Sol before running. Defaults to the current local HEAD commit.",
+    "remote_git_fetch": "When True, fetch origin on Sol before checking out remote_git_ref.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "slurm_partition": "Optional Slurm partition for remote submission.",
     "slurm_account": "Optional Slurm account for remote submission.",
@@ -182,6 +184,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_repo_root": None,
         "remote_results_root": None,
         "remote_conda_activate_cmd": 'source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate OBGPU',
+        "remote_git_ref": None,
+        "remote_git_fetch": True,
         "remote_poll_interval_s": 10.0,
         "slurm_partition": None,
         "slurm_account": None,
@@ -383,6 +387,29 @@ def _remote_results_root(config: dict[str, Any]) -> PurePosixPath:
     return _remote_repo_root(config) / "results" / "notebook_runs"
 
 
+def _resolve_local_git_head() -> str | None:
+    """Return the current local git HEAD commit or ``None`` when unavailable."""
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    head = (completed.stdout or "").strip()
+    return head or None
+
+
+def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
+    """Return the requested Sol git ref, defaulting to the current local HEAD commit."""
+    configured = config.get("remote_git_ref")
+    if configured not in (None, ""):
+        return str(configured)
+    return _resolve_local_git_head()
+
+
 def _require_remote_host(config: dict[str, Any]) -> str:
     """Return the configured remote SSH target."""
     remote_host = str(config.get("remote_host") or "").strip()
@@ -452,6 +479,7 @@ def _build_remote_submit_command(
     remote_repo_root: PurePosixPath,
     remote_results_root: PurePosixPath,
     benchmark_command: list[str],
+    remote_git_ref: str | None,
 ) -> str:
     """Build the remote `submit_sol_run.py` invocation shell line."""
     remote_helper = remote_repo_root / "tools" / "remote" / "submit_sol_run.py"
@@ -470,6 +498,11 @@ def _build_remote_submit_command(
         "--conda-activate-cmd",
         str(config.get("remote_conda_activate_cmd")),
     ]
+
+    if remote_git_ref:
+        command.extend(["--git-ref", remote_git_ref])
+    if bool(config.get("remote_git_fetch", True)):
+        command.append("--git-fetch")
 
     for key, flag in (
         ("slurm_partition", "--partition"),
@@ -523,6 +556,7 @@ def _remote_submission_payload(
     """Prepare the remote paths and benchmark command for a Sol run."""
     remote_repo_root = _remote_repo_root(config)
     remote_results_root = _remote_results_root(config)
+    remote_git_ref = _resolve_remote_git_ref(config)
     remote_mpi_exec = config.get("remote_mpi_exec") or config.get("mpi_exec", "mpiexec")
     remote_command = build_run_command(
         config,
@@ -537,6 +571,7 @@ def _remote_submission_payload(
         remote_repo_root=remote_repo_root,
         remote_results_root=remote_results_root,
         benchmark_command=remote_command,
+        remote_git_ref=remote_git_ref,
     )
     return (
         remote_repo_root,
@@ -548,6 +583,8 @@ def _remote_submission_payload(
             "remote_repo_root": remote_repo_root.as_posix(),
             "remote_results_root": remote_results_root.as_posix(),
             "remote_mpi_exec": str(remote_mpi_exec),
+            "remote_git_ref": remote_git_ref,
+            "remote_git_fetch": bool(config.get("remote_git_fetch", True)),
         },
         submit_command,
     )
@@ -653,6 +690,16 @@ def _run_remote_simulation(
 
     stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
     stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
+    remote_git_commit = (
+        (local_result_dir / "git_commit.txt").read_text().strip()
+        if (local_result_dir / "git_commit.txt").exists()
+        else None
+    )
+    remote_git_ref = (
+        (local_result_dir / "git_ref.txt").read_text().strip()
+        if (local_result_dir / "git_ref.txt").exists()
+        else remote_metadata.get("remote_git_ref")
+    )
     returncode = 0 if final_status and final_status.get("ok") else 1
     completed = SimpleNamespace(returncode=returncode, stdout=stdout_text, stderr=stderr_text)
 
@@ -679,6 +726,8 @@ def _run_remote_simulation(
                 "submit_response": submission,
                 "final_status": final_status,
                 "poll_transcript": poll_transcript,
+                "resolved_git_ref": remote_git_ref,
+                "resolved_git_commit": remote_git_commit,
             }
         },
     )
@@ -1390,6 +1439,8 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "remote_repo_root",
         "remote_results_root",
         "remote_conda_activate_cmd",
+        "remote_git_ref",
+        "remote_git_fetch",
         "remote_poll_interval_s",
         "remote_mpi_exec",
         "slurm_partition",
