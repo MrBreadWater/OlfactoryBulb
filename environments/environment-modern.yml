@@ -17,6 +17,7 @@ dependencies:
   - peewee
   - lmfit
   - requests
+  - pexpect
   - validators
   - gitpython
   - networkx

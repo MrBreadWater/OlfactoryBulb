@@ -46,6 +46,7 @@ The notebook helper layer now supports these remote controls:
 - `ssh_binary`
 - `ssh_options`
 - `ssh_multiplex`
+- `ssh_allow_interactive_auth`
 - `ssh_control_path`
 - `ssh_control_persist_s`
 - `rsync_binary`
@@ -103,11 +104,16 @@ to re-enter Sol password + 2FA for every submit, poll, and sync step.
 The relevant controls are:
 
 - `ssh_multiplex=True`
+- `ssh_allow_interactive_auth=True`
 - `ssh_control_path=None` to use the default hashed socket path under `/tmp`
 - `ssh_control_persist_s=28800` to keep the shared control master alive for 8 hours
 
 With those defaults, the first remote action authenticates once, then later
 submit/poll/rsync steps reuse the same SSH control socket.
+
+When `ssh_allow_interactive_auth=True`, the first connection can prompt through
+the notebook/kernel process itself using a PTY. That removes the old
+"authenticate in a separate terminal first" requirement.
 
 ## Remote Helper Scripts
 

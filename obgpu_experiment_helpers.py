@@ -20,6 +20,7 @@ from collections import Counter
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
+from getpass import getpass
 from hashlib import sha1
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
@@ -29,6 +30,10 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 import pywt
+try:
+    import pexpect
+except ImportError:  # pragma: no cover - optional runtime dependency
+    pexpect = None
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -101,6 +106,7 @@ CONTROL_HELP = {
     "ssh_binary": "SSH client executable used by the remote backend.",
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
     "ssh_multiplex": "When True, reuse a persistent SSH control socket so Sol auth happens once instead of on every submit/poll/sync step.",
+    "ssh_allow_interactive_auth": "When True, open the initial SSH control master through an interactive PTY so notebook-launched Sol runs can prompt for password and 2FA once.",
     "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under /tmp.",
     "ssh_control_persist_s": "How long to keep the SSH control master alive after the last use.",
     "rsync_binary": "rsync executable used to sync remote results back locally.",
@@ -209,6 +215,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "ssh_binary": "ssh",
         "ssh_options": [],
         "ssh_multiplex": True,
+        "ssh_allow_interactive_auth": True,
         "ssh_control_path": None,
         "ssh_control_persist_s": 28800,
         "rsync_binary": "rsync",
@@ -541,11 +548,79 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
         text=True,
         check=False,
     )
-    if completed.returncode != 0:
+    if completed.returncode == 0:
+        return
+
+    if not bool(config.get("ssh_allow_interactive_auth", True)):
         raise RuntimeError(
             "Could not establish a persistent SSH control master for the Sol backend.\n"
             f"Host: {host}\n"
             f"Stdout:\n{completed.stdout}\n\nStderr:\n{completed.stderr}"
+        )
+    _start_ssh_master_interactive(config, start_command)
+
+
+def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[str]) -> None:
+    """Start the SSH control master through a PTY so notebook users can answer auth prompts."""
+    if pexpect is None:
+        raise RuntimeError(
+            "Interactive SSH auth requires the optional 'pexpect' dependency in the notebook environment."
+        )
+
+    child = pexpect.spawn(
+        start_command[0],
+        start_command[1:],
+        cwd=str(REPO_ROOT),
+        encoding="utf-8",
+        timeout=120,
+    )
+
+    password_prompt = re.compile(r"(?i)(?:^|\n).*(?:password|passphrase).{0,20}:\s*$")
+    otp_prompt = re.compile(r"(?i)(?:^|\n).*(?:passcode|verification|otp|token|duo|2fa|two-factor).{0,40}:\s*$")
+    generic_prompt = re.compile(r"(?i)(?:^|\n).{0,120}:\s*$")
+    hostkey_prompt = re.compile(r"(?i)are you sure you want to continue connecting")
+
+    while True:
+        idx = child.expect(
+            [
+                hostkey_prompt,
+                password_prompt,
+                otp_prompt,
+                generic_prompt,
+                pexpect.EOF,
+                pexpect.TIMEOUT,
+            ]
+        )
+        if idx == 0:
+            child.sendline("yes")
+            continue
+        if idx == 1:
+            prompt = child.after.strip() or f"Password for {_require_remote_host(config)}: "
+            child.sendline(getpass(prompt + " "))
+            continue
+        if idx == 2:
+            prompt = child.after.strip() or f"2FA for {_require_remote_host(config)}: "
+            child.sendline(input(prompt + " "))
+            continue
+        if idx == 3:
+            prompt = child.after.strip() or f"SSH prompt for {_require_remote_host(config)}: "
+            if "password" in prompt.lower() or "passphrase" in prompt.lower():
+                child.sendline(getpass(prompt + " "))
+            else:
+                child.sendline(input(prompt + " "))
+            continue
+        if idx == 4:
+            child.close()
+            if child.exitstatus == 0:
+                return
+            raise RuntimeError(
+                "Interactive SSH authentication failed while opening the Sol control master.\n"
+                f"Exit status: {child.exitstatus}\n"
+                f"Output:\n{child.before}"
+            )
+        raise RuntimeError(
+            "Timed out while waiting for the Sol SSH control master to authenticate.\n"
+            f"Partial output:\n{child.before}"
         )
 
 
@@ -1586,6 +1661,7 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "ssh_binary",
         "ssh_options",
         "ssh_multiplex",
+        "ssh_allow_interactive_auth",
         "ssh_control_path",
         "ssh_control_persist_s",
         "rsync_binary",
