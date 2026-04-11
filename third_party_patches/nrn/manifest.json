@@ -16,6 +16,11 @@
       "file": "0003-nvhpc-compatibility.patch",
       "category": "required",
       "description": "Apply NVHPC/Eigen/Python compatibility fixes needed by OBGPU."
+    },
+    {
+      "file": "0004-random123-aarch64-nvhpc.patch",
+      "category": "required",
+      "description": "Allow the pinned Random123 PGI/NVHPC feature header to build correctly on aarch64."
     }
   ]
 }

@@ -1,0 +1,67 @@
+diff --git a/external/Random123/include/Random123/features/pgccfeatures.h b/external/Random123/include/Random123/features/pgccfeatures.h
+index 24399e4..0c26147 100644
+--- a/external/Random123/include/Random123/features/pgccfeatures.h
++++ b/external/Random123/include/Random123/features/pgccfeatures.h
+@@ -45,8 +45,8 @@ so as not to confuse it with the version available from LANL.
+ #ifndef __pgccfeatures_dot_hpp
+ #define __pgccfeatures_dot_hpp
+ 
+-#if !defined(__x86_64__) && !defined(__i386__) && !defined(__powerpc64__)
+-#  error "This code has only been tested on x86 platforms."
++#if !defined(__x86_64__) && !defined(__i386__) && !defined(__powerpc64__) && !defined(__aarch64__)
++#  error "This code has only been tested on x86, powerpc64, and aarch64 platforms."
+ #include <including_a_nonexistent_file_will_stop_some_compilers_from_continuing_with_a_hopeless_task>
+ { /* maybe an unbalanced brace will terminate the compilation */
+  /* Feel free to try the Random123 library on other architectures by changing
+@@ -116,7 +116,11 @@ so as not to confuse it with the version available from LANL.
+ #endif
+ 
+ #ifndef R123_USE_ASM_GNU
++#if defined(__x86_64__) || defined(__i386__) || defined(__powerpc64__)
+ #define R123_USE_ASM_GNU 1
++#else
++#define R123_USE_ASM_GNU 0
++#endif
+ #endif
+ 
+ #ifndef R123_USE_CPUID_MSVC
+@@ -134,11 +138,19 @@ so as not to confuse it with the version available from LANL.
+ /* emmintrin.h from PGI #includes xmmintrin.h but then complains at link time
+    about undefined references to _mm_castsi128_ps(__m128i).  Why? */
+ #ifndef R123_USE_XMMINTRIN_H
++#if defined(__x86_64__) || defined(__i386__)
+ #define R123_USE_XMMINTRIN_H 1
++#else
++#define R123_USE_XMMINTRIN_H 0
++#endif
+ #endif
+ 
+ #ifndef R123_USE_EMMINTRIN_H
++#if defined(__x86_64__) || defined(__i386__)
+ #define R123_USE_EMMINTRIN_H 1
++#else
++#define R123_USE_EMMINTRIN_H 0
++#endif
+ #endif
+ 
+ #ifndef R123_USE_SMMINTRIN_H
+@@ -166,7 +178,19 @@ so as not to confuse it with the version available from LANL.
+ #endif
+ 
+ #ifndef R123_USE_MULHILO64_ASM
++#if defined(__x86_64__) || defined(__powerpc64__)
+ #define R123_USE_MULHILO64_ASM 1
++#else
++#define R123_USE_MULHILO64_ASM 0
++#endif
++#endif
++
++#ifndef R123_USE_MULHILO64_C99
++#if defined(__aarch64__)
++#define R123_USE_MULHILO64_C99 1
++#else
++#define R123_USE_MULHILO64_C99 0
++#endif
+ #endif
+ 
+ #ifndef R123_USE_MULHILO64_MSVC_INTRIN
