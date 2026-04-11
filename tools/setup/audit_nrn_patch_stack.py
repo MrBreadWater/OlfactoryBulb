@@ -87,6 +87,14 @@ def find_modified_paths(source_tree: Path) -> list[str]:
     return normalize_paths([line.strip() for line in stdout.splitlines()])
 
 
+def is_git_submodule_path(source_tree: Path, path: str) -> bool:
+    """Return True when ``path`` is tracked as a gitlink/submodule."""
+    stdout = run(["git", "ls-files", "--stage", "--", path], cwd=source_tree).strip()
+    if not stdout:
+        return False
+    return stdout.split(None, 1)[0] == "160000"
+
+
 def diff_added_lines(source_tree: Path, path: str) -> list[str]:
     """Return added lines for one tracked modified file."""
     stdout = run(["git", "diff", "--no-color", "--unified=0", "--", path], cwd=source_tree)
@@ -95,6 +103,25 @@ def diff_added_lines(source_tree: Path, path: str) -> list[str]:
         if line.startswith("+++") or not line.startswith("+"):
             continue
         added.append(line[1:])
+    return added
+
+
+def diff_added_lines_in_submodule(source_tree: Path, submodule_path: str) -> list[str]:
+    """Return added lines from modified files inside a dirty git submodule."""
+    submodule_root = source_tree / submodule_path
+    if not submodule_root.is_dir():
+        return []
+
+    stdout = run(["git", "diff", "--name-only"], cwd=submodule_root)
+    changed_paths = normalize_paths([line.strip() for line in stdout.splitlines()])
+
+    added: list[str] = []
+    for changed_path in changed_paths:
+        diff_stdout = run(["git", "diff", "--no-color", "--unified=0", "--", changed_path], cwd=submodule_root)
+        for line in diff_stdout.splitlines():
+            if line.startswith("+++") or not line.startswith("+"):
+                continue
+            added.append(line[1:])
     return added
 
 
@@ -108,6 +135,27 @@ def untracked_file_lines(source_tree: Path, path: str) -> list[str]:
         stripped = line.strip()
         if stripped:
             lines.append(stripped)
+    return lines
+
+
+def untracked_file_lines_in_submodule(source_tree: Path, submodule_path: str) -> list[str]:
+    """Return stable non-empty lines from untracked files inside a dirty git submodule."""
+    submodule_root = source_tree / submodule_path
+    if not submodule_root.is_dir():
+        return []
+
+    stdout = run(["git", "ls-files", "--others", "--exclude-standard"], cwd=submodule_root)
+    untracked_paths = normalize_paths([line.strip() for line in stdout.splitlines()])
+
+    lines: list[str] = []
+    for untracked_path in untracked_paths:
+        file_path = submodule_root / untracked_path
+        if not file_path.is_file():
+            continue
+        for line in file_path.read_text().splitlines():
+            stripped = line.strip()
+            if stripped:
+                lines.append(stripped)
     return lines
 
 
@@ -134,9 +182,13 @@ def verify_modified_content_coverage(
         relevant_patch_text = patch_text_for_path(path, patch_texts)
         if not relevant_patch_text:
             continue
+        if is_git_submodule_path(source_tree, path):
+            candidate_lines = diff_added_lines_in_submodule(source_tree, path)
+        else:
+            candidate_lines = diff_added_lines(source_tree, path)
         missing_lines = [
             line
-            for line in diff_added_lines(source_tree, path)
+            for line in candidate_lines
             if line and line not in relevant_patch_text
         ]
         if missing_lines:
@@ -155,9 +207,13 @@ def verify_untracked_content_coverage(
         relevant_patch_text = patch_text_for_path(path, patch_texts)
         if not relevant_patch_text:
             continue
+        if is_git_submodule_path(source_tree, path):
+            candidate_lines = untracked_file_lines_in_submodule(source_tree, path)
+        else:
+            candidate_lines = untracked_file_lines(source_tree, path)
         missing_lines = [
             line
-            for line in untracked_file_lines(source_tree, path)
+            for line in candidate_lines
             if line not in relevant_patch_text
         ]
         if missing_lines:
