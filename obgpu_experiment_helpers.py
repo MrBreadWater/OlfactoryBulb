@@ -260,6 +260,7 @@ def build_sol_remote_config(
     remote_host: str,
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
+    slurm_partition: str = "arm",
     slurm_account: str | None = None,
     slurm_time: str = "02:00:00",
     slurm_gpus: int = 1,
@@ -275,9 +276,9 @@ def build_sol_remote_config(
 ) -> dict[str, Any]:
     """Return a Sol-specific remote runner config with Grace Hopper defaults.
 
-    This helper is the supported notebook-facing way to send runs to Sol. It
-    chooses the `arm` partition, uses the Sol activation helper, and launches
-    the benchmark through `srun --mpi=pmix`.
+    This helper is the supported notebook-facing way to send runs to Sol. By
+    default it chooses the `arm` partition for Grace Hopper, uses the Sol
+    activation helper, and launches the benchmark through `srun --mpi=pmix`.
     """
     remote_repo_root = str(remote_repo_root)
     if remote_results_root is None:
@@ -294,7 +295,7 @@ def build_sol_remote_config(
         "remote_git_ref": remote_git_ref,
         "remote_git_fetch": bool(remote_git_fetch),
         "remote_git_remote": str(remote_git_remote),
-        "slurm_partition": "arm",
+        "slurm_partition": str(slurm_partition),
         "slurm_account": slurm_account,
         "slurm_time": str(slurm_time),
         "slurm_gpus": int(slurm_gpus),
