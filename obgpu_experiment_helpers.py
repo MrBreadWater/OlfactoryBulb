@@ -1317,6 +1317,27 @@ def _build_remote_poll_command(
     )
 
 
+def _build_remote_preflight_command(
+    *,
+    remote_repo_root: PurePosixPath,
+) -> str:
+    """Build one remote shell command that validates Sol-side prerequisites."""
+    checks = [
+        f'test -d {shlex.quote(remote_repo_root.as_posix())}',
+        f'test -f {shlex.quote((remote_repo_root / "tools" / "remote" / "submit_sol_run.py").as_posix())}',
+        f'test -f {shlex.quote((remote_repo_root / "tools" / "remote" / "poll_sol_run.py").as_posix())}',
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"',
+        'test -n "$REMOTE_PYTHON"',
+        'command -v bash >/dev/null',
+        'command -v git >/dev/null',
+        'command -v sbatch >/dev/null',
+        'command -v sacct >/dev/null',
+        'command -v squeue >/dev/null',
+        'command -v srun >/dev/null',
+    ]
+    return " && ".join(checks)
+
+
 def _remote_submission_payload(
     config: dict[str, Any],
     *,
@@ -1375,6 +1396,34 @@ def _run_remote_simulation(
         remote_metadata,
         submit_shell,
     ) = _remote_submission_payload(config, label=label)
+
+    preflight_completed = _run_ssh_shell(
+        config,
+        _build_remote_preflight_command(remote_repo_root=remote_repo_root),
+    )
+    if preflight_completed.returncode != 0:
+        local_result_dir.mkdir(parents=True, exist_ok=True)
+        completed = SimpleNamespace(
+            returncode=preflight_completed.returncode,
+            stdout=preflight_completed.stdout or "",
+            stderr=preflight_completed.stderr or "",
+        )
+        _write_notebook_run_info(
+            local_result_dir,
+            config=config,
+            label=label,
+            timestamp=timestamp,
+            command=remote_benchmark_command,
+            env={},
+            completed=completed,
+            extra_payload={"remote": remote_metadata},
+        )
+        raise RuntimeError(
+            "Remote Sol preflight failed.\n"
+            f"Result dir: {local_result_dir}\n"
+            f"Stdout:\n{preflight_completed.stdout}\n\n"
+            f"Stderr:\n{preflight_completed.stderr}"
+        )
 
     submit_completed = _run_ssh_shell(config, submit_shell)
     local_result_dir.mkdir(parents=True, exist_ok=True)
