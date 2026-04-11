@@ -56,9 +56,12 @@ def write_batch_script(
     """Write the Slurm batch script that launches one benchmark run."""
     batch_path = result_dir / "slurm_job.sh"
     benchmark_shell = shell_join(benchmark_command)
+    slurm_log_path = result_dir / "slurm-%j.out"
     lines = [
         "#!/usr/bin/env bash",
         *slurm_directives(args, label),
+        "#SBATCH --output={}".format(slurm_log_path),
+        "#SBATCH --error={}".format(slurm_log_path),
         "set -euo pipefail",
         "mkdir -p {}".format(shlex.quote(str(result_dir))),
         "cd {}".format(shlex.quote(str(repo_root))),

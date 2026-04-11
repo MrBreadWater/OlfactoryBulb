@@ -1525,6 +1525,8 @@ def _run_remote_simulation(
 
     stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
     stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
+    slurm_logs = sorted(local_result_dir.glob("slurm-*.out"))
+    slurm_text = slurm_logs[-1].read_text() if slurm_logs else ""
     remote_git_commit = (
         (local_result_dir / "git_commit.txt").read_text().strip()
         if (local_result_dir / "git_commit.txt").exists()
@@ -1570,12 +1572,14 @@ def _run_remote_simulation(
     if returncode != 0:
         stderr_tail = stderr_text.strip()[-4000:]
         stdout_tail = stdout_text.strip()[-2000:]
+        slurm_tail = slurm_text.strip()[-4000:]
         raise RuntimeError(
             "Remote Sol simulation failed.\n"
             f"Result dir: {local_result_dir}\n"
             f"Command: {_shell_join(remote_benchmark_command)}\n"
             f"Stdout tail:\n{stdout_tail}\n\n"
-            f"Stderr tail:\n{stderr_tail}"
+            f"Stderr tail:\n{stderr_tail}\n\n"
+            f"Slurm tail:\n{slurm_tail}"
         )
 
     if summary is None:
