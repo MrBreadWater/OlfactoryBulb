@@ -92,10 +92,25 @@ def apply_patch_stack(*, repo_root: Path, source_tree: Path, manifest: dict[str,
         run(["git", "apply", "--whitespace=nowarn", str(patch_path)], cwd=source_tree)
 
 
+def default_mpi_exec() -> str:
+    """Return the preferred smoke-test MPI launcher for the current shell."""
+    configured = os.environ.get("OB_MPIEXEC")
+    if configured:
+        return configured
+
+    if os.environ.get("SLURM_JOB_ID") and shutil.which("srun"):
+        slurm_mpi_type = os.environ.get("OB_SLURM_MPI_TYPE", "pmix").strip()
+        if slurm_mpi_type:
+            return f"srun --mpi={slurm_mpi_type}"
+        return "srun"
+
+    return "mpiexec"
+
+
 def default_smoke_commands(*, enable_gpu: bool) -> list[str]:
     """Return the minimal default smoke matrix for an upgrade candidate."""
     command = (
-        "mpiexec -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py "
+        f"{default_mpi_exec()} -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py "
         "--label nrn_upgrade_smoke_onems --paramset OneMsTest --coreneuron"
     )
     if enable_gpu:

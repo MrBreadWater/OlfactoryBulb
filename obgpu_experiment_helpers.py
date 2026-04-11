@@ -12,6 +12,7 @@ import os
 import pickle
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -91,12 +92,12 @@ CONTROL_HELP = {
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
     "wavelet_signal": "Signal for wavelet plots, e.g. 'lfp', 'mean_TC_voltage', or a soma label.",
     "runner_backend": "Execution backend: 'local' or 'sol_slurm'.",
-    "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec'.",
-    "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'mpiexec' or 'srun'.",
+    "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec' or 'srun --mpi=pmix'.",
+    "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'srun --mpi=pmix' or 'mpiexec'.",
     "remote_host": "SSH target used by the Sol backend, e.g. 'user@sol.asu.edu'.",
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
-    "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command.",
+    "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command. Defaults to 'source tools/setup/activate_sol_obgpu.sh'.",
     "remote_git_ref": "Git commit, tag, or branch to check out on Sol before running. Defaults to the current local HEAD commit.",
     "remote_git_fetch": "When True, fetch the configured remote on Sol before checking out remote_git_ref.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
@@ -139,6 +140,26 @@ class RunRecord:
 
 _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
+
+
+def default_local_mpi_exec() -> str:
+    """Return the preferred local MPI launcher for the current shell."""
+    configured = os.environ.get("OB_MPIEXEC")
+    if configured:
+        return configured
+
+    if os.environ.get("SLURM_JOB_ID") and shutil.which("srun"):
+        slurm_mpi_type = os.environ.get("OB_SLURM_MPI_TYPE", "pmix").strip()
+        if slurm_mpi_type:
+            return f"srun --mpi={slurm_mpi_type}"
+        return "srun"
+
+    return "mpiexec"
+
+
+def default_remote_mpi_exec() -> str:
+    """Return the preferred MPI launcher for the Sol Slurm backend."""
+    return "srun --mpi=pmix"
 
 
 def make_timestamp() -> str:
@@ -201,12 +222,12 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "max_spike_raster_cells_per_type": 24,
         "extra_overrides": {},
         "runner_backend": "local",
-        "mpi_exec": "mpiexec",
-        "remote_mpi_exec": None,
+        "mpi_exec": default_local_mpi_exec(),
+        "remote_mpi_exec": default_remote_mpi_exec(),
         "remote_host": None,
         "remote_repo_root": None,
         "remote_results_root": None,
-        "remote_conda_activate_cmd": 'source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate OBGPU',
+        "remote_conda_activate_cmd": "source tools/setup/activate_sol_obgpu.sh",
         "remote_git_ref": None,
         "remote_git_fetch": True,
         "remote_git_remote": "origin",
@@ -368,10 +389,10 @@ def build_run_command(
     """Build the benchmark subprocess command for a notebook run."""
     repo_root = repo_root or REPO_ROOT
     results_base = results_base or config.get("results_base", DEFAULT_RESULTS_BASE)
-    mpi_exec = mpi_exec or str(config.get("mpi_exec", "mpiexec"))
+    mpi_exec = mpi_exec or str(config.get("mpi_exec", default_local_mpi_exec()))
     benchmark_script = Path(repo_root) / "tools" / "benchmarks" / "benchmark_ob.py"
     command = [
-        mpi_exec,
+        *shlex.split(mpi_exec),
         "-n",
         str(int(config["nranks"])),
         "nrniv",
@@ -770,7 +791,7 @@ def _remote_submission_payload(
     remote_repo_root = _remote_repo_root(config)
     remote_results_root = _remote_results_root(config)
     remote_git_ref = _resolve_remote_git_ref(config)
-    remote_mpi_exec = config.get("remote_mpi_exec") or config.get("mpi_exec", "mpiexec")
+    remote_mpi_exec = config.get("remote_mpi_exec") or default_remote_mpi_exec()
     remote_command = build_run_command(
         config,
         label,

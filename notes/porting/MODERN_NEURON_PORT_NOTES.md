@@ -82,6 +82,7 @@ That helper:
 - otherwise auto-detects the best available `mamba`, `nvhpc`, and `cuda` modules from `module avail`
 - initializes conda in the current shell
 - activates `OBGPU`
+- exports `OB_MPIEXEC` to a working `srun` launcher inside Slurm allocations
 
 If your `salloc` keeps you in the same shell, already-loaded modules persist. If
 you start a fresh shell on the compute node, run the helper again.

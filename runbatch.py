@@ -5,7 +5,9 @@ The paramsets array should contain class names found in: [repo]/olfactorybulb/pa
 
 Environment overrides:
     OB_MPI_RANKS          Number of MPI ranks to launch per simulation.
-    OB_MPIEXEC            MPI launcher binary. Defaults to "mpiexec".
+    OB_MPIEXEC            MPI launcher command. Defaults to "mpiexec", or
+                          "srun --mpi=pmix" inside a Slurm allocation when
+                          available.
     OB_RUNTIME_MODE       One of "scientific" or "exploratory".
     OB_USE_CORENRN        Enable CoreNEURON for `initslice.py`.
     OB_USE_CORENRN_GPU    Enable CoreNEURON GPU mode for `initslice.py`.
@@ -18,6 +20,8 @@ from __future__ import annotations
 
 import multiprocessing
 import os
+import shlex
+import shutil
 import subprocess
 
 from olfactorybulb.output_paths import label_with_timestamp, make_timestamp
@@ -54,10 +58,25 @@ def get_mpi_ranks() -> int:
     return max(2, int(raw))
 
 
+def default_mpi_exec() -> str:
+    """Return the preferred MPI launcher for the current environment."""
+    configured = os.environ.get("OB_MPIEXEC")
+    if configured:
+        return configured
+
+    if os.environ.get("SLURM_JOB_ID") and shutil.which("srun"):
+        slurm_mpi_type = os.environ.get("OB_SLURM_MPI_TYPE", "pmix").strip()
+        if slurm_mpi_type:
+            return f"srun --mpi={slurm_mpi_type}"
+        return "srun"
+
+    return "mpiexec"
+
+
 def main() -> None:
     """Launch each configured paramset sequentially with the current runtime defaults."""
     mpi_ranks = get_mpi_ranks()
-    mpiexec = os.environ.get("OB_MPIEXEC", "mpiexec")
+    mpiexec = default_mpi_exec()
     base_env = os.environ.copy()
 
     # Prevent threaded math libraries from oversubscribing the CPU under MPI.
@@ -82,7 +101,7 @@ def main() -> None:
         run_env["OB_RESULT_LABEL"] = run_label
         print('Starting paramset: %s (%s/%s) with %s MPI ranks [%s, %s, warp=%s] -> %s...' % (params, i + 1, len(paramsets), mpi_ranks, mode, runtime_mode, warp_balance, run_label))
         command = [
-            mpiexec,
+            *shlex.split(mpiexec),
             "-n",
             str(mpi_ranks),
             "nrniv",

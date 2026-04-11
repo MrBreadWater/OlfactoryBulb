@@ -22,6 +22,33 @@ ensure_conda_cmd() {
   return 1
 }
 
+detect_srun_mpi_exec() {
+  if ! command -v srun >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local preferred_type="${OB_SLURM_MPI_TYPE:-pmix}"
+  local mpi_list=""
+  mpi_list="$(srun --mpi=list 2>/dev/null || true)"
+
+  if [[ -n "${preferred_type}" ]] && grep -Eq "(^|[[:space:],])${preferred_type}([[:space:],]|$)" <<<"${mpi_list}"; then
+    printf 'srun --mpi=%s\n' "${preferred_type}"
+    return 0
+  fi
+
+  if grep -Eq '(^|[[:space:],])pmix([[:space:],]|$)' <<<"${mpi_list}"; then
+    printf 'srun --mpi=pmix\n'
+    return 0
+  fi
+
+  if grep -Eq '(^|[[:space:],])pmi2([[:space:],]|$)' <<<"${mpi_list}"; then
+    printf 'srun --mpi=pmi2\n'
+    return 0
+  fi
+
+  printf 'srun\n'
+}
+
 resolve_module_if_needed() {
   local prefix="$1"
   local explicit="${2:-}"
@@ -88,6 +115,12 @@ ensure_conda_cmd
 eval "$(conda shell.bash hook)"
 conda activate "${ENV_NAME}"
 
+if [[ -n "${SLURM_JOB_ID:-}" ]] && [[ -z "${OB_MPIEXEC:-}" ]]; then
+  if detected_mpi_exec="$(detect_srun_mpi_exec)"; then
+    export OB_MPIEXEC="${detected_mpi_exec}"
+  fi
+fi
+
 missing_tools=()
 for tool_name in nvc "nvc++" nvcc; do
   if ! command -v "${tool_name}" >/dev/null 2>&1; then
@@ -100,6 +133,9 @@ export OBGPU_SOL_MODULES_LOADED=1
 echo "Loaded Sol modules and activated ${ENV_NAME}." >&2
 echo "Resolved modules: mamba=${SOL_MAMBA_MODULE:-<none>} nvhpc=${SOL_NVHPC_MODULE:-<none>} cuda=${SOL_CUDA_MODULE:-<none>}" >&2
 echo "Loaded modules: ${LOADEDMODULES:-<unknown>}" >&2
+if [[ -n "${OB_MPIEXEC:-}" ]]; then
+  echo "MPI launcher: ${OB_MPIEXEC}" >&2
+fi
 if [[ "${#missing_tools[@]}" -gt 0 ]]; then
   echo "Warning: toolchain commands not on PATH after activation: ${missing_tools[*]}" >&2
 fi

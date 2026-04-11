@@ -36,6 +36,10 @@ That helper loads the expected modules and activates `OBGPU`. If your `salloc`
 session keeps the same shell, the loaded modules persist. If you start a fresh
 shell on the compute node, run the helper again there.
 
+Inside a Slurm allocation, the helper also exports `OB_MPIEXEC` to a working
+`srun` launcher, preferring `srun --mpi=pmix` when supported. On Sol, use that
+instead of `mpiexec`.
+
 Module selection is not hardcoded anymore:
 
 - if the needed modules are already loaded, the helper reuses them
@@ -90,6 +94,12 @@ The public notebook interface is unchanged:
 - `run, result = run_and_load(RUN_CONFIG)`
 - `run, result = load_run_pair(...)`
 
+For direct Sol smoke tests inside an allocation, prefer:
+
+```bash
+$OB_MPIEXEC -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label sol_smoke --paramset OneMsTest --coreneuron --coreneuron-gpu
+```
+
 ## Minimal Example
 
 ```python
@@ -100,7 +110,7 @@ RUN_CONFIG = build_run_config(
     remote_host="youruser@sol.asu.edu",
     remote_repo_root="/path/on/sol/OlfactoryBulb",
     remote_results_root="/path/on/sol/OlfactoryBulb/results/notebook_runs",
-    remote_conda_activate_cmd='source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate OBGPU',
+    remote_conda_activate_cmd='source tools/setup/activate_sol_obgpu.sh',
     remote_git_ref="0123abcd...",  # optional; defaults to the current local HEAD commit
     slurm_partition="gpu",
     slurm_time="02:00:00",
