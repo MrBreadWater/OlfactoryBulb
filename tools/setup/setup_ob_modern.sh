@@ -397,15 +397,8 @@ PY
 activate_conda_env() {
   local env_name="$1"
   local hook_output=""
-
-  if command -v conda >/dev/null 2>&1; then
-    hook_output="$(conda shell.bash hook 2>/dev/null || true)"
-    if [[ -n "${hook_output}" ]]; then
-      eval "${hook_output}"
-      conda activate "${env_name}"
-      return 0
-    fi
-  fi
+  local conda_bin=""
+  local activate_script=""
 
   if command -v activate >/dev/null 2>&1; then
     # Sol's mamba module documents `source activate <env>` as the supported
@@ -413,6 +406,25 @@ activate_conda_env() {
     # shellcheck disable=SC1090
     source activate "${env_name}"
     return 0
+  fi
+
+  if command -v conda >/dev/null 2>&1; then
+    conda_bin="$(command -v conda)"
+    activate_script="$(dirname "${conda_bin}")/activate"
+    if [[ -f "${activate_script}" ]]; then
+      # shellcheck disable=SC1090
+      source "${activate_script}" "${env_name}"
+      return 0
+    fi
+  fi
+
+  if command -v conda >/dev/null 2>&1; then
+    hook_output="$(conda shell.bash hook 2>/dev/null || true)"
+    if [[ -n "${hook_output}" ]] && grep -q '__conda_' <<<"${hook_output}"; then
+      eval "${hook_output}"
+      conda activate "${env_name}"
+      return 0
+    fi
   fi
 
   echo "Could not activate environment '${env_name}'." >&2
