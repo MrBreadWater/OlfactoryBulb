@@ -1,7 +1,5 @@
 """Poll one remote Slurm-backed OBGPU run and emit JSON status."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import subprocess
@@ -23,20 +21,26 @@ TERMINAL_FAIL = {
 }
 
 
-def run_command(command: list[str]) -> str:
+def run_command(command):
     """Return stripped stdout from a subprocess or an empty string on failure."""
-    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    completed = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
     if completed.returncode != 0:
         return ""
     return (completed.stdout or "").strip()
 
 
-def normalize_state(raw_state: str) -> str:
+def normalize_state(raw_state):
     """Normalize Slurm state tokens by removing suffixes such as '+'."""
     return raw_state.split()[0].split("+", 1)[0].strip().upper()
 
 
-def query_state(job_id: str) -> str:
+def query_state(job_id):
     """Query Slurm for one job state using sacct first, then squeue."""
     sacct_output = run_command(["sacct", "-j", str(job_id), "--format=State", "--noheader"])
     if sacct_output:
@@ -52,7 +56,7 @@ def query_state(job_id: str) -> str:
     return "UNKNOWN"
 
 
-def main() -> None:
+def main():
     """Emit JSON job state and result readiness for one remote run."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--job-id", required=True)

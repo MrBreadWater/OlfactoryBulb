@@ -1,17 +1,15 @@
 """Submit one timestamped OBGPU benchmark run to Slurm on a remote host."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import shlex
 import subprocess
 from base64 import b64decode
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 
-def decode_command(payload_b64: str) -> list[str]:
+def decode_command(payload_b64):
     """Decode a base64-encoded JSON command list."""
     command = json.loads(b64decode(payload_b64).decode("utf-8"))
     if not isinstance(command, list) or not all(isinstance(part, str) for part in command):
@@ -19,44 +17,43 @@ def decode_command(payload_b64: str) -> list[str]:
     return command
 
 
-def slurm_directives(args: argparse.Namespace, *, label: str) -> list[str]:
+def slurm_directives(args, label):
     """Return `#SBATCH` header lines for a generated batch script."""
-    directives = [f"#SBATCH --job-name={label[:120]}"]
+    directives = ["#SBATCH --job-name={}".format(label[:120])]
     if args.partition:
-        directives.append(f"#SBATCH --partition={args.partition}")
+        directives.append("#SBATCH --partition={}".format(args.partition))
     if args.account:
-        directives.append(f"#SBATCH --account={args.account}")
+        directives.append("#SBATCH --account={}".format(args.account))
     if args.time:
-        directives.append(f"#SBATCH --time={args.time}")
+        directives.append("#SBATCH --time={}".format(args.time))
     if args.gpus is not None:
-        directives.append(f"#SBATCH --gpus={args.gpus}")
+        directives.append("#SBATCH --gpus={}".format(args.gpus))
     if args.cpus_per_task is not None:
-        directives.append(f"#SBATCH --cpus-per-task={args.cpus_per_task}")
+        directives.append("#SBATCH --cpus-per-task={}".format(args.cpus_per_task))
     if args.mem:
-        directives.append(f"#SBATCH --mem={args.mem}")
+        directives.append("#SBATCH --mem={}".format(args.mem))
     for extra in args.sbatch_arg:
-        directives.append(f"#SBATCH {extra}")
+        directives.append("#SBATCH {}".format(extra))
     return directives
 
 
 def write_batch_script(
-    *,
-    repo_root: Path,
-    result_dir: Path,
-    label: str,
-    conda_activate_cmd: str,
-    benchmark_command: list[str],
-    git_ref: str | None,
-    git_fetch: bool,
-    git_remote: str,
-    args: argparse.Namespace,
-) -> Path:
+    repo_root,
+    result_dir,
+    label,
+    conda_activate_cmd,
+    benchmark_command,
+    git_ref,
+    git_fetch,
+    git_remote,
+    args,
+):
     """Write the Slurm batch script that launches one benchmark run."""
     batch_path = result_dir / "slurm_job.sh"
     wrapper = repo_root / "tools" / "remote" / "run_obgpu_batch.sh"
     lines = [
         "#!/usr/bin/env bash",
-        *slurm_directives(args, label=label),
+        *slurm_directives(args, label),
         "set -euo pipefail",
         shlex.join(
             [
@@ -84,23 +81,31 @@ def write_batch_script(
     return batch_path
 
 
-def submit_batch(batch_path: Path) -> str:
+def submit_batch(batch_path):
     """Submit a generated Slurm script and return the parsed job id."""
     completed = subprocess.run(
         ["sbatch", "--parsable", str(batch_path)],
-        capture_output=True,
-        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
         check=False,
     )
     if completed.returncode != 0:
-        raise RuntimeError(f"sbatch failed:\nSTDOUT:\n{completed.stdout}\nSTDERR:\n{completed.stderr}")
+        raise RuntimeError(
+            "sbatch failed:\nSTDOUT:\n{}\nSTDERR:\n{}".format(
+                completed.stdout,
+                completed.stderr,
+            )
+        )
     job_id = (completed.stdout or "").strip().split(";", 1)[0].strip()
     if not job_id:
-        raise RuntimeError(f"Could not parse Slurm job id from sbatch output: {completed.stdout!r}")
+        raise RuntimeError(
+            "Could not parse Slurm job id from sbatch output: {!r}".format(completed.stdout)
+        )
     return job_id
 
 
-def main() -> None:
+def main():
     """Parse CLI args, write the batch script, optionally submit it, and emit JSON."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
@@ -138,7 +143,7 @@ def main() -> None:
         args=args,
     )
 
-    payload: dict[str, Any] = {
+    payload = {
         "submitted": False,
         "job_id": None,
         "label": args.label,
