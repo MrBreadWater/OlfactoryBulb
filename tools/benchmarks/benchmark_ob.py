@@ -19,11 +19,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from olfactorybulb.output_paths import configure_output_env
-from obgpu_experiment_helpers import (
-    modify_existing_connections,
-    add_new_connections,
-    perform_cell_type_swaps
-)
+
 
 def sha256_file(path: str | Path) -> str:
     """Return the SHA-256 digest for a file on disk."""
@@ -158,8 +154,20 @@ def main() -> None:
     parser.add_argument("--parallel-timeout", type=float, default=None)
     parser.add_argument("--overrides-json", default=None)
     parser.add_argument("--overrides-file", default=None)
+    parser.add_argument("--add-connections-json", default=None)
+    parser.add_argument("--modify-connections-json", default=None)
+    parser.add_argument("--swap-cell-types-json", default=None)
     args, _unknown = parser.parse_known_args()
     overrides_json = json.loads(args.overrides_json) if args.overrides_json is not None else None
+    add_connections = (
+        json.loads(args.add_connections_json) if args.add_connections_json is not None else None
+    )
+    modify_connections = (
+        json.loads(args.modify_connections_json) if args.modify_connections_json is not None else None
+    )
+    swap_cell_types = (
+        json.loads(args.swap_cell_types_json) if args.swap_cell_types_json is not None else None
+    )
     if args.coreneuron_warp_balance is None:
         if args.coreneuron_gpu:
             args.coreneuron_warp_balance = int(os.environ.get("OB_CORENRN_WARP_BALANCE", "128"))
@@ -221,12 +229,18 @@ def main() -> None:
 
     build_start = time.perf_counter()
     ob = OlfactoryBulb(params, autorun=False)
-    if args.add_connections is not None:
-        add_new_connections(ob, args.add_connections)
-    if args.modify_connections is not None:
-        modify_existing_connections(ob, args.modify_connections)
-    if args.swap_cell_types is not None:
-        perform_cell_type_swaps(ob, args.swap_cell_types)
+    if add_connections is not None or modify_connections is not None or swap_cell_types is not None:
+        from obgpu_experiment_helpers import (
+            add_new_connections,
+            modify_existing_connections,
+            perform_cell_type_swaps,
+        )
+    if add_connections is not None:
+        add_new_connections(ob, add_connections)
+    if modify_connections is not None:
+        modify_existing_connections(ob, modify_connections)
+    if swap_cell_types is not None:
+        perform_cell_type_swaps(ob, swap_cell_types)
     if args.tstop_override is not None:
         ob.params.tstop = args.tstop_override
     if args.disable_status_report:
