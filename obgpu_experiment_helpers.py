@@ -13,6 +13,7 @@ import pickle
 import re
 import shlex
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -579,6 +580,89 @@ def _ssh_command_env() -> dict[str, str]:
     return env
 
 
+def _ssh_master_is_ready(config: dict[str, Any], control_path: Path) -> bool:
+    """Return True when the configured SSH control master accepts mux requests."""
+    checked = subprocess.run(
+        [
+            str(config.get("ssh_binary", "ssh")),
+            *[str(option) for option in config.get("ssh_options", [])],
+            "-o",
+            f"ControlPath={control_path}",
+            "-O",
+            "check",
+            _require_remote_host(config),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_ssh_command_env(),
+    )
+    return checked.returncode == 0
+
+
+def _kill_stale_ssh_master_processes(config: dict[str, Any], control_path: Path) -> None:
+    """Kill stale SSH master processes still tied to a removed or broken control path."""
+    listed = subprocess.run(
+        ["ps", "-eo", "pid=,args="],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if listed.returncode != 0:
+        return
+
+    control_path_text = str(control_path)
+    current_pid = os.getpid()
+    target_pids: list[int] = []
+    for raw_line in (listed.stdout or "").splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        parts = line.split(maxsplit=1)
+        if len(parts) != 2:
+            continue
+        pid_text, args = parts
+        try:
+            pid = int(pid_text)
+        except ValueError:
+            continue
+        if pid == current_pid:
+            continue
+        if control_path_text not in args:
+            continue
+        if "ssh" not in args:
+            continue
+        target_pids.append(pid)
+
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        survivors: list[int] = []
+        for pid in target_pids:
+            try:
+                os.kill(pid, sig)
+            except ProcessLookupError:
+                continue
+            except OSError:
+                survivors.append(pid)
+                continue
+            survivors.append(pid)
+        if not survivors:
+            return
+        time.sleep(0.2)
+        target_pids = []
+        for pid in survivors:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                continue
+            except OSError:
+                continue
+            target_pids.append(pid)
+        if not target_pids:
+            return
+
+
 def _reset_ssh_master(config: dict[str, Any]) -> None:
     """Tear down and remove any cached SSH control socket for the remote host."""
     control_path = _ssh_control_path(config)
@@ -588,7 +672,10 @@ def _reset_ssh_master(config: dict[str, Any]) -> None:
     stored_child = _LIVE_SSH_MASTERS.pop(str(control_path), None)
     if stored_child is not None:
         try:
-            stored_child.close(force=True)
+            if hasattr(stored_child, "terminate"):
+                stored_child.terminate()
+            else:
+                stored_child.close(force=True)
         except Exception:
             pass
 
@@ -617,6 +704,7 @@ def _reset_ssh_master(config: dict[str, Any]) -> None:
             control_path.unlink()
         except OSError:
             pass
+    _kill_stale_ssh_master_processes(config, control_path)
 
 
 def _ssh_failure_needs_reset(stderr: str) -> bool:
@@ -646,24 +734,7 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
     user_options = [str(option) for option in config.get("ssh_options", [])]
     persist_seconds = int(config.get("ssh_control_persist_s", 28800))
 
-    check_command = [
-        ssh_binary,
-        *user_options,
-        "-o",
-        f"ControlPath={control_path}",
-        "-O",
-        "check",
-        host,
-    ]
-    checked = subprocess.run(
-        check_command,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_ssh_command_env(),
-    )
-    if checked.returncode == 0:
+    if _ssh_master_is_ready(config, control_path):
         return
 
     _reset_ssh_master(config)
@@ -677,26 +748,47 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
         f"ControlPath={control_path}",
         "-o",
         f"ControlPersist={persist_seconds}s",
-        "-MNf",
+        "-MN",
         host,
     ]
-    completed = subprocess.run(
+    started = subprocess.Popen(
         start_command,
         cwd=REPO_ROOT,
-        capture_output=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        check=False,
         env=_ssh_command_env(),
     )
-    if completed.returncode == 0:
-        return
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if _ssh_master_is_ready(config, control_path):
+            _LIVE_SSH_MASTERS[str(control_path)] = started
+            return
+        if started.poll() is not None:
+            break
+        time.sleep(0.1)
+
+    stdout, stderr = started.communicate(timeout=1) if started.poll() is not None else ("", "")
+    if started.poll() is None:
+        try:
+            started.terminate()
+            started.wait(timeout=1)
+        except Exception:
+            try:
+                started.kill()
+            except Exception:
+                pass
+        stdout = stdout or ""
+        stderr = stderr or ""
 
     if not bool(config.get("ssh_allow_interactive_auth", True)):
         raise RuntimeError(
             "Could not establish a persistent SSH control master for the Sol backend.\n"
             f"Host: {host}\n"
-            f"Stdout:\n{completed.stdout}\n\nStderr:\n{completed.stderr}"
+            f"Stdout:\n{stdout}\n\nStderr:\n{stderr}"
         )
+    _reset_ssh_master(config)
     _start_ssh_master_interactive(config, start_command)
 
 
@@ -707,7 +799,7 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
             "Interactive SSH auth requires the optional 'pexpect' dependency in the notebook environment."
         )
 
-    interactive_command = ["-MN" if part == "-MNf" else part for part in start_command]
+    interactive_command = list(start_command)
     control_path = _ssh_control_path(config)
     if control_path is None:
         raise RuntimeError("Interactive SSH auth requires ssh_multiplex=True")
@@ -759,7 +851,7 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
         if idx == 4:
             child.close()
             if child.exitstatus == 0:
-                if control_path.exists():
+                if _ssh_master_is_ready(config, control_path):
                     _LIVE_SSH_MASTERS[str(control_path)] = child
                     return
             raise RuntimeError(
@@ -767,26 +859,9 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
                 f"Exit status: {child.exitstatus}\n"
                 f"Output:\n{child.before}"
             )
-        if control_path.exists():
-            checked = subprocess.run(
-                [
-                    str(config.get("ssh_binary", "ssh")),
-                    *[str(option) for option in config.get("ssh_options", [])],
-                    "-o",
-                    f"ControlPath={control_path}",
-                    "-O",
-                    "check",
-                    _require_remote_host(config),
-                ],
-                cwd=REPO_ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-                env=_ssh_command_env(),
-            )
-            if checked.returncode == 0:
-                _LIVE_SSH_MASTERS[str(control_path)] = child
-                return
+        if _ssh_master_is_ready(config, control_path):
+            _LIVE_SSH_MASTERS[str(control_path)] = child
+            return
         if time.time() > deadline:
             child.close(force=True)
             raise RuntimeError(
