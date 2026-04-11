@@ -527,6 +527,35 @@ def _resolve_local_git_head() -> str | None:
     return head or None
 
 
+def _resolve_local_git_branch() -> str | None:
+    """Return the current local branch name or ``None`` when detached."""
+    completed = subprocess.run(
+        ["git", "branch", "--show-current"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    branch = (completed.stdout or "").strip()
+    return branch or None
+
+
+def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
+    """Return whether one local git ref currently resolves to the requested commit."""
+    completed = subprocess.run(
+        ["git", "rev-parse", ref_name],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return False
+    return (completed.stdout or "").strip() == commit_sha
+
+
 def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
     """Return the requested Sol git ref, defaulting to the current local HEAD commit."""
     configured = config.get("remote_git_ref")
@@ -1407,6 +1436,129 @@ def _remote_submission_payload(
     )
 
 
+def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
+    """Create a temporary git bundle that carries the requested local commit."""
+    branch_name = _resolve_local_git_branch()
+    temp_ref: str | None = None
+    source_ref: str
+
+    if branch_name and _git_ref_points_to_commit(branch_name, commit_sha):
+        source_ref = f"refs/heads/{branch_name}"
+    else:
+        temp_ref = f"refs/obgpu-notebook-sync/{commit_sha}"
+        updated = subprocess.run(
+            ["git", "update-ref", temp_ref, commit_sha],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if updated.returncode != 0:
+            raise RuntimeError(
+                "Could not create a temporary git ref for the Sol sync bundle.\n"
+                f"Commit: {commit_sha}\n"
+                f"Stderr:\n{updated.stderr}"
+            )
+        source_ref = temp_ref
+
+    bundle_handle = tempfile.NamedTemporaryFile(prefix="obgpu-sol-sync-", suffix=".bundle", delete=False)
+    bundle_path = Path(bundle_handle.name)
+    bundle_handle.close()
+
+    try:
+        created = subprocess.run(
+            ["git", "bundle", "create", str(bundle_path), source_ref],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if created.returncode != 0:
+            raise RuntimeError(
+                "Could not create a git bundle for the Sol backend.\n"
+                f"Source ref: {source_ref}\n"
+                f"Stderr:\n{created.stderr}"
+            )
+        return bundle_path, source_ref
+    except Exception:
+        try:
+            bundle_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        raise
+    finally:
+        if temp_ref is not None:
+            subprocess.run(
+                ["git", "update-ref", "-d", temp_ref],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+
+
+def _ensure_remote_git_ref_available(
+    config: dict[str, Any],
+    *,
+    remote_repo_root: PurePosixPath,
+    remote_git_ref: str | None,
+) -> None:
+    """Ensure the current local commit exists in the remote repo without requiring manual git push."""
+    if not remote_git_ref:
+        return
+
+    check_command = (
+        f"git -C {shlex.quote(remote_repo_root.as_posix())} "
+        f"cat-file -e {shlex.quote(remote_git_ref + '^{{commit}}')}"
+    )
+    check_completed = _run_ssh_shell(config, check_command)
+    if check_completed.returncode == 0:
+        return
+
+    if _remote_transport(config) != "paramiko":
+        raise RuntimeError(
+            "The requested git ref is not available in the remote Sol repo, and automatic sync "
+            "requires ssh_transport='paramiko'.\n"
+            f"Remote ref: {remote_git_ref}\n"
+            "Push the branch manually or enable the Paramiko transport."
+        )
+
+    connection = _connect_paramiko(config)
+    sftp = connection["sftp"]
+    bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref)
+    remote_bundle_path = f"/tmp/obgpu-sync-{remote_git_ref[:12]}-{os.getpid()}.bundle"
+    remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
+    fetch_command = (
+        f"git -C {shlex.quote(remote_repo_root.as_posix())} fetch --force --no-tags "
+        f"{shlex.quote(remote_bundle_path)} "
+        f"{shlex.quote(source_ref)}:{shlex.quote(remote_private_ref)}"
+        f" && git -C {shlex.quote(remote_repo_root.as_posix())} "
+        f"cat-file -e {shlex.quote(remote_git_ref + '^{{commit}}')}"
+        f" && rm -f {shlex.quote(remote_bundle_path)}"
+    )
+
+    try:
+        sftp.put(str(bundle_path), remote_bundle_path)
+        fetch_completed = _run_paramiko_shell(config, fetch_command)
+        if fetch_completed.returncode != 0:
+            raise RuntimeError(
+                "Could not publish the current local git commit to the Sol repo over the notebook SSH transport.\n"
+                f"Remote repo: {remote_repo_root.as_posix()}\n"
+                f"Commit: {remote_git_ref}\n"
+                f"Stdout:\n{fetch_completed.stdout}\n\n"
+                f"Stderr:\n{fetch_completed.stderr}"
+            )
+    finally:
+        try:
+            bundle_path.unlink(missing_ok=True)
+        except Exception:
+            pass
+        try:
+            sftp.remove(remote_bundle_path)
+        except Exception:
+            pass
+
+
 def _run_remote_simulation(
     config: dict[str, Any],
     *,
@@ -1422,6 +1574,11 @@ def _run_remote_simulation(
         remote_metadata,
         submit_shell,
     ) = _remote_submission_payload(config, label=label)
+    _ensure_remote_git_ref_available(
+        config,
+        remote_repo_root=remote_repo_root,
+        remote_git_ref=remote_metadata.get("remote_git_ref"),
+    )
 
     preflight_completed = _run_ssh_shell(
         config,
