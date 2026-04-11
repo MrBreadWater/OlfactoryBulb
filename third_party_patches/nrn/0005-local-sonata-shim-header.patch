@@ -1,0 +1,48 @@
+diff --git a/src/coreneuron/io/reports/shim/bbp/sonata/reports.h b/src/coreneuron/io/reports/shim/bbp/sonata/reports.h
+new file mode 100644
+index 000000000..590590590
+--- /dev/null
++++ b/src/coreneuron/io/reports/shim/bbp/sonata/reports.h
+@@ -0,0 +1,40 @@
++#pragma once
++
++#include <cstddef>
++#include <cstdint>
++
++void sonata_set_atomic_step(double dt);
++void sonata_create_report(const char* output_path,
++                          double start,
++                          double stop,
++                          double report_dt,
++                          const char* unit,
++                          const char* type);
++void sonata_set_report_max_buffer_size_hint(const char* output_path, int hint_mb);
++void sonata_add_node(const char* output_path,
++                     const char* population_name,
++                     int population_offset,
++                     std::uint64_t gid);
++void sonata_add_element(const char* output_path,
++                        const char* population_name,
++                        std::uint64_t gid,
++                        std::uint32_t element_id,
++                        double* value_ptr);
++void sonata_record_node_data(double step,
++                             std::size_t gid_count,
++                             const int* gids,
++                             const char* output_path);
++void sonata_check_and_flush(double t);
++void sonata_set_min_steps_to_record(int steps);
++void sonata_setup_communicators();
++void sonata_prepare_datasets();
++void sonata_set_max_buffer_size_hint(int hint_mb);
++void sonata_flush(double t);
++
++void sonata_create_spikefile(const char* outpath, const char* filename);
++void sonata_add_spikes_population(const char* population_name,
++                                  int population_offset,
++                                  const double* times,
++                                  std::size_t n_times,
++                                  const int* gids,
++                                  std::size_t n_gids);
++void sonata_write_spike_populations();
++void sonata_close_spikefile();

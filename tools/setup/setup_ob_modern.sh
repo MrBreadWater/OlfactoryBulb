@@ -154,6 +154,10 @@ python -m pip install blenderneuron==2.0.4 lfpsimpy==0.1.1 natsort==8.4.0
 
 prepare_nrn_source
 
+python "${REPO_ROOT}/tools/setup/audit_nrn_patch_stack.py" \
+  --source-tree "${NRN_SRC_DIR}" \
+  --manifest "${PATCH_MANIFEST}"
+
 export CC=gcc
 export CXX=g++
 export OMPI_CC=gcc

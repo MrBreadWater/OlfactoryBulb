@@ -21,6 +21,11 @@
       "file": "0004-random123-aarch64-nvhpc.patch",
       "category": "required",
       "description": "Allow the pinned Random123 PGI/NVHPC feature header to build correctly on aarch64."
+    },
+    {
+      "file": "0005-local-sonata-shim-header.patch",
+      "category": "required",
+      "description": "Add the bundled SONATA shim header so clean builds do not depend on untracked vendor files."
     }
   ]
 }
