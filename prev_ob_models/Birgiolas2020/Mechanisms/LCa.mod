@@ -10,7 +10,7 @@ NEURON {
 	SUFFIX LCa
 	USEION ca WRITE ica
 	RANGE gbar, ica
-	GLOBAL sinf, rinf, stau, rtau
+	RANGE sinf, rinf, stau, rtau
 }
 
 UNITS {

@@ -66,10 +66,12 @@ NET_RECEIVE (w) {
 
 DESTRUCTOR {
 VERBATIM
+#if !NRNBBCORE
 	void* vv = (void*)(_p_ptr);  
         if (vv) {
 		hoc_obj_unref(*vector_pobj(vv));
 	}
+#endif
 ENDVERBATIM
 }
 
@@ -143,11 +145,13 @@ static void bbcore_write(double* xarray, int* iarray, int* xoffset, int* ioffset
 static void bbcore_read(double* xarray, int* iarray, int* xoffset, int* ioffset, _threadargsproto_) {
   int dsize, i, *ia;
   double *xa, *dv;
-  assert(!_p_ptr);
   xa = xarray + *xoffset;
   ia = iarray + *ioffset;
   dsize = ia[0];
-  _p_ptr = vector_new1(dsize);
+  if (!_p_ptr) {
+    _p_ptr = vector_new1(dsize);
+  }
+  assert(dsize == vector_capacity(_p_ptr));
   dv = vector_vec(_p_ptr);
   for (i = 0; i < dsize; ++i) {
     dv[i] = xa[i];

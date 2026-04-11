@@ -9,7 +9,7 @@ NEURON{
 	SUFFIX CaPool
 	USEION ca READ ica, cai WRITE cai
 	RANGE channel_flow, depth, B
-	GLOBAL cai, cainf, tau
+	GLOBAL cainf, tau
 }
 
 UNITS {

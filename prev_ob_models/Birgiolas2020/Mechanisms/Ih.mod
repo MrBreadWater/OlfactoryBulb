@@ -10,8 +10,8 @@ UNITS {
 NEURON {
     SUFFIX Ih
     USEION h READ eh WRITE ih VALENCE 1
-    RANGE gbar,ih
-    GLOBAL rinf, rexp, tau_r
+    RANGE gbar, ih
+    RANGE rinf, rexp, tau_r
 }
  
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}

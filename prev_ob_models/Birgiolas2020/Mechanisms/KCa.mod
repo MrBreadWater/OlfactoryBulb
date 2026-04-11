@@ -8,8 +8,8 @@ NEURON {
 	SUFFIX KCa
 	USEION k READ ek WRITE ik
 	USEION ca READ cai
-	RANGE gbar, ik, Yconcdep, Yvdep
-	GLOBAL Yalpha, Ybeta
+	RANGE gbar, ik, Yconcdep, Yvdep, Yalpha
+	GLOBAL Ybeta
 }
 
 UNITS {

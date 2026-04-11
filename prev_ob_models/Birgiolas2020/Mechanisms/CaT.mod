@@ -4,7 +4,7 @@ NEURON {
     SUFFIX CaT
     USEION ca WRITE ica
     RANGE gbar, ica, g, h, m, sha, shi, k_tauH
-    GLOBAL minf, hinf, mtau, htau
+    RANGE minf, hinf, mtau, htau
 } 
  
 UNITS { 

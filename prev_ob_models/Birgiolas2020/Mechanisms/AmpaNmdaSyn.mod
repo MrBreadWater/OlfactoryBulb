@@ -58,8 +58,9 @@ NEURON {
 	POINT_PROCESS AmpaNmdaSyn
 	RANGE R, g, mg, inmda, iampa, gnmda, gampa
 	RANGE x, mgid, ggid, srcgid, gmax, ltdinvl, ltpinvl, nmdafactor
+	RANGE Rinf, Rtau
 	NONSPECIFIC_CURRENT i
-	GLOBAL Cdur, Alpha, Beta, E, Rinf, Rtau, ampatau
+	GLOBAL Cdur, Alpha, Beta, E, ampatau
 	GLOBAL gampafactor
 	GLOBAL sighalf, sigslope
 }
@@ -108,8 +109,8 @@ STATE {Ron Roff
 }
 
 INITIAL {
-	PROTECT Rinf = Alpha / (Alpha + Beta)
-	PROTECT Rtau = 1 / (Alpha + Beta)
+	Rinf = Alpha / (Alpha + Beta)
+	Rtau = 1 / (Alpha + Beta)
 	synon = 0
 	gampa = 0
 }
@@ -189,4 +190,3 @@ NET_RECEIVE(weight, s, w, tlast (ms), r0, t0 (ms)) {
 		Roff = Roff + r0
 	}
 }
-

@@ -7,7 +7,7 @@ NEURON {
 	SUFFIX KM
 	USEION k READ ek WRITE ik
 	RANGE gbar, ik
-	GLOBAL xinf, xtau
+	RANGE xinf, xtau
 }
 
 UNITS {
@@ -57,4 +57,3 @@ PROCEDURE rates(v(mV)) {
 	xtau = 1000(ms)/(3.3*exp((v*1(/mV) + 35)/40) + exp(-(v*1(/mV) + 35)/20))
 	xtau = xtau / qt
 }
-

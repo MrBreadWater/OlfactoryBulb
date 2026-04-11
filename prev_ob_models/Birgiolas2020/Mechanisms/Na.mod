@@ -7,8 +7,9 @@ NEURON {
     THREADSAFE
 	SUFFIX Na
 	USEION na READ ena WRITE ina
-	RANGE  gbar, sh, m, h
-	GLOBAL minf, hinf, mtau, htau,thinf, qinf
+	RANGE gbar, sh, m, h
+	RANGE minf, hinf, mtau, htau
+	GLOBAL thinf, qinf
 }
 
 PARAMETER {
@@ -111,7 +112,6 @@ FUNCTION trap0(v,th,a,q) {
 }	
 
         
-
 
 
 

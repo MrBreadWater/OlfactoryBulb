@@ -5,8 +5,8 @@ TITLE K-A
 NEURON {
 	SUFFIX KA
 	USEION k READ ek WRITE ik
-	RANGE  gbar, ik, m, h, sha,shi, k_tauH,sh_tauH
-	GLOBAL minf, mtau, hinf, htau
+	RANGE  gbar, ik, m, h, sha, shi, k_tauH, sh_tauH
+	RANGE minf, mtau, hinf, htau
 }
 
 PARAMETER {

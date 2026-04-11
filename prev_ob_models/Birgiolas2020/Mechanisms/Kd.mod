@@ -8,8 +8,7 @@ TITLE K-DR
 NEURON {
 	SUFFIX Kd
 	USEION k READ ek WRITE ik
-	RANGE  gbar
-	GLOBAL minf, mtau
+	RANGE gbar, minf, mtau
 }
 
 PARAMETER {
