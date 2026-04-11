@@ -102,7 +102,7 @@ CONTROL_HELP = {
     "remote_git_fetch": "When True, fetch the configured remote on Sol before checking out remote_git_ref.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
-    "slurm_partition": "Optional Slurm partition for remote submission.",
+    "slurm_partition": "Optional Slurm partition for remote submission. Use 'arm' on Sol for Grace Hopper.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
     "slurm_gpus": "Optional GPU count requested from Slurm.",
@@ -232,7 +232,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_git_fetch": True,
         "remote_git_remote": "origin",
         "remote_poll_interval_s": 10.0,
-        "slurm_partition": None,
+        "slurm_partition": "arm",
         "slurm_account": None,
         "slurm_time": None,
         "slurm_gpus": 1,
@@ -253,6 +253,57 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
     }
     base.update(overrides)
     return base
+
+
+def build_sol_remote_config(
+    *,
+    remote_host: str,
+    remote_repo_root: str | Path,
+    remote_results_root: str | Path | None = None,
+    slurm_account: str | None = None,
+    slurm_time: str = "02:00:00",
+    slurm_gpus: int = 1,
+    slurm_cpus_per_task: int | None = None,
+    slurm_mem: str | None = None,
+    remote_poll_interval_s: float = 15.0,
+    remote_git_ref: str | None = None,
+    remote_git_fetch: bool = True,
+    remote_git_remote: str = "origin",
+    ssh_options: list[str] | None = None,
+    rsync_options: list[str] | None = None,
+    slurm_extra_args: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return a Sol-specific remote runner config with Grace Hopper defaults.
+
+    This helper is the supported notebook-facing way to send runs to Sol. It
+    chooses the `arm` partition, uses the Sol activation helper, and launches
+    the benchmark through `srun --mpi=pmix`.
+    """
+    remote_repo_root = str(remote_repo_root)
+    if remote_results_root is None:
+        remote_results_root = str(PurePosixPath(remote_repo_root) / "results" / "notebook_runs")
+
+    return {
+        "runner_backend": "sol_slurm",
+        "remote_host": str(remote_host),
+        "remote_repo_root": remote_repo_root,
+        "remote_results_root": str(remote_results_root),
+        "remote_conda_activate_cmd": "source tools/setup/activate_sol_obgpu.sh",
+        "remote_mpi_exec": default_remote_mpi_exec(),
+        "remote_poll_interval_s": float(remote_poll_interval_s),
+        "remote_git_ref": remote_git_ref,
+        "remote_git_fetch": bool(remote_git_fetch),
+        "remote_git_remote": str(remote_git_remote),
+        "slurm_partition": "arm",
+        "slurm_account": slurm_account,
+        "slurm_time": str(slurm_time),
+        "slurm_gpus": int(slurm_gpus),
+        "slurm_cpus_per_task": slurm_cpus_per_task,
+        "slurm_mem": slurm_mem,
+        "slurm_extra_args": list(slurm_extra_args or []),
+        "ssh_options": list(ssh_options or []),
+        "rsync_options": list(rsync_options or ["-az"]),
+    }
 
 
 def make_label(config: dict[str, Any], timestamp: str | None = None) -> str:
