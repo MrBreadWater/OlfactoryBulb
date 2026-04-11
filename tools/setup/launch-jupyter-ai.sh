@@ -10,7 +10,12 @@ export JUPYTER_CONFIG_DIR="${JUPYTER_CONFIG_DIR:-${JUPYTER_STATE_DIR}/config}"
 export JUPYTER_DATA_DIR="${JUPYTER_DATA_DIR:-${JUPYTER_STATE_DIR}/data}"
 export JUPYTER_RUNTIME_DIR="${JUPYTER_RUNTIME_DIR:-${JUPYTER_STATE_DIR}/runtime}"
 
-source /opt/miniconda3/etc/profile.d/conda.sh
+if ! command -v conda >/dev/null 2>&1; then
+  echo "conda is required on PATH to launch jupyter-ai" >&2
+  exit 1
+fi
+
+source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate jupyter-ai
 
 # Keep notebook trust warnings from hiding the real issue.

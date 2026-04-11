@@ -80,11 +80,63 @@ from pathlib import Path
 import sys
 
 root = Path(sys.argv[1])
-candidates = [path for path in root.glob("*/libnrnmech.so") if path.is_file()]
+candidates = [
+    path
+    for path in root.glob("**/libnrnmech.so")
+    if path.is_file() and ".git" not in path.parts and "external" not in path.parts
+]
 if not candidates:
     raise SystemExit(1)
 candidates.sort(key=lambda path: path.stat().st_mtime, reverse=True)
 print(candidates[0])
+PY
+}
+
+detect_python_runtime_paths() {
+  python - <<'PY'
+import sys
+import sysconfig
+from pathlib import Path
+
+purelib = Path(sysconfig.get_paths()["purelib"])
+
+candidates = []
+libdir = sysconfig.get_config_var("LIBDIR")
+ldlibrary = sysconfig.get_config_var("LDLIBRARY")
+if libdir and ldlibrary:
+    candidates.append(Path(libdir) / ldlibrary)
+
+version = f"{sys.version_info.major}.{sys.version_info.minor}"
+prefix = Path(sys.prefix)
+base_prefix = Path(sys.base_prefix)
+for root in (prefix / "lib", base_prefix / "lib"):
+    candidates.extend(
+        [
+            root / f"libpython{version}.so",
+            root / f"libpython{version}.so.1.0",
+            root / f"libpython{version}.dylib",
+        ]
+    )
+
+libpython = None
+seen = set()
+for candidate in candidates:
+    candidate = candidate.resolve()
+    if candidate in seen:
+        continue
+    seen.add(candidate)
+    if candidate.exists():
+        libpython = candidate
+        break
+
+if libpython is None:
+    raise SystemExit(
+        "Could not locate the active environment's libpython shared library. "
+        f"Tried: {', '.join(str(candidate) for candidate in candidates)}"
+    )
+
+print(purelib)
+print(libpython)
 PY
 }
 
@@ -135,17 +187,18 @@ if [[ "${ENABLE_GPU}" == "1" ]]; then
     fi
   fi
   if [[ -z "${NVHPC_C_COMPILER}" || -z "${NVHPC_CXX_COMPILER}" ]]; then
-    cat >&2 <<'EOF'
+    cat >&2 <<EOF
 ENABLE_GPU=1 requires NVIDIA HPC SDK compilers (nvc and nvc++).
 CUDA runtime/nvcc alone is not enough for a CoreNEURON GPU build.
 
-Official Arm Server download/install instructions:
+Either:
+  - load your cluster's NVHPC module(s), or
+  - install the NVIDIA HPC SDK and export NVHPC_SDK_ROOT/NVHPC_VERSION.
+
+Official NVIDIA HPC SDK downloads:
   https://developer.nvidia.com/hpc-sdk/downloads
 
-Example for Linux Arm Server tar install:
-  wget https://developer.download.nvidia.com/hpc-sdk/26.1/nvhpc_2026_261_Linux_aarch64_cuda_multi.tar.gz
-  tar xpzf nvhpc_2026_261_Linux_aarch64_cuda_multi.tar.gz
-  nvhpc_2026_261_Linux_aarch64_cuda_multi/install
+Expected architecture on this host: $(uname -m)
 EOF
     exit 1
   fi
@@ -181,15 +234,55 @@ EOF
     echo "ENABLE_GPU=1 requires a working nvcc. Tried: ${CUDA_COMPILER}" >&2
     exit 1
   fi
+  if [[ -z "${NVHPC_CUDA_HOME:-}" ]]; then
+    NVHPC_CUDA_HOME="$(cd "$(dirname "${CUDA_COMPILER}")/.." && pwd)"
+  fi
   GPU_BUILD_TAG="${GPU_BUILD_TAG:-${NVHPC_VERSION//./_}}"
   NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern-gpu-${GPU_BUILD_TAG}}"
 
   CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-$(
-    python - <<'PY'
+    python - "${NVHPC_CUDA_HOME:-}" <<'PY'
 import ctypes
+import ctypes.util
+from pathlib import Path
+import sys
 from ctypes import byref, c_int, c_char, c_size_t, c_uint
 
-lib = ctypes.CDLL("libcudart.so")
+cuda_root = Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else None
+
+candidates = []
+if cuda_root:
+    candidates.extend(
+        [
+            cuda_root / "lib64" / "libcudart.so",
+            cuda_root / "lib64" / "libcudart.so.12",
+            cuda_root / "targets" / "x86_64-linux" / "lib" / "libcudart.so",
+            cuda_root / "targets" / "sbsa-linux" / "lib" / "libcudart.so",
+        ]
+    )
+
+found = ctypes.util.find_library("cudart")
+if found:
+    candidates.append(Path(found) if "/" in found else Path(found))
+
+lib = None
+load_errors = []
+for candidate in candidates:
+    try:
+        lib = ctypes.CDLL(str(candidate))
+        break
+    except OSError as exc:
+        load_errors.append(f"{candidate}: {exc}")
+
+if lib is None:
+    try:
+        lib = ctypes.CDLL("libcudart.so")
+    except OSError as exc:
+        load_errors.append(f"libcudart.so: {exc}")
+        raise SystemExit(
+            "Could not load libcudart for CUDA architecture detection. "
+            + "; ".join(load_errors)
+        )
 
 class cudaDeviceProp(ctypes.Structure):
     _fields_ = [
@@ -267,6 +360,7 @@ cmake_args=(
   -B "${NRN_BUILD_DIR}"
   -DCMAKE_MAKE_PROGRAM="$(command -v ninja)"
   -DCMAKE_INSTALL_PREFIX="${CONDA_PREFIX}"
+  -DPYTHON_EXECUTABLE="${CONDA_PREFIX}/bin/python"
   -DNRN_ENABLE_MPI=ON
   -DNRN_ENABLE_CORENEURON=ON
   -DNRN_ENABLE_INTERVIEWS=OFF
@@ -288,13 +382,22 @@ cmake "${cmake_args[@]}"
 cmake --build "${NRN_BUILD_DIR}" --parallel 8
 cmake --install "${NRN_BUILD_DIR}"
 
-printf '%s\n' "${CONDA_PREFIX}/lib/python" > "${CONDA_PREFIX}/lib/python3.11/site-packages/ob_modern_neuron.pth"
+mapfile -t python_runtime_paths < <(detect_python_runtime_paths)
+if [[ "${#python_runtime_paths[@]}" -ne 2 ]]; then
+  echo "Could not determine Python runtime paths for ${CONDA_PREFIX}" >&2
+  exit 1
+fi
+PYTHON_SITE_PACKAGES="${python_runtime_paths[0]}"
+PYTHON_SHARED_LIB="${python_runtime_paths[1]}"
+
+mkdir -p "${PYTHON_SITE_PACKAGES}"
+printf '%s\n' "${CONDA_PREFIX}/lib/python" > "${PYTHON_SITE_PACKAGES}/ob_modern_neuron.pth"
 
 mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d" "${CONDA_PREFIX}/etc/conda/deactivate.d"
 cat > "${CONDA_PREFIX}/etc/conda/activate.d/ob_modern_neuron.sh" <<EOF
 export OMPI_MCA_opal_cuda_support=true
 export NMODLHOME=${CONDA_PREFIX}
-export NMODL_PYLIB=${CONDA_PREFIX}/lib/libpython3.11.so
+export NMODL_PYLIB=${PYTHON_SHARED_LIB}
 EOF
 cat > "${CONDA_PREFIX}/etc/conda/deactivate.d/ob_modern_neuron.sh" <<'EOF'
 unset OMPI_MCA_opal_cuda_support

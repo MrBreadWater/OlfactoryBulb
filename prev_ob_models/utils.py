@@ -72,9 +72,10 @@ def load_mechanisms_from_candidates(load_mechanisms,
     Load compiled NEURON mechanisms by searching common build layouts.
 
     Legacy setups often compile inside ``Mechanisms/`` while newer project-level
-    builds place ``aarch64/`` or ``x86_64/`` at the repo root. This helper
-    accepts either layout and returns the directory passed to
-    ``neuron.load_mechanisms``.
+    builds place ``aarch64/`` or ``x86_64/`` at the repo root. Some builds keep
+    the actual shared library under ``<arch>/.libs/`` while others place it
+    directly under ``<arch>/``. This helper accepts either layout and returns
+    the directory passed to ``neuron.load_mechanisms``.
     """
 
     anchor = Path(anchor_path).resolve()
@@ -114,7 +115,12 @@ def load_mechanisms_from_candidates(load_mechanisms,
             _MECH_LOAD_CACHE[key] = candidate_str
             return candidate_str
         for arch in arch_names:
-            if (candidate / arch / libname).exists():
+            arch_dir = candidate / arch
+            lib_candidates = (
+                arch_dir / libname,
+                arch_dir / ".libs" / libname,
+            )
+            if any(path.exists() for path in lib_candidates):
                 try:
                     if _call_load_mechanisms(load_mechanisms, candidate_str):
                         _LOADED_MECH_BASES.add(candidate_str)

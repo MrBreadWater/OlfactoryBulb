@@ -35,8 +35,11 @@ Important portability details:
 
 - the setup path no longer hardcodes `aarch64/libnrnmech.so`
 - the setup path no longer assumes `/opt/miniconda3`
+- the setup path derives the active env's `site-packages` path and `libpython` path dynamically instead of assuming Python `3.11`
+- the setup path derives `CUDAToolkit_ROOT` and `libcudart` from module-provided CUDA installs when they are not under `/usr/local/cuda`
 - the main build path is intended for generic Linux GPU hosts, not just the Jetson
 - [setup_nvhpc_jetson.sh](/home/alek/OlfactoryBulb/tools/setup/setup_nvhpc_jetson.sh) remains a Jetson-specific helper, not the primary OBGPU build workflow
+- any NEURON/CoreNEURON portability fix must land in [third_party_patches/nrn](/home/alek/OlfactoryBulb/third_party_patches/nrn), not as an ad hoc edit inside `external/nrn-9.0.1`
 
 ## Runtime Defaults
 
