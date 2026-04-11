@@ -38,18 +38,41 @@ obgpu_sol_pick_loaded_module() {
 
 obgpu_sol_list_available_modules() {
   local prefix="$1"
-  local raw line
+  local raw line token cleaned found_any
   raw="$(module -t avail "${prefix}" 2>&1 || true)"
+  found_any=0
   while IFS= read -r line; do
-    line="${line#"${line%%[![:space:]]*}"}"
-    line="${line%"${line##*[![:space:]]}"}"
-    [[ -z "${line}" ]] && continue
-    [[ "${line}" == *":"* ]] && continue
-    [[ "${line}" == *"where:"* || "${line}" == *"Where:"* ]] && continue
-    [[ "${line}" == *"Use "* ]] && continue
-    if [[ "${line}" == "${prefix}" || "${line}" == "${prefix}/"* ]]; then
-      printf '%s\n' "${line}"
-    fi
+    for token in ${line}; do
+      cleaned="${token%%(*}"
+      cleaned="${cleaned%%:*}"
+      cleaned="${cleaned#"${cleaned%%[![:space:]]*}"}"
+      cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
+      [[ -z "${cleaned}" ]] && continue
+      if [[ "${cleaned}" == "${prefix}" || "${cleaned}" == "${prefix}/"* ]]; then
+        printf '%s\n' "${cleaned}"
+        found_any=1
+      fi
+    done
+  done <<< "${raw}"
+
+  if [[ "${found_any}" == "1" ]]; then
+    return 0
+  fi
+
+  if [[ -z "${raw//[[:space:]]/}" || "${found_any}" == "0" ]]; then
+    raw="$(module spider "${prefix}" 2>&1 || true)"
+  fi
+  while IFS= read -r line; do
+    for token in ${line}; do
+      cleaned="${token%%(*}"
+      cleaned="${cleaned%%:*}"
+      cleaned="${cleaned#"${cleaned%%[![:space:]]*}"}"
+      cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
+      [[ -z "${cleaned}" ]] && continue
+      if [[ "${cleaned}" == "${prefix}" || "${cleaned}" == "${prefix}/"* ]]; then
+        printf '%s\n' "${cleaned}"
+      fi
+    done
   done <<< "${raw}"
 }
 
