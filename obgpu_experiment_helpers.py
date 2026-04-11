@@ -14,6 +14,7 @@ import re
 import shlex
 import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -40,6 +41,10 @@ try:
     import pexpect
 except ImportError:  # pragma: no cover - optional runtime dependency
     pexpect = None
+try:
+    import paramiko
+except ImportError:  # pragma: no cover - optional runtime dependency
+    paramiko = None
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -112,6 +117,7 @@ CONTROL_HELP = {
     "slurm_extra_args": "Optional extra sbatch arguments passed as raw strings.",
     "ssh_binary": "SSH client executable used by the remote backend.",
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
+    "ssh_transport": "Remote transport for the Sol backend: 'auto', 'paramiko', or 'openssh'.",
     "ssh_multiplex": "When True, reuse a persistent SSH control socket so Sol auth happens once instead of on every submit/poll/sync step.",
     "ssh_allow_interactive_auth": "When True, open the initial SSH control master through an interactive PTY so notebook-launched Sol runs can prompt for password and 2FA once.",
     "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under XDG_RUNTIME_DIR, TMPDIR, or the system temp directory.",
@@ -142,6 +148,7 @@ class RunRecord:
 _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
 _LIVE_SSH_MASTERS: dict[str, Any] = {}
+_LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = {}
 
 
 def default_local_mpi_exec() -> str:
@@ -243,6 +250,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "slurm_extra_args": [],
         "ssh_binary": "ssh",
         "ssh_options": [],
+        "ssh_transport": "auto",
         "ssh_multiplex": True,
         "ssh_allow_interactive_auth": True,
         "ssh_control_path": None,
@@ -305,6 +313,7 @@ def build_sol_remote_config(
         "slurm_mem": slurm_mem,
         "slurm_extra_args": list(slurm_extra_args or []),
         "ssh_options": list(ssh_options or []),
+        "ssh_transport": "auto",
         "rsync_options": list(rsync_options or ["-az"]),
     }
 
@@ -551,6 +560,212 @@ def _ssh_control_path(config: dict[str, Any]) -> Path | None:
         or tempfile.gettempdir()
     )
     return Path(runtime_base) / f"obgpu-ssh-{digest}.sock"
+
+
+def _remote_transport(config: dict[str, Any]) -> str:
+    """Return the active transport implementation for the Sol backend."""
+    configured = str(config.get("ssh_transport", "auto")).strip().lower()
+    if configured not in {"auto", "paramiko", "openssh"}:
+        raise ValueError(f"Unsupported ssh_transport={configured!r}")
+    if configured == "auto":
+        if paramiko is not None:
+            return "paramiko"
+        return "openssh"
+    if configured == "paramiko" and paramiko is None:
+        raise RuntimeError(
+            "ssh_transport='paramiko' requires the optional 'paramiko' dependency "
+            "in the notebook environment."
+        )
+    return configured
+
+
+def _remote_endpoint(config: dict[str, Any]) -> tuple[str, int, str]:
+    """Resolve hostname, port, and username from the remote config."""
+    host = _require_remote_host(config)
+    if "@" in host:
+        username, hostname = host.split("@", 1)
+    else:
+        username = os.environ.get("USER") or os.environ.get("USERNAME") or ""
+        hostname = host
+    if not username:
+        raise ValueError(f"Could not infer SSH username from remote_host={host!r}")
+
+    port = 22
+    options = [str(option) for option in config.get("ssh_options", [])]
+    index = 0
+    while index < len(options):
+        option = options[index]
+        if option == "-p" and index + 1 < len(options):
+            port = int(options[index + 1])
+            index += 2
+            continue
+        if option.startswith("-p") and option != "-p":
+            port = int(option[2:])
+            index += 1
+            continue
+        if option == "-o" and index + 1 < len(options):
+            key_value = options[index + 1]
+            if key_value.lower().startswith("port="):
+                port = int(key_value.split("=", 1)[1])
+            index += 2
+            continue
+        index += 1
+    return hostname, port, username
+
+
+def _paramiko_connection_key(config: dict[str, Any]) -> str:
+    """Build the cache key for one persistent Paramiko connection."""
+    hostname, port, username = _remote_endpoint(config)
+    return f"{username}@{hostname}:{port}"
+
+
+def _paramiko_prompt_response(prompt_text: str) -> str:
+    """Prompt the notebook user for one interactive SSH auth field."""
+    prompt = prompt_text.strip() or "SSH authentication:"
+    lowered = prompt.lower()
+    if "password" in lowered or "passphrase" in lowered:
+        return getpass(prompt + " ")
+    return input(prompt + " ")
+
+
+def _connect_paramiko(config: dict[str, Any]) -> Any:
+    """Open or reuse one persistent Paramiko transport for the Sol backend."""
+    if paramiko is None:
+        raise RuntimeError("Paramiko transport requested but the 'paramiko' package is not installed.")
+
+    cache_key = _paramiko_connection_key(config)
+    cached = _LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
+    if cached is not None:
+        transport = cached.get("transport")
+        if transport is not None and transport.is_active() and transport.is_authenticated():
+            return cached
+        _LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
+
+    hostname, port, username = _remote_endpoint(config)
+    raw_sock = None
+    transport = None
+    try:
+        import socket
+
+        raw_sock = socket.create_connection((hostname, port), timeout=30.0)
+        transport = paramiko.Transport(raw_sock)
+        transport.start_client(timeout=30.0)
+
+        auth_methods: list[str] = []
+        try:
+            transport.auth_none(username)
+        except paramiko.BadAuthenticationType as exc:
+            auth_methods = list(exc.allowed_types)
+        except paramiko.PartialAuthentication as exc:  # pragma: no cover - defensive
+            auth_methods = list(exc.allowed_types)
+        except paramiko.AuthenticationException:
+            auth_methods = []
+
+        authenticated = False
+        if "keyboard-interactive" in auth_methods or not auth_methods:
+            def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
+                responses: list[str] = []
+                if title:
+                    print(title)
+                if instructions:
+                    print(instructions)
+                for prompt_text, _echo in prompt_list:
+                    responses.append(_paramiko_prompt_response(prompt_text))
+                return responses
+
+            try:
+                transport.auth_interactive(username, handler)
+                authenticated = transport.is_authenticated()
+            except paramiko.AuthenticationException:
+                authenticated = False
+
+        if not authenticated and "password" in auth_methods:
+            try:
+                transport.auth_password(
+                    username,
+                    _paramiko_prompt_response(f"Password for {username}@{hostname}:"),
+                )
+                authenticated = transport.is_authenticated()
+            except paramiko.PartialAuthentication as exc:
+                auth_methods = list(exc.allowed_types)
+                authenticated = False
+
+        if not authenticated and "keyboard-interactive" in auth_methods:
+            def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
+                responses: list[str] = []
+                if title:
+                    print(title)
+                if instructions:
+                    print(instructions)
+                for prompt_text, _echo in prompt_list:
+                    responses.append(_paramiko_prompt_response(prompt_text))
+                return responses
+
+            transport.auth_interactive(username, handler)
+            authenticated = transport.is_authenticated()
+
+        if not authenticated:
+            raise RuntimeError(
+                "Paramiko could not authenticate to the Sol backend.\n"
+                f"Host: {username}@{hostname}:{port}\n"
+                f"Auth methods: {auth_methods}"
+            )
+
+        connection = {
+            "transport": transport,
+            "sftp": paramiko.SFTPClient.from_transport(transport),
+            "hostname": hostname,
+            "port": port,
+            "username": username,
+        }
+        _LIVE_PARAMIKO_CONNECTIONS[cache_key] = connection
+        return connection
+    except Exception:
+        if transport is not None:
+            try:
+                transport.close()
+            except Exception:
+                pass
+        if raw_sock is not None:
+            try:
+                raw_sock.close()
+            except Exception:
+                pass
+        raise
+
+
+def _run_paramiko_shell(
+    config: dict[str, Any],
+    remote_shell_command: str,
+) -> subprocess.CompletedProcess[str]:
+    """Run one shell command over a persistent Paramiko transport."""
+    connection = _connect_paramiko(config)
+    transport = connection["transport"]
+    channel = transport.open_session()
+    try:
+        channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
+        stdout_data = channel.makefile("rb").read().decode("utf-8", errors="replace")
+        stderr_data = channel.makefile_stderr("rb").read().decode("utf-8", errors="replace")
+        return subprocess.CompletedProcess(
+            args=["paramiko", connection["hostname"], remote_shell_command],
+            returncode=channel.recv_exit_status(),
+            stdout=stdout_data,
+            stderr=stderr_data,
+        )
+    finally:
+        channel.close()
+
+
+def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:
+    """Recursively copy one remote directory tree through SFTP."""
+    local_dir.mkdir(parents=True, exist_ok=True)
+    for entry in sftp.listdir_attr(remote_dir):
+        remote_path = f"{remote_dir.rstrip('/')}/{entry.filename}"
+        local_path = local_dir / entry.filename
+        if stat.S_ISDIR(entry.st_mode):
+            _sftp_copy_tree(sftp, remote_path, local_path)
+            continue
+        sftp.get(remote_path, str(local_path))
 
 
 def _ssh_common_options(config: dict[str, Any]) -> list[str]:
@@ -912,6 +1127,17 @@ def _run_ssh_shell(
     check: bool = False,
 ) -> subprocess.CompletedProcess[str]:
     """Run one shell command on the remote Sol host over SSH."""
+    if _remote_transport(config) == "paramiko":
+        completed = _run_paramiko_shell(config, remote_shell_command)
+        if check and completed.returncode != 0:
+            raise subprocess.CalledProcessError(
+                completed.returncode,
+                completed.args,
+                output=completed.stdout,
+                stderr=completed.stderr,
+            )
+        return completed
+
     command = _ssh_prefix(config) + ["bash", "-lc", remote_shell_command]
     completed = subprocess.run(
         command,
@@ -947,6 +1173,24 @@ def _sync_remote_result_dir(
 ) -> subprocess.CompletedProcess[str]:
     """Sync one remote result directory back into the local notebook results tree."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
+    if _remote_transport(config) == "paramiko":
+        try:
+            connection = _connect_paramiko(config)
+            _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
+        except Exception as exc:
+            return subprocess.CompletedProcess(
+                args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
+                returncode=1,
+                stdout="",
+                stderr=str(exc),
+            )
+        return subprocess.CompletedProcess(
+            args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
     _ensure_ssh_master(config)
     command = [str(config.get("rsync_binary", "rsync"))]
     command.extend(str(option) for option in config.get("rsync_options", ["-az"]))

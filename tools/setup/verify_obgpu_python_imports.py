@@ -38,6 +38,7 @@ THIRD_PARTY_IMPORTS = [
     "lmfit",
     "requests",
     "pexpect",
+    "paramiko",
     "validators",
     "git",
     "networkx",
