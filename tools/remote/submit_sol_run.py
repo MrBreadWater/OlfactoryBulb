@@ -48,6 +48,7 @@ def write_batch_script(
     benchmark_command: list[str],
     git_ref: str | None,
     git_fetch: bool,
+    git_remote: str,
     args: argparse.Namespace,
 ) -> Path:
     """Write the Slurm batch script that launches one benchmark run."""
@@ -70,6 +71,8 @@ def write_batch_script(
                 git_ref or "",
                 "--git-fetch",
                 "1" if git_fetch else "0",
+                "--git-remote",
+                git_remote,
                 "--",
                 *benchmark_command,
             ]
@@ -107,6 +110,7 @@ def main() -> None:
     parser.add_argument("--conda-activate-cmd", required=True)
     parser.add_argument("--git-ref", default=None)
     parser.add_argument("--git-fetch", action="store_true")
+    parser.add_argument("--git-remote", default="origin")
     parser.add_argument("--partition", default=None)
     parser.add_argument("--account", default=None)
     parser.add_argument("--time", default=None)
@@ -130,6 +134,7 @@ def main() -> None:
         benchmark_command=benchmark_command,
         git_ref=args.git_ref,
         git_fetch=bool(args.git_fetch),
+        git_remote=str(args.git_remote),
         args=args,
     )
 
@@ -145,6 +150,7 @@ def main() -> None:
         "benchmark_command": benchmark_command,
         "git_ref": args.git_ref,
         "git_fetch": bool(args.git_fetch),
+        "git_remote": str(args.git_remote),
     }
 
     if not args.dry_run:

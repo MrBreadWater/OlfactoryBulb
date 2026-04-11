@@ -6,6 +6,7 @@ result_dir=""
 conda_activate_cmd=""
 git_ref=""
 git_fetch="0"
+git_remote="origin"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -27,6 +28,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --git-fetch)
       git_fetch="$2"
+      shift 2
+      ;;
+    --git-remote)
+      git_remote="$2"
       shift 2
       ;;
     --)
@@ -55,7 +60,7 @@ mkdir -p "${result_dir}"
 cd "${repo_root}"
 
 if [[ "${git_fetch}" == "1" ]]; then
-  git fetch --tags --prune origin
+  git fetch --tags --prune "${git_remote}"
 fi
 
 if [[ -n "${git_ref}" ]]; then

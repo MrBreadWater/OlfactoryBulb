@@ -28,7 +28,7 @@ obgpu_sol_pick_loaded_module() {
   loaded="${LOADEDMODULES:-}"
   IFS=':' read -r -a _obgpu_loaded_modules <<< "${loaded}"
   for entry in "${_obgpu_loaded_modules[@]}"; do
-    if [[ "${entry}" == "${prefix}" || "${entry}" == "${prefix}/"* ]]; then
+    if [[ "${entry}" == "${prefix}" || "${entry}" == "${prefix}/"* || "${entry}" == "${prefix}-"* ]]; then
       printf '%s\n' "${entry}"
       return 0
     fi
@@ -48,7 +48,7 @@ obgpu_sol_list_available_modules() {
       cleaned="${cleaned#"${cleaned%%[![:space:]]*}"}"
       cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
       [[ -z "${cleaned}" ]] && continue
-      if [[ "${cleaned}" == "${prefix}" || "${cleaned}" == "${prefix}/"* ]]; then
+      if [[ "${cleaned}" == "${prefix}" || "${cleaned}" == "${prefix}/"* || "${cleaned}" == "${prefix}-"* ]]; then
         printf '%s\n' "${cleaned}"
         found_any=1
       fi
@@ -69,7 +69,7 @@ obgpu_sol_list_available_modules() {
       cleaned="${cleaned#"${cleaned%%[![:space:]]*}"}"
       cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
       [[ -z "${cleaned}" ]] && continue
-      if [[ "${cleaned}" == "${prefix}" || "${cleaned}" == "${prefix}/"* ]]; then
+      if [[ "${cleaned}" == "${prefix}" || "${cleaned}" == "${prefix}/"* || "${cleaned}" == "${prefix}-"* ]]; then
         printf '%s\n' "${cleaned}"
       fi
     done
@@ -78,13 +78,29 @@ obgpu_sol_list_available_modules() {
 
 obgpu_sol_pick_available_module() {
   local prefix="$1"
-  local candidates latest_module
+  local candidates latest_module versioned_candidates bare_candidate
   candidates="$(obgpu_sol_list_available_modules "${prefix}" | sort -uV)"
   [[ -z "${candidates}" ]] && return 1
 
   latest_module="$(printf '%s\n' "${candidates}" | awk -v prefix="${prefix}" '$0 == prefix"/latest" { print; exit }')"
   if [[ -n "${latest_module}" ]]; then
     printf '%s\n' "${latest_module}"
+    return 0
+  fi
+
+  versioned_candidates="$(
+    printf '%s\n' "${candidates}" | awk -v prefix="${prefix}" '
+      $0 != prefix && ($0 ~ ("^" prefix "/") || $0 ~ ("^" prefix "-")) { print }
+    '
+  )"
+  if [[ -n "${versioned_candidates}" ]]; then
+    printf '%s\n' "${versioned_candidates}" | tail -n 1
+    return 0
+  fi
+
+  bare_candidate="$(printf '%s\n' "${candidates}" | awk -v prefix="${prefix}" '$0 == prefix { print; exit }')"
+  if [[ -n "${bare_candidate}" ]]; then
+    printf '%s\n' "${bare_candidate}"
     return 0
   fi
 

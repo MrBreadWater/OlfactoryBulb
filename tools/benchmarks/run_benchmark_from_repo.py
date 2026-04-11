@@ -16,13 +16,14 @@ def main() -> None:
 
     repo_root = str(Path(args.repo_root).resolve())
     script_path = str(Path(args.script).resolve())
+    local_checkout_root = str(Path(__file__).resolve().parents[2])
 
     cleaned = []
     for entry in sys.path:
         if not entry:
             continue
         resolved = str(Path(entry).resolve())
-        if resolved in {str(Path("/home/alek/OlfactoryBulb").resolve()), repo_root}:
+        if resolved in {local_checkout_root, repo_root}:
             continue
         cleaned.append(entry)
 
