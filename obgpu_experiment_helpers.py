@@ -1307,6 +1307,7 @@ def _build_remote_poll_command(
     remote_repo_root: PurePosixPath,
     remote_result_dir: PurePosixPath,
     job_id: str,
+    worktree_path: str | None = None,
 ) -> str:
     """Build the remote `poll_sol_run.py` invocation shell line."""
     remote_helper = REPO_ROOT / "tools" / "remote" / "poll_sol_run.py"
@@ -1332,6 +1333,15 @@ def _build_remote_poll_command(
         "--result-dir",
         remote_result_dir.as_posix(),
     ]
+    if worktree_path not in (None, ""):
+        command.extend(
+            [
+                "--repo-root",
+                remote_repo_root.as_posix(),
+                "--worktree-path",
+                str(worktree_path),
+            ]
+        )
     return python_exec + " " + _shell_join(command)
 
 
@@ -1487,6 +1497,7 @@ def _run_remote_simulation(
             remote_repo_root=remote_repo_root,
             remote_result_dir=remote_result_dir,
             job_id=str(submission["job_id"]),
+            worktree_path=str(submission.get("worktree_path") or ""),
         )
         poll_completed = _run_ssh_shell(config, poll_shell)
         if poll_completed.returncode != 0:

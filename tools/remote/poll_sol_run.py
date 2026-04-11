@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -56,11 +57,43 @@ def query_state(job_id):
     return "UNKNOWN"
 
 
+def cleanup_worktree(repo_root, worktree_path):
+    """Best-effort cleanup for a per-run detached git worktree."""
+    repo_root_path = Path(repo_root).expanduser().resolve()
+    worktree = Path(worktree_path).expanduser().resolve()
+
+    remove_completed = subprocess.run(
+        ["git", "-C", str(repo_root_path), "worktree", "remove", "--force", str(worktree)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
+    remove_ok = remove_completed.returncode == 0 or not worktree.exists()
+    if worktree.exists():
+        shutil.rmtree(str(worktree), ignore_errors=True)
+    prune_completed = subprocess.run(
+        ["git", "-C", str(repo_root_path), "worktree", "prune"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
+    return {
+        "attempted": True,
+        "ok": remove_ok and prune_completed.returncode == 0,
+        "remove_stderr": (remove_completed.stderr or "").strip(),
+        "prune_stderr": (prune_completed.stderr or "").strip(),
+    }
+
+
 def main():
     """Emit JSON job state and result readiness for one remote run."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--result-dir", required=True)
+    parser.add_argument("--repo-root", default=None)
+    parser.add_argument("--worktree-path", default=None)
     args = parser.parse_args()
 
     result_dir = Path(args.result_dir).expanduser().resolve()
@@ -86,6 +119,10 @@ def main():
         done = False
         ok = False
 
+    cleanup_payload = {"attempted": False, "ok": True, "remove_stderr": "", "prune_stderr": ""}
+    if done and args.repo_root and args.worktree_path:
+        cleanup_payload = cleanup_worktree(args.repo_root, args.worktree_path)
+
     payload = {
         "job_id": str(args.job_id),
         "state": state,
@@ -95,6 +132,7 @@ def main():
         "summary_exists": summary_exists,
         "stdout_exists": stdout_exists,
         "stderr_exists": stderr_exists,
+        "cleanup": cleanup_payload,
     }
     print(json.dumps(payload, sort_keys=True))
 
