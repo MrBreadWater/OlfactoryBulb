@@ -238,7 +238,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_results_root": None,
         "remote_conda_activate_cmd": "source tools/setup/activate_sol_obgpu.sh",
         "remote_git_ref": None,
-        "remote_git_fetch": True,
+        "remote_git_fetch": False,
         "remote_git_remote": "origin",
         "remote_poll_interval_s": 10.0,
         "slurm_partition": "arm",
@@ -278,7 +278,7 @@ def build_sol_remote_config(
     slurm_mem: str | None = None,
     remote_poll_interval_s: float = 15.0,
     remote_git_ref: str | None = None,
-    remote_git_fetch: bool = True,
+    remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
     ssh_options: list[str] | None = None,
     rsync_options: list[str] | None = None,
@@ -1302,7 +1302,7 @@ def _build_remote_submit_command(
 
     if remote_git_ref:
         command.extend(["--git-ref", remote_git_ref])
-    if bool(config.get("remote_git_fetch", True)):
+    if bool(config.get("remote_git_fetch", False)):
         command.append("--git-fetch")
         command.extend(["--git-remote", str(config.get("remote_git_remote", "origin"))])
 
@@ -1429,7 +1429,7 @@ def _remote_submission_payload(
             "remote_results_root": remote_results_root.as_posix(),
             "remote_mpi_exec": str(remote_mpi_exec),
             "remote_git_ref": remote_git_ref,
-            "remote_git_fetch": bool(config.get("remote_git_fetch", True)),
+            "remote_git_fetch": bool(config.get("remote_git_fetch", False)),
             "remote_git_remote": str(config.get("remote_git_remote", "origin")),
         },
         submit_command,
@@ -1509,7 +1509,7 @@ def _ensure_remote_git_ref_available(
 
     check_command = (
         f"git -C {shlex.quote(remote_repo_root.as_posix())} "
-        f"cat-file -e {shlex.quote(remote_git_ref + '^{{commit}}')}"
+        f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
     )
     check_completed = _run_ssh_shell(config, check_command)
     if check_completed.returncode == 0:
@@ -1533,7 +1533,7 @@ def _ensure_remote_git_ref_available(
         f"{shlex.quote(remote_bundle_path)} "
         f"{shlex.quote(source_ref)}:{shlex.quote(remote_private_ref)}"
         f" && git -C {shlex.quote(remote_repo_root.as_posix())} "
-        f"cat-file -e {shlex.quote(remote_git_ref + '^{{commit}}')}"
+        f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
         f" && rm -f {shlex.quote(remote_bundle_path)}"
     )
 
