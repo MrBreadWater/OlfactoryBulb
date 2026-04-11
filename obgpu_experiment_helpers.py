@@ -140,6 +140,7 @@ class RunRecord:
 
 _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
+_LIVE_SSH_MASTERS: dict[str, Any] = {}
 
 
 def default_local_mpi_exec() -> str:
@@ -584,6 +585,13 @@ def _reset_ssh_master(config: dict[str, Any]) -> None:
     if control_path is None:
         return
 
+    stored_child = _LIVE_SSH_MASTERS.pop(str(control_path), None)
+    if stored_child is not None:
+        try:
+            stored_child.close(force=True)
+        except Exception:
+            pass
+
     host = _require_remote_host(config)
     ssh_binary = str(config.get("ssh_binary", "ssh"))
     user_options = [str(option) for option in config.get("ssh_options", [])]
@@ -699,18 +707,25 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
             "Interactive SSH auth requires the optional 'pexpect' dependency in the notebook environment."
         )
 
+    interactive_command = ["-MN" if part == "-MNf" else part for part in start_command]
+    control_path = _ssh_control_path(config)
+    if control_path is None:
+        raise RuntimeError("Interactive SSH auth requires ssh_multiplex=True")
+
     child = pexpect.spawn(
-        start_command[0],
-        start_command[1:],
+        interactive_command[0],
+        interactive_command[1:],
         cwd=str(REPO_ROOT),
         encoding="utf-8",
-        timeout=120,
+        timeout=15,
     )
 
     password_prompt = re.compile(r"(?i)(?:^|\n).*(?:password|passphrase).{0,20}:\s*$")
     otp_prompt = re.compile(r"(?i)(?:^|\n).*(?:passcode|verification|otp|token|duo|2fa|two-factor).{0,40}:\s*$")
     generic_prompt = re.compile(r"(?i)(?:^|\n).{0,120}:\s*$")
     hostkey_prompt = re.compile(r"(?i)are you sure you want to continue connecting")
+
+    deadline = time.time() + 180.0
 
     while True:
         idx = child.expect(
@@ -744,16 +759,40 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
         if idx == 4:
             child.close()
             if child.exitstatus == 0:
-                return
+                if control_path.exists():
+                    _LIVE_SSH_MASTERS[str(control_path)] = child
+                    return
             raise RuntimeError(
                 "Interactive SSH authentication failed while opening the Sol control master.\n"
                 f"Exit status: {child.exitstatus}\n"
                 f"Output:\n{child.before}"
             )
-        raise RuntimeError(
-            "Timed out while waiting for the Sol SSH control master to authenticate.\n"
-            f"Partial output:\n{child.before}"
-        )
+        if control_path.exists():
+            checked = subprocess.run(
+                [
+                    str(config.get("ssh_binary", "ssh")),
+                    *[str(option) for option in config.get("ssh_options", [])],
+                    "-o",
+                    f"ControlPath={control_path}",
+                    "-O",
+                    "check",
+                    _require_remote_host(config),
+                ],
+                cwd=REPO_ROOT,
+                capture_output=True,
+                text=True,
+                check=False,
+                env=_ssh_command_env(),
+            )
+            if checked.returncode == 0:
+                _LIVE_SSH_MASTERS[str(control_path)] = child
+                return
+        if time.time() > deadline:
+            child.close(force=True)
+            raise RuntimeError(
+                "Timed out while waiting for the Sol SSH control master to authenticate.\n"
+                f"Partial output:\n{child.before}"
+            )
 
 
 def _ssh_prefix(config: dict[str, Any]) -> list[str]:
