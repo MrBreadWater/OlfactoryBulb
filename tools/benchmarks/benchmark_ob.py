@@ -14,8 +14,16 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from olfactorybulb.output_paths import configure_output_env
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
+from olfactorybulb.output_paths import configure_output_env
+from obgpu_experiment_helpers import (
+    modify_existing_connections,
+    add_new_connections,
+    perform_cell_type_swaps
+)
 
 def sha256_file(path: str | Path) -> str:
     """Return the SHA-256 digest for a file on disk."""
@@ -213,6 +221,12 @@ def main() -> None:
 
     build_start = time.perf_counter()
     ob = OlfactoryBulb(params, autorun=False)
+    if args.add_connections is not None:
+        add_new_connections(ob, args.add_connections)
+    if args.modify_connections is not None:
+        modify_existing_connections(ob, args.modify_connections)
+    if args.swap_cell_types is not None:
+        perform_cell_type_swaps(ob, args.swap_cell_types)
     if args.tstop_override is not None:
         ob.params.tstop = args.tstop_override
     if args.disable_status_report:
