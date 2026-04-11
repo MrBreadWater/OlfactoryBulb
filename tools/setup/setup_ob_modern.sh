@@ -197,6 +197,113 @@ print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())
 PY
 }
 
+detect_cuda_architectures() {
+  python - "${NVHPC_CUDA_HOME:-}" <<'PY'
+import ctypes
+import ctypes.util
+from pathlib import Path
+import sys
+from ctypes import byref, c_int, c_char, c_size_t, c_uint
+
+cuda_root = Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else None
+
+candidates = []
+if cuda_root:
+    candidates.extend(
+        [
+            cuda_root / "lib64" / "libcudart.so",
+            cuda_root / "lib64" / "libcudart.so.12",
+            cuda_root / "targets" / "x86_64-linux" / "lib" / "libcudart.so",
+            cuda_root / "targets" / "sbsa-linux" / "lib" / "libcudart.so",
+        ]
+    )
+
+found = ctypes.util.find_library("cudart")
+if found:
+    candidates.append(Path(found) if "/" in found else Path(found))
+
+lib = None
+load_errors = []
+for candidate in candidates:
+    try:
+        lib = ctypes.CDLL(str(candidate))
+        break
+    except OSError as exc:
+        load_errors.append(f"{candidate}: {exc}")
+
+if lib is None:
+    try:
+        lib = ctypes.CDLL("libcudart.so")
+    except OSError as exc:
+        load_errors.append(f"libcudart.so: {exc}")
+        raise SystemExit(
+            "Could not load libcudart for CUDA architecture detection. "
+            + "; ".join(load_errors)
+        )
+
+class cudaDeviceProp(ctypes.Structure):
+    _fields_ = [
+        ("name", c_char * 256),
+        ("uuid", c_char * 16),
+        ("luid", c_char * 8),
+        ("luidDeviceNodeMask", c_uint),
+        ("totalGlobalMem", c_size_t),
+        ("sharedMemPerBlock", c_size_t),
+        ("regsPerBlock", c_int),
+        ("warpSize", c_int),
+        ("memPitch", c_size_t),
+        ("maxThreadsPerBlock", c_int),
+        ("maxThreadsDim", c_int * 3),
+        ("maxGridSize", c_int * 3),
+        ("clockRate", c_int),
+        ("totalConstMem", c_size_t),
+        ("major", c_int),
+        ("minor", c_int),
+        ("rest", c_char * 2048),
+    ]
+
+count = c_int()
+rc = lib.cudaGetDeviceCount(byref(count))
+if rc != 0 or count.value < 1:
+    raise SystemExit(
+        "Could not auto-detect CUDA_ARCHITECTURES because no visible CUDA device was found. "
+        "Set CUDA_ARCHITECTURES and NVHPC_COMPUTE_CAPABILITIES explicitly, or rerun on a GPU node."
+    )
+prop = cudaDeviceProp()
+rc = lib.cudaGetDeviceProperties(byref(prop), 0)
+if rc != 0:
+    raise SystemExit("cudaGetDeviceProperties failed while detecting CUDA_ARCHITECTURES.")
+print(f"{prop.major}{prop.minor}")
+PY
+}
+
+load_previous_build_meta() {
+  local meta_path="$1"
+  if [[ -f "${meta_path}" ]]; then
+    # shellcheck disable=SC1090
+    source "${meta_path}"
+    if [[ -z "${CUDA_ARCHITECTURES:-}" && -n "${OBGPU_STAMP_CUDA_ARCHITECTURES:-}" ]]; then
+      CUDA_ARCHITECTURES="${OBGPU_STAMP_CUDA_ARCHITECTURES}"
+    fi
+    if [[ -z "${NVHPC_COMPUTE_CAPABILITIES:-}" && -n "${OBGPU_STAMP_NVHPC_COMPUTE_CAPABILITIES:-}" ]]; then
+      NVHPC_COMPUTE_CAPABILITIES="${OBGPU_STAMP_NVHPC_COMPUTE_CAPABILITIES}"
+    fi
+  fi
+}
+
+write_build_meta() {
+  local meta_path="$1"
+  mkdir -p "$(dirname "${meta_path}")"
+  cat > "${meta_path}" <<EOF
+OBGPU_STAMP_CUDA_ARCHITECTURES='${CUDA_ARCHITECTURES:-}'
+OBGPU_STAMP_NVHPC_COMPUTE_CAPABILITIES='${NVHPC_COMPUTE_CAPABILITIES:-}'
+OBGPU_STAMP_NVHPC_C_COMPILER='${NVHPC_C_COMPILER:-}'
+OBGPU_STAMP_NVHPC_CXX_COMPILER='${NVHPC_CXX_COMPILER:-}'
+OBGPU_STAMP_CUDA_COMPILER='${CUDA_COMPILER:-}'
+OBGPU_STAMP_NVHPC_CUDA_HOME='${NVHPC_CUDA_HOME:-}'
+EOF
+}
+
 build_stamp_fingerprint() {
   {
     printf 'upstream_repo=%s\n' "${UPSTREAM_REPO}"
@@ -358,83 +465,12 @@ EOF
   fi
   GPU_BUILD_TAG="${GPU_BUILD_TAG:-${NVHPC_VERSION//./_}}"
   NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern-gpu-${GPU_BUILD_TAG}}"
+  NRN_BUILD_META_PATH="${NRN_BUILD_DIR}/.obgpu_build_meta.sh"
+  load_previous_build_meta "${NRN_BUILD_META_PATH}"
 
-  CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-$(
-    python - "${NVHPC_CUDA_HOME:-}" <<'PY'
-import ctypes
-import ctypes.util
-from pathlib import Path
-import sys
-from ctypes import byref, c_int, c_char, c_size_t, c_uint
-
-cuda_root = Path(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1] else None
-
-candidates = []
-if cuda_root:
-    candidates.extend(
-        [
-            cuda_root / "lib64" / "libcudart.so",
-            cuda_root / "lib64" / "libcudart.so.12",
-            cuda_root / "targets" / "x86_64-linux" / "lib" / "libcudart.so",
-            cuda_root / "targets" / "sbsa-linux" / "lib" / "libcudart.so",
-        ]
-    )
-
-found = ctypes.util.find_library("cudart")
-if found:
-    candidates.append(Path(found) if "/" in found else Path(found))
-
-lib = None
-load_errors = []
-for candidate in candidates:
-    try:
-        lib = ctypes.CDLL(str(candidate))
-        break
-    except OSError as exc:
-        load_errors.append(f"{candidate}: {exc}")
-
-if lib is None:
-    try:
-        lib = ctypes.CDLL("libcudart.so")
-    except OSError as exc:
-        load_errors.append(f"libcudart.so: {exc}")
-        raise SystemExit(
-            "Could not load libcudart for CUDA architecture detection. "
-            + "; ".join(load_errors)
-        )
-
-class cudaDeviceProp(ctypes.Structure):
-    _fields_ = [
-        ("name", c_char * 256),
-        ("uuid", c_char * 16),
-        ("luid", c_char * 8),
-        ("luidDeviceNodeMask", c_uint),
-        ("totalGlobalMem", c_size_t),
-        ("sharedMemPerBlock", c_size_t),
-        ("regsPerBlock", c_int),
-        ("warpSize", c_int),
-        ("memPitch", c_size_t),
-        ("maxThreadsPerBlock", c_int),
-        ("maxThreadsDim", c_int * 3),
-        ("maxGridSize", c_int * 3),
-        ("clockRate", c_int),
-        ("totalConstMem", c_size_t),
-        ("major", c_int),
-        ("minor", c_int),
-        ("rest", c_char * 2048),
-    ]
-
-count = c_int()
-rc = lib.cudaGetDeviceCount(byref(count))
-if rc != 0 or count.value < 1:
-    raise SystemExit(1)
-prop = cudaDeviceProp()
-rc = lib.cudaGetDeviceProperties(byref(prop), 0)
-if rc != 0:
-    raise SystemExit(1)
-print(f"{prop.major}{prop.minor}")
-PY
-  )}"
+  if [[ -z "${CUDA_ARCHITECTURES:-}" ]]; then
+    CUDA_ARCHITECTURES="$(detect_cuda_architectures)"
+  fi
 
   NVHPC_COMPUTE_CAPABILITIES="${NVHPC_COMPUTE_CAPABILITIES:-${CUDA_ARCHITECTURES}}"
   mapfile -t supported_arches < <("${NVHPC_CXX_COMPILER}" -help -gpu 2>&1 | grep -oE 'cc[0-9]{2}' | sed 's/^cc//' | sort -uV)
@@ -471,6 +507,7 @@ PY
   fi
 else
   NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern}"
+  NRN_BUILD_META_PATH="${NRN_BUILD_DIR}/.obgpu_build_meta.sh"
 fi
 
 cmake_args=(
@@ -507,6 +544,7 @@ else
   cmake --install "${NRN_BUILD_DIR}"
   mkdir -p "${NRN_BUILD_DIR}"
   printf '%s\n' "${NRN_BUILD_FINGERPRINT}" > "${NRN_BUILD_STAMP_PATH}"
+  write_build_meta "${NRN_BUILD_META_PATH}"
 fi
 
 mapfile -t python_runtime_paths < <(detect_python_runtime_paths)
