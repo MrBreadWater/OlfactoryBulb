@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+def shell_join(parts):
+    """Portable equivalent of shlex.join for older Python versions."""
+    return " ".join(shlex.quote(str(part)) for part in parts)
+
+
 def decode_command(payload_b64):
     """Decode a base64-encoded JSON command list."""
     command = json.loads(b64decode(payload_b64).decode("utf-8"))
@@ -50,7 +55,7 @@ def write_batch_script(
 ):
     """Write the Slurm batch script that launches one benchmark run."""
     batch_path = result_dir / "slurm_job.sh"
-    benchmark_shell = shlex.join(benchmark_command)
+    benchmark_shell = shell_join(benchmark_command)
     lines = [
         "#!/usr/bin/env bash",
         *slurm_directives(args, label),
