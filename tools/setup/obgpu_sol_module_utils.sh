@@ -76,6 +76,32 @@ obgpu_sol_list_available_modules() {
   done <<< "${raw}"
 }
 
+obgpu_sol_module_exists() {
+  local module_name="$1"
+  local raw line token cleaned
+  [[ -z "${module_name}" ]] && return 1
+
+  raw="$(module -t avail "${module_name}" 2>&1 || true)"
+  if [[ -z "${raw//[[:space:]]/}" ]]; then
+    raw="$(module spider "${module_name}" 2>&1 || true)"
+  fi
+
+  while IFS= read -r line; do
+    for token in ${line}; do
+      cleaned="${token%%(*}"
+      cleaned="${cleaned%%:*}"
+      cleaned="${cleaned#"${cleaned%%[![:space:]]*}"}"
+      cleaned="${cleaned%"${cleaned##*[![:space:]]}"}"
+      [[ -z "${cleaned}" ]] && continue
+      if [[ "${cleaned}" == "${module_name}" ]]; then
+        return 0
+      fi
+    done
+  done <<< "${raw}"
+
+  return 1
+}
+
 obgpu_sol_pick_available_module() {
   local prefix="$1"
   local candidates latest_module versioned_candidates bare_candidate
@@ -112,8 +138,10 @@ obgpu_sol_resolve_module() {
   local explicit="${2:-}"
 
   if [[ -n "${explicit}" ]]; then
-    printf '%s\n' "${explicit}"
-    return 0
+    if [[ ":${LOADEDMODULES:-}:" == *":${explicit}:"* ]] || obgpu_sol_module_exists "${explicit}"; then
+      printf '%s\n' "${explicit}"
+      return 0
+    fi
   fi
 
   if obgpu_sol_pick_loaded_module "${prefix}" >/dev/null; then
