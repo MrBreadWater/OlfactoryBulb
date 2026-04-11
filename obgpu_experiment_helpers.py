@@ -601,6 +601,13 @@ def _ssh_master_is_ready(config: dict[str, Any], control_path: Path) -> bool:
     return checked.returncode == 0
 
 
+def _ssh_master_socket_is_live(config: dict[str, Any], control_path: Path) -> bool:
+    """Return True when the control socket exists and appears to back a live master."""
+    if not control_path.exists():
+        return False
+    return _ssh_master_is_ready(config, control_path)
+
+
 def _kill_stale_ssh_master_processes(config: dict[str, Any], control_path: Path) -> None:
     """Kill stale SSH master processes still tied to a removed or broken control path."""
     listed = subprocess.run(
@@ -743,6 +750,8 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
         ssh_binary,
         *user_options,
         "-o",
+        "BatchMode=yes",
+        "-o",
         "ControlMaster=yes",
         "-o",
         f"ControlPath={control_path}",
@@ -762,7 +771,7 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
     )
     deadline = time.time() + 10.0
     while time.time() < deadline:
-        if _ssh_master_is_ready(config, control_path):
+        if _ssh_master_socket_is_live(config, control_path):
             _LIVE_SSH_MASTERS[str(control_path)] = started
             return
         if started.poll() is not None:
@@ -800,6 +809,10 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
         )
 
     interactive_command = list(start_command)
+    interactive_command = [
+        part for part in interactive_command
+        if part not in ("BatchMode=yes",)
+    ]
     control_path = _ssh_control_path(config)
     if control_path is None:
         raise RuntimeError("Interactive SSH auth requires ssh_multiplex=True")
@@ -818,6 +831,7 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
     hostkey_prompt = re.compile(r"(?i)are you sure you want to continue connecting")
 
     deadline = time.time() + 180.0
+    auth_answered = False
 
     while True:
         idx = child.expect(
@@ -832,14 +846,17 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
         )
         if idx == 0:
             child.sendline("yes")
+            auth_answered = True
             continue
         if idx == 1:
             prompt = child.after.strip() or f"Password for {_require_remote_host(config)}: "
             child.sendline(getpass(prompt + " "))
+            auth_answered = True
             continue
         if idx == 2:
             prompt = child.after.strip() or f"2FA for {_require_remote_host(config)}: "
             child.sendline(input(prompt + " "))
+            auth_answered = True
             continue
         if idx == 3:
             prompt = child.after.strip() or f"SSH prompt for {_require_remote_host(config)}: "
@@ -847,11 +864,12 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
                 child.sendline(getpass(prompt + " "))
             else:
                 child.sendline(input(prompt + " "))
+            auth_answered = True
             continue
         if idx == 4:
             child.close()
             if child.exitstatus == 0:
-                if _ssh_master_is_ready(config, control_path):
+                if _ssh_master_socket_is_live(config, control_path):
                     _LIVE_SSH_MASTERS[str(control_path)] = child
                     return
             raise RuntimeError(
@@ -859,7 +877,7 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
                 f"Exit status: {child.exitstatus}\n"
                 f"Output:\n{child.before}"
             )
-        if _ssh_master_is_ready(config, control_path):
+        if control_path.exists() and child.isalive() and auth_answered:
             _LIVE_SSH_MASTERS[str(control_path)] = child
             return
         if time.time() > deadline:
