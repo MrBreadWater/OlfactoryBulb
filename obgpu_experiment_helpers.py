@@ -1284,7 +1284,12 @@ def _build_remote_submit_command(
     for extra in config.get("slurm_extra_args", []):
         command.extend(["--sbatch-arg", str(extra)])
 
-    return _shell_join(command)
+    return (
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
+        ' && test -n "$REMOTE_PYTHON"'
+        ' && exec "$REMOTE_PYTHON" '
+        + _shell_join(command[1:])
+    )
 
 
 def _build_remote_poll_command(
@@ -1304,7 +1309,12 @@ def _build_remote_poll_command(
         "--result-dir",
         remote_result_dir.as_posix(),
     ]
-    return _shell_join(command)
+    return (
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
+        ' && test -n "$REMOTE_PYTHON"'
+        ' && exec "$REMOTE_PYTHON" '
+        + _shell_join(command[1:])
+    )
 
 
 def _remote_submission_payload(
