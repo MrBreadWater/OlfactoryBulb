@@ -567,6 +567,12 @@ unset NMODLHOME
 unset NMODL_PYLIB
 EOF
 
+# Make the current setup shell consistent with the activate hook we just wrote so follow-on
+# nrnivmodl invocations in this same process do not depend on a manual conda reactivate.
+export OMPI_MCA_opal_cuda_support=true
+export NMODLHOME="${CONDA_PREFIX}"
+export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
+
 (
   MECH_BUILD_STAMP_PATH="${REPO_ROOT}/$(uname -m)/.obgpu_mechanisms_stamp"
   MECH_BUILD_FINGERPRINT="$(mechanism_stamp_fingerprint "${NRN_BUILD_FINGERPRINT}")"
