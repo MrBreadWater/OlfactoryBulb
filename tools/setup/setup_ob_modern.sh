@@ -723,4 +723,7 @@ if [[ "${ENABLE_GPU}" == "1" ]] && ! find_current_arch_libnrnmech >/dev/null 2>&
   echo "Warning: could not locate a generated libnrnmech.so to repair." >&2
 fi
 
+log_step "Verifying maintained OBGPU Python imports"
+python "${REPO_ROOT}/tools/setup/verify_obgpu_python_imports.py" --repo-root "${REPO_ROOT}"
+
 log_step "OBGPU setup complete from ${UPSTREAM_REF}"
