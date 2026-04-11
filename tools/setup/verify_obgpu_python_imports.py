@@ -15,6 +15,7 @@ target.
 from __future__ import annotations
 
 import argparse
+import os
 import importlib
 import importlib.util
 import json
@@ -97,6 +98,12 @@ def main() -> None:
     """Run the import verification and exit non-zero on failure."""
     args = parse_args()
     repo_root = args.repo_root.resolve()
+
+    # Older OBGPU activate hooks exported NRN_NMODL_PATH to the repo root. NEURON
+    # then auto-loaded libnrnmech on interpreter startup, which collides with the
+    # explicit Birgiolas mechanism load path used by the maintained runtime.
+    # Clear it here so verification reflects the supported import path.
+    os.environ.pop("NRN_NMODL_PATH", None)
 
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
