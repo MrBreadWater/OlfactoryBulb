@@ -1,0 +1,26 @@
+diff --git a/src/coreneuron/io/output_spikes.cpp b/src/coreneuron/io/output_spikes.cpp
+index 6a17a3345..7c849d3c7 100644
+--- a/src/coreneuron/io/output_spikes.cpp
++++ b/src/coreneuron/io/output_spikes.cpp
+@@ -26,6 +26,21 @@
+ #include "coreneuron/apps/corenrn_parameters.hpp"
+ #ifdef ENABLE_SONATA_REPORTS
+ #include "bbp/sonata/reports.h"
++
++/*
++ * NVHPC/aarch64 has intermittently failed to see the spikefile helper declarations at the end of
++ * the bundled SONATA shim header. Repeat the declarations locally so the call sites below do not
++ * depend on compiler-specific lookup behavior across the injected local-report shim path.
++ */
++void sonata_create_spikefile(const char* outpath, const char* filename);
++void sonata_add_spikes_population(const char* population_name,
++                                  int population_offset,
++                                  const double* times,
++                                  std::size_t n_times,
++                                  const int* gids,
++                                  std::size_t n_gids);
++void sonata_write_spike_populations();
++void sonata_close_spikefile();
+ #endif  // ENABLE_SONATA_REPORTS
+ 
+ /**

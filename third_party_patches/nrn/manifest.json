@@ -26,6 +26,11 @@
       "file": "0005-local-sonata-shim-header.patch",
       "category": "required",
       "description": "Add the bundled SONATA shim header so clean builds do not depend on untracked vendor files."
+    },
+    {
+      "file": "0006-output-spikes-sonata-shim-compat.patch",
+      "category": "required",
+      "description": "Make CoreNEURON output_spikes compile reliably with the bundled SONATA shim under NVHPC/aarch64."
     }
   ]
 }

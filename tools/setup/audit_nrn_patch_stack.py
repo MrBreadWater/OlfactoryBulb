@@ -56,6 +56,11 @@ def load_patch_texts(manifest: dict[str, Any], manifest_dir: Path) -> dict[str, 
     return patch_texts
 
 
+def patch_text_for_path(path: str, patch_texts: dict[str, str]) -> str:
+    """Return concatenated patch text for patches that mention ``path``."""
+    return "\n".join(text for text in patch_texts.values() if path in text)
+
+
 def normalize_paths(paths: list[str]) -> list[str]:
     """Drop generated/build paths and keep stable source paths only."""
     filtered: list[str] = []
@@ -82,6 +87,30 @@ def find_modified_paths(source_tree: Path) -> list[str]:
     return normalize_paths([line.strip() for line in stdout.splitlines()])
 
 
+def diff_added_lines(source_tree: Path, path: str) -> list[str]:
+    """Return added lines for one tracked modified file."""
+    stdout = run(["git", "diff", "--no-color", "--unified=0", "--", path], cwd=source_tree)
+    added: list[str] = []
+    for line in stdout.splitlines():
+        if line.startswith("+++") or not line.startswith("+"):
+            continue
+        added.append(line[1:])
+    return added
+
+
+def untracked_file_lines(source_tree: Path, path: str) -> list[str]:
+    """Return stable non-empty lines from one untracked file."""
+    file_path = source_tree / path
+    if not file_path.is_file():
+        return []
+    lines: list[str] = []
+    for line in file_path.read_text().splitlines():
+        stripped = line.strip()
+        if stripped:
+            lines.append(stripped)
+    return lines
+
+
 def match_paths_to_patches(paths: list[str], patch_texts: dict[str, str]) -> tuple[list[str], dict[str, str]]:
     """Match each path to a patch that mentions it, returning unmatched paths."""
     unmatched: list[str] = []
@@ -93,6 +122,48 @@ def match_paths_to_patches(paths: list[str], patch_texts: dict[str, str]) -> tup
         else:
             matched_by[path] = matched_patch
     return unmatched, matched_by
+
+
+def verify_modified_content_coverage(
+    source_tree: Path, paths: list[str], patch_texts: dict[str, str]
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Return modified files whose added lines are missing from the patch stack."""
+    uncovered: list[str] = []
+    missing_lines_by_path: dict[str, list[str]] = {}
+    for path in paths:
+        relevant_patch_text = patch_text_for_path(path, patch_texts)
+        if not relevant_patch_text:
+            continue
+        missing_lines = [
+            line
+            for line in diff_added_lines(source_tree, path)
+            if line and line not in relevant_patch_text
+        ]
+        if missing_lines:
+            uncovered.append(path)
+            missing_lines_by_path[path] = missing_lines[:10]
+    return uncovered, missing_lines_by_path
+
+
+def verify_untracked_content_coverage(
+    source_tree: Path, paths: list[str], patch_texts: dict[str, str]
+) -> tuple[list[str], dict[str, list[str]]]:
+    """Return untracked files whose contents are not actually present in the patch stack."""
+    uncovered: list[str] = []
+    missing_lines_by_path: dict[str, list[str]] = {}
+    for path in paths:
+        relevant_patch_text = patch_text_for_path(path, patch_texts)
+        if not relevant_patch_text:
+            continue
+        missing_lines = [
+            line
+            for line in untracked_file_lines(source_tree, path)
+            if line not in relevant_patch_text
+        ]
+        if missing_lines:
+            uncovered.append(path)
+            missing_lines_by_path[path] = missing_lines[:10]
+    return uncovered, missing_lines_by_path
 
 
 def parse_args() -> argparse.Namespace:
@@ -126,19 +197,30 @@ def main() -> None:
 
     unmatched_modified, modified_matches = match_paths_to_patches(modified_paths, patch_texts)
     unmatched_untracked, untracked_matches = match_paths_to_patches(untracked_paths, patch_texts)
+    incomplete_modified, incomplete_modified_lines = verify_modified_content_coverage(
+        source_tree, modified_paths, patch_texts
+    )
+    incomplete_untracked, incomplete_untracked_lines = verify_untracked_content_coverage(
+        source_tree, untracked_paths, patch_texts
+    )
 
     summary = {
-        "ok": not unmatched_modified and not unmatched_untracked,
+        "ok": not unmatched_modified
+        and not unmatched_untracked
+        and not incomplete_modified
+        and not incomplete_untracked,
         "source_tree": str(source_tree),
         "manifest": str(manifest_path),
         "modified_paths": modified_matches,
         "untracked_paths": untracked_matches,
         "unmatched_modified_paths": unmatched_modified,
         "unmatched_untracked_paths": unmatched_untracked,
+        "incomplete_modified_paths": incomplete_modified_lines,
+        "incomplete_untracked_paths": incomplete_untracked_lines,
     }
     print(json.dumps(summary, indent=2, sort_keys=True))
 
-    if unmatched_modified or unmatched_untracked:
+    if unmatched_modified or unmatched_untracked or incomplete_modified or incomplete_untracked:
         raise SystemExit(1)
 
 
