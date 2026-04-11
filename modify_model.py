@@ -1,8 +1,6 @@
 import os
-os.environ["NEURON_MODULE_OPTIONS"] = "-nogui"
 from olfactorybulb.paramsets.base import ParameterSetBase
 from olfactorybulb.model import OlfactoryBulb
-from olfactorybulb.parse_topology import build_adjacency_list
 from neuron import h
 import prev_ob_models.Birgiolas2020.isolated_cells as isolated_cells
 from dataclasses import dataclass, field
@@ -26,12 +24,12 @@ def make_synapse_key(entry: dict, source_to_dest: bool) -> SynapseKey:
     else:
         return SynapseKey(entry['dest_section'], entry['dest_x'], entry['source_section'], entry['source_x'], 'AmpaNmdaSyn')
 
-@dataclass
-class ModifiedParameterSet(ParameterSetBase):
-    topology: dict[str, list] = field(default_factory={"add_connections": [], "connections_weights": []})
-    swap_cell_types: list[dict] = field(default_factory=[])
+# @dataclass
+# class ModifiedParameterSet(ParameterSetBase):
+#     topology: dict[str, list] = field(default_factory={"add_connections": [], "connections_weights": []})
+#     swap_cell_types: list[dict] = field(default_factory=[])
 
-def perform_cell_type_swaps(bulb: OlfactoryBulb, swap_list: list, synapse_map: dict):
+def perform_cell_type_swaps(bulb: OlfactoryBulb, swap_list: list):
     cell_type_re = re.compile(r'^([A-Z]+)')
     for swap in swap_list:
         json_cell_id = swap['cell']
@@ -64,8 +62,7 @@ def perform_cell_type_swaps(bulb: OlfactoryBulb, swap_list: list, synapse_map: d
 
         cell_prefix = json_cell_id + '.'
         connected_synapses = {
-                key: entry,
-                for key, entry in synapse_map.items() if key.x_name.startswith(cell_prefix) or key.y_name.startswith(cell_prefix)
+                key: entry for key, entry in synapse_map.items() if key.x_name.startswith(cell_prefix) or key.y_name.startswith(cell_prefix)
         }
 
         print(f"Swapped {json_cell_id} -> {to_class}.\nFound {len(connected_synapses)} connected synapse(s) in synapse_map.")
@@ -99,9 +96,20 @@ def add_synaptic_connection(bulb, connection_config):
         bulb.added_connections = []
     bulb.added_connections.append((syn, netcon))
 
-def modify_synaptic_connection(bulb: OlfactoryBulb, synapse_map: dict, synapse_key: SynapseKey, modification: dict):
+def modify_synaptic_connection(bulb: OlfactoryBulb, synapse_map: dict, modification: dict):
     # use synaps map and synapse key to iterate over netcons and identify the netcon which has the target synapse key pointer
     # then perform in place modifications of the netcon and synapse point process
+    try:
+        synapse_key = SynapseKey(
+            modification["x_name"],
+            modification["x_location"],
+            modification["y_name"],
+            modification["y_location"],
+            modification["synapse_type"]
+        )
+    except Exception as e:
+        raise Exception(f"could not create synapse key for modification: {modification}")
+    
     entry = synapse_map.get(synapse_key)
     if entry is None:
         raise KeyError(f"SynapseKey not found in synapse_map: {synapse_key}")
@@ -168,13 +176,5 @@ def build_synapse_map(bulb):
 
     return synapse_map
 
-bulb = OlfactoryBulb(params=test_params, autorun=False)
-topology = build_synapse_map(bulb)
-
-
-
-    
-
-
-
-
+# bulb = OlfactoryBulb(params=test_params, autorun=False)
+# topology = build_synapse_map(bulb)
