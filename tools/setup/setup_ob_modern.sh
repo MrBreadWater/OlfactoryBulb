@@ -92,6 +92,41 @@ print(candidates[0])
 PY
 }
 
+find_current_arch_libnrnmech() {
+  python - "${REPO_ROOT}" "$(uname -m)" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+arch = sys.argv[2]
+arch_dir = root / arch
+candidates = [
+    arch_dir / "libnrnmech.so",
+    arch_dir / ".libs" / "libnrnmech.so",
+]
+
+for candidate in candidates:
+    if candidate.is_file():
+        print(candidate)
+        raise SystemExit(0)
+
+fallbacks = sorted(
+    [
+        path
+        for path in arch_dir.glob("**/libnrnmech.so")
+        if path.is_file()
+    ],
+    key=lambda path: path.stat().st_mtime,
+    reverse=True,
+)
+if fallbacks:
+    print(fallbacks[0])
+    raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 detect_python_runtime_paths() {
   python - <<'PY'
 import sys
@@ -137,6 +172,86 @@ if libpython is None:
 
 print(purelib)
 print(libpython)
+PY
+}
+
+file_sha256() {
+  python - "$1" <<'PY'
+from pathlib import Path
+import hashlib
+import sys
+
+path = Path(sys.argv[1])
+digest = hashlib.sha256()
+digest.update(path.read_bytes())
+print(digest.hexdigest())
+PY
+}
+
+hash_stdin() {
+  python - <<'PY'
+import hashlib
+import sys
+
+print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())
+PY
+}
+
+build_stamp_fingerprint() {
+  {
+    printf 'upstream_repo=%s\n' "${UPSTREAM_REPO}"
+    printf 'upstream_ref=%s\n' "${UPSTREAM_REF}"
+    printf 'patch_manifest=%s\n' "${PATCH_MANIFEST}"
+    printf 'patch_manifest_sha=%s\n' "$(file_sha256 "${PATCH_MANIFEST}")"
+    for patch_file in "${PATCH_FILES[@]}"; do
+      printf 'patch=%s sha=%s\n' "${patch_file}" "$(file_sha256 "${PATCH_DIR}/${patch_file}")"
+    done
+    printf 'enable_gpu=%s\n' "${ENABLE_GPU}"
+    printf 'conda_prefix=%s\n' "${CONDA_PREFIX}"
+    printf 'python_executable=%s\n' "${CONDA_PREFIX}/bin/python"
+    printf 'cc=%s\n' "${CC}"
+    printf 'cxx=%s\n' "${CXX}"
+    printf 'ompi_cc=%s\n' "${OMPI_CC}"
+    printf 'ompi_cxx=%s\n' "${OMPI_CXX}"
+    printf 'nrn_src_dir=%s\n' "${NRN_SRC_DIR}"
+    printf 'nrn_build_dir=%s\n' "${NRN_BUILD_DIR}"
+    printf 'nvhpc_c_compiler=%s\n' "${NVHPC_C_COMPILER:-}"
+    printf 'nvhpc_cxx_compiler=%s\n' "${NVHPC_CXX_COMPILER:-}"
+    printf 'cuda_compiler=%s\n' "${CUDA_COMPILER:-}"
+    printf 'nvhpc_cuda_home=%s\n' "${NVHPC_CUDA_HOME:-}"
+    printf 'cuda_architectures=%s\n' "${CUDA_ARCHITECTURES:-}"
+    printf 'nvhpc_compute_capabilities=%s\n' "${NVHPC_COMPUTE_CAPABILITIES:-}"
+    printf 'gpu_build_tag=%s\n' "${GPU_BUILD_TAG:-}"
+    printf 'cmake_arg=%s\n' "${cmake_args[@]}"
+  } | hash_stdin
+}
+
+mechanism_stamp_fingerprint() {
+  {
+    printf 'build_fingerprint=%s\n' "$1"
+    printf 'repo_root=%s\n' "${REPO_ROOT}"
+    printf 'conda_prefix=%s\n' "${CONDA_PREFIX}"
+    printf 'ompi_cc=%s\n' "${OMPI_CC}"
+    printf 'ompi_cxx=%s\n' "${OMPI_CXX}"
+    printf 'machine_arch=%s\n' "$(uname -m)"
+    while IFS= read -r mod_file; do
+      [[ -z "${mod_file}" ]] && continue
+      printf 'mod=%s sha=%s\n' "${mod_file}" "$(file_sha256 "${mod_file}")"
+    done < <(find "${REPO_ROOT}/prev_ob_models/Birgiolas2020/Mechanisms" -maxdepth 1 -name '*.mod' -type f | sort)
+  } | hash_stdin
+}
+
+stamp_matches() {
+  local stamp_path="$1"
+  local expected="$2"
+  [[ -f "${stamp_path}" ]] && [[ "$(tr -d '\n' < "${stamp_path}")" == "${expected}" ]]
+}
+
+neuron_install_ok() {
+  python - <<'PY' >/dev/null 2>&1
+import neuron
+from neuron import coreneuron
+print(neuron.__version__, coreneuron)
 PY
 }
 
@@ -381,10 +496,18 @@ if [[ "${ENABLE_GPU}" == "1" ]]; then
   cmake_args+=("${gpu_cmake_args[@]}")
 fi
 
-cmake "${cmake_args[@]}"
+NRN_BUILD_STAMP_PATH="${NRN_BUILD_DIR}/.obgpu_build_stamp"
+NRN_BUILD_FINGERPRINT="$(build_stamp_fingerprint)"
 
-cmake --build "${NRN_BUILD_DIR}" --parallel 8
-cmake --install "${NRN_BUILD_DIR}"
+if stamp_matches "${NRN_BUILD_STAMP_PATH}" "${NRN_BUILD_FINGERPRINT}" && neuron_install_ok; then
+  echo "Skipping NEURON/CoreNEURON build; matching successful stamp found at ${NRN_BUILD_STAMP_PATH}."
+else
+  cmake "${cmake_args[@]}"
+  cmake --build "${NRN_BUILD_DIR}" --parallel 8
+  cmake --install "${NRN_BUILD_DIR}"
+  mkdir -p "${NRN_BUILD_DIR}"
+  printf '%s\n' "${NRN_BUILD_FINGERPRINT}" > "${NRN_BUILD_STAMP_PATH}"
+fi
 
 mapfile -t python_runtime_paths < <(detect_python_runtime_paths)
 if [[ "${#python_runtime_paths[@]}" -ne 2 ]]; then
@@ -445,16 +568,33 @@ unset NMODL_PYLIB
 EOF
 
 (
-  cd "${REPO_ROOT}"
-  OMPI_CC=gcc OMPI_CXX=g++ nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms
+  MECH_BUILD_STAMP_PATH="${REPO_ROOT}/$(uname -m)/.obgpu_mechanisms_stamp"
+  MECH_BUILD_FINGERPRINT="$(mechanism_stamp_fingerprint "${NRN_BUILD_FINGERPRINT}")"
+
+  if mechanism_lib_path="$(find_current_arch_libnrnmech 2>/dev/null)"; then
+    mechanism_lib_present=1
+  else
+    mechanism_lib_path=""
+    mechanism_lib_present=0
+  fi
+
+  if [[ "${mechanism_lib_present}" == "1" ]] && stamp_matches "${MECH_BUILD_STAMP_PATH}" "${MECH_BUILD_FINGERPRINT}"; then
+    echo "Skipping mechanism rebuild; matching successful stamp found at ${MECH_BUILD_STAMP_PATH}."
+  else
+    cd "${REPO_ROOT}"
+    OMPI_CC=gcc OMPI_CXX=g++ nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms
+    mechanism_lib_path="$(find_current_arch_libnrnmech)"
+    mkdir -p "$(dirname "${MECH_BUILD_STAMP_PATH}")"
+    printf '%s\n' "${MECH_BUILD_FINGERPRINT}" > "${MECH_BUILD_STAMP_PATH}"
+  fi
+
+  if [[ "${ENABLE_GPU}" == "1" && -n "${mechanism_lib_path}" ]]; then
+    "${REPO_ROOT}/tools/setup/fix_nvhpc_libnrnmech.sh" "${mechanism_lib_path}"
+  fi
 )
 
-if [[ "${ENABLE_GPU}" == "1" ]]; then
-  if libnrnmech_path="$(find_latest_libnrnmech)"; then
-    "${REPO_ROOT}/tools/setup/fix_nvhpc_libnrnmech.sh" "${libnrnmech_path}"
-  else
-    echo "Warning: could not locate a generated libnrnmech.so to repair." >&2
-  fi
+if [[ "${ENABLE_GPU}" == "1" ]] && ! find_current_arch_libnrnmech >/dev/null 2>&1; then
+  echo "Warning: could not locate a generated libnrnmech.so to repair." >&2
 fi
 
 echo "OBGPU setup complete from ${UPSTREAM_REF}."
