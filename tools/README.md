@@ -23,3 +23,7 @@ For the supported remote workflow, see:
 - [SOL_REMOTE_WORKFLOW.md](/home/alek/OlfactoryBulb/notes/porting/SOL_REMOTE_WORKFLOW.md)
 - [submit_sol_run.py](/home/alek/OlfactoryBulb/tools/remote/submit_sol_run.py)
 - [poll_sol_run.py](/home/alek/OlfactoryBulb/tools/remote/poll_sol_run.py)
+
+For interactive Sol shells, use:
+
+- [activate_sol_obgpu.sh](/home/alek/OlfactoryBulb/tools/setup/activate_sol_obgpu.sh)

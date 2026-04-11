@@ -23,6 +23,34 @@ Sol needs:
 
 You do not need to run Jupyter on Sol.
 
+## Interactive Sol Shells
+
+For interactive builds or smoke tests on Sol, use:
+
+```bash
+salloc -p arm -G 1 -c 8 -t 02:00:00
+source tools/setup/activate_sol_obgpu.sh
+```
+
+That helper loads the expected modules and activates `OBGPU`. If your `salloc`
+session keeps the same shell, the loaded modules persist. If you start a fresh
+shell on the compute node, run the helper again there.
+
+If you want `conda activate OBGPU` itself to load the Sol modules, opt in with:
+
+```bash
+export OBGPU_AUTOLOAD_SOL_MODULES=1
+conda activate OBGPU
+```
+
+The default module names can be overridden before either workflow:
+
+```bash
+export SOL_MAMBA_MODULE=mamba/latest
+export SOL_NVHPC_MODULE=nvhpc/24.9
+export SOL_CUDA_MODULE=cuda/12.6.1
+```
+
 ## Notebook Controls
 
 The notebook helper layer now supports these remote controls:

@@ -70,6 +70,32 @@ See:
 - [obgpu_experiment_helpers.py](/home/alek/OlfactoryBulb/obgpu_experiment_helpers.py)
 - [tools/remote](/home/alek/OlfactoryBulb/tools/remote)
 
+For interactive Sol shells, the supported activation helper is:
+
+```bash
+source tools/setup/activate_sol_obgpu.sh
+```
+
+That helper:
+
+- loads the expected Sol modules (`mamba/latest`, `nvhpc/24.9`, `cuda/12.6.1`) unless already loaded
+- initializes conda in the current shell
+- activates `OBGPU`
+
+If your `salloc` keeps you in the same shell, already-loaded modules persist. If
+you start a fresh shell on the compute node, run the helper again.
+
+Optional opt-in convenience:
+
+```bash
+export OBGPU_AUTOLOAD_SOL_MODULES=1
+conda activate OBGPU
+```
+
+When enabled, the `OBGPU` activate hook will try to load the same Sol modules if
+they are not already present. This is intentionally opt-in so generic Linux
+hosts do not get surprise cluster-module behavior on activation.
+
 ## Upgrade Policy
 
 Upstream NEURON updates are deliberate, not automatic.

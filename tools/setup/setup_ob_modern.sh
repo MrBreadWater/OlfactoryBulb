@@ -399,6 +399,47 @@ printf '%s\n' "${CONDA_PREFIX}/lib/python" > "${PYTHON_SITE_PACKAGES}/ob_modern_
 
 mkdir -p "${CONDA_PREFIX}/etc/conda/activate.d" "${CONDA_PREFIX}/etc/conda/deactivate.d"
 cat > "${CONDA_PREFIX}/etc/conda/activate.d/ob_modern_neuron.sh" <<EOF
+if [[ "\${OBGPU_AUTOLOAD_SOL_MODULES:-0}" == "1" ]]; then
+  _obgpu_sol_ensure_module_cmd() {
+    if declare -F module >/dev/null 2>&1; then
+      return 0
+    fi
+    local init_script
+    for init_script in \
+      /etc/profile.d/z00_lmod.sh \
+      /etc/profile.d/modules.sh \
+      /usr/share/lmod/lmod/init/bash \
+      /usr/share/Modules/init/bash; do
+      if [[ -f "\${init_script}" ]]; then
+        # shellcheck disable=SC1090
+        source "\${init_script}"
+        break
+      fi
+    done
+    declare -F module >/dev/null 2>&1
+  }
+
+  _obgpu_sol_load_module() {
+    local module_name="\$1"
+    if [[ -z "\${module_name}" ]]; then
+      return 0
+    fi
+    if [[ ":\${LOADEDMODULES:-}:" == *":\${module_name}:"* ]]; then
+      return 0
+    fi
+    module load "\${module_name}"
+  }
+
+  if _obgpu_sol_ensure_module_cmd; then
+    _obgpu_sol_load_module "\${OBGPU_SOL_MAMBA_MODULE:-mamba/latest}"
+    _obgpu_sol_load_module "\${OBGPU_SOL_NVHPC_MODULE:-nvhpc/24.9}"
+    _obgpu_sol_load_module "\${OBGPU_SOL_CUDA_MODULE:-cuda/12.6.1}"
+  fi
+
+  unset -f _obgpu_sol_load_module
+  unset -f _obgpu_sol_ensure_module_cmd
+fi
+
 export OMPI_MCA_opal_cuda_support=true
 export NMODLHOME=${CONDA_PREFIX}
 export NMODL_PYLIB=${PYTHON_SHARED_LIB}
