@@ -637,11 +637,46 @@ fi
 export OMPI_MCA_opal_cuda_support=true
 export NMODLHOME=${CONDA_PREFIX}
 export NMODL_PYLIB=${PYTHON_SHARED_LIB}
+if [[ -n "\${NRN_NMODL_PATH+x}" ]]; then
+  export _OBGPU_OLD_NRN_NMODL_PATH="\${NRN_NMODL_PATH}"
+fi
+export NRN_NMODL_PATH=${REPO_ROOT}
+if [[ -n "\${CORENEURONLIB+x}" ]]; then
+  export _OBGPU_OLD_CORENEURONLIB="\${CORENEURONLIB}"
+fi
+export CORENEURONLIB=${REPO_ROOT}/$(uname -m)/libcorenrnmech.so
+if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
+  if [[ -n "\${LD_LIBRARY_PATH:-}" ]]; then
+    export _OBGPU_OLD_LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}"
+    export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m):\${LD_LIBRARY_PATH}"
+  else
+    unset _OBGPU_OLD_LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m)"
+  fi
+fi
 EOF
 cat > "${CONDA_PREFIX}/etc/conda/deactivate.d/ob_modern_neuron.sh" <<'EOF'
 unset OMPI_MCA_opal_cuda_support
 unset NMODLHOME
 unset NMODL_PYLIB
+if [[ -n "${_OBGPU_OLD_NRN_NMODL_PATH+x}" ]]; then
+  export NRN_NMODL_PATH="${_OBGPU_OLD_NRN_NMODL_PATH}"
+  unset _OBGPU_OLD_NRN_NMODL_PATH
+else
+  unset NRN_NMODL_PATH
+fi
+if [[ -n "${_OBGPU_OLD_CORENEURONLIB+x}" ]]; then
+  export CORENEURONLIB="${_OBGPU_OLD_CORENEURONLIB}"
+  unset _OBGPU_OLD_CORENEURONLIB
+else
+  unset CORENEURONLIB
+fi
+if [[ -n "${_OBGPU_OLD_LD_LIBRARY_PATH:-}" ]]; then
+  export LD_LIBRARY_PATH="${_OBGPU_OLD_LD_LIBRARY_PATH}"
+  unset _OBGPU_OLD_LD_LIBRARY_PATH
+else
+  unset LD_LIBRARY_PATH
+fi
 EOF
 
 # Make the current setup shell consistent with the activate hook we just wrote so follow-on
@@ -649,6 +684,11 @@ EOF
 export OMPI_MCA_opal_cuda_support=true
 export NMODLHOME="${CONDA_PREFIX}"
 export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
+export NRN_NMODL_PATH="${REPO_ROOT}"
+export CORENEURONLIB="${REPO_ROOT}/$(uname -m)/libcorenrnmech.so"
+if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
+  export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m)${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+fi
 
 (
   log_step "Checking Birgiolas mechanism build stamp"

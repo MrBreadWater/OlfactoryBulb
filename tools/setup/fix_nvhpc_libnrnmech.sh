@@ -18,15 +18,41 @@ if ! command -v patchelf >/dev/null 2>&1; then
   exit 1
 fi
 
-mapfile -t bogus_needed < <(patchelf --print-needed "${lib_path}" | grep '^/tmp/pgcudafat' || true)
+merge_origin_rpath() {
+  local target="$1"
+  local existing_rpath merged_rpath
 
-if [[ ${#bogus_needed[@]} -eq 0 ]]; then
-  exit 0
+  existing_rpath="$(patchelf --print-rpath "${target}" 2>/dev/null || true)"
+  if [[ -z "${existing_rpath}" ]]; then
+    merged_rpath='$ORIGIN'
+  elif [[ ":${existing_rpath}:" == *':$ORIGIN:'* ]]; then
+    merged_rpath="${existing_rpath}"
+  else
+    merged_rpath="\$ORIGIN:${existing_rpath}"
+  fi
+
+  patchelf --set-rpath "${merged_rpath}" "${target}"
+}
+
+repair_one_lib() {
+  local target="$1"
+  mapfile -t bogus_needed < <(patchelf --print-needed "${target}" | grep '^/tmp/pgcudafat' || true)
+
+  for dep in "${bogus_needed[@]}"; do
+    patchelf --remove-needed "${dep}" "${target}"
+  done
+
+  merge_origin_rpath "${target}"
+}
+
+repair_one_lib "${lib_path}"
+
+if [[ "$(basename "${lib_path}")" == "libnrnmech.so" ]]; then
+  patchelf --set-soname libnrnmech.so "${lib_path}"
 fi
 
-for dep in "${bogus_needed[@]}"; do
-  patchelf --remove-needed "${dep}" "${lib_path}"
-done
-
-patchelf --set-soname libnrnmech.so "${lib_path}"
-
+lib_dir="$(dirname "${lib_path}")"
+corenrn_lib="${lib_dir}/libcorenrnmech.so"
+if [[ -f "${corenrn_lib}" ]]; then
+  repair_one_lib "${corenrn_lib}"
+fi
