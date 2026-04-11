@@ -158,6 +158,12 @@ EOF
     if [[ -d "${NVHPC_CUDA_ROOT}" ]]; then
       NVHPC_CUDA_HOME="$(find "${NVHPC_CUDA_ROOT}" -mindepth 1 -maxdepth 1 -type d | sort -V | head -n 1)"
     fi
+    if [[ -z "${NVHPC_CUDA_HOME:-}" && -n "${CUDA_HOME:-}" && -x "${CUDA_HOME}/bin/nvcc" ]]; then
+      NVHPC_CUDA_HOME="${CUDA_HOME}"
+    fi
+    if [[ -z "${NVHPC_CUDA_HOME:-}" && -n "${CUDA_PATH:-}" && -x "${CUDA_PATH}/bin/nvcc" ]]; then
+      NVHPC_CUDA_HOME="${CUDA_PATH}"
+    fi
     if [[ -z "${NVHPC_CUDA_HOME:-}" && -d /usr/local/cuda ]]; then
       NVHPC_CUDA_HOME="/usr/local/cuda"
     fi
@@ -165,6 +171,8 @@ EOF
   if [[ -z "${CUDA_COMPILER:-}" ]]; then
     if [[ -n "${NVHPC_CUDA_HOME:-}" && -x "${NVHPC_CUDA_HOME}/bin/nvcc" ]]; then
       CUDA_COMPILER="${NVHPC_CUDA_HOME}/bin/nvcc"
+    elif command -v nvcc >/dev/null 2>&1; then
+      CUDA_COMPILER="$(command -v nvcc)"
     else
       CUDA_COMPILER="/usr/local/cuda/bin/nvcc"
     fi
