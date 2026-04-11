@@ -14,6 +14,7 @@ import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from base64 import b64encode
 from collections import Counter
@@ -29,7 +30,10 @@ from typing import Any
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
-import pywt
+try:
+    import pywt
+except ImportError:  # pragma: no cover - optional runtime dependency
+    pywt = None
 try:
     import pexpect
 except ImportError:  # pragma: no cover - optional runtime dependency
@@ -94,7 +98,8 @@ CONTROL_HELP = {
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
     "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command.",
     "remote_git_ref": "Git commit, tag, or branch to check out on Sol before running. Defaults to the current local HEAD commit.",
-    "remote_git_fetch": "When True, fetch origin on Sol before checking out remote_git_ref.",
+    "remote_git_fetch": "When True, fetch the configured remote on Sol before checking out remote_git_ref.",
+    "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "slurm_partition": "Optional Slurm partition for remote submission.",
     "slurm_account": "Optional Slurm account for remote submission.",
@@ -107,7 +112,7 @@ CONTROL_HELP = {
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
     "ssh_multiplex": "When True, reuse a persistent SSH control socket so Sol auth happens once instead of on every submit/poll/sync step.",
     "ssh_allow_interactive_auth": "When True, open the initial SSH control master through an interactive PTY so notebook-launched Sol runs can prompt for password and 2FA once.",
-    "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under /tmp.",
+    "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under XDG_RUNTIME_DIR, TMPDIR, or the system temp directory.",
     "ssh_control_persist_s": "How long to keep the SSH control master alive after the last use.",
     "rsync_binary": "rsync executable used to sync remote results back locally.",
     "rsync_options": "Extra rsync options used by the remote backend.",
@@ -204,6 +209,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_conda_activate_cmd": 'source "$(conda info --base)/etc/profile.d/conda.sh" && conda activate OBGPU',
         "remote_git_ref": None,
         "remote_git_fetch": True,
+        "remote_git_remote": "origin",
         "remote_poll_interval_s": 10.0,
         "slurm_partition": None,
         "slurm_account": None,
@@ -345,18 +351,11 @@ def add_new_connections(ob, new_connections_config):
     for config in new_connections_config:
         add_synaptic_connection(ob, config)
 
-def modify_existing_connections(ob, synapse_map, modifications_config):
-    """Apply in-place edits to existing synapses described by notebook config entries.
-
-    Each modification entry must provide a concrete ``synapse_key`` object that
-    can be resolved in ``synapse_map`` plus the netcon/synapse attribute updates
-    consumed by :func:`modify_synaptic_connection`.
-    """
+def modify_existing_connections(ob, modifications_config):
+    """Apply in-place edits to existing synapses described by notebook config entries."""
+    synapse_map = build_synapse_map(ob)
     for config in modifications_config:
-        synapse_key = config.get("synapse_key")
-        if synapse_key is None:
-            raise ValueError("Each modify_connections entry must include a 'synapse_key'")
-        modify_synaptic_connection(ob, synapse_map, synapse_key, config)
+        modify_synaptic_connection(ob, synapse_map, config)
 
 def build_run_command(
     config: dict[str, Any],
@@ -471,7 +470,12 @@ def _ssh_control_path(config: dict[str, Any]) -> Path | None:
 
     host = _require_remote_host(config)
     digest = sha1(host.encode("utf-8")).hexdigest()[:12]
-    return Path("/tmp") / f"obgpu-ssh-{digest}.sock"
+    runtime_base = (
+        os.environ.get("XDG_RUNTIME_DIR")
+        or os.environ.get("TMPDIR")
+        or tempfile.gettempdir()
+    )
+    return Path(runtime_base) / f"obgpu-ssh-{digest}.sock"
 
 
 def _ssh_common_options(config: dict[str, Any]) -> list[str]:
@@ -711,6 +715,7 @@ def _build_remote_submit_command(
         command.extend(["--git-ref", remote_git_ref])
     if bool(config.get("remote_git_fetch", True)):
         command.append("--git-fetch")
+        command.extend(["--git-remote", str(config.get("remote_git_remote", "origin"))])
 
     for key, flag in (
         ("slurm_partition", "--partition"),
@@ -793,6 +798,7 @@ def _remote_submission_payload(
             "remote_mpi_exec": str(remote_mpi_exec),
             "remote_git_ref": remote_git_ref,
             "remote_git_fetch": bool(config.get("remote_git_fetch", True)),
+            "remote_git_remote": str(config.get("remote_git_remote", "origin")),
         },
         submit_command,
     )
@@ -1886,6 +1892,10 @@ def compute_wavelet_map(
     n_scales: int = 50,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Compute the legacy-style continuous wavelet map used in the notebooks."""
+    if pywt is None:
+        raise ModuleNotFoundError(
+            "PyWavelets is required for wavelet analysis. Install the 'pywavelets' package."
+        )
     t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
     fs_hz = 1000.0 / dt_ms
     y_bp = butter_bandpass_filter(y, lowcut_hz, highcut_hz, fs_hz, order=4)
@@ -1925,6 +1935,10 @@ def load_legacy_wavelet_analysis(
     sniff_count: int = 8,
 ) -> dict[str, Any]:
     """Reproduce the legacy LFP wavelet-analysis pipeline for one result."""
+    if pywt is None:
+        raise ModuleNotFoundError(
+            "PyWavelets is required for wavelet analysis. Install the 'pywavelets' package."
+        )
     input_times = sorted(result["input_times"], key=lambda row: row[0])
     events = {}
     for seg_name, seg_times in input_times:
@@ -3285,6 +3299,208 @@ def print_run_summary(
             print(json.dumps(remote_info, indent=2, sort_keys=True))
     print(f"\nResult directory: {run.result_dir}")
     print(f"Command: {' '.join(run.command)}")
+
+
+# ---------------------------------------------------------------------------
+# Config persistence helpers
+# ---------------------------------------------------------------------------
+
+DEFAULT_CONFIGS_DIR = REPO_ROOT / "configs"
+
+
+def save_config(config: dict[str, Any], path: str | Path) -> Path:
+    """Save a notebook run config dict to a JSON file for future reproduction.
+
+    The saved file can be reloaded with :func:`load_config` and passed directly
+    to :func:`run_simulation` or :func:`run_and_load`.
+
+    Parameters
+    ----------
+    config:
+        A config dict as returned by :func:`build_run_config`.
+    path:
+        Destination file path (JSON). Parent directories are created as needed.
+
+    Returns
+    -------
+    Path
+        The resolved path that was written.
+    """
+    path = Path(path).expanduser().resolve()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_json_ready(dict(config)), indent=2, sort_keys=True))
+    return path
+
+
+def load_config(path: str | Path) -> dict[str, Any]:
+    """Load a previously saved run config from a JSON file.
+
+    The returned dict can be passed directly to :func:`run_simulation` or
+    :func:`run_and_load`.  Odor-schedule keys are normalized back to numeric
+    types after JSON round-trip.
+
+    Parameters
+    ----------
+    path:
+        Path to a JSON config file previously written by :func:`save_config`.
+    """
+    path = Path(path).expanduser().resolve()
+    with open(path) as f:
+        data = json.load(f)
+    if data.get("input_odors") is not None:
+        data["input_odors"] = normalize_input_odors(data["input_odors"])
+    return data
+
+
+def config_from_run(
+    run_or_dir: RunRecord | str | Path | None = None,
+    *,
+    prefix: str | None = None,
+    index: int = -1,
+    results_base: str | Path = DEFAULT_RESULTS_BASE,
+) -> dict[str, Any]:
+    """Extract the original notebook config from a past run.
+
+    The returned config is a deep copy of the dict originally passed to
+    :func:`run_simulation`, ready to be fed back unchanged (for exact
+    reproduction) or modified before re-running.
+
+    Parameters
+    ----------
+    run_or_dir:
+        A :class:`RunRecord`, a path to a result directory, or ``None`` to
+        select by *prefix* / *index*.
+    prefix:
+        Optional label prefix filter when *run_or_dir* is ``None``.
+    index:
+        Index into the sorted run list when *run_or_dir* is ``None``.
+        Defaults to ``-1`` (most recent).
+    results_base:
+        Base directory for notebook runs.
+
+    Example
+    -------
+    ::
+
+        cfg = config_from_run()          # most recent run
+        cfg["gaba_tau2_ms"] = 50         # tweak one parameter
+        run, result = run_and_load(cfg)  # re-run with the change
+    """
+    record = load_run_record(
+        run_or_dir, prefix=prefix, index=index, results_base=results_base
+    )
+    return deepcopy(record.config)
+
+
+def list_saved_configs(directory: str | Path | None = None) -> list[Path]:
+    """Return a sorted list of JSON config files in *directory*.
+
+    Defaults to the ``configs/`` directory at the repository root.  Returns an
+    empty list when the directory does not exist.
+
+    Parameters
+    ----------
+    directory:
+        Directory to search.  Defaults to ``<repo_root>/configs``.
+    """
+    directory = Path(directory).expanduser().resolve() if directory else DEFAULT_CONFIGS_DIR
+    if not directory.is_dir():
+        return []
+    return sorted(directory.glob("*.json"))
+
+
+def list_paramsets(
+    include_saved: bool = False,
+    configs_dir: str | Path | None = None,
+) -> list[str] | dict[str, list]:
+    """Return available paramset sources.
+
+    By default returns a sorted list of built-in paramset class names that can
+    be used as the ``paramset`` key in :func:`build_run_config`.
+
+    When *include_saved* is ``True``, returns a dict with two keys:
+
+    * ``"builtin"`` — sorted list of Python paramset class names.
+    * ``"saved"``   — sorted list of :class:`~pathlib.Path` objects pointing to
+      JSON config files in *configs_dir* (defaults to ``<repo_root>/configs``).
+
+    Use :func:`load_config` to load a saved config file and pass it directly to
+    :func:`run_simulation` or :func:`run_and_load`.
+
+    Parameters
+    ----------
+    include_saved:
+        When ``True``, also include saved JSON configs from *configs_dir*.
+    configs_dir:
+        Directory to search for saved JSON configs.  Defaults to
+        ``<repo_root>/configs``.
+
+    Example
+    -------
+    ::
+
+        # Built-in paramsets only
+        list_paramsets()
+        # ['GammaSignature', 'GammaSignature_DifferentOdor', ...]
+
+        # Both built-in and saved configs
+        sources = list_paramsets(include_saved=True)
+        # {
+        #   'builtin': ['GammaSignature', 'PureMCs', ...],
+        #   'saved':   [PosixPath('configs/my_experiment.json'), ...]
+        # }
+        cfg = load_config(sources['saved'][0])
+    """
+    import olfactorybulb.model as obmodel
+    from olfactorybulb.paramsets.base import SilentNetwork
+
+    names = sorted(
+        name
+        for name, obj in vars(obmodel).items()
+        if isinstance(obj, type)
+        and issubclass(obj, SilentNetwork)
+        and obj is not SilentNetwork
+    )
+
+    if not include_saved:
+        return names
+
+    return {
+        "builtin": names,
+        "saved": list_saved_configs(configs_dir),
+    }
+
+
+def config_diff(
+    config1: dict[str, Any],
+    config2: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Compare two run configs at the effective-params level.
+
+    Resolves the full paramset snapshot for each config and returns a list of
+    changed paths.  Each entry has the keys ``path``, ``before``, and
+    ``after``.  Only parameters that differ between the two configs appear in
+    the result.
+
+    Parameters
+    ----------
+    config1:
+        The "before" config dict.
+    config2:
+        The "after" config dict.
+
+    Example
+    -------
+    ::
+
+        base = build_run_config(paramset="GammaSignature")
+        tweaked = build_run_config(paramset="GammaSignature", gaba_tau2_ms=50)
+        changes = config_diff(base, tweaked)
+        print_diff_section("Changes", changes)
+    """
+    snap1 = resolve_effective_params(config1)["full_param_snapshot"]
+    snap2 = resolve_effective_params(config2)["full_param_snapshot"]
+    return diff_values(snap1, snap2)
 
 
 if __name__ == "__main__":
