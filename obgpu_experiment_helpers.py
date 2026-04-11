@@ -1240,10 +1240,24 @@ def _build_remote_submit_command(
     remote_git_ref: str | None,
 ) -> str:
     """Build the remote `submit_sol_run.py` invocation shell line."""
-    remote_helper = remote_repo_root / "tools" / "remote" / "submit_sol_run.py"
+    remote_helper = REPO_ROOT / "tools" / "remote" / "submit_sol_run.py"
     benchmark_b64 = b64encode(json.dumps(benchmark_command).encode("utf-8")).decode("ascii")
+    helper_b64 = b64encode(remote_helper.read_bytes()).decode("ascii")
+    python_exec = (
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
+        ' && test -n "$REMOTE_PYTHON"'
+        ' && exec "$REMOTE_PYTHON" -c '
+        + shlex.quote(
+            'import base64,sys; '
+            'script_b64=sys.argv[1]; '
+            'script_path=sys.argv[2]; '
+            'sys.argv=sys.argv[2:]; '
+            'namespace={"__name__":"__main__","__file__":script_path}; '
+            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
+        )
+    )
     command = [
-        "python",
+        helper_b64,
         str(remote_helper),
         "--repo-root",
         remote_repo_root.as_posix(),
@@ -1284,12 +1298,7 @@ def _build_remote_submit_command(
     for extra in config.get("slurm_extra_args", []):
         command.extend(["--sbatch-arg", str(extra)])
 
-    return (
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
-        ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON" '
-        + _shell_join(command[1:])
-    )
+    return python_exec + " " + _shell_join(command)
 
 
 def _build_remote_poll_command(
@@ -1300,21 +1309,30 @@ def _build_remote_poll_command(
     job_id: str,
 ) -> str:
     """Build the remote `poll_sol_run.py` invocation shell line."""
-    remote_helper = remote_repo_root / "tools" / "remote" / "poll_sol_run.py"
+    remote_helper = REPO_ROOT / "tools" / "remote" / "poll_sol_run.py"
+    helper_b64 = b64encode(remote_helper.read_bytes()).decode("ascii")
+    python_exec = (
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
+        ' && test -n "$REMOTE_PYTHON"'
+        ' && exec "$REMOTE_PYTHON" -c '
+        + shlex.quote(
+            'import base64,sys; '
+            'script_b64=sys.argv[1]; '
+            'script_path=sys.argv[2]; '
+            'sys.argv=sys.argv[2:]; '
+            'namespace={"__name__":"__main__","__file__":script_path}; '
+            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
+        )
+    )
     command = [
-        "python",
+        helper_b64,
         str(remote_helper),
         "--job-id",
         str(job_id),
         "--result-dir",
         remote_result_dir.as_posix(),
     ]
-    return (
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
-        ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON" '
-        + _shell_join(command[1:])
-    )
+    return python_exec + " " + _shell_join(command)
 
 
 def _build_remote_preflight_command(
@@ -1324,8 +1342,6 @@ def _build_remote_preflight_command(
     """Build one remote shell command that validates Sol-side prerequisites."""
     checks = [
         f'test -d {shlex.quote(remote_repo_root.as_posix())}',
-        f'test -f {shlex.quote((remote_repo_root / "tools" / "remote" / "submit_sol_run.py").as_posix())}',
-        f'test -f {shlex.quote((remote_repo_root / "tools" / "remote" / "poll_sol_run.py").as_posix())}',
         'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"',
         'test -n "$REMOTE_PYTHON"',
         'command -v bash >/dev/null',

@@ -50,29 +50,36 @@ def write_batch_script(
 ):
     """Write the Slurm batch script that launches one benchmark run."""
     batch_path = result_dir / "slurm_job.sh"
-    wrapper = repo_root / "tools" / "remote" / "run_obgpu_batch.sh"
+    benchmark_shell = shlex.join(benchmark_command)
     lines = [
         "#!/usr/bin/env bash",
         *slurm_directives(args, label),
         "set -euo pipefail",
-        shlex.join(
-            [
-                str(wrapper),
-                "--repo-root",
-                str(repo_root),
-                "--result-dir",
-                str(result_dir),
-                "--conda-activate-cmd",
-                conda_activate_cmd,
-                "--git-ref",
-                git_ref or "",
-                "--git-fetch",
-                "1" if git_fetch else "0",
-                "--git-remote",
-                git_remote,
-                "--",
-                *benchmark_command,
-            ]
+        "mkdir -p {}".format(shlex.quote(str(result_dir))),
+        "cd {}".format(shlex.quote(str(repo_root))),
+        'if [[ "{}" == "1" ]]; then git fetch --tags --prune {}; fi'.format(
+            "1" if git_fetch else "0",
+            shlex.quote(str(git_remote)),
+        ),
+        'if [[ -n "{}" ]]; then git checkout --force {}; fi'.format(
+            git_ref or "",
+            shlex.quote(git_ref or ""),
+        ),
+        "git rev-parse HEAD > {}".format(shlex.quote(str(result_dir / "git_commit.txt"))),
+        'if [[ -n "{}" ]]; then printf "%s\\n" {} > {}; fi'.format(
+            git_ref or "",
+            shlex.quote(git_ref or ""),
+            shlex.quote(str(result_dir / "git_ref.txt")),
+        ),
+        "eval {}".format(shlex.quote(conda_activate_cmd)),
+        "printf '%s\\n' {} > {}".format(
+            shlex.quote(benchmark_shell),
+            shlex.quote(str(result_dir / "command.txt")),
+        ),
+        "exec {} > {} 2> {}".format(
+            benchmark_shell,
+            shlex.quote(str(result_dir / "stdout.txt")),
+            shlex.quote(str(result_dir / "stderr.txt")),
         ),
         "",
     ]
