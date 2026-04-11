@@ -203,6 +203,15 @@ print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())
 PY
 }
 
+hash_text() {
+  python - "$1" <<'PY'
+import hashlib
+import sys
+
+print(hashlib.sha256(sys.argv[1].encode()).hexdigest())
+PY
+}
+
 detect_cuda_architectures() {
   python - "${NVHPC_CUDA_HOME:-}" <<'PY'
 import ctypes
@@ -283,6 +292,14 @@ print(f"{prop.major}{prop.minor}")
 PY
 }
 
+detect_supported_nvhpc_arches() {
+  local compiler="$1"
+  local help_output
+
+  help_output="$("${compiler}" -help -gpu 2>&1 || true)"
+  printf '%s\n' "${help_output}" | sed -n 's/.*\(cc[0-9][0-9]\).*/\1/p' | sed 's/^cc//' | sort -uV
+}
+
 load_previous_build_meta() {
   local meta_path="$1"
   if [[ -f "${meta_path}" ]]; then
@@ -311,7 +328,9 @@ EOF
 }
 
 build_stamp_fingerprint() {
-  {
+  local payload
+  payload="$(
+    {
     printf 'upstream_repo=%s\n' "${UPSTREAM_REPO}"
     printf 'upstream_ref=%s\n' "${UPSTREAM_REF}"
     printf 'patch_manifest=%s\n' "${PATCH_MANIFEST}"
@@ -336,12 +355,17 @@ build_stamp_fingerprint() {
     printf 'nvhpc_compute_capabilities=%s\n' "${NVHPC_COMPUTE_CAPABILITIES:-}"
     printf 'gpu_build_tag=%s\n' "${GPU_BUILD_TAG:-}"
     printf 'cmake_arg=%s\n' "${cmake_args[@]}"
-  } | hash_stdin
+    }
+  )"
+  hash_text "${payload}"
 }
 
 mechanism_stamp_fingerprint() {
-  {
-    printf 'build_fingerprint=%s\n' "$1"
+  local base_fingerprint="$1"
+  local payload
+  payload="$(
+    {
+    printf 'build_fingerprint=%s\n' "${base_fingerprint}"
     printf 'repo_root=%s\n' "${REPO_ROOT}"
     printf 'conda_prefix=%s\n' "${CONDA_PREFIX}"
     printf 'ompi_cc=%s\n' "${OMPI_CC}"
@@ -351,7 +375,9 @@ mechanism_stamp_fingerprint() {
       [[ -z "${mod_file}" ]] && continue
       printf 'mod=%s sha=%s\n' "${mod_file}" "$(file_sha256 "${mod_file}")"
     done < <(find "${REPO_ROOT}/prev_ob_models/Birgiolas2020/Mechanisms" -maxdepth 1 -name '*.mod' -type f | sort)
-  } | hash_stdin
+    }
+  )"
+  hash_text "${payload}"
 }
 
 stamp_matches() {
@@ -484,7 +510,7 @@ EOF
   fi
 
   NVHPC_COMPUTE_CAPABILITIES="${NVHPC_COMPUTE_CAPABILITIES:-${CUDA_ARCHITECTURES}}"
-  mapfile -t supported_arches < <("${NVHPC_CXX_COMPILER}" -help -gpu 2>&1 | grep -oE 'cc[0-9]{2}' | sed 's/^cc//' | sort -uV)
+  mapfile -t supported_arches < <(detect_supported_nvhpc_arches "${NVHPC_CXX_COMPILER}")
   if [[ "${#supported_arches[@]}" -gt 0 ]]; then
     if ! printf '%s\n' "${supported_arches[@]}" | grep -qx "${NVHPC_COMPUTE_CAPABILITIES}"; then
       fallback_arch="$(printf '%s\n' "${supported_arches[@]}" | awk -v detected="${NVHPC_COMPUTE_CAPABILITIES}" '$1 <= detected { best=$1 } END { if (best != "") print best }')"
