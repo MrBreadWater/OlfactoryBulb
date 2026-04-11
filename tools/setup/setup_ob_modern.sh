@@ -394,7 +394,30 @@ print(neuron.__version__, coreneuron)
 PY
 }
 
-eval "$(conda shell.bash hook)"
+activate_conda_env() {
+  local env_name="$1"
+  local hook_output=""
+
+  if command -v conda >/dev/null 2>&1; then
+    hook_output="$(conda shell.bash hook 2>/dev/null || true)"
+    if [[ -n "${hook_output}" ]]; then
+      eval "${hook_output}"
+      conda activate "${env_name}"
+      return 0
+    fi
+  fi
+
+  if command -v activate >/dev/null 2>&1; then
+    # Sol's mamba module documents `source activate <env>` as the supported
+    # activation path in non-interactive shells.
+    # shellcheck disable=SC1090
+    source activate "${env_name}"
+    return 0
+  fi
+
+  echo "Could not activate environment '${env_name}'." >&2
+  return 1
+}
 
 log_step "Preparing conda environment ${ENV_NAME}"
 if conda env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
@@ -403,7 +426,7 @@ else
   conda env create -n "${ENV_NAME}" -f "${REPO_ROOT}/environments/environment-modern.yml"
 fi
 
-conda activate "${ENV_NAME}"
+activate_conda_env "${ENV_NAME}"
 
 log_step "Installing required pip packages into ${ENV_NAME}"
 python -m pip install blenderneuron==2.0.4 lfpsimpy==0.1.1 natsort==8.4.0

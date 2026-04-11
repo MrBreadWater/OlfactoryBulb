@@ -14,11 +14,39 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/obgpu_sol_module_utils.sh"
 
-ensure_conda_cmd() {
+ensure_env_activation_cmd() {
   if command -v conda >/dev/null 2>&1; then
     return 0
   fi
-  echo "conda is not on PATH after loading modules. Adjust SOL_MAMBA_MODULE if needed." >&2
+  if command -v activate >/dev/null 2>&1; then
+    return 0
+  fi
+  echo "Neither conda nor activate is on PATH after loading modules. Adjust SOL_MAMBA_MODULE if needed." >&2
+  return 1
+}
+
+activate_env() {
+  local env_name="$1"
+  local hook_output=""
+
+  if command -v conda >/dev/null 2>&1; then
+    hook_output="$(conda shell.bash hook 2>/dev/null || true)"
+    if [[ -n "${hook_output}" ]]; then
+      eval "${hook_output}"
+      conda activate "${env_name}"
+      return 0
+    fi
+  fi
+
+  if command -v activate >/dev/null 2>&1; then
+    # Sol's mamba module explicitly documents `source activate <env>` as the
+    # supported activation path in non-interactive shells.
+    # shellcheck disable=SC1090
+    source activate "${env_name}"
+    return 0
+  fi
+
+  echo "Could not activate environment '${env_name}'." >&2
   return 1
 }
 
@@ -111,9 +139,8 @@ if ! obgpu_sol_maybe_load_module "${SOL_CUDA_MODULE}"; then
   return 1
 fi
 
-ensure_conda_cmd
-eval "$(conda shell.bash hook)"
-conda activate "${ENV_NAME}"
+ensure_env_activation_cmd
+activate_env "${ENV_NAME}"
 
 if [[ -n "${SLURM_JOB_ID:-}" ]] && [[ -z "${OB_MPIEXEC:-}" ]]; then
   if detected_mpi_exec="$(detect_srun_mpi_exec)"; then
