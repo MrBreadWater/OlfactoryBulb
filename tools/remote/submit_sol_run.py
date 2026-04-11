@@ -57,6 +57,7 @@ def write_batch_script(
     batch_path = result_dir / "slurm_job.sh"
     benchmark_shell = shell_join(benchmark_command)
     slurm_log_path = result_dir / "slurm-%j.out"
+    bootstrap_log_path = result_dir / "bootstrap.log"
     lines = [
         "#!/usr/bin/env bash",
         *slurm_directives(args, label),
@@ -64,6 +65,8 @@ def write_batch_script(
         "#SBATCH --error={}".format(slurm_log_path),
         "set -euo pipefail",
         "mkdir -p {}".format(shlex.quote(str(result_dir))),
+        "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
+        "{",
         "cd {}".format(shlex.quote(str(repo_root))),
         'if [[ "{}" == "1" ]]; then git fetch --tags --prune {}; fi'.format(
             "1" if git_fetch else "0",
@@ -80,6 +83,7 @@ def write_batch_script(
             shlex.quote(str(result_dir / "git_ref.txt")),
         ),
         "eval {}".format(shlex.quote(conda_activate_cmd)),
+        "} >> \"$bootstrap_log\" 2>&1",
         "printf '%s\\n' {} > {}".format(
             shlex.quote(benchmark_shell),
             shlex.quote(str(result_dir / "command.txt")),
