@@ -808,11 +808,19 @@ def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[st
             "Interactive SSH auth requires the optional 'pexpect' dependency in the notebook environment."
         )
 
-    interactive_command = list(start_command)
-    interactive_command = [
-        part for part in interactive_command
-        if part not in ("BatchMode=yes",)
-    ]
+    interactive_command: list[str] = []
+    index = 0
+    while index < len(start_command):
+        part = start_command[index]
+        if (
+            part == "-o"
+            and index + 1 < len(start_command)
+            and start_command[index + 1] == "BatchMode=yes"
+        ):
+            index += 2
+            continue
+        interactive_command.append(part)
+        index += 1
     control_path = _ssh_control_path(config)
     if control_path is None:
         raise RuntimeError("Interactive SSH auth requires ssh_multiplex=True")
