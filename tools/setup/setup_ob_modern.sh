@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+
+log_step() {
+  echo "[OBGPU setup] $*" >&2
+}
+
+trap 'status=$?; echo "[OBGPU setup] failed (exit ${status}) at line ${LINENO}: ${BASH_COMMAND}" >&2; exit ${status}' ERR
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_NAME="${ENV_NAME:-OBGPU}"
@@ -364,6 +370,7 @@ PY
 
 eval "$(conda shell.bash hook)"
 
+log_step "Preparing conda environment ${ENV_NAME}"
 if conda env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
   conda env update -n "${ENV_NAME}" -f "${REPO_ROOT}/environments/environment-modern.yml" --prune
 else
@@ -372,10 +379,13 @@ fi
 
 conda activate "${ENV_NAME}"
 
+log_step "Installing required pip packages into ${ENV_NAME}"
 python -m pip install blenderneuron==2.0.4 lfpsimpy==0.1.1 natsort==8.4.0
 
+log_step "Preparing pinned NEURON source tree at ${NRN_SRC_DIR}"
 prepare_nrn_source
 
+log_step "Auditing local NEURON patch stack coverage"
 python "${REPO_ROOT}/tools/setup/audit_nrn_patch_stack.py" \
   --source-tree "${NRN_SRC_DIR}" \
   --manifest "${PATCH_MANIFEST}"
@@ -389,6 +399,7 @@ export CPLUS_INCLUDE_PATH="${CONDA_PREFIX}/include${CPLUS_INCLUDE_PATH:+:${CPLUS
 gpu_cmake_args=()
 
 if [[ "${ENABLE_GPU}" == "1" ]]; then
+  log_step "Resolving GPU toolchain configuration"
   NVHPC_SDK_ROOT="${NVHPC_SDK_ROOT:-${HOME}/.local/nvidia/hpc_sdk}"
   NVHPC_VERSION="${NVHPC_VERSION:-}"
   NVHPC_ARCH_ROOT="${NVHPC_SDK_ROOT}/$(uname -s)_$(uname -m)"
@@ -537,8 +548,9 @@ NRN_BUILD_STAMP_PATH="${NRN_BUILD_DIR}/.obgpu_build_stamp"
 NRN_BUILD_FINGERPRINT="$(build_stamp_fingerprint)"
 
 if stamp_matches "${NRN_BUILD_STAMP_PATH}" "${NRN_BUILD_FINGERPRINT}" && neuron_install_ok; then
-  echo "Skipping NEURON/CoreNEURON build; matching successful stamp found at ${NRN_BUILD_STAMP_PATH}."
+  log_step "Skipping NEURON/CoreNEURON build; matching successful stamp found at ${NRN_BUILD_STAMP_PATH}"
 else
+  log_step "Configuring and building NEURON/CoreNEURON in ${NRN_BUILD_DIR}"
   cmake "${cmake_args[@]}"
   cmake --build "${NRN_BUILD_DIR}" --parallel 8
   cmake --install "${NRN_BUILD_DIR}"
@@ -547,6 +559,7 @@ else
   write_build_meta "${NRN_BUILD_META_PATH}"
 fi
 
+log_step "Resolving Python runtime paths for NMODL"
 mapfile -t python_runtime_paths < <(detect_python_runtime_paths)
 if [[ "${#python_runtime_paths[@]}" -ne 2 ]]; then
   echo "Could not determine Python runtime paths for ${CONDA_PREFIX}" >&2
@@ -612,6 +625,7 @@ export NMODLHOME="${CONDA_PREFIX}"
 export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
 
 (
+  log_step "Checking Birgiolas mechanism build stamp"
   MECH_BUILD_STAMP_PATH="${REPO_ROOT}/$(uname -m)/.obgpu_mechanisms_stamp"
   MECH_BUILD_FINGERPRINT="$(mechanism_stamp_fingerprint "${NRN_BUILD_FINGERPRINT}")"
 
@@ -623,8 +637,9 @@ export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
   fi
 
   if [[ "${mechanism_lib_present}" == "1" ]] && stamp_matches "${MECH_BUILD_STAMP_PATH}" "${MECH_BUILD_FINGERPRINT}"; then
-    echo "Skipping mechanism rebuild; matching successful stamp found at ${MECH_BUILD_STAMP_PATH}."
+    log_step "Skipping mechanism rebuild; matching successful stamp found at ${MECH_BUILD_STAMP_PATH}"
   else
+    log_step "Building Birgiolas mechanisms with nrnivmodl -coreneuron"
     cd "${REPO_ROOT}"
     OMPI_CC=gcc OMPI_CXX=g++ nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms
     mechanism_lib_path="$(find_current_arch_libnrnmech)"
@@ -633,6 +648,7 @@ export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
   fi
 
   if [[ "${ENABLE_GPU}" == "1" && -n "${mechanism_lib_path}" ]]; then
+    log_step "Repairing NVHPC libnrnmech dependencies for ${mechanism_lib_path}"
     "${REPO_ROOT}/tools/setup/fix_nvhpc_libnrnmech.sh" "${mechanism_lib_path}"
   fi
 )
@@ -641,4 +657,4 @@ if [[ "${ENABLE_GPU}" == "1" ]] && ! find_current_arch_libnrnmech >/dev/null 2>&
   echo "Warning: could not locate a generated libnrnmech.so to repair." >&2
 fi
 
-echo "OBGPU setup complete from ${UPSTREAM_REF}."
+log_step "OBGPU setup complete from ${UPSTREAM_REF}"
