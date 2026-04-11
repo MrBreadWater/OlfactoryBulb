@@ -36,6 +36,11 @@ That helper loads the expected modules and activates `OBGPU`. If your `salloc`
 session keeps the same shell, the loaded modules persist. If you start a fresh
 shell on the compute node, run the helper again there.
 
+Module selection is not hardcoded anymore:
+
+- if the needed modules are already loaded, the helper reuses them
+- otherwise it scans `module avail` and picks the best available `mamba`, `nvhpc`, and `cuda` entries
+
 If you want `conda activate OBGPU` itself to load the Sol modules, opt in with:
 
 ```bash

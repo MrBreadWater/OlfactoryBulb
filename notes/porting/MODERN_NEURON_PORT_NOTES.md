@@ -78,7 +78,8 @@ source tools/setup/activate_sol_obgpu.sh
 
 That helper:
 
-- loads the expected Sol modules (`mamba/latest`, `nvhpc/24.9`, `cuda/12.6.1`) unless already loaded
+- prefers already loaded Sol modules
+- otherwise auto-detects the best available `mamba`, `nvhpc`, and `cuda` modules from `module avail`
 - initializes conda in the current shell
 - activates `OBGPU`
 
@@ -95,6 +96,14 @@ conda activate OBGPU
 When enabled, the `OBGPU` activate hook will try to load the same Sol modules if
 they are not already present. This is intentionally opt-in so generic Linux
 hosts do not get surprise cluster-module behavior on activation.
+
+You can still override module selection explicitly with:
+
+```bash
+export SOL_MAMBA_MODULE=<module>
+export SOL_NVHPC_MODULE=<module>
+export SOL_CUDA_MODULE=<module>
+```
 
 ## Upgrade Policy
 
