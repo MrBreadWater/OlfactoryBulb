@@ -569,6 +569,63 @@ def _ssh_common_options(config: dict[str, Any]) -> list[str]:
     return options
 
 
+def _ssh_command_env() -> dict[str, str]:
+    """Return a stable environment for non-interactive SSH subprocesses."""
+    env = os.environ.copy()
+    # The notebook backend handles first-use auth through pexpect when needed.
+    # Do not fall back to GUI askpass helpers from plain subprocess calls.
+    env["SSH_ASKPASS_REQUIRE"] = "never"
+    return env
+
+
+def _reset_ssh_master(config: dict[str, Any]) -> None:
+    """Tear down and remove any cached SSH control socket for the remote host."""
+    control_path = _ssh_control_path(config)
+    if control_path is None:
+        return
+
+    host = _require_remote_host(config)
+    ssh_binary = str(config.get("ssh_binary", "ssh"))
+    user_options = [str(option) for option in config.get("ssh_options", [])]
+    exit_command = [
+        ssh_binary,
+        *user_options,
+        "-o",
+        f"ControlPath={control_path}",
+        "-O",
+        "exit",
+        host,
+    ]
+    subprocess.run(
+        exit_command,
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        env=_ssh_command_env(),
+    )
+    if control_path.exists():
+        try:
+            control_path.unlink()
+        except OSError:
+            pass
+
+
+def _ssh_failure_needs_reset(stderr: str) -> bool:
+    """Return True when SSH stderr indicates a stale or unusable control master."""
+    message = (stderr or "").lower()
+    return any(
+        token in message
+        for token in (
+            "master refused session request",
+            "control socket connect",
+            "permission denied",
+            "connection reset",
+            "broken pipe",
+        )
+    )
+
+
 def _ensure_ssh_master(config: dict[str, Any]) -> None:
     """Ensure a reusable SSH control master exists for the configured remote host."""
     control_path = _ssh_control_path(config)
@@ -596,15 +653,12 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_ssh_command_env(),
     )
     if checked.returncode == 0:
         return
 
-    if control_path.exists():
-        try:
-            control_path.unlink()
-        except OSError:
-            pass
+    _reset_ssh_master(config)
 
     start_command = [
         ssh_binary,
@@ -624,6 +678,7 @@ def _ensure_ssh_master(config: dict[str, Any]) -> None:
         capture_output=True,
         text=True,
         check=False,
+        env=_ssh_command_env(),
     )
     if completed.returncode == 0:
         return
@@ -718,13 +773,30 @@ def _run_ssh_shell(
 ) -> subprocess.CompletedProcess[str]:
     """Run one shell command on the remote Sol host over SSH."""
     command = _ssh_prefix(config) + ["bash", "-lc", remote_shell_command]
-    return subprocess.run(
+    completed = subprocess.run(
         command,
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=check,
+        env=_ssh_command_env(),
     )
+    if (
+        completed.returncode != 0
+        and bool(config.get("ssh_multiplex", True))
+        and _ssh_failure_needs_reset(completed.stderr or "")
+    ):
+        _reset_ssh_master(config)
+        _ensure_ssh_master(config)
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=check,
+            env=_ssh_command_env(),
+        )
+    return completed
 
 
 def _sync_remote_result_dir(
@@ -748,13 +820,30 @@ def _sync_remote_result_dir(
             str(local_result_dir) + "/",
         ]
     )
-    return subprocess.run(
+    completed = subprocess.run(
         command,
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
+        env=_ssh_command_env(),
     )
+    if (
+        completed.returncode != 0
+        and bool(config.get("ssh_multiplex", True))
+        and _ssh_failure_needs_reset(completed.stderr or "")
+    ):
+        _reset_ssh_master(config)
+        _ensure_ssh_master(config)
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_ssh_command_env(),
+        )
+    return completed
 
 
 def _build_remote_submit_command(
