@@ -116,6 +116,7 @@ CONTROL_HELP = {
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
+    "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
     "slurm_partition": "Optional Slurm partition for remote submission. Use 'arm' on Sol for Grace Hopper.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
@@ -403,6 +404,7 @@ def build_sol_remote_config(
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
         "remote_live_logs": bool(remote_live_logs),
+        "remote_sync_compress": True,
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
         "remote_git_ref": remote_git_ref,
@@ -1395,6 +1397,108 @@ def _run_ssh_shell(
     return completed
 
 
+def _build_remote_archive_command(remote_result_dir: PurePosixPath) -> str:
+    """Build one remote shell command that packs the result dir into a compressed tar archive."""
+    archive_dir = PurePosixPath(remote_result_dir.parent) / ".obgpu-transfer"
+    archive_base = archive_dir / remote_result_dir.name
+    return (
+        "set -euo pipefail && "
+        f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
+        f"archive_dir={shlex.quote(archive_dir.as_posix())} && "
+        f"archive_base={shlex.quote(archive_base.as_posix())} && "
+        "mkdir -p \"$archive_dir\" && "
+        "rm -f \"${archive_base}.tar.zst\" \"${archive_base}.tar.gz\" \"${archive_base}.tar.xz\" && "
+        "raw_bytes=$(du -sb \"$result_dir\" 2>/dev/null | awk '{print $1}') && "
+        "if command -v zstd >/dev/null 2>&1; then "
+        "  archive_path=\"${archive_base}.tar.zst\"; "
+        "  compressor=zstd; "
+        "  tar -C \"$result_dir\" -cf - . | zstd -T0 -15 -q -o \"$archive_path\"; "
+        "elif command -v pigz >/dev/null 2>&1; then "
+        "  archive_path=\"${archive_base}.tar.gz\"; "
+        "  compressor=pigz; "
+        "  tar -C \"$result_dir\" -cf - . | pigz -6 > \"$archive_path\"; "
+        "elif command -v gzip >/dev/null 2>&1; then "
+        "  archive_path=\"${archive_base}.tar.gz\"; "
+        "  compressor=gzip; "
+        "  tar -C \"$result_dir\" -cf - . | gzip -6 > \"$archive_path\"; "
+        "elif command -v xz >/dev/null 2>&1; then "
+        "  archive_path=\"${archive_base}.tar.xz\"; "
+        "  compressor=xz; "
+        "  tar -C \"$result_dir\" -cf - . | xz -6 -T0 > \"$archive_path\"; "
+        "else "
+        "  printf '%s\\n' 'No supported compressor found on remote host' >&2; "
+        "  exit 1; "
+        "fi && "
+        "archive_bytes=$(wc -c < \"$archive_path\") && "
+        "printf '%s\\n%s\\n%s\\n%s\\n' \"$archive_path\" \"$compressor\" \"${raw_bytes:-0}\" \"$archive_bytes\""
+    )
+
+
+def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
+    """Best-effort remote file removal used for temporary sync archives."""
+    remote_shell = "rm -f {}".format(shlex.quote(remote_path))
+    if _remote_transport(config) == "paramiko":
+        try:
+            _run_paramiko_shell(config, remote_shell)
+        except Exception:
+            pass
+        return
+    try:
+        _run_ssh_shell(config, remote_shell)
+    except Exception:
+        pass
+
+
+def _extract_local_archive(local_archive_path: Path, local_result_dir: Path) -> subprocess.CompletedProcess[str]:
+    """Extract one downloaded result archive into the local result directory."""
+    local_result_dir.mkdir(parents=True, exist_ok=True)
+    suffixes = local_archive_path.suffixes
+    if suffixes[-2:] == [".tar", ".gz"] or suffixes[-2:] == [".tar", ".xz"]:
+        import tarfile
+
+        mode = "r:gz" if suffixes[-1] == ".gz" else "r:xz"
+        try:
+            with tarfile.open(local_archive_path, mode) as handle:
+                handle.extractall(local_result_dir)
+        except Exception as exc:
+            return subprocess.CompletedProcess(
+                args=["tarfile", str(local_archive_path), str(local_result_dir)],
+                returncode=1,
+                stdout="",
+                stderr=str(exc),
+            )
+        return subprocess.CompletedProcess(
+            args=["tarfile", str(local_archive_path), str(local_result_dir)],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    if suffixes[-2:] == [".tar", ".zst"]:
+        completed = subprocess.run(
+            [
+                "tar",
+                "--use-compress-program=zstd -d -q",
+                "-xf",
+                str(local_archive_path),
+                "-C",
+                str(local_result_dir),
+            ],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return completed
+
+    return subprocess.CompletedProcess(
+        args=["extract", str(local_archive_path), str(local_result_dir)],
+        returncode=1,
+        stdout="",
+        stderr=f"Unsupported archive format for {local_archive_path.name}",
+    )
+
+
 def _sync_remote_result_dir(
     config: dict[str, Any],
     *,
@@ -1408,7 +1512,62 @@ def _sync_remote_result_dir(
         for attempt in range(2):
             try:
                 connection = _connect_paramiko(config)
-                _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
+                if bool(config.get("remote_sync_compress", True)):
+                    _progress_write("[OBGPU load] Packing remote result directory for transfer...")
+                    archive_completed = _run_paramiko_shell(
+                        config,
+                        _build_remote_archive_command(remote_result_dir),
+                    )
+                    if archive_completed.returncode != 0:
+                        return subprocess.CompletedProcess(
+                            args=["paramiko-pack", remote_result_dir.as_posix(), str(local_result_dir)],
+                            returncode=1,
+                            stdout=archive_completed.stdout or "",
+                            stderr=archive_completed.stderr or "",
+                        )
+                    archive_lines = [line.strip() for line in (archive_completed.stdout or "").splitlines() if line.strip()]
+                    if len(archive_lines) < 4:
+                        return subprocess.CompletedProcess(
+                            args=["paramiko-pack", remote_result_dir.as_posix(), str(local_result_dir)],
+                            returncode=1,
+                            stdout=archive_completed.stdout or "",
+                            stderr="Remote archive command did not return the expected metadata",
+                        )
+                    remote_archive_path, compressor, raw_bytes_text, archive_bytes_text = archive_lines[:4]
+                    raw_bytes = int(raw_bytes_text or "0")
+                    archive_bytes = int(archive_bytes_text or "0")
+                    ratio = (archive_bytes / raw_bytes) if raw_bytes > 0 else 0.0
+                    _progress_write(
+                        f"[OBGPU load] Remote archive ready via {compressor}: "
+                        f"{_format_bytes(raw_bytes)} -> {_format_bytes(archive_bytes)} ({ratio:.1%})"
+                    )
+                    local_archive_path = local_result_dir.parent / Path(remote_archive_path).name
+                    progress = _ProgressBar(
+                        total=archive_bytes,
+                        desc="[OBGPU load] Download compressed result",
+                        unit="B",
+                        unit_scale=True,
+                    )
+
+                    def archive_callback(current_bytes: int, _total_bytes: int) -> None:
+                        progress.update_to(current_bytes)
+
+                    connection["sftp"].get(remote_archive_path, str(local_archive_path), callback=archive_callback)
+                    progress.update_to(archive_bytes)
+                    progress.close()
+                    _progress_write(
+                        f"[OBGPU load] Extracting {local_archive_path.name} into {local_result_dir.name}..."
+                    )
+                    extract_completed = _extract_local_archive(local_archive_path, local_result_dir)
+                    try:
+                        local_archive_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+                    _remove_remote_file(config, remote_archive_path)
+                    if extract_completed.returncode != 0:
+                        return extract_completed
+                else:
+                    _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
             except Exception as exc:
                 last_exc = exc
                 _drop_paramiko_connection(config)
