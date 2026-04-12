@@ -718,8 +718,8 @@ if stamp_matches "${NRN_BUILD_STAMP_PATH}" "${NRN_BUILD_FINGERPRINT}" && neuron_
 else
   log_step "Configuring and building NEURON/CoreNEURON in ${NRN_BUILD_DIR}"
   cmake "${cmake_args[@]}"
-  env LD_LIBRARY_PATH="${build_ld_library_path}" cmake --build "${NRN_BUILD_DIR}" --parallel "${OBGPU_BUILD_JOBS}"
-  env LD_LIBRARY_PATH="${build_ld_library_path}" cmake --install "${NRN_BUILD_DIR}"
+  env LD_LIBRARY_PATH="${build_ld_library_path}" \
+    cmake --build "${NRN_BUILD_DIR}" --target install --parallel "${OBGPU_BUILD_JOBS}"
   mkdir -p "${NRN_BUILD_DIR}"
   printf '%s\n' "${NRN_BUILD_FINGERPRINT}" > "${NRN_BUILD_STAMP_PATH}"
   write_build_meta "${NRN_BUILD_META_PATH}"
