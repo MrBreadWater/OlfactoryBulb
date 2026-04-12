@@ -14,6 +14,12 @@ PATCH_MANIFEST="${NRN_PATCH_MANIFEST:-${REPO_ROOT}/third_party_patches/nrn/manif
 PATCH_DIR="$(cd "$(dirname "${PATCH_MANIFEST}")" && pwd)"
 NRN_SRC_DIR="${NRN_SRC_DIR:-${REPO_ROOT}/external/nrn-9.0.1}"
 NRN_BUILD_DIR="${NRN_BUILD_DIR:-}"
+BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-$(command -v python3 || command -v python || true)}"
+
+if [[ -z "${BOOTSTRAP_PYTHON}" ]]; then
+  echo "setup_ob_modern.sh requires python3 or python on PATH before the conda env exists." >&2
+  exit 1
+fi
 
 if [[ ! -f "${PATCH_MANIFEST}" ]]; then
   echo "Patch manifest not found: ${PATCH_MANIFEST}" >&2
@@ -21,7 +27,7 @@ if [[ ! -f "${PATCH_MANIFEST}" ]]; then
 fi
 
 mapfile -t manifest_lines < <(
-  python - "${PATCH_MANIFEST}" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "${PATCH_MANIFEST}" <<'PY'
 import json
 import sys
 
@@ -81,7 +87,7 @@ prepare_nrn_source() {
 }
 
 find_latest_libnrnmech() {
-  python - "${REPO_ROOT}" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "${REPO_ROOT}" <<'PY'
 from pathlib import Path
 import sys
 
@@ -99,7 +105,7 @@ PY
 }
 
 find_current_arch_libnrnmech() {
-  python - "${REPO_ROOT}" "$(uname -m)" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "${REPO_ROOT}" "$(uname -m)" <<'PY'
 from pathlib import Path
 import sys
 
@@ -134,7 +140,7 @@ PY
 }
 
 detect_python_runtime_paths() {
-  python - <<'PY'
+  "${BOOTSTRAP_PYTHON}" - <<'PY'
 import sys
 import sysconfig
 from pathlib import Path
@@ -182,7 +188,7 @@ PY
 }
 
 file_sha256() {
-  python - "$1" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "$1" <<'PY'
 from pathlib import Path
 import hashlib
 import sys
@@ -195,7 +201,7 @@ PY
 }
 
 hash_stdin() {
-  python - <<'PY'
+  "${BOOTSTRAP_PYTHON}" - <<'PY'
 import hashlib
 import sys
 
@@ -204,7 +210,7 @@ PY
 }
 
 hash_text() {
-  python - "$1" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "$1" <<'PY'
 import hashlib
 import sys
 
@@ -213,7 +219,7 @@ PY
 }
 
 detect_cuda_architectures() {
-  python - "${NVHPC_CUDA_HOME:-}" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "${NVHPC_CUDA_HOME:-}" <<'PY'
 import ctypes
 import ctypes.util
 from pathlib import Path
@@ -408,7 +414,7 @@ activate_conda_env() {
   fi
 
   conda_bin="$(command -v conda)"
-  conda_real="$(python - <<'PY' "${conda_bin}" 2>/dev/null || true
+  conda_real="$("${BOOTSTRAP_PYTHON}" - <<'PY' "${conda_bin}" 2>/dev/null || true
 import os
 import sys
 print(os.path.realpath(sys.argv[1]))
