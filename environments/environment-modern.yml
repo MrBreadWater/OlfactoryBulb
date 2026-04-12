@@ -21,6 +21,7 @@ dependencies:
   - requests
   - pexpect
   - paramiko
+  - tqdm
   - validators
   - gitpython
   - networkx

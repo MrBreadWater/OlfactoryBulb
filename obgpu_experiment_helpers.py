@@ -46,6 +46,10 @@ try:
     import paramiko
 except ImportError:  # pragma: no cover - optional runtime dependency
     paramiko = None
+try:
+    from tqdm.auto import tqdm
+except ImportError:  # pragma: no cover - optional runtime dependency
+    tqdm = None
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -148,6 +152,83 @@ class RunRecord:
     command: list[str]
     stdout: str
     stderr: str
+
+
+def _format_bytes(num_bytes: int | float) -> str:
+    """Return a compact human-readable byte count."""
+    value = float(num_bytes)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if abs(value) < 1024.0 or unit == "TiB":
+            if unit == "B":
+                return f"{int(value)} {unit}"
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{value:.1f} PiB"
+
+
+def _render_progress_bar(current: int | float, total: int | float, width: int = 24) -> str:
+    """Render a compact ASCII progress bar."""
+    if total <= 0:
+        return "[" + ("?" * width) + "]"
+    progress = max(0.0, min(float(current) / float(total), 1.0))
+    filled = int(round(progress * width))
+    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+
+
+def _progress_write(message: str) -> None:
+    """Write one progress message without corrupting active tqdm bars."""
+    if tqdm is not None:
+        tqdm.write(message)
+    else:
+        print(message, flush=True)
+
+
+class _ProgressBar:
+    """Small wrapper around tqdm with a plain-print fallback."""
+
+    def __init__(self, *, total: int, desc: str, unit: str = "B", unit_scale: bool = False):
+        self.total = int(total)
+        self.current = 0
+        self.desc = desc
+        self.unit = unit
+        self.unit_scale = unit_scale
+        self._last_step = -1
+        self._bar = None
+        if tqdm is not None:
+            self._bar = tqdm(
+                total=max(self.total, 0),
+                desc=desc,
+                unit=unit,
+                unit_scale=unit_scale,
+                leave=False,
+                dynamic_ncols=True,
+            )
+
+    def update_to(self, current: int) -> None:
+        current = max(0, int(current))
+        if self._bar is not None:
+            delta = current - self.current
+            if delta > 0:
+                self._bar.update(delta)
+            self.current = current
+            return
+
+        self.current = current
+        if self.total <= 0:
+            return
+        progress_step = int((self.current * 100.0) / self.total) // 5
+        if progress_step == self._last_step and self.current < self.total:
+            return
+        self._last_step = progress_step
+        print(
+            f"{self.desc} {_render_progress_bar(self.current, self.total)} "
+            f"{_format_bytes(self.current)} / {_format_bytes(self.total)}",
+            flush=True,
+        )
+
+    def close(self) -> None:
+        if self._bar is not None:
+            self._bar.close()
 
 
 _LIVE_INSPECTION_MODEL = None
@@ -322,6 +403,7 @@ def build_sol_remote_config(
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
         "remote_live_logs": bool(remote_live_logs),
+        "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
         "remote_git_ref": remote_git_ref,
         "remote_git_fetch": bool(remote_git_fetch),
@@ -868,15 +950,52 @@ def _run_paramiko_shell(
 
 
 def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:
-    """Recursively copy one remote directory tree through SFTP."""
-    local_dir.mkdir(parents=True, exist_ok=True)
-    for entry in sftp.listdir_attr(remote_dir):
-        remote_path = f"{remote_dir.rstrip('/')}/{entry.filename}"
-        local_path = local_dir / entry.filename
-        if stat.S_ISDIR(entry.st_mode):
-            _sftp_copy_tree(sftp, remote_path, local_path)
-            continue
-        sftp.get(remote_path, str(local_path))
+    """Recursively copy one remote directory tree through SFTP with progress output."""
+
+    def collect_files(current_remote_dir: str, current_local_dir: Path) -> list[tuple[str, Path, int]]:
+        current_local_dir.mkdir(parents=True, exist_ok=True)
+        files: list[tuple[str, Path, int]] = []
+        for entry in sftp.listdir_attr(current_remote_dir):
+            remote_path = f"{current_remote_dir.rstrip('/')}/{entry.filename}"
+            local_path = current_local_dir / entry.filename
+            if stat.S_ISDIR(entry.st_mode):
+                files.extend(collect_files(remote_path, local_path))
+                continue
+            files.append((remote_path, local_path, int(getattr(entry, "st_size", 0))))
+        return files
+
+    transfer_plan = collect_files(remote_dir, local_dir)
+    total_files = len(transfer_plan)
+    total_bytes = sum(size for _remote_path, _local_path, size in transfer_plan)
+    transferred_bytes = 0
+    progress = _ProgressBar(total=total_bytes, desc="[OBGPU load] Sync from Sol", unit="B", unit_scale=True)
+
+    if total_files:
+        _progress_write(
+            f"[OBGPU load] Syncing {total_files} files from Sol ({_format_bytes(total_bytes)})...",
+        )
+
+    for index, (remote_path, local_path, file_size) in enumerate(transfer_plan, start=1):
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        _progress_write(
+            f"[OBGPU load] Syncing {index}/{total_files}: {local_path.name} ({_format_bytes(file_size)})",
+        )
+        base_bytes = transferred_bytes
+
+        def callback(current_file_bytes: int, _current_file_total: int) -> None:
+            overall_bytes = base_bytes + current_file_bytes
+            progress.update_to(overall_bytes)
+
+        sftp.get(remote_path, str(local_path), callback=callback)
+        transferred_bytes += file_size
+        progress.update_to(transferred_bytes)
+
+    if total_files:
+        _progress_write(
+            f"[OBGPU load] Sync complete {_render_progress_bar(total_bytes, total_bytes)} "
+            f"{_format_bytes(total_bytes)} / {_format_bytes(total_bytes)}",
+        )
+    progress.close()
 
 
 def _ssh_common_options(config: dict[str, Any]) -> list[str]:
@@ -1960,6 +2079,7 @@ def _run_remote_simulation(
             f"Result dir: {local_result_dir}\n"
             f"rsync stderr:\n{sync_completed.stderr}"
         )
+    print(f"[OBGPU load] Remote sync finished: {local_result_dir}", flush=True)
 
     stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
     stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
@@ -2402,23 +2522,50 @@ def load_result(run_or_dir: RunRecord | str | Path) -> dict[str, Any]:
         "lfp": np.array([]),
     }
 
+    load_plan: list[tuple[str, Path]] = []
     input_path = result_dir / "input_times.pkl"
     if input_path.exists():
-        result["input_times"] = load_pickle(input_path)
-
+        load_plan.append(("input_times", input_path))
     soma_path = result_dir / "soma_vs.pkl"
     if soma_path.exists():
-        result["soma_vs"] = load_pickle(soma_path)
-
+        load_plan.append(("soma_vs", soma_path))
     gc_output_path = result_dir / "gc_output_events.pkl"
     if gc_output_path.exists():
-        result["gc_output_events"] = load_pickle(gc_output_path)
-
+        load_plan.append(("gc_output_events", gc_output_path))
     lfp_path = result_dir / "lfp.pkl"
     if lfp_path.exists():
-        lfp_t, lfp = load_pickle(lfp_path)
-        result["lfp_t"] = np.asarray(lfp_t, dtype=float)
-        result["lfp"] = np.asarray(lfp, dtype=float)
+        load_plan.append(("lfp", lfp_path))
+
+    total_bytes = sum(path.stat().st_size for _key, path in load_plan)
+    loaded_bytes = 0
+    progress = _ProgressBar(total=total_bytes, desc="[OBGPU load] Load result files", unit="B", unit_scale=True)
+    if load_plan:
+        _progress_write(
+            f"[OBGPU load] Loading {len(load_plan)} local result files ({_format_bytes(total_bytes)})...",
+        )
+
+    for index, (key, path) in enumerate(load_plan, start=1):
+        file_size = path.stat().st_size
+        _progress_write(
+            f"[OBGPU load] Loading {index}/{len(load_plan)}: {path.name} ({_format_bytes(file_size)})",
+        )
+        started = time.perf_counter()
+        loaded = load_pickle(path)
+        elapsed_s = time.perf_counter() - started
+        if key == "lfp":
+            lfp_t, lfp = loaded
+            result["lfp_t"] = np.asarray(lfp_t, dtype=float)
+            result["lfp"] = np.asarray(lfp, dtype=float)
+        else:
+            result[key] = loaded
+        loaded_bytes += file_size
+        progress.update_to(loaded_bytes)
+        _progress_write(
+            f"[OBGPU load] {_render_progress_bar(loaded_bytes, total_bytes)} "
+            f"{_format_bytes(loaded_bytes)} / {_format_bytes(total_bytes)} "
+            f"(loaded {path.name} in {elapsed_s:.1f}s)",
+        )
+    progress.close()
 
     return result
 
@@ -2441,8 +2588,12 @@ def load_run_pair(
 
 def run_and_load(config: dict[str, Any] | None = None) -> tuple[RunRecord, dict[str, Any]]:
     """Run a simulation and immediately load its outputs from disk."""
+    print("[OBGPU load] Starting simulation run...", flush=True)
     run = run_simulation(config)
-    return run, load_result(run)
+    print(f"[OBGPU load] Simulation complete. Loading results from {run.result_dir}...", flush=True)
+    result = load_result(run)
+    print("[OBGPU load] Result load complete.", flush=True)
+    return run, result
 
 
 def normalize_cell_name(name: Any) -> str:

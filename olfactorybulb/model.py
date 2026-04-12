@@ -203,6 +203,8 @@ class OlfactoryBulb:
         self._native_lfp_cell_gids = {}
         self._native_lfp_gid_source = {}
         self._native_lfp_mappings_registered = False
+        self._status_is_tty = sys.stdout.isatty()
+        self._last_status_percent = None
 
         # Just use the BlenderNEURON package functions (e.g. no server/client)
         self.bn_server = OBNeuronNode(server_end='Package')
@@ -732,22 +734,44 @@ class OlfactoryBulb:
 
         # Clear status updater line
         if self.mpirank == 0:
-            print('')
+            if self._status_is_tty:
+                print('')
 
     def print_status(self):
         """
-        Prints the current simulation time on the same line (no new line)
+        Prints simulation progress as a compact progress bar.
         """
 
-        sys.stdout.write("\rTime: %s ms" % self.h.t)
+        current_ms = float(self.h.t)
+        total_ms = float(getattr(self.params, "tstop", getattr(self.h, "tstop", 0.0)))
+        if total_ms > 0:
+            progress = max(0.0, min(current_ms / total_ms, 1.0))
+            percent = int(progress * 100.0)
+            filled = int(progress * 24)
+            bar = "#" * filled + "-" * (24 - filled)
+            line = "Sim [%s] %3d%% (%.1f / %.1f ms)" % (bar, percent, current_ms, total_ms)
+        else:
+            percent = None
+            line = "Time: %.1f ms" % current_ms
+
+        if self._status_is_tty:
+            sys.stdout.write("\r" + line)
+            sys.stdout.flush()
+            return
+
+        if percent is not None and percent == self._last_status_percent:
+            return
+
+        print(line)
         sys.stdout.flush()
+        self._last_status_percent = percent
 
     def setup_status_reporter(self):
         """
         Sets up the NEURON simulation to report the simulation time
         """
 
-        if self.mpirank == 0 and getattr(self.params, "enable_status_report", True) and sys.stdout.isatty():
+        if self.mpirank == 0 and getattr(self.params, "enable_status_report", True):
             h = self.h
 
             collector_stim = h.NetStim(0.5)

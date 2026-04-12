@@ -39,6 +39,7 @@ THIRD_PARTY_IMPORTS = [
     "requests",
     "pexpect",
     "paramiko",
+    "tqdm",
     "validators",
     "git",
     "networkx",
