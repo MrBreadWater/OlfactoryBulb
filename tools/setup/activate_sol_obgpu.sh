@@ -15,57 +15,79 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/obgpu_sol_module_utils.sh"
 
 ensure_env_activation_cmd() {
-  if command -v conda >/dev/null 2>&1; then
+  if find_env_prefix "${ENV_NAME}" >/dev/null 2>&1; then
     return 0
   fi
-  echo "conda is not on PATH after loading modules. Adjust SOL_MAMBA_MODULE if needed." >&2
+  echo "Could not locate the conda environment prefix for '${ENV_NAME}'." >&2
+  return 1
+}
+
+find_env_prefix() {
+  local env_name="$1"
+  local candidate=""
+
+  for candidate in \
+    "${OBGPU_ENV_PREFIX:-}" \
+    "${HOME}/.conda/envs/${env_name}" \
+    "/home/${USER}/.conda/envs/${env_name}"; do
+    [[ -z "${candidate}" ]] && continue
+    if [[ -x "${candidate}/bin/python" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  fi
+
+  if command -v conda >/dev/null 2>&1; then
+    candidate="$(
+      conda env list 2>/dev/null | awk -v env_name="${env_name}" '
+        $1 == env_name { print $NF; exit }
+      '
+    )"
+    if [[ -n "${candidate}" && -x "${candidate}/bin/python" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  fi
+
   return 1
 }
 
 activate_env() {
   local env_name="$1"
-  local hook_output=""
-  local conda_bin=""
-  local conda_real=""
-  local conda_base=""
-  local conda_sh=""
+  local env_prefix=""
+  local hook_dir=""
+  local hook_script=""
 
-  if ! command -v conda >/dev/null 2>&1; then
-    echo "Could not activate environment '${env_name}': conda is not available." >&2
+  env_prefix="$(find_env_prefix "${env_name}")" || {
+    echo "Could not activate environment '${env_name}': prefix not found." >&2
     return 1
+  }
+
+  if [[ "${CONDA_PREFIX:-}" != "${env_prefix}" ]]; then
+    export CONDA_PREFIX="${env_prefix}"
+    export CONDA_DEFAULT_ENV="${env_name}"
+    case ":${PATH}:" in
+      *":${env_prefix}/bin:"*) ;;
+      *) export PATH="${env_prefix}/bin:${PATH}" ;;
+    esac
   fi
 
-  conda_bin="$(command -v conda)"
-  conda_real="$(python - <<'PY' "${conda_bin}" 2>/dev/null || true
-import os
-import sys
-print(os.path.realpath(sys.argv[1]))
-PY
-)"
-
-  for conda_base in \
-    "$(cd "$(dirname "${conda_bin}")/.." 2>/dev/null && pwd || true)" \
-    "$(cd "$(dirname "${conda_real}")/.." 2>/dev/null && pwd || true)" \
-    "$(conda info --base 2>/dev/null || true)"; do
-    [[ -z "${conda_base}" ]] && continue
-    conda_sh="${conda_base}/etc/profile.d/conda.sh"
-    if [[ -f "${conda_sh}" ]]; then
-      # shellcheck disable=SC1090
-      source "${conda_sh}"
-      conda activate "${env_name}"
-      return 0
-    fi
-  done
-
-  hook_output="$(conda shell.bash hook 2>/dev/null || true)"
-  if [[ -n "${hook_output}" ]] && grep -q '__conda_' <<<"${hook_output}"; then
-    eval "${hook_output}"
-    conda activate "${env_name}"
+  if [[ "${_OBGPU_SOL_ACTIVE_PREFIX:-}" == "${env_prefix}" ]]; then
     return 0
   fi
 
-  echo "Could not activate environment '${env_name}'." >&2
-  return 1
+  hook_dir="${env_prefix}/etc/conda/activate.d"
+  if [[ -d "${hook_dir}" ]]; then
+    shopt -s nullglob
+    for hook_script in "${hook_dir}"/*.sh; do
+      # shellcheck disable=SC1090
+      source "${hook_script}"
+    done
+    shopt -u nullglob
+  fi
+
+  export _OBGPU_SOL_ACTIVE_PREFIX="${env_prefix}"
+  return 0
 }
 
 detect_srun_mpi_exec() {
@@ -122,7 +144,7 @@ for explicit_module in "${SOL_MAMBA_MODULE:-}" "${SOL_NVHPC_MODULE:-}" "${SOL_CU
     break
   fi
 done
-for required_tool in conda nvc nvcc; do
+for required_tool in nvc nvcc; do
   if ! command -v "${required_tool}" >/dev/null 2>&1; then
     need_module_cmd=1
     break
@@ -140,7 +162,7 @@ if [[ "${SOL_MODULE_PURGE}" == "1" ]]; then
   module purge
 fi
 
-SOL_MAMBA_MODULE="$(resolve_module_if_needed mamba "${SOL_MAMBA_MODULE:-}" conda)"
+SOL_MAMBA_MODULE="${SOL_MAMBA_MODULE:-}"
 SOL_NVHPC_MODULE="$(resolve_module_if_needed nvhpc "${SOL_NVHPC_MODULE:-}" nvc)"
 SOL_CUDA_MODULE="$(resolve_module_if_needed cuda "${SOL_CUDA_MODULE:-}" nvcc)"
 
