@@ -35,7 +35,7 @@ find_env_prefix() {
       printf '%s\n' "${candidate}"
       return 0
     fi
-  fi
+  done
 
   if command -v conda >/dev/null 2>&1; then
     candidate="$(
