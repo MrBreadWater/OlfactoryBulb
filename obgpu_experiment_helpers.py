@@ -114,6 +114,9 @@ CONTROL_HELP = {
     "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
     "slurm_allocation_job_id": "Optional existing Slurm allocation/job id to reuse for notebook runs instead of submitting a fresh sbatch job.",
+    "slurm_reuse_allocation": "When True, cache one reusable Slurm allocation in the notebook runtime and launch runs as srun steps inside it.",
+    "slurm_allocation_time": "Optional walltime for the cached reusable allocation. Defaults to slurm_time when unset.",
+    "slurm_allocation_name": "Optional job-name prefix for cached reusable allocations. Defaults to 'obgpu_notebook_alloc'.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
@@ -236,13 +239,14 @@ class _ProgressBar:
 _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
 if not hasattr(builtins, "_OBGPU_NOTEBOOK_RUNTIME"):
-    builtins._OBGPU_NOTEBOOK_RUNTIME = {
-        "ssh_masters": {},
-        "paramiko_connections": {},
-    }
+    builtins._OBGPU_NOTEBOOK_RUNTIME = {}
 _NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
+_NOTEBOOK_RUNTIME.setdefault("ssh_masters", {})
+_NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
+_NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
 _LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
+_LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
 
 
 def default_local_mpi_exec() -> str:
@@ -336,6 +340,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_git_fetch": False,
         "remote_git_remote": "origin",
         "slurm_allocation_job_id": None,
+        "slurm_reuse_allocation": False,
+        "slurm_allocation_time": None,
+        "slurm_allocation_name": None,
         "remote_poll_interval_s": 10.0,
         "remote_live_status": True,
         "remote_live_logs": True,
@@ -384,6 +391,9 @@ def build_slurm_remote_config(
     remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
     slurm_allocation_job_id: str | None = None,
+    slurm_reuse_allocation: bool = False,
+    slurm_allocation_time: str | None = None,
+    slurm_allocation_name: str | None = None,
     ssh_options: list[str] | None = None,
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
@@ -410,6 +420,9 @@ def build_slurm_remote_config(
         "remote_git_fetch": bool(remote_git_fetch),
         "remote_git_remote": str(remote_git_remote),
         "slurm_allocation_job_id": None if slurm_allocation_job_id in (None, "") else str(slurm_allocation_job_id),
+        "slurm_reuse_allocation": bool(slurm_reuse_allocation),
+        "slurm_allocation_time": None if slurm_allocation_time in (None, "") else str(slurm_allocation_time),
+        "slurm_allocation_name": None if slurm_allocation_name in (None, "") else str(slurm_allocation_name),
         "slurm_partition": None if slurm_partition in (None, "") else str(slurm_partition),
         "slurm_account": slurm_account,
         "slurm_time": str(slurm_time),
@@ -445,6 +458,9 @@ def build_sol_remote_config(
     remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
     slurm_allocation_job_id: str | None = None,
+    slurm_reuse_allocation: bool = False,
+    slurm_allocation_time: str | None = None,
+    slurm_allocation_name: str | None = None,
     ssh_options: list[str] | None = None,
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
@@ -469,6 +485,9 @@ def build_sol_remote_config(
         remote_git_fetch=remote_git_fetch,
         remote_git_remote=remote_git_remote,
         slurm_allocation_job_id=slurm_allocation_job_id,
+        slurm_reuse_allocation=slurm_reuse_allocation,
+        slurm_allocation_time=slurm_allocation_time,
+        slurm_allocation_name=slurm_allocation_name,
         ssh_options=ssh_options,
         rsync_options=rsync_options,
         slurm_extra_args=slurm_extra_args,
@@ -679,6 +698,21 @@ def _remote_results_root(config: dict[str, Any]) -> PurePosixPath:
     return _remote_repo_root(config) / "results" / "notebook_runs"
 
 
+_REMOTE_SLURM_TERMINAL_OK = {"COMPLETED"}
+_REMOTE_SLURM_TERMINAL_FAIL = {
+    "BOOT_FAIL",
+    "CANCELLED",
+    "COMPLETED_WITH_ERRORS",
+    "DEADLINE",
+    "FAILED",
+    "NODE_FAIL",
+    "OUT_OF_MEMORY",
+    "PREEMPTED",
+    "REVOKED",
+    "TIMEOUT",
+}
+
+
 def _resolve_local_git_head() -> str | None:
     """Return the current local git HEAD commit or ``None`` when unavailable."""
     completed = subprocess.run(
@@ -840,6 +874,34 @@ def _paramiko_connection_key(config: dict[str, Any]) -> str:
     """Build the cache key for one persistent Paramiko connection."""
     hostname, port, username = _remote_endpoint(config)
     return f"{username}@{hostname}:{port}"
+
+
+def _normalize_slurm_state(raw_state: str) -> str:
+    """Normalize Slurm state tokens by removing suffixes such as '+'."""
+    return raw_state.split()[0].split("+", 1)[0].strip().upper()
+
+
+def _slurm_allocation_signature(config: dict[str, Any]) -> dict[str, Any]:
+    """Return the cache signature for one reusable remote Slurm allocation."""
+    hostname, port, username = _remote_endpoint(config)
+    return {
+        "remote_host": f"{username}@{hostname}:{port}",
+        "remote_results_root": _remote_results_root(config).as_posix(),
+        "partition": None if config.get("slurm_partition") in (None, "") else str(config.get("slurm_partition")),
+        "account": None if config.get("slurm_account") in (None, "") else str(config.get("slurm_account")),
+        "time": str(config.get("slurm_allocation_time") or config.get("slurm_time") or ""),
+        "gpus": None if config.get("slurm_gpus") in (None, "") else int(config.get("slurm_gpus")),
+        "cpus_per_task": None if config.get("slurm_cpus_per_task") in (None, "") else int(config.get("slurm_cpus_per_task")),
+        "mem": None if config.get("slurm_mem") in (None, "") else str(config.get("slurm_mem")),
+        "extra_args": [str(arg) for arg in config.get("slurm_extra_args", [])],
+        "name": str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc"),
+    }
+
+
+def _slurm_allocation_cache_key(config: dict[str, Any]) -> str:
+    """Return the runtime cache key for one reusable remote Slurm allocation."""
+    payload = json.dumps(_slurm_allocation_signature(config), sort_keys=True, separators=(",", ":"))
+    return sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _paramiko_prompt_response(prompt_text: str) -> str:
@@ -1692,6 +1754,60 @@ def _sync_remote_result_dir(
     return completed
 
 
+def _build_remote_allocation_submit_command(
+    config: dict[str, Any],
+) -> tuple[str, PurePosixPath, str]:
+    """Build the remote helper invocation that submits one reusable allocation."""
+    remote_helper = REPO_ROOT / "tools" / "remote" / "submit_slurm_allocation.py"
+    helper_b64 = b64encode(remote_helper.read_bytes()).decode("ascii")
+    python_exec = (
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
+        ' && test -n "$REMOTE_PYTHON"'
+        ' && exec "$REMOTE_PYTHON" -c '
+        + shlex.quote(
+            'import base64,sys; '
+            'script_b64=sys.argv[1]; '
+            'script_path=sys.argv[2]; '
+            'sys.argv=sys.argv[2:]; '
+            'namespace={"__name__":"__main__","__file__":script_path}; '
+            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
+        )
+    )
+    allocation_key = _slurm_allocation_cache_key(config)
+    allocation_root = _remote_results_root(config) / ".obgpu-allocations" / allocation_key
+    allocation_name_base = str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc")
+    allocation_name = f"{allocation_name_base[:100]}_{allocation_key[:8]}"
+    allocation_time = config.get("slurm_allocation_time") or config.get("slurm_time")
+    command = [
+        helper_b64,
+        str(remote_helper),
+        "--alloc-root",
+        allocation_root.as_posix(),
+        "--name",
+        allocation_name,
+    ]
+    for key, flag in (
+        ("slurm_partition", "--partition"),
+        ("slurm_account", "--account"),
+        ("slurm_mem", "--mem"),
+    ):
+        value = config.get(key)
+        if value not in (None, ""):
+            command.extend([flag, str(value)])
+    if allocation_time not in (None, ""):
+        command.extend(["--time", str(allocation_time)])
+    for key, flag in (
+        ("slurm_gpus", "--gpus"),
+        ("slurm_cpus_per_task", "--cpus-per-task"),
+    ):
+        value = config.get(key)
+        if value not in (None, ""):
+            command.extend([flag, str(int(value))])
+    for extra in config.get("slurm_extra_args", []):
+        command.extend(["--sbatch-arg", str(extra)])
+    return python_exec + " " + _shell_join(command), allocation_root, allocation_name
+
+
 def _build_remote_submit_command(
     config: dict[str, Any],
     *,
@@ -1853,6 +1969,201 @@ def _build_remote_result_listing_command(
 def _build_remote_cancel_command(*, job_id: str) -> str:
     """Build one remote shell command that cancels a submitted Slurm job."""
     return f"scancel {shlex.quote(str(job_id))}"
+
+
+def _query_remote_slurm_job_state(config: dict[str, Any], job_id: str) -> dict[str, str]:
+    """Query one remote Slurm job state without requiring a result directory."""
+    query_command = (
+        f"squeue -j {shlex.quote(str(job_id))} -h -o '%T|%R' || true; "
+        "printf '%s\\n' '__SACCT__'; "
+        f"sacct -j {shlex.quote(str(job_id))} --format=JobIDRaw,State --parsable2 --noheader || true"
+    )
+    completed = _run_ssh_shell(config, query_command)
+    if completed.returncode != 0:
+        raise RuntimeError(
+            "Remote Slurm job-state query failed.\n"
+            f"Job id: {job_id}\n"
+            f"Stdout:\n{completed.stdout}\n\nStderr:\n{completed.stderr}"
+        )
+
+    squeue_text, _marker, sacct_text = (completed.stdout or "").partition("__SACCT__\n")
+    squeue_output = squeue_text.strip()
+    sacct_output = sacct_text.strip()
+    squeue_reason = ""
+    squeue_location = ""
+
+    if squeue_output:
+        first_line = squeue_output.splitlines()[0]
+        parts = first_line.split("|", 1)
+        if len(parts) == 2:
+            squeue_state = _normalize_slurm_state(parts[0])
+            squeue_detail = parts[1].strip()
+            if squeue_state == "PENDING":
+                squeue_reason = squeue_detail
+            else:
+                squeue_location = squeue_detail
+        else:
+            squeue_state = _normalize_slurm_state(first_line)
+        if squeue_state == "PENDING":
+            return {"state": squeue_state, "reason": squeue_reason, "location": squeue_location}
+
+    if sacct_output:
+        for line in sacct_output.splitlines():
+            parts = line.split("|", 1)
+            if len(parts) != 2:
+                continue
+            raw_job_id, raw_state = parts
+            if raw_job_id.strip() == str(job_id):
+                state = _normalize_slurm_state(raw_state)
+                if state:
+                    return {"state": state, "reason": squeue_reason, "location": squeue_location}
+        for line in sacct_output.splitlines():
+            parts = line.split("|", 1)
+            if len(parts) != 2:
+                continue
+            state = _normalize_slurm_state(parts[1])
+            if state:
+                return {"state": state, "reason": squeue_reason, "location": squeue_location}
+
+    if squeue_output:
+        return {
+            "state": _normalize_slurm_state(squeue_output.split("|", 1)[0]),
+            "reason": squeue_reason,
+            "location": squeue_location,
+        }
+    return {"state": "UNKNOWN", "reason": "", "location": ""}
+
+
+def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, Any]:
+    """Acquire or reuse one notebook-cached remote Slurm allocation."""
+    manual_job_id = config.get("slurm_allocation_job_id")
+    if manual_job_id not in (None, ""):
+        return {
+            "job_id": str(manual_job_id),
+            "cached": False,
+            "manual": True,
+            "state": "",
+            "reason": "",
+            "location": "",
+        }
+    if not bool(config.get("slurm_reuse_allocation", False)):
+        return {
+            "job_id": None,
+            "cached": False,
+            "manual": False,
+            "state": "",
+            "reason": "",
+            "location": "",
+        }
+
+    cache_key = _slurm_allocation_cache_key(config)
+    allocation = _LIVE_SLURM_ALLOCATIONS.get(cache_key)
+    created_now = False
+
+    if allocation is not None:
+        status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
+        state = status.get("state", "UNKNOWN")
+        if state in _REMOTE_SLURM_TERMINAL_OK or state in _REMOTE_SLURM_TERMINAL_FAIL or state == "UNKNOWN":
+            _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
+            allocation = None
+        else:
+            print(f"[Sol remote] Reusing cached allocation {allocation['job_id']}.", flush=True)
+
+    if allocation is None:
+        print("[Sol remote] Requesting reusable Slurm allocation...", flush=True)
+        submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(config)
+        submit_completed = _run_ssh_shell(config, submit_command)
+        if submit_completed.returncode != 0:
+            raise RuntimeError(
+                "Remote Slurm allocation submission failed.\n"
+                f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
+            )
+        try:
+            submission = json.loads((submit_completed.stdout or "").strip())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "Remote Slurm allocation submission did not return valid JSON.\n"
+                f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
+            ) from exc
+        allocation = {
+            "job_id": str(submission["job_id"]),
+            "cache_key": cache_key,
+            "allocation_root": str(submission.get("allocation_root") or allocation_root.as_posix()),
+            "batch_script": str(submission.get("batch_script") or ""),
+            "slurm_log_pattern": str(submission.get("slurm_log_pattern") or ""),
+            "name": str(submission.get("name") or allocation_name),
+            "cached": True,
+            "manual": False,
+        }
+        _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
+        created_now = True
+
+    last_signature: tuple[str, str, str] | None = None
+    try:
+        while True:
+            status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
+            state = status.get("state", "UNKNOWN")
+            reason = str(status.get("reason") or "").strip()
+            location = str(status.get("location") or "").strip()
+            status_signature = (state, reason, location)
+            if status_signature != last_signature:
+                detail = ""
+                if state == "PENDING" and reason:
+                    detail = f" reason={reason}"
+                elif location and state not in {"UNKNOWN", "PENDING"}:
+                    detail = f" where={location}"
+                print(
+                    f"[Sol remote] Allocation {allocation['job_id']}: {state}{detail}",
+                    flush=True,
+                )
+                last_signature = status_signature
+
+            if state == "RUNNING":
+                allocation.update(
+                    {
+                        "state": state,
+                        "reason": reason,
+                        "location": location,
+                    }
+                )
+                _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
+                return allocation
+            if state in _REMOTE_SLURM_TERMINAL_OK or state in _REMOTE_SLURM_TERMINAL_FAIL:
+                _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
+                raise RuntimeError(
+                    "Reusable Slurm allocation terminated before it became runnable.\n"
+                    f"Job id: {allocation['job_id']}\n"
+                    f"State: {state}\n"
+                    f"Reason: {reason}\n"
+                    f"Location: {location}"
+                )
+            time.sleep(5.0)
+    except KeyboardInterrupt:
+        if created_now:
+            print(
+                f"[Sol remote] Interrupt received; cancelling new allocation {allocation['job_id']}...",
+                flush=True,
+            )
+            _run_ssh_shell(config, _build_remote_cancel_command(job_id=str(allocation["job_id"])))
+            _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
+        raise
+
+
+def release_remote_slurm_allocation(config: dict[str, Any]) -> bool:
+    """Cancel and forget the cached reusable remote Slurm allocation for one config."""
+    cache_key = _slurm_allocation_cache_key(config)
+    allocation = _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
+    if allocation is None:
+        print("[Sol remote] No cached reusable allocation for this config.", flush=True)
+        return False
+    job_id = str(allocation["job_id"])
+    print(f"[Sol remote] Releasing cached allocation {job_id}...", flush=True)
+    completed = _run_ssh_shell(config, _build_remote_cancel_command(job_id=job_id))
+    if completed.returncode != 0:
+        print(f"[Sol remote] scancel stderr: {(completed.stderr or '').strip()}", flush=True)
+        return False
+    print(f"[Sol remote] Cancellation requested for allocation {job_id}.", flush=True)
+    return True
 
 
 def _remote_submission_payload(
@@ -2065,22 +2376,25 @@ def _run_remote_simulation(
     local_result_dir: Path,
 ) -> RunRecord:
     """Submit one Sol Slurm job, wait for completion, sync results, and return a run record."""
+    effective_config = dict(config)
+    remote_repo_root = _remote_repo_root(effective_config)
+    remote_git_ref = _resolve_remote_git_ref(effective_config)
     (
-        remote_repo_root,
+        _remote_repo_root_value,
         _remote_results_root_value,
         remote_benchmark_command,
         remote_metadata,
         submit_shell,
-    ) = _remote_submission_payload(config, label=label)
+    ) = _remote_submission_payload(effective_config, label=label)
     _ensure_remote_git_ref_available(
-        config,
+        effective_config,
         remote_repo_root=remote_repo_root,
-        remote_git_ref=remote_metadata.get("remote_git_ref"),
+        remote_git_ref=remote_git_ref,
     )
     print("[Sol remote] Running remote preflight checks...", flush=True)
 
     preflight_completed = _run_ssh_shell(
-        config,
+        effective_config,
         _build_remote_preflight_command(remote_repo_root=remote_repo_root),
     )
     if preflight_completed.returncode != 0:
@@ -2107,8 +2421,26 @@ def _run_remote_simulation(
             f"Stderr:\n{preflight_completed.stderr}"
         )
 
+    allocation_info = _ensure_cached_remote_slurm_allocation(effective_config)
+    if allocation_info.get("job_id") not in (None, ""):
+        effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
+        (
+            _remote_repo_root_value,
+            _remote_results_root_value,
+            remote_benchmark_command,
+            remote_metadata,
+            submit_shell,
+        ) = _remote_submission_payload(effective_config, label=label)
+        remote_metadata["auto_reused_allocation"] = bool(
+            effective_config.get("slurm_reuse_allocation", False)
+            and not allocation_info.get("manual", False)
+        )
+        remote_metadata["allocation_state"] = allocation_info.get("state", "")
+        remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
+        remote_metadata["allocation_location"] = allocation_info.get("location", "")
+
     print("[Sol remote] Submitting Slurm job...", flush=True)
-    submit_completed = _run_ssh_shell(config, submit_shell)
+    submit_completed = _run_ssh_shell(effective_config, submit_shell)
     local_result_dir.mkdir(parents=True, exist_ok=True)
     (local_result_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
     (local_result_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
@@ -2121,7 +2453,7 @@ def _run_remote_simulation(
         )
         _write_notebook_run_info(
             local_result_dir,
-            config=config,
+            config=effective_config,
             label=label,
             timestamp=timestamp,
             command=remote_benchmark_command,
@@ -2145,9 +2477,9 @@ def _run_remote_simulation(
 
     remote_result_dir = PurePosixPath(submission["result_dir"])
     print(f"[Sol remote] Submitted job {submission['job_id']}.", flush=True)
-    poll_interval_s = max(float(config.get("remote_poll_interval_s", 10.0)), 1.0)
-    live_status = bool(config.get("remote_live_status", True))
-    live_logs = bool(config.get("remote_live_logs", True))
+    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 10.0)), 1.0)
+    live_status = bool(effective_config.get("remote_live_status", True))
+    live_logs = bool(effective_config.get("remote_live_logs", True))
     poll_transcript: list[dict[str, Any]] = []
     final_status: dict[str, Any] | None = None
     missing_artifact_retries = 0
@@ -2161,14 +2493,14 @@ def _run_remote_simulation(
 
     def poll_remote_status_once() -> dict[str, Any]:
         poll_shell = _build_remote_poll_command(
-            config,
+            effective_config,
             remote_repo_root=remote_repo_root,
             remote_result_dir=remote_result_dir,
             job_id=str(submission["job_id"]),
             wrapper_dir=str(submission.get("wrapper_dir") or ""),
             worktree_path=str(submission.get("worktree_path") or ""),
         )
-        poll_completed = _run_ssh_shell(config, poll_shell)
+        poll_completed = _run_ssh_shell(effective_config, poll_shell)
         if poll_completed.returncode != 0:
             raise RuntimeError(
                 "Remote Sol status poll failed.\n"
@@ -2255,7 +2587,7 @@ def _run_remote_simulation(
             flush=True,
         )
         cancel_completed = _run_ssh_shell(
-            config,
+            effective_config,
             _build_remote_cancel_command(job_id=str(submission["job_id"])),
         )
         if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
@@ -2292,7 +2624,7 @@ def _run_remote_simulation(
         else:
             print(f"[Sol remote] Syncing partial remote artifacts...", flush=True)
         sync_completed = _sync_remote_result_dir(
-            config,
+            effective_config,
             remote_result_dir=remote_result_dir,
             local_result_dir=local_result_dir,
         )
@@ -2304,7 +2636,7 @@ def _run_remote_simulation(
         )
 
     sync_completed = _sync_remote_result_dir(
-        config,
+        effective_config,
         remote_result_dir=remote_result_dir,
         local_result_dir=local_result_dir,
     )
@@ -2330,7 +2662,7 @@ def _run_remote_simulation(
     if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
         time.sleep(3.0)
         sync_completed = _sync_remote_result_dir(
-            config,
+            effective_config,
             remote_result_dir=remote_result_dir,
             local_result_dir=local_result_dir,
         )
@@ -2349,7 +2681,7 @@ def _run_remote_simulation(
     remote_listing_text = ""
     if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
         listing_completed = _run_ssh_shell(
-            config,
+            effective_config,
             _build_remote_result_listing_command(remote_result_dir=remote_result_dir),
         )
         remote_listing_text = (listing_completed.stdout or "").strip()
@@ -2374,7 +2706,7 @@ def _run_remote_simulation(
 
     _write_notebook_run_info(
         local_result_dir,
-        config=config,
+        config=effective_config,
         label=label,
         timestamp=timestamp,
         command=remote_benchmark_command,
