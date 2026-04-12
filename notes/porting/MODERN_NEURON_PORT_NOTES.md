@@ -54,6 +54,21 @@ The parity-oriented mode is still available by running with `2` MPI ranks.
 
 The notebook helper surface continues to expose both modes through `build_run_config(...)`.
 
+## Activation Helpers
+
+For generic Linux hosts and clusters, use:
+
+```bash
+source tools/setup/activate_obgpu.sh
+```
+
+That helper:
+
+- bootstraps `conda` from common installs or modules when possible
+- activates `OBGPU`
+- exports the shared repo/mechanism paths for runtime use
+- sets `OB_MPIEXEC` to `srun` inside Slurm allocations or `mpiexec` otherwise
+
 ## Sol Workflow
 
 The intended Sol workflow is headless:

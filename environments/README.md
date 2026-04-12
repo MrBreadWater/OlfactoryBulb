@@ -17,6 +17,8 @@ source build now comes from:
 - pinned upstream ref: [third_party_patches/nrn/manifest.json](/home/alek/OlfactoryBulb/third_party_patches/nrn/manifest.json)
 - repo patch stack: [third_party_patches/nrn](/home/alek/OlfactoryBulb/third_party_patches/nrn)
 - bootstrap script: [setup_ob_modern.sh](/home/alek/OlfactoryBulb/tools/setup/setup_ob_modern.sh)
+- generic activation helper: [activate_obgpu.sh](/home/alek/OlfactoryBulb/tools/setup/activate_obgpu.sh)
+- Sol activation helper: [activate_sol_obgpu.sh](/home/alek/OlfactoryBulb/tools/setup/activate_sol_obgpu.sh)
 
 See also:
 

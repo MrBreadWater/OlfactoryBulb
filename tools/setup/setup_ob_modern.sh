@@ -16,6 +16,9 @@ NRN_SRC_DIR="${NRN_SRC_DIR:-${REPO_ROOT}/external/nrn-9.0.1}"
 NRN_BUILD_DIR="${NRN_BUILD_DIR:-}"
 BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-$(command -v python3 || command -v python || true)}"
 
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/setup/obgpu_conda_utils.sh"
+
 if [[ -z "${BOOTSTRAP_PYTHON}" ]]; then
   echo "setup_ob_modern.sh requires python3 or python on PATH before the conda env exists." >&2
   exit 1
@@ -50,8 +53,8 @@ UPSTREAM_REPO="${manifest_lines[0]}"
 UPSTREAM_REF="${manifest_lines[1]}"
 PATCH_FILES=("${manifest_lines[@]:2}")
 
-if ! command -v conda >/dev/null 2>&1; then
-  echo "conda is required on PATH" >&2
+if ! obgpu_bootstrap_conda; then
+  echo "Could not locate conda. Load your cluster's conda/anaconda module or install Miniconda/Mambaforge." >&2
   exit 1
 fi
 
@@ -402,48 +405,7 @@ PY
 
 activate_conda_env() {
   local env_name="$1"
-  local hook_output=""
-  local conda_bin=""
-  local conda_real=""
-  local conda_base=""
-  local conda_sh=""
-
-  if ! command -v conda >/dev/null 2>&1; then
-    echo "Could not activate environment '${env_name}': conda is not available." >&2
-    return 1
-  fi
-
-  conda_bin="$(command -v conda)"
-  conda_real="$("${BOOTSTRAP_PYTHON}" - <<'PY' "${conda_bin}" 2>/dev/null || true
-import os
-import sys
-print(os.path.realpath(sys.argv[1]))
-PY
-)"
-
-  for conda_base in \
-    "$(cd "$(dirname "${conda_bin}")/.." 2>/dev/null && pwd || true)" \
-    "$(cd "$(dirname "${conda_real}")/.." 2>/dev/null && pwd || true)" \
-    "$(conda info --base 2>/dev/null || true)"; do
-    [[ -z "${conda_base}" ]] && continue
-    conda_sh="${conda_base}/etc/profile.d/conda.sh"
-    if [[ -f "${conda_sh}" ]]; then
-      # shellcheck disable=SC1090
-      source "${conda_sh}"
-      conda activate "${env_name}"
-      return 0
-    fi
-  done
-
-  hook_output="$(conda shell.bash hook 2>/dev/null || true)"
-  if [[ -n "${hook_output}" ]] && grep -q '__conda_' <<<"${hook_output}"; then
-    eval "${hook_output}"
-    conda activate "${env_name}"
-    return 0
-  fi
-
-  echo "Could not activate environment '${env_name}'." >&2
-  return 1
+  obgpu_activate_conda_env "${env_name}"
 }
 
 log_step "Preparing conda environment ${ENV_NAME}"
