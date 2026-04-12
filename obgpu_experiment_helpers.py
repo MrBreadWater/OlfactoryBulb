@@ -104,9 +104,9 @@ CONTROL_HELP = {
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
     "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command. Defaults to 'source tools/setup/activate_sol_obgpu.sh'.",
-    "remote_repo_mode": "How Sol should choose the repo tree for a run: 'shared' uses remote_repo_root directly, while 'snapshot' stages a detached per-run worktree.",
-    "remote_git_ref": "Optional git commit, tag, or branch for Sol snapshot mode. Shared mode ignores this and runs the current shared checkout.",
-    "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref or before shared-mode preflight.",
+    "remote_repo_mode": "How Sol should choose the repo tree for a run: 'shared' temporarily checks out the requested commit in remote_repo_root and restores it afterward, while 'snapshot' stages a detached per-run worktree.",
+    "remote_git_ref": "Optional git commit, tag, or branch for Sol runs. Defaults to the current local HEAD commit so notebook runs can auto-publish exact code.",
+    "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
@@ -596,14 +596,11 @@ def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
 
 
 def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
-    """Return the requested Sol git ref, defaulting to local HEAD only in snapshot mode."""
-    repo_mode = str(config.get("remote_repo_mode", "shared")).strip().lower()
+    """Return the requested Sol git ref, defaulting to the current local HEAD commit."""
     configured = config.get("remote_git_ref")
     if configured not in (None, ""):
         return str(configured)
-    if repo_mode == "snapshot":
-        return _resolve_local_git_head()
-    return None
+    return _resolve_local_git_head()
 
 
 def _require_remote_host(config: dict[str, Any]) -> str:
@@ -1594,8 +1591,6 @@ def _ensure_remote_git_ref_available(
     remote_git_ref: str | None,
 ) -> None:
     """Ensure the current local commit exists in the remote repo without requiring manual git push."""
-    if str(config.get("remote_repo_mode", "shared")).strip().lower() != "snapshot":
-        return
     if not remote_git_ref:
         return
 
