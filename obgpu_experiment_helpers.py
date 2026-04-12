@@ -108,6 +108,7 @@ CONTROL_HELP = {
     "remote_git_fetch": "When True, fetch the configured remote on Sol before checking out remote_git_ref.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
+    "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "slurm_partition": "Optional Slurm partition for remote submission. Use 'arm' on Sol for Grace Hopper.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
@@ -241,6 +242,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_git_fetch": False,
         "remote_git_remote": "origin",
         "remote_poll_interval_s": 10.0,
+        "remote_live_status": True,
         "slurm_partition": "arm",
         "slurm_account": None,
         "slurm_time": None,
@@ -277,6 +279,7 @@ def build_sol_remote_config(
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
     remote_poll_interval_s: float = 15.0,
+    remote_live_status: bool = True,
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
@@ -302,6 +305,7 @@ def build_sol_remote_config(
         "remote_conda_activate_cmd": "source tools/setup/activate_sol_obgpu.sh",
         "remote_mpi_exec": default_remote_mpi_exec(),
         "remote_poll_interval_s": float(remote_poll_interval_s),
+        "remote_live_status": bool(remote_live_status),
         "remote_git_ref": remote_git_ref,
         "remote_git_fetch": bool(remote_git_fetch),
         "remote_git_remote": str(remote_git_remote),
@@ -1718,9 +1722,11 @@ def _run_remote_simulation(
     remote_result_dir = PurePosixPath(submission["result_dir"])
     print(f"[Sol remote] Submitted job {submission['job_id']}.", flush=True)
     poll_interval_s = max(float(config.get("remote_poll_interval_s", 10.0)), 1.0)
+    live_status = bool(config.get("remote_live_status", True))
     poll_transcript: list[dict[str, Any]] = []
     final_status: dict[str, Any] | None = None
     missing_artifact_retries = 0
+    last_status_signature: tuple[Any, ...] | None = None
 
     while True:
         poll_shell = _build_remote_poll_command(
@@ -1746,6 +1752,33 @@ def _run_remote_simulation(
             ) from exc
 
         poll_transcript.append(status)
+        status_signature = (
+            status.get("state"),
+            bool(status.get("summary_exists")),
+            bool(status.get("stdout_exists")),
+            bool(status.get("stderr_exists")),
+            bool(status.get("bootstrap_exists")),
+            bool(status.get("command_exists")),
+            bool(status.get("slurm_log_exists")),
+        )
+        if live_status and status_signature != last_status_signature:
+            state = str(status.get("state", "UNKNOWN"))
+            flags = []
+            if status.get("bootstrap_exists"):
+                flags.append("bootstrap")
+            if status.get("command_exists"):
+                flags.append("command")
+            if status.get("stdout_exists"):
+                flags.append("stdout")
+            if status.get("stderr_exists"):
+                flags.append("stderr")
+            if status.get("slurm_log_exists"):
+                flags.append("slurm")
+            if status.get("summary_exists"):
+                flags.append("summary")
+            flag_text = ", ".join(flags) if flags else "no artifacts yet"
+            print(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})", flush=True)
+            last_status_signature = status_signature
         if status.get("done"):
             if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
                 missing_artifact_retries += 1
@@ -2562,6 +2595,7 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "remote_git_ref",
         "remote_git_fetch",
         "remote_poll_interval_s",
+        "remote_live_status",
         "remote_mpi_exec",
         "slurm_partition",
         "slurm_account",
