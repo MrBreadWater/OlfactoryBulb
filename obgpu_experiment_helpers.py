@@ -19,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import builtins
 from base64 import b64encode
 from collections import Counter
 from copy import deepcopy
@@ -151,8 +152,14 @@ class RunRecord:
 
 _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
-_LIVE_SSH_MASTERS: dict[str, Any] = {}
-_LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = {}
+if not hasattr(builtins, "_OBGPU_NOTEBOOK_RUNTIME"):
+    builtins._OBGPU_NOTEBOOK_RUNTIME = {
+        "ssh_masters": {},
+        "paramiko_connections": {},
+    }
+_NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
+_LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
+_LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 
 
 def default_local_mpi_exec() -> str:
