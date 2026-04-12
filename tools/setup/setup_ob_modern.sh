@@ -340,6 +340,66 @@ detect_supported_nvhpc_arches() {
   printf '%s\n' "${help_output}" | sed -n 's/.*\(cc[0-9][0-9]\).*/\1/p' | sed 's/^cc//' | sort -uV
 }
 
+detect_cuda_toolkit_root() {
+  "${BOOTSTRAP_PYTHON}" - \
+    "${CUDA_COMPILER:-}" \
+    "${NVHPC_CUDA_HOME:-}" \
+    "${CUDA_HOME:-}" \
+    "${CUDA_PATH:-}" \
+    "${CUDA_ROOT:-}" \
+    "${NVHPC_ARCH_ROOT:-}" \
+    "${NVHPC_VERSION:-}" <<'PY'
+from pathlib import Path
+import sys
+
+args = sys.argv[1:]
+candidates = []
+
+def add_candidate(value):
+    if not value:
+        return
+    path = Path(value).expanduser()
+    candidates.append(path)
+    if path.name == "nvcc":
+        candidates.append(path.parent.parent)
+    elif path.name == "bin":
+        candidates.append(path.parent)
+    elif path.name == "cuda":
+        candidates.append(path)
+
+for value in args[:5]:
+    add_candidate(value)
+
+arch_root = args[5] if len(args) > 5 else ""
+version = args[6] if len(args) > 6 else ""
+if arch_root and version:
+    cuda_root = Path(arch_root) / version / "cuda"
+    if cuda_root.is_dir():
+        for child in sorted([path for path in cuda_root.iterdir() if path.is_dir()]):
+            candidates.append(child)
+
+for base in (Path("/usr/local/cuda"), *sorted(Path("/usr/local").glob("cuda-*"))):
+    candidates.append(base)
+
+seen = set()
+for candidate in candidates:
+    try:
+        resolved = candidate.resolve()
+    except Exception:
+        resolved = candidate
+    if resolved in seen:
+        continue
+    seen.add(resolved)
+    if not resolved.is_dir():
+        continue
+    if (resolved / "nvvm" / "libdevice").is_dir():
+        print(resolved)
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY
+}
+
 load_previous_build_meta() {
   local meta_path="$1"
   if [[ -f "${meta_path}" ]]; then
@@ -548,6 +608,20 @@ EOF
   if [[ -z "${NVHPC_CUDA_HOME:-}" ]]; then
     NVHPC_CUDA_HOME="$(cd "$(dirname "${CUDA_COMPILER}")/.." && pwd)"
   fi
+  if [[ ! -d "${NVHPC_CUDA_HOME}/nvvm/libdevice" ]]; then
+    if toolkit_root="$(detect_cuda_toolkit_root)"; then
+      NVHPC_CUDA_HOME="${toolkit_root}"
+    fi
+  fi
+  if [[ ! -d "${NVHPC_CUDA_HOME}/nvvm/libdevice" ]]; then
+    cat >&2 <<EOF
+Could not locate a CUDA toolkit root containing nvvm/libdevice.
+Tried CUDA_COMPILER=${CUDA_COMPILER}
+Tried NVHPC_CUDA_HOME=${NVHPC_CUDA_HOME}
+Set CUDA_HOME/CUDA_PATH/CUDA_ROOT explicitly or load a CUDA module that provides the full toolkit.
+EOF
+    exit 1
+  fi
   GPU_BUILD_TAG="${GPU_BUILD_TAG:-${NVHPC_VERSION//./_}}"
   NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern-gpu-${GPU_BUILD_TAG}}"
   NRN_BUILD_META_PATH="${NRN_BUILD_DIR}/.obgpu_build_meta.sh"
@@ -575,6 +649,10 @@ EOF
   if [[ -n "${NVHPC_CUDA_HOME:-}" ]]; then
     export NVHPC_CUDA_HOME
     export CUDA_HOME="${NVHPC_CUDA_HOME}"
+    export CUDA_PATH="${NVHPC_CUDA_HOME}"
+    export CUDA_ROOT="${NVHPC_CUDA_HOME}"
+    export CUDAToolkit_ROOT="${NVHPC_CUDA_HOME}"
+    export CUDA_TOOLKIT_ROOT_DIR="${NVHPC_CUDA_HOME}"
   fi
 
   gpu_cmake_args+=(
@@ -588,6 +666,7 @@ EOF
   if [[ -n "${NVHPC_CUDA_HOME:-}" ]]; then
     gpu_cmake_args+=(
       -DCUDAToolkit_ROOT="${NVHPC_CUDA_HOME}"
+      -DCUDA_TOOLKIT_ROOT_DIR="${NVHPC_CUDA_HOME}"
     )
   fi
 else
