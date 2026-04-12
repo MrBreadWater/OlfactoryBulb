@@ -1501,6 +1501,11 @@ def _build_remote_result_listing_command(
     )
 
 
+def _build_remote_cancel_command(*, job_id: str) -> str:
+    """Build one remote shell command that cancels a submitted Slurm job."""
+    return f"scancel {shlex.quote(str(job_id))}"
+
+
 def _remote_submission_payload(
     config: dict[str, Any],
     *,
@@ -1797,7 +1802,7 @@ def _run_remote_simulation(
         "slurm": "",
     }
 
-    while True:
+    def poll_remote_status_once() -> dict[str, Any]:
         poll_shell = _build_remote_poll_command(
             config,
             remote_repo_root=remote_repo_root,
@@ -1822,6 +1827,10 @@ def _run_remote_simulation(
             ) from exc
 
         poll_transcript.append(status)
+        return status
+
+    def emit_live_remote_updates(status: dict[str, Any]) -> None:
+        nonlocal last_status_signature
         status_signature = (
             status.get("state"),
             bool(status.get("summary_exists")),
@@ -1864,14 +1873,50 @@ def _run_remote_simulation(
                     for line in delta_text.splitlines():
                         print(f"[Sol remote][{kind}] {line}", flush=True)
                 last_live_tails[kind] = tail_text
-        if status.get("done"):
-            if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
-                missing_artifact_retries += 1
-                time.sleep(3.0)
-                continue
-            final_status = status
-            break
-        time.sleep(poll_interval_s)
+
+    try:
+        while True:
+            status = poll_remote_status_once()
+            emit_live_remote_updates(status)
+            if status.get("done"):
+                if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
+                    missing_artifact_retries += 1
+                    time.sleep(3.0)
+                    continue
+                final_status = status
+                break
+            time.sleep(poll_interval_s)
+    except KeyboardInterrupt:
+        print(f"[Sol remote] Interrupt received; cancelling job {submission['job_id']}...", flush=True)
+        cancel_completed = _run_ssh_shell(
+            config,
+            _build_remote_cancel_command(job_id=str(submission["job_id"])),
+        )
+        if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
+            print(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}", flush=True)
+
+        cancel_deadline = time.time() + 30.0
+        while time.time() < cancel_deadline:
+            try:
+                status = poll_remote_status_once()
+            except Exception:
+                break
+            emit_live_remote_updates(status)
+            if status.get("done"):
+                final_status = status
+                break
+            time.sleep(2.0)
+
+        sync_completed = _sync_remote_result_dir(
+            config,
+            remote_result_dir=remote_result_dir,
+            local_result_dir=local_result_dir,
+        )
+        (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
+        (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+        raise KeyboardInterrupt(
+            f"Interrupted remote Sol run and requested cancellation for job {submission['job_id']}."
+        )
 
     sync_completed = _sync_remote_result_dir(
         config,
