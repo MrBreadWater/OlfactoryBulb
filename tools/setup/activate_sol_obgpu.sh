@@ -58,6 +58,9 @@ activate_env() {
   local env_prefix=""
   local hook_dir=""
   local hook_script=""
+  local had_errexit=0
+  local had_nounset=0
+  local hook_rc=0
 
   env_prefix="$(find_env_prefix "${env_name}")" || {
     echo "Could not activate environment '${env_name}': prefix not found." >&2
@@ -67,6 +70,7 @@ activate_env() {
   if [[ "${CONDA_PREFIX:-}" != "${env_prefix}" ]]; then
     export CONDA_PREFIX="${env_prefix}"
     export CONDA_DEFAULT_ENV="${env_name}"
+    export CONDA_SHLVL="${CONDA_SHLVL:-1}"
     case ":${PATH}:" in
       *":${env_prefix}/bin:"*) ;;
       *) export PATH="${env_prefix}/bin:${PATH}" ;;
@@ -79,12 +83,25 @@ activate_env() {
 
   hook_dir="${env_prefix}/etc/conda/activate.d"
   if [[ -d "${hook_dir}" ]]; then
+    [[ "$-" == *e* ]] && had_errexit=1
+    [[ "$-" == *u* ]] && had_nounset=1
+    set +e +u
     shopt -s nullglob
     for hook_script in "${hook_dir}"/*.sh; do
       # shellcheck disable=SC1090
       source "${hook_script}"
+      hook_rc=$?
+      if [[ "${hook_rc}" -ne 0 ]]; then
+        shopt -u nullglob
+        if [[ "${had_errexit}" == "1" ]]; then set -e; else set +e; fi
+        if [[ "${had_nounset}" == "1" ]]; then set -u; else set +u; fi
+        echo "Activation hook failed: ${hook_script} (exit ${hook_rc})" >&2
+        return "${hook_rc}"
+      fi
     done
     shopt -u nullglob
+    if [[ "${had_errexit}" == "1" ]]; then set -e; else set +e; fi
+    if [[ "${had_nounset}" == "1" ]]; then set -u; else set +u; fi
   fi
 
   export _OBGPU_SOL_ACTIVE_PREFIX="${env_prefix}"
