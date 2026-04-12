@@ -322,6 +322,82 @@ def submit_batch(batch_path):
     return job_id
 
 
+def submit_allocation_step(batch_path, allocation_job_id, wrapper_dir):
+    """Launch the generated script as a reusable step inside an existing allocation."""
+    wrapper_dir = Path(wrapper_dir)
+    step_id_path = wrapper_dir / "srun-step-id.txt"
+    launcher_stderr_path = wrapper_dir / "srun-launch.stderr"
+    launcher_pid_path = wrapper_dir / "srun-launch.pid"
+    slurm_log_path = wrapper_dir / "slurm-%j-%s.out"
+
+    step_id_path.write_text("")
+    launcher_stderr_path.write_text("")
+
+    shell_script = """
+set -euo pipefail
+step_id_path={step_id_path}
+launcher_stderr_path={launcher_stderr_path}
+launcher_pid_path={launcher_pid_path}
+batch_path={batch_path}
+allocation_job_id={allocation_job_id}
+slurm_log_path={slurm_log_path}
+
+srun --jobid "$allocation_job_id" --overlap --parsable --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$step_id_path" 2> "$launcher_stderr_path" &
+launcher_pid=$!
+printf '%s\\n' "$launcher_pid" > "$launcher_pid_path"
+
+for _ in $(seq 1 100); do
+  if [[ -s "$step_id_path" ]]; then
+    break
+  fi
+  if ! kill -0 "$launcher_pid" 2>/dev/null; then
+    break
+  fi
+  sleep 0.1
+done
+
+if [[ ! -s "$step_id_path" ]]; then
+  wait "$launcher_pid" || true
+fi
+
+if [[ ! -s "$step_id_path" ]]; then
+  printf '%s' 'NO_STEP_ID'
+  exit 1
+fi
+
+head -n 1 "$step_id_path"
+""".format(
+        step_id_path=shlex.quote(str(step_id_path)),
+        launcher_stderr_path=shlex.quote(str(launcher_stderr_path)),
+        launcher_pid_path=shlex.quote(str(launcher_pid_path)),
+        batch_path=shlex.quote(str(batch_path)),
+        allocation_job_id=shlex.quote(str(allocation_job_id)),
+        slurm_log_path=shlex.quote(str(slurm_log_path)),
+    )
+    completed = subprocess.run(
+        ["bash", "-lc", shell_script],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        universal_newlines=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        launch_stderr = launcher_stderr_path.read_text() if launcher_stderr_path.exists() else ""
+        raise RuntimeError(
+            "srun within existing allocation failed:\nSTDOUT:\n{}\nSTDERR:\n{}\nLAUNCH STDERR:\n{}".format(
+                completed.stdout,
+                completed.stderr,
+                launch_stderr,
+            )
+        )
+    job_id = (completed.stdout or "").strip().split(";", 1)[0].strip()
+    if not job_id:
+        raise RuntimeError(
+            "Could not parse Slurm step id from srun output: {!r}".format(completed.stdout)
+        )
+    return job_id
+
+
 def main():
     """Parse CLI args, write the batch script, optionally submit it, and emit JSON."""
     parser = argparse.ArgumentParser()
@@ -335,6 +411,7 @@ def main():
     parser.add_argument("--git-ref", default=None)
     parser.add_argument("--git-fetch", action="store_true")
     parser.add_argument("--git-remote", default="origin")
+    parser.add_argument("--allocation-job-id", default=None)
     parser.add_argument("--partition", default=None)
     parser.add_argument("--account", default=None)
     parser.add_argument("--time", default=None)
@@ -372,6 +449,7 @@ def main():
     payload = {
         "submitted": False,
         "job_id": None,
+        "allocation_job_id": args.allocation_job_id,
         "label": args.label,
         "repo_mode": repo_mode,
         "result_dir": str(result_dir),
@@ -398,7 +476,10 @@ def main():
         payload["worktree_path"] = str(worktree_root)
 
     if not args.dry_run:
-        payload["job_id"] = submit_batch(batch_path)
+        if args.allocation_job_id not in (None, ""):
+            payload["job_id"] = submit_allocation_step(batch_path, args.allocation_job_id, wrapper_dir)
+        else:
+            payload["job_id"] = submit_batch(batch_path)
         payload["submitted"] = True
 
     (result_dir / "remote_submit.json").write_text(json.dumps(payload, indent=2, sort_keys=True))

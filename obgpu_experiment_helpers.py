@@ -113,6 +113,7 @@ CONTROL_HELP = {
     "remote_git_ref": "Optional git commit, tag, or branch for Sol runs. Defaults to the current local HEAD commit so notebook runs can auto-publish exact code.",
     "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
+    "slurm_allocation_job_id": "Optional existing Slurm allocation/job id to reuse for notebook runs instead of submitting a fresh sbatch job.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
@@ -334,6 +335,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_git_ref": None,
         "remote_git_fetch": False,
         "remote_git_remote": "origin",
+        "slurm_allocation_job_id": None,
         "remote_poll_interval_s": 10.0,
         "remote_live_status": True,
         "remote_live_logs": True,
@@ -381,6 +383,7 @@ def build_slurm_remote_config(
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
+    slurm_allocation_job_id: str | None = None,
     ssh_options: list[str] | None = None,
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
@@ -406,6 +409,7 @@ def build_slurm_remote_config(
         "remote_git_ref": remote_git_ref,
         "remote_git_fetch": bool(remote_git_fetch),
         "remote_git_remote": str(remote_git_remote),
+        "slurm_allocation_job_id": None if slurm_allocation_job_id in (None, "") else str(slurm_allocation_job_id),
         "slurm_partition": None if slurm_partition in (None, "") else str(slurm_partition),
         "slurm_account": slurm_account,
         "slurm_time": str(slurm_time),
@@ -440,6 +444,7 @@ def build_sol_remote_config(
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
+    slurm_allocation_job_id: str | None = None,
     ssh_options: list[str] | None = None,
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
@@ -463,6 +468,7 @@ def build_sol_remote_config(
         remote_git_ref=remote_git_ref,
         remote_git_fetch=remote_git_fetch,
         remote_git_remote=remote_git_remote,
+        slurm_allocation_job_id=slurm_allocation_job_id,
         ssh_options=ssh_options,
         rsync_options=rsync_options,
         slurm_extra_args=slurm_extra_args,
@@ -599,31 +605,41 @@ def build_run_command(
     repo_root: str | Path | None = None,
     results_base: str | Path | None = None,
     mpi_exec: str | None = None,
+    include_mpi_launcher: bool = True,
 ) -> list[str]:
     """Build the benchmark subprocess command for a notebook run."""
     repo_root = repo_root or REPO_ROOT
     results_base = results_base or config.get("results_base", DEFAULT_RESULTS_BASE)
-    mpi_exec = mpi_exec or str(config.get("mpi_exec", default_local_mpi_exec()))
     benchmark_script = Path(repo_root) / "tools" / "benchmarks" / "benchmark_ob.py"
-    command = [
-        *shlex.split(mpi_exec),
-        "-n",
-        str(int(config["nranks"])),
-        "nrniv",
-        "-mpi",
-        "-python",
-        str(benchmark_script),
-        "--repo-root",
-        str(repo_root),
-        "--paramset",
-        str(config["paramset"]),
-        "--label",
-        label,
-        "--results-base",
-        str(results_base),
-        "--overrides-json",
-        json.dumps(build_param_overrides(config), sort_keys=True),
-    ]
+    command: list[str] = []
+    if include_mpi_launcher:
+        mpi_exec = mpi_exec or str(config.get("mpi_exec", default_local_mpi_exec()))
+        command.extend(
+            [
+                *shlex.split(mpi_exec),
+                "-n",
+                str(int(config["nranks"])),
+            ]
+        )
+
+    command.extend(
+        [
+            "nrniv",
+            "-mpi",
+            "-python",
+            str(benchmark_script),
+            "--repo-root",
+            str(repo_root),
+            "--paramset",
+            str(config["paramset"]),
+            "--label",
+            label,
+            "--results-base",
+            str(results_base),
+            "--overrides-json",
+            json.dumps(build_param_overrides(config), sort_keys=True),
+        ]
+    )
 
     if config.get("tstop_ms") is not None:
         command.extend(["--tstop-override", str(float(config["tstop_ms"]))])
@@ -1727,6 +1743,9 @@ def _build_remote_submit_command(
     if bool(config.get("remote_git_fetch", False)):
         command.append("--git-fetch")
         command.extend(["--git-remote", str(config.get("remote_git_remote", "origin"))])
+    allocation_job_id = config.get("slurm_allocation_job_id")
+    if allocation_job_id not in (None, ""):
+        command.extend(["--allocation-job-id", str(allocation_job_id)])
 
     for key, flag in (
         ("slurm_partition", "--partition"),
@@ -1846,12 +1865,19 @@ def _remote_submission_payload(
     remote_results_root = _remote_results_root(config)
     remote_git_ref = _resolve_remote_git_ref(config)
     remote_mpi_exec = config.get("remote_mpi_exec") or default_remote_mpi_exec()
+    allocation_job_id = config.get("slurm_allocation_job_id")
+    include_mpi_launcher = True
+    if allocation_job_id not in (None, ""):
+        if int(config.get("nranks", 1)) != 1:
+            raise ValueError("slurm_allocation_job_id currently supports only nranks=1")
+        include_mpi_launcher = False
     remote_command = build_run_command(
         config,
         label,
         repo_root=remote_repo_root,
         results_base=remote_results_root,
         mpi_exec=str(remote_mpi_exec),
+        include_mpi_launcher=include_mpi_launcher,
     )
     submit_command = _build_remote_submit_command(
         config,
@@ -1876,6 +1902,7 @@ def _remote_submission_payload(
             "remote_git_ref": remote_git_ref,
             "remote_git_fetch": bool(config.get("remote_git_fetch", False)),
             "remote_git_remote": str(config.get("remote_git_remote", "origin")),
+            "slurm_allocation_job_id": None if allocation_job_id in (None, "") else str(allocation_job_id),
         },
         submit_command,
     )
