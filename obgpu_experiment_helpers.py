@@ -63,6 +63,9 @@ REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
 DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+_SIM_PROGRESS_RE = re.compile(
+    r"^Sim \[[^\]]+\]\s+(?P<percent>\d+)%\s+\((?P<current>[\d.]+)\s*/\s*(?P<total>[\d.]+)\s+ms\)$"
+)
 CONTROL_HELP = {
     "mode": "Use 'fast' for 1-rank exploration or 'parity' for exact match to a previous version.",
     "nranks": "MPI rank count for the run. 1 is faster on this machine",
@@ -121,7 +124,7 @@ CONTROL_HELP = {
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
-    "slurm_partition": "Optional Slurm partition for remote submission. Use 'arm' on Sol for Grace Hopper.",
+    "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
     "slurm_gpus": "Optional GPU count requested from Slurm.",
@@ -186,6 +189,19 @@ def _progress_write(message: str) -> None:
         tqdm.write(message)
     else:
         print(message, flush=True)
+
+
+def _parse_sim_progress_line(line: str) -> tuple[int, int] | None:
+    """Extract the current/total ms values from one simulation progress line."""
+    match = _SIM_PROGRESS_RE.match(line.strip())
+    if match is None:
+        return None
+    current_ms = int(float(match.group("current")))
+    total_ms = int(float(match.group("total")))
+    if total_ms <= 0:
+        return None
+    current_ms = max(0, min(current_ms, total_ms))
+    return current_ms, total_ms
 
 
 class _ProgressBar:
@@ -343,13 +359,13 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "slurm_reuse_allocation": False,
         "slurm_allocation_time": None,
         "slurm_allocation_name": None,
-        "remote_poll_interval_s": 10.0,
+        "remote_poll_interval_s": 1.0,
         "remote_live_status": True,
         "remote_live_logs": True,
-        "slurm_partition": "arm",
+        "slurm_partition": None,
         "slurm_account": None,
         "slurm_time": None,
-        "slurm_gpus": 1,
+        "slurm_gpus": None,
         "slurm_cpus_per_task": None,
         "slurm_mem": None,
         "slurm_extra_args": [],
@@ -379,11 +395,11 @@ def build_slurm_remote_config(
     remote_conda_activate_cmd: str = "source tools/setup/activate_obgpu.sh",
     slurm_partition: str | None = None,
     slurm_account: str | None = None,
-    slurm_time: str = "02:00:00",
+    slurm_time: str | None = None,
     slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
-    remote_poll_interval_s: float = 15.0,
+    remote_poll_interval_s: float = 1.0,
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
     remote_repo_mode: str = "shared",
@@ -398,7 +414,10 @@ def build_slurm_remote_config(
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Return a generic remote Slurm config for notebook-driven runs."""
+    """Return a generic remote Slurm config for notebook-driven runs.
+
+    Slurm arguments are only emitted when explicitly provided.
+    """
     remote_repo_root = str(remote_repo_root)
     if remote_results_root is None:
         remote_results_root = str(PurePosixPath(remote_repo_root) / "results" / "notebook_runs")
@@ -424,11 +443,11 @@ def build_slurm_remote_config(
         "slurm_allocation_time": None if slurm_allocation_time in (None, "") else str(slurm_allocation_time),
         "slurm_allocation_name": None if slurm_allocation_name in (None, "") else str(slurm_allocation_name),
         "slurm_partition": None if slurm_partition in (None, "") else str(slurm_partition),
-        "slurm_account": slurm_account,
-        "slurm_time": str(slurm_time),
+        "slurm_account": None if slurm_account in (None, "") else str(slurm_account),
+        "slurm_time": None if slurm_time in (None, "") else str(slurm_time),
         "slurm_gpus": None if slurm_gpus in (None, "") else int(slurm_gpus),
-        "slurm_cpus_per_task": slurm_cpus_per_task,
-        "slurm_mem": slurm_mem,
+        "slurm_cpus_per_task": None if slurm_cpus_per_task in (None, "") else int(slurm_cpus_per_task),
+        "slurm_mem": None if slurm_mem in (None, "") else str(slurm_mem),
         "slurm_extra_args": list(slurm_extra_args or []),
         "ssh_options": list(ssh_options or []),
         "ssh_transport": "auto",
@@ -444,13 +463,13 @@ def build_sol_remote_config(
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
     remote_conda_activate_cmd: str = "source tools/setup/activate_sol_obgpu.sh",
-    slurm_partition: str = "arm",
+    slurm_partition: str | None = None,
     slurm_account: str | None = None,
-    slurm_time: str = "02:00:00",
-    slurm_gpus: int | None = 1,
+    slurm_time: str | None = None,
+    slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
-    remote_poll_interval_s: float = 15.0,
+    remote_poll_interval_s: float = 1.0,
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
     remote_repo_mode: str = "shared",
@@ -465,7 +484,10 @@ def build_sol_remote_config(
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Return a Sol-specific remote runner config with Grace Hopper defaults."""
+    """Return a Sol-specific remote runner config with Sol activation defaults.
+
+    Slurm arguments are only emitted when explicitly provided.
+    """
     config = build_slurm_remote_config(
         remote_host=remote_host,
         remote_repo_root=remote_repo_root,
@@ -1804,7 +1826,7 @@ def _build_remote_allocation_submit_command(
         if value not in (None, ""):
             command.extend([flag, str(int(value))])
     for extra in config.get("slurm_extra_args", []):
-        command.extend(["--sbatch-arg", str(extra)])
+        command.append("--sbatch-arg={}".format(str(extra)))
     return python_exec + " " + _shell_join(command), allocation_root, allocation_name
 
 
@@ -1882,7 +1904,7 @@ def _build_remote_submit_command(
             command.extend([flag, str(int(value))])
 
     for extra in config.get("slurm_extra_args", []):
-        command.extend(["--sbatch-arg", str(extra)])
+        command.append("--sbatch-arg={}".format(str(extra)))
 
     return python_exec + " " + _shell_join(command)
 
@@ -2391,7 +2413,7 @@ def _run_remote_simulation(
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_git_ref,
     )
-    print("[Sol remote] Running remote preflight checks...", flush=True)
+    _progress_write("[Sol remote] Running remote preflight checks...")
 
     preflight_completed = _run_ssh_shell(
         effective_config,
@@ -2439,7 +2461,7 @@ def _run_remote_simulation(
         remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
         remote_metadata["allocation_location"] = allocation_info.get("location", "")
 
-    print("[Sol remote] Submitting Slurm job...", flush=True)
+    _progress_write("[Sol remote] Submitting Slurm job...")
     submit_completed = _run_ssh_shell(effective_config, submit_shell)
     local_result_dir.mkdir(parents=True, exist_ok=True)
     (local_result_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
@@ -2476,8 +2498,8 @@ def _run_remote_simulation(
             ) from exc
 
     remote_result_dir = PurePosixPath(submission["result_dir"])
-    print(f"[Sol remote] Submitted job {submission['job_id']}.", flush=True)
-    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 10.0)), 1.0)
+    _progress_write(f"[Sol remote] Submitted job {submission['job_id']}.")
+    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
     live_status = bool(effective_config.get("remote_live_status", True))
     live_logs = bool(effective_config.get("remote_live_logs", True))
     poll_transcript: list[dict[str, Any]] = []
@@ -2490,6 +2512,8 @@ def _run_remote_simulation(
         "stderr": "",
         "slurm": "",
     }
+    sim_progress_bar: _ProgressBar | None = None
+    sim_progress_total_ms: int | None = None
 
     def poll_remote_status_once() -> dict[str, Any]:
         poll_shell = _build_remote_poll_command(
@@ -2519,7 +2543,7 @@ def _run_remote_simulation(
         return status
 
     def emit_live_remote_updates(status: dict[str, Any]) -> None:
-        nonlocal last_status_signature
+        nonlocal last_status_signature, sim_progress_bar, sim_progress_total_ms
         status_signature = (
             status.get("state"),
             bool(status.get("summary_exists")),
@@ -2551,7 +2575,7 @@ def _run_remote_simulation(
                 flag_text = f"{flag_text}; reason={reason}"
             elif location and state not in {"PENDING", "UNKNOWN"}:
                 flag_text = f"{flag_text}; where={location}"
-            print(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})", flush=True)
+            _progress_write(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})")
             last_status_signature = status_signature
         if live_logs:
             for kind in ("bootstrap", "stdout", "stderr", "slurm"):
@@ -2565,9 +2589,36 @@ def _run_remote_simulation(
                     delta_text = tail_text
                 delta_text = delta_text.strip("\n")
                 if delta_text:
-                    for line in delta_text.splitlines():
-                        print(f"[Sol remote][{kind}] {line}", flush=True)
+                    raw_lines = delta_text.replace("\r", "\n").splitlines()
+                    printable_lines: list[str] = []
+                    if kind == "stdout":
+                        for line in raw_lines:
+                            progress_values = _parse_sim_progress_line(line)
+                            if progress_values is not None:
+                                current_ms, total_ms = progress_values
+                                if sim_progress_bar is None or sim_progress_total_ms != total_ms:
+                                    if sim_progress_bar is not None:
+                                        sim_progress_bar.close()
+                                    sim_progress_total_ms = total_ms
+                                    sim_progress_bar = _ProgressBar(
+                                        total=total_ms,
+                                        desc="Sim",
+                                        unit="ms",
+                                        unit_scale=False,
+                                    )
+                                sim_progress_bar.update_to(current_ms)
+                                continue
+                            printable_lines.append(line)
+                    else:
+                        printable_lines = raw_lines
+                    for line in printable_lines:
+                        if line.strip():
+                            _progress_write(f"[Sol remote][{kind}] {line}")
                 last_live_tails[kind] = tail_text
+        if status.get("done") and sim_progress_bar is not None:
+            sim_progress_bar.close()
+            sim_progress_bar = None
+            sim_progress_total_ms = None
 
     try:
         while True:
@@ -2582,21 +2633,17 @@ def _run_remote_simulation(
                 break
             time.sleep(poll_interval_s)
     except KeyboardInterrupt:
-        print(
-            f"[Sol remote] Interrupt received; beginning shutdown for job {submission['job_id']}...",
-            flush=True,
+        _progress_write(
+            f"[Sol remote] Interrupt received; beginning shutdown for job {submission['job_id']}..."
         )
         cancel_completed = _run_ssh_shell(
             effective_config,
             _build_remote_cancel_command(job_id=str(submission["job_id"])),
         )
         if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
-            print(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}", flush=True)
+            _progress_write(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}")
         else:
-            print(
-                f"[Sol remote] Cancellation requested; waiting for remote cleanup...",
-                flush=True,
-            )
+            _progress_write(f"[Sol remote] Cancellation requested; waiting for remote cleanup...")
 
         cancel_deadline = time.time() + 30.0
         cancel_confirmed = False
@@ -2609,20 +2656,18 @@ def _run_remote_simulation(
             if status.get("done"):
                 final_status = status
                 cancel_confirmed = True
-                print(
-                    f"[Sol remote] Job {submission['job_id']} reached terminal state {status.get('state', 'UNKNOWN')}.",
-                    flush=True,
+                _progress_write(
+                    f"[Sol remote] Job {submission['job_id']} reached terminal state {status.get('state', 'UNKNOWN')}."
                 )
                 break
-            time.sleep(2.0)
+            time.sleep(1.0)
 
         if not cancel_confirmed:
-            print(
-                f"[Sol remote] Remote shutdown not yet confirmed; syncing partial artifacts anyway...",
-                flush=True,
+            _progress_write(
+                f"[Sol remote] Remote shutdown not yet confirmed; syncing partial artifacts anyway..."
             )
         else:
-            print(f"[Sol remote] Syncing partial remote artifacts...", flush=True)
+            _progress_write(f"[Sol remote] Syncing partial remote artifacts...")
         sync_completed = _sync_remote_result_dir(
             effective_config,
             remote_result_dir=remote_result_dir,
@@ -2630,7 +2675,7 @@ def _run_remote_simulation(
         )
         (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
         (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
-        print(f"[Sol remote] Partial artifacts synced to {local_result_dir}", flush=True)
+        _progress_write(f"[Sol remote] Partial artifacts synced to {local_result_dir}")
         raise KeyboardInterrupt(
             f"Interrupted remote Sol run and requested cancellation for job {submission['job_id']}."
         )
@@ -2648,7 +2693,7 @@ def _run_remote_simulation(
             f"Result dir: {local_result_dir}\n"
             f"rsync stderr:\n{sync_completed.stderr}"
         )
-    print(f"[OBGPU load] Remote sync finished: {local_result_dir}", flush=True)
+    _progress_write(f"[OBGPU load] Remote sync finished: {local_result_dir}")
 
     stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
     stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""

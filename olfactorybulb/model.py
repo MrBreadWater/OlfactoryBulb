@@ -203,7 +203,6 @@ class OlfactoryBulb:
         self._native_lfp_cell_gids = {}
         self._native_lfp_gid_source = {}
         self._native_lfp_mappings_registered = False
-        self._status_is_tty = sys.stdout.isatty()
         self._last_status_percent = None
 
         # Just use the BlenderNEURON package functions (e.g. no server/client)
@@ -734,8 +733,7 @@ class OlfactoryBulb:
 
         # Clear status updater line
         if self.mpirank == 0:
-            if self._status_is_tty:
-                print('')
+            print('')
 
     def print_status(self):
         """
@@ -754,15 +752,10 @@ class OlfactoryBulb:
             percent = None
             line = "Time: %.1f ms" % current_ms
 
-        if self._status_is_tty:
-            sys.stdout.write("\r" + line)
-            sys.stdout.flush()
-            return
-
         if percent is not None and percent == self._last_status_percent:
             return
 
-        print(line)
+        sys.stdout.write("\r" + line)
         sys.stdout.flush()
         self._last_status_percent = percent
 
