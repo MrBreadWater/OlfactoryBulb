@@ -23,17 +23,14 @@ TERMINAL_FAIL = {
 
 
 def run_command(command):
-    """Return stripped stdout from a subprocess or an empty string on failure."""
-    completed = subprocess.run(
+    """Return one completed subprocess without raising on non-zero exit."""
+    return subprocess.run(
         command,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         universal_newlines=True,
         check=False,
     )
-    if completed.returncode != 0:
-        return ""
-    return (completed.stdout or "").strip()
 
 
 def normalize_state(raw_state):
@@ -42,16 +39,39 @@ def normalize_state(raw_state):
 
 
 def query_state(job_id):
-    """Query Slurm for one job state using sacct first, then squeue."""
-    sacct_output = run_command(["sacct", "-j", str(job_id), "--format=State", "--noheader"])
-    if sacct_output:
+    """Query Slurm for the top-level job state using sacct first, then squeue."""
+    sacct_completed = run_command(
+        [
+            "sacct",
+            "-j",
+            str(job_id),
+            "--format=JobIDRaw,State",
+            "--parsable2",
+            "--noheader",
+        ]
+    )
+    sacct_output = (sacct_completed.stdout or "").strip()
+    if sacct_completed.returncode == 0 and sacct_output:
         for line in sacct_output.splitlines():
-            state = normalize_state(line)
+            parts = line.split("|", 1)
+            if len(parts) != 2:
+                continue
+            raw_job_id, raw_state = parts
+            if raw_job_id.strip() == str(job_id):
+                state = normalize_state(raw_state)
+                if state:
+                    return state
+        for line in sacct_output.splitlines():
+            parts = line.split("|", 1)
+            if len(parts) != 2:
+                continue
+            state = normalize_state(parts[1])
             if state:
                 return state
 
-    squeue_output = run_command(["squeue", "-j", str(job_id), "-h", "-o", "%T"])
-    if squeue_output:
+    squeue_completed = run_command(["squeue", "-j", str(job_id), "-h", "-o", "%T"])
+    squeue_output = (squeue_completed.stdout or "").strip()
+    if squeue_completed.returncode == 0 and squeue_output:
         return normalize_state(squeue_output)
 
     return "UNKNOWN"
@@ -100,6 +120,10 @@ def main():
     summary_exists = (result_dir / "summary.json").exists()
     stdout_exists = (result_dir / "stdout.txt").exists()
     stderr_exists = (result_dir / "stderr.txt").exists()
+    bootstrap_exists = (result_dir / "bootstrap.log").exists()
+    command_exists = (result_dir / "command.txt").exists()
+    slurm_logs = sorted(result_dir.glob("slurm-*.out"))
+    slurm_log_exists = bool(slurm_logs)
 
     state = query_state(args.job_id)
     done = False
@@ -132,6 +156,10 @@ def main():
         "summary_exists": summary_exists,
         "stdout_exists": stdout_exists,
         "stderr_exists": stderr_exists,
+        "bootstrap_exists": bootstrap_exists,
+        "command_exists": command_exists,
+        "slurm_log_exists": slurm_log_exists,
+        "slurm_logs": [str(path) for path in slurm_logs],
         "cleanup": cleanup_payload,
     }
     print(json.dumps(payload, sort_keys=True))

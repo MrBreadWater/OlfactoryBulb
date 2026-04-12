@@ -1423,6 +1423,19 @@ def _build_remote_preflight_command(
     return " && ".join(checks)
 
 
+def _build_remote_result_listing_command(
+    *,
+    remote_result_dir: PurePosixPath,
+) -> str:
+    """Build one remote shell command that lists the synced result directory contents."""
+    quoted_dir = shlex.quote(remote_result_dir.as_posix())
+    return (
+        f"if test -d {quoted_dir}; then "
+        f"find {quoted_dir} -maxdepth 1 -type f -printf '%f\\t%s\\n' | sort; "
+        "fi"
+    )
+
+
 def _remote_submission_payload(
     config: dict[str, Any],
     *,
@@ -1464,6 +1477,23 @@ def _remote_submission_payload(
             "remote_git_remote": str(config.get("remote_git_remote", "origin")),
         },
         submit_command,
+    )
+
+
+def _remote_status_has_artifacts(status: dict[str, Any] | None) -> bool:
+    """Return whether the remote poll status saw any useful output artifacts."""
+    if not status:
+        return False
+    return any(
+        bool(status.get(key))
+        for key in (
+            "summary_exists",
+            "stdout_exists",
+            "stderr_exists",
+            "bootstrap_exists",
+            "command_exists",
+            "slurm_log_exists",
+        )
     )
 
 
@@ -1690,6 +1720,7 @@ def _run_remote_simulation(
     poll_interval_s = max(float(config.get("remote_poll_interval_s", 10.0)), 1.0)
     poll_transcript: list[dict[str, Any]] = []
     final_status: dict[str, Any] | None = None
+    missing_artifact_retries = 0
 
     while True:
         poll_shell = _build_remote_poll_command(
@@ -1716,6 +1747,10 @@ def _run_remote_simulation(
 
         poll_transcript.append(status)
         if status.get("done"):
+            if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
+                missing_artifact_retries += 1
+                time.sleep(3.0)
+                continue
             final_status = status
             break
         time.sleep(poll_interval_s)
@@ -1743,6 +1778,32 @@ def _run_remote_simulation(
     )
     slurm_logs = sorted(local_result_dir.glob("slurm-*.out"))
     slurm_text = slurm_logs[-1].read_text() if slurm_logs else ""
+    if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
+        time.sleep(3.0)
+        sync_completed = _sync_remote_result_dir(
+            config,
+            remote_result_dir=remote_result_dir,
+            local_result_dir=local_result_dir,
+        )
+        (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
+        (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+        if sync_completed.returncode == 0:
+            stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
+            stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
+            bootstrap_text = (
+                (local_result_dir / "bootstrap.log").read_text()
+                if (local_result_dir / "bootstrap.log").exists()
+                else ""
+            )
+            slurm_logs = sorted(local_result_dir.glob("slurm-*.out"))
+            slurm_text = slurm_logs[-1].read_text() if slurm_logs else ""
+    remote_listing_text = ""
+    if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
+        listing_completed = _run_ssh_shell(
+            config,
+            _build_remote_result_listing_command(remote_result_dir=remote_result_dir),
+        )
+        remote_listing_text = (listing_completed.stdout or "").strip()
     remote_git_commit = (
         (local_result_dir / "git_commit.txt").read_text().strip()
         if (local_result_dir / "git_commit.txt").exists()
@@ -1790,6 +1851,7 @@ def _run_remote_simulation(
         stdout_tail = stdout_text.strip()[-2000:]
         bootstrap_tail = bootstrap_text.strip()[-4000:]
         slurm_tail = slurm_text.strip()[-4000:]
+        remote_listing_tail = remote_listing_text.strip()[-4000:]
         raise RuntimeError(
             "Remote Sol simulation failed.\n"
             f"Result dir: {local_result_dir}\n"
@@ -1797,7 +1859,8 @@ def _run_remote_simulation(
             f"Stdout tail:\n{stdout_tail}\n\n"
             f"Stderr tail:\n{stderr_tail}\n\n"
             f"Bootstrap tail:\n{bootstrap_tail}\n\n"
-            f"Slurm tail:\n{slurm_tail}"
+            f"Slurm tail:\n{slurm_tail}\n\n"
+            f"Remote files:\n{remote_listing_tail}"
         )
 
     if summary is None:
