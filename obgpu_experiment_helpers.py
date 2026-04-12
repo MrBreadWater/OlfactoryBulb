@@ -98,8 +98,8 @@ CONTROL_HELP = {
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
     "wavelet_signal": "Signal for wavelet plots, e.g. 'lfp', 'mean_TC_voltage', or a soma label.",
     "runner_backend": "Execution backend: 'local' or 'sol_slurm'.",
-    "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec' or 'srun --mpi=pmix'.",
-    "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'srun --mpi=pmix' or 'mpiexec'.",
+    "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec' or 'srun --mpi=pmi2'.",
+    "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'srun' or 'mpiexec'.",
     "remote_host": "SSH target used by the Sol backend, e.g. 'user@sol.asu.edu'.",
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
@@ -168,7 +168,7 @@ def default_local_mpi_exec() -> str:
 
 def default_remote_mpi_exec() -> str:
     """Return the preferred MPI launcher for the Sol Slurm backend."""
-    return "srun --mpi=pmix"
+    return "srun"
 
 
 def make_timestamp() -> str:
@@ -288,7 +288,7 @@ def build_sol_remote_config(
 
     This helper is the supported notebook-facing way to send runs to Sol. By
     default it chooses the `arm` partition for Grace Hopper, uses the Sol
-    activation helper, and launches the benchmark through `srun --mpi=pmix`.
+    activation helper, and launches the benchmark through plain `srun`.
     """
     remote_repo_root = str(remote_repo_root)
     if remote_results_root is None:
