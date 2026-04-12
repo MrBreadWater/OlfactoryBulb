@@ -142,6 +142,17 @@ def read_tail(path):
         return handle.read().decode("utf-8", errors="replace")
 
 
+def read_progress(path):
+    """Return one decoded progress snapshot when it exists and is valid JSON."""
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return {}
+    try:
+        return json.loads(file_path.read_text())
+    except Exception:
+        return {}
+
+
 def main():
     """Emit JSON job state and result readiness for one remote run."""
     parser = argparse.ArgumentParser()
@@ -167,6 +178,7 @@ def main():
         else result_dir / "bootstrap.log"
     )
     command_path = wrapper_dir / "command.txt" if (wrapper_dir / "command.txt").exists() else result_dir / "command.txt"
+    progress_path = result_dir / "sim_progress.json"
     wrapper_slurm_logs = sorted(wrapper_dir.glob("slurm-*.out")) if wrapper_dir.exists() else []
     result_slurm_logs = sorted(result_dir.glob("slurm-*.out"))
     slurm_logs = wrapper_slurm_logs or result_slurm_logs
@@ -174,7 +186,9 @@ def main():
     stderr_exists = stderr_path.exists()
     bootstrap_exists = bootstrap_path.exists()
     command_exists = command_path.exists()
+    progress_exists = progress_path.exists()
     slurm_log_exists = bool(slurm_logs)
+    progress_payload = read_progress(progress_path)
 
     state_payload = query_state(args.job_id)
     state = state_payload["state"]
@@ -213,6 +227,10 @@ def main():
         "bootstrap_exists": bootstrap_exists,
         "bootstrap_tail": read_tail(bootstrap_path),
         "command_exists": command_exists,
+        "progress_exists": progress_exists,
+        "progress_current_ms": progress_payload.get("current_ms"),
+        "progress_total_ms": progress_payload.get("total_ms"),
+        "progress_percent": progress_payload.get("percent"),
         "stdout_tail": read_tail(stdout_path),
         "stderr_tail": read_tail(stderr_path),
         "slurm_log_exists": slurm_log_exists,

@@ -63,9 +63,6 @@ REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
 DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
-_SIM_PROGRESS_RE = re.compile(
-    r"^Sim \[[^\]]+\]\s+(?P<percent>\d+)%\s+\((?P<current>[\d.]+)\s*/\s*(?P<total>[\d.]+)\s+ms\)$"
-)
 CONTROL_HELP = {
     "mode": "Use 'fast' for 1-rank exploration or 'parity' for exact match to a previous version.",
     "nranks": "MPI rank count for the run. 1 is faster on this machine",
@@ -189,19 +186,6 @@ def _progress_write(message: str) -> None:
         tqdm.write(message)
     else:
         print(message, flush=True)
-
-
-def _parse_sim_progress_line(line: str) -> tuple[int, int] | None:
-    """Extract the current/total ms values from one simulation progress line."""
-    match = _SIM_PROGRESS_RE.match(line.strip())
-    if match is None:
-        return None
-    current_ms = int(float(match.group("current")))
-    total_ms = int(float(match.group("total")))
-    if total_ms <= 0:
-        return None
-    current_ms = max(0, min(current_ms, total_ms))
-    return current_ms, total_ms
 
 
 class _ProgressBar:
@@ -2577,6 +2561,23 @@ def _run_remote_simulation(
                 flag_text = f"{flag_text}; where={location}"
             _progress_write(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})")
             last_status_signature = status_signature
+        progress_total_ms = status.get("progress_total_ms")
+        progress_current_ms = status.get("progress_current_ms")
+        if progress_total_ms not in (None, "", 0) and progress_current_ms is not None:
+            total_ms = max(int(float(progress_total_ms)), 0)
+            current_ms = max(0, min(int(float(progress_current_ms)), total_ms))
+            if total_ms > 0:
+                if sim_progress_bar is None or sim_progress_total_ms != total_ms:
+                    if sim_progress_bar is not None:
+                        sim_progress_bar.close()
+                    sim_progress_total_ms = total_ms
+                    sim_progress_bar = _ProgressBar(
+                        total=total_ms,
+                        desc="Sim",
+                        unit="ms",
+                        unit_scale=False,
+                    )
+                sim_progress_bar.update_to(current_ms)
         if live_logs:
             for kind in ("bootstrap", "stdout", "stderr", "slurm"):
                 tail_text = str(status.get(f"{kind}_tail") or "")
@@ -2589,29 +2590,7 @@ def _run_remote_simulation(
                     delta_text = tail_text
                 delta_text = delta_text.strip("\n")
                 if delta_text:
-                    raw_lines = delta_text.replace("\r", "\n").splitlines()
-                    printable_lines: list[str] = []
-                    if kind == "stdout":
-                        for line in raw_lines:
-                            progress_values = _parse_sim_progress_line(line)
-                            if progress_values is not None:
-                                current_ms, total_ms = progress_values
-                                if sim_progress_bar is None or sim_progress_total_ms != total_ms:
-                                    if sim_progress_bar is not None:
-                                        sim_progress_bar.close()
-                                    sim_progress_total_ms = total_ms
-                                    sim_progress_bar = _ProgressBar(
-                                        total=total_ms,
-                                        desc="Sim",
-                                        unit="ms",
-                                        unit_scale=False,
-                                    )
-                                sim_progress_bar.update_to(current_ms)
-                                continue
-                            printable_lines.append(line)
-                    else:
-                        printable_lines = raw_lines
-                    for line in printable_lines:
+                    for line in delta_text.replace("\r", "\n").splitlines():
                         if line.strip():
                             _progress_write(f"[Sol remote][{kind}] {line}")
                 last_live_tails[kind] = tail_text

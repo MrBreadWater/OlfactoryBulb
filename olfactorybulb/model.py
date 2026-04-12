@@ -203,6 +203,7 @@ class OlfactoryBulb:
         self._native_lfp_cell_gids = {}
         self._native_lfp_gid_source = {}
         self._native_lfp_mappings_registered = False
+        self._status_is_tty = sys.stdout.isatty()
         self._last_status_percent = None
 
         # Just use the BlenderNEURON package functions (e.g. no server/client)
@@ -731,13 +732,46 @@ class OlfactoryBulb:
                 self.prepare_corenrn_native_lfp()
             self.pc.psolve(h.tstop)
 
+        if self.mpirank == 0:
+            self.write_progress_status(float(h.tstop), float(h.tstop))
+
         # Clear status updater line
         if self.mpirank == 0:
-            print('')
+            if self._status_is_tty:
+                print('')
+
+    def write_progress_status(self, current_ms, total_ms):
+        """Persist one coarse simulation-progress snapshot for notebook polling."""
+        if self.mpirank != 0:
+            return
+
+        result_dir = getattr(self, "results_dir", None)
+        if not result_dir:
+            return
+
+        if total_ms > 0:
+            progress = max(0.0, min(float(current_ms) / float(total_ms), 1.0))
+            percent = int(progress * 100.0)
+        else:
+            percent = None
+
+        payload = {
+            "current_ms": float(current_ms),
+            "total_ms": float(total_ms),
+            "percent": percent,
+        }
+        progress_path = os.path.join(str(result_dir), "sim_progress.json")
+        tmp_path = progress_path + ".tmp"
+        try:
+            with open(tmp_path, "w") as handle:
+                json.dump(payload, handle, sort_keys=True)
+            os.replace(tmp_path, progress_path)
+        except Exception:
+            pass
 
     def print_status(self):
         """
-        Prints simulation progress as a compact progress bar.
+        Emits simulation progress to stdout on TTYs and to a progress file otherwise.
         """
 
         current_ms = float(self.h.t)
@@ -755,8 +789,11 @@ class OlfactoryBulb:
         if percent is not None and percent == self._last_status_percent:
             return
 
-        sys.stdout.write("\r" + line)
-        sys.stdout.flush()
+        if self._status_is_tty:
+            sys.stdout.write("\r" + line)
+            sys.stdout.flush()
+        else:
+            self.write_progress_status(current_ms, total_ms)
         self._last_status_percent = percent
 
     def setup_status_reporter(self):
