@@ -10,6 +10,7 @@ trap 'status=$?; echo "[OBGPU setup] failed (exit ${status}) at line ${LINENO}: 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_NAME="${ENV_NAME:-OBGPU}"
 ENABLE_GPU="${ENABLE_GPU:-0}"
+OBGPU_BUILD_JOBS="${OBGPU_BUILD_JOBS:-8}"
 PATCH_MANIFEST="${NRN_PATCH_MANIFEST:-${REPO_ROOT}/third_party_patches/nrn/manifest.json}"
 PATCH_DIR="$(cd "$(dirname "${PATCH_MANIFEST}")" && pwd)"
 NRN_SRC_DIR="${NRN_SRC_DIR:-${REPO_ROOT}/external/nrn-9.0.1}"
@@ -28,6 +29,11 @@ fi
 
 if [[ ! -f "${PATCH_MANIFEST}" ]]; then
   echo "Patch manifest not found: ${PATCH_MANIFEST}" >&2
+  exit 1
+fi
+
+if [[ ! "${OBGPU_BUILD_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
+  echo "OBGPU_BUILD_JOBS must be a positive integer, got '${OBGPU_BUILD_JOBS}'" >&2
   exit 1
 fi
 
@@ -705,7 +711,7 @@ if stamp_matches "${NRN_BUILD_STAMP_PATH}" "${NRN_BUILD_FINGERPRINT}" && neuron_
 else
   log_step "Configuring and building NEURON/CoreNEURON in ${NRN_BUILD_DIR}"
   cmake "${cmake_args[@]}"
-  cmake --build "${NRN_BUILD_DIR}" --parallel 8
+  cmake --build "${NRN_BUILD_DIR}" --parallel "${OBGPU_BUILD_JOBS}"
   cmake --install "${NRN_BUILD_DIR}"
   mkdir -p "${NRN_BUILD_DIR}"
   printf '%s\n' "${NRN_BUILD_FINGERPRINT}" > "${NRN_BUILD_STAMP_PATH}"
