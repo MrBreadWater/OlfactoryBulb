@@ -82,7 +82,8 @@ def write_batch_script(
     args,
 ):
     """Write the Slurm batch script that launches one benchmark run."""
-    batch_path = result_dir / "slurm_job.sh"
+    wrapper_dir = result_dir.parent / ".obgpu-wrapper" / label
+    batch_path = wrapper_dir / "slurm_job.sh"
     worktree_command = relocate_benchmark_command(
         benchmark_command,
         repo_root=repo_root,
@@ -95,8 +96,8 @@ def write_batch_script(
     replace_mpi_exec = bool(requested_mpi_parts) and worktree_command[: len(requested_mpi_parts)] == requested_mpi_parts
     if replace_mpi_exec:
         benchmark_suffix = worktree_command[len(requested_mpi_parts):]
-    slurm_log_path = result_dir / "slurm-%j.out"
-    bootstrap_log_path = result_dir / "bootstrap.log"
+    slurm_log_path = wrapper_dir / "slurm-%j.out"
+    bootstrap_log_path = wrapper_dir / "bootstrap.log"
     git_ref_value = git_ref or ""
     lines = [
         "#!/usr/bin/env bash",
@@ -105,14 +106,28 @@ def write_batch_script(
         "#SBATCH --error={}".format(slurm_log_path),
         "set -Eeuo pipefail",
         "mkdir -p {}".format(shlex.quote(str(result_dir))),
+        "mkdir -p {}".format(shlex.quote(str(wrapper_dir))),
         "result_dir={}".format(shlex.quote(str(result_dir))),
+        "wrapper_dir={}".format(shlex.quote(str(wrapper_dir))),
         "shared_repo_root={}".format(shlex.quote(str(repo_root))),
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
         "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
         "touch \"$bootstrap_log\"",
+        "sync_wrapper_artifacts() {",
+        "  set +e",
+        "  mkdir -p \"$result_dir\" || true",
+        "  shopt -s nullglob",
+        "  local artifact",
+        "  for artifact in \"$wrapper_dir\"/bootstrap.log \"$wrapper_dir\"/command.txt \"$wrapper_dir\"/stdout.txt \"$wrapper_dir\"/stderr.txt \"$wrapper_dir\"/slurm-*.out; do",
+        "    [[ -e \"$artifact\" ]] || continue",
+        "    cp -f \"$artifact\" \"$result_dir\"/ 2>/dev/null || true",
+        "  done",
+        "  shopt -u nullglob",
+        "}",
         "on_err() {",
         "  local rc=$?",
         "  printf '[OBGPU batch] failed at line %s: %s (exit %s)\\n' \"${BASH_LINENO[0]:-?}\" \"${BASH_COMMAND:-<unknown>}\" \"$rc\" >> \"$bootstrap_log\"",
+        "  sync_wrapper_artifacts",
         "  exit \"$rc\"",
         "}",
         "cleanup_worktree() {",
@@ -126,6 +141,7 @@ def write_batch_script(
         "on_exit() {",
         "  local exit_code=$?",
         "  trap - EXIT",
+        "  sync_wrapper_artifacts",
         "  cleanup_worktree",
         "  exit \"$exit_code\"",
         "}",
@@ -136,6 +152,7 @@ def write_batch_script(
         "    kill -\"$signal\" \"$benchmark_pid\" 2>/dev/null || kill \"$benchmark_pid\" 2>/dev/null || true",
         "    wait \"$benchmark_pid\" 2>/dev/null || true",
         "  fi",
+        "  sync_wrapper_artifacts",
         "  cleanup_worktree",
         "  exit 128",
         "}",
@@ -179,17 +196,17 @@ def write_batch_script(
                 "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
                 "obgpu_command=(" + " ".join(shlex.quote(part) for part in benchmark_suffix) + ")",
                 "obgpu_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_command[@]}\")",
-                "touch " + shlex.quote(str(result_dir / "command.txt")) + " "
-                + shlex.quote(str(result_dir / "stdout.txt")) + " "
-                + shlex.quote(str(result_dir / "stderr.txt")),
+                "touch " + shlex.quote(str(wrapper_dir / "command.txt")) + " "
+                + shlex.quote(str(wrapper_dir / "stdout.txt")) + " "
+                + shlex.quote(str(wrapper_dir / "stderr.txt")),
                 "printf '%s\\n' \"$(printf '%q ' \"${obgpu_command[@]}\")\" > "
-                + shlex.quote(str(result_dir / "command.txt")),
+                + shlex.quote(str(wrapper_dir / "command.txt")),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
                 "if \"${obgpu_command[@]}\" > "
-                + shlex.quote(str(result_dir / "stdout.txt"))
+                + shlex.quote(str(wrapper_dir / "stdout.txt"))
                 + " 2> "
-                + shlex.quote(str(result_dir / "stderr.txt"))
+                + shlex.quote(str(wrapper_dir / "stderr.txt"))
                 + "; then",
                 "  benchmark_rc=0",
                 "else",
@@ -200,19 +217,19 @@ def write_batch_script(
     else:
         lines.extend(
             [
-                "touch " + shlex.quote(str(result_dir / "command.txt")) + " "
-                + shlex.quote(str(result_dir / "stdout.txt")) + " "
-                + shlex.quote(str(result_dir / "stderr.txt")),
+                "touch " + shlex.quote(str(wrapper_dir / "command.txt")) + " "
+                + shlex.quote(str(wrapper_dir / "stdout.txt")) + " "
+                + shlex.quote(str(wrapper_dir / "stderr.txt")),
                 "printf '%s\\n' {} > {}".format(
                     shlex.quote(benchmark_shell),
-                    shlex.quote(str(result_dir / "command.txt")),
+                    shlex.quote(str(wrapper_dir / "command.txt")),
                 ),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
                 "if {} > {} 2> {}; then".format(
                     benchmark_shell,
-                    shlex.quote(str(result_dir / "stdout.txt")),
-                    shlex.quote(str(result_dir / "stderr.txt")),
+                    shlex.quote(str(wrapper_dir / "stdout.txt")),
+                    shlex.quote(str(wrapper_dir / "stderr.txt")),
                 ),
                 "  benchmark_rc=0",
                 "else",
@@ -224,10 +241,12 @@ def write_batch_script(
         [
         "printf '%s\\n' \"[OBGPU batch] benchmark rc=${benchmark_rc}\" >> \"$bootstrap_log\"",
         "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
+        "sync_wrapper_artifacts",
         "exit \"$benchmark_rc\"",
         "",
         ]
     )
+    batch_path.parent.mkdir(parents=True, exist_ok=True)
     batch_path.write_text("\n".join(lines))
     batch_path.chmod(0o755)
     return batch_path
@@ -281,8 +300,10 @@ def main():
 
     repo_root = Path(args.repo_root).resolve()
     result_dir = Path(args.results_base).expanduser().resolve() / args.label
+    wrapper_dir = result_dir.parent / ".obgpu-wrapper" / args.label
     worktree_root = repo_root.parent / ".obgpu-worktrees" / args.label
     result_dir.mkdir(parents=True, exist_ok=True)
+    wrapper_dir.mkdir(parents=True, exist_ok=True)
 
     benchmark_command = decode_command(args.benchmark_command_b64)
     batch_path = write_batch_script(
@@ -304,11 +325,12 @@ def main():
         "job_id": None,
         "label": args.label,
         "result_dir": str(result_dir),
+        "wrapper_dir": str(wrapper_dir),
         "worktree_path": str(worktree_root),
         "batch_script": str(batch_path),
         "stdout_path": str(result_dir / "stdout.txt"),
         "stderr_path": str(result_dir / "stderr.txt"),
-        "slurm_stdout_path": str(result_dir / "slurm-%j.out"),
+        "slurm_stdout_path": str(wrapper_dir / "slurm-%j.out"),
         "benchmark_command": relocate_benchmark_command(
             benchmark_command,
             repo_root=repo_root,
