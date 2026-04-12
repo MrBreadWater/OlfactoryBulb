@@ -75,6 +75,7 @@ def write_batch_script(
     worktree_root,
     conda_activate_cmd,
     benchmark_command,
+    mpi_exec,
     git_ref,
     git_fetch,
     git_remote,
@@ -89,6 +90,11 @@ def write_batch_script(
         preserved_roots=[result_dir.parent],
     )
     benchmark_shell = shell_join(worktree_command)
+    benchmark_suffix = list(worktree_command)
+    requested_mpi_parts = shlex.split(mpi_exec) if mpi_exec else []
+    replace_mpi_exec = bool(requested_mpi_parts) and worktree_command[: len(requested_mpi_parts)] == requested_mpi_parts
+    if replace_mpi_exec:
+        benchmark_suffix = worktree_command[len(requested_mpi_parts):]
     slurm_log_path = result_dir / "slurm-%j.out"
     bootstrap_log_path = result_dir / "bootstrap.log"
     git_ref_value = git_ref or ""
@@ -155,22 +161,47 @@ def write_batch_script(
         "export OBGPU_SHARED_REPO_ROOT=\"$shared_repo_root\"",
         "eval {}".format(shlex.quote(conda_activate_cmd)),
         "} >> \"$bootstrap_log\" 2>&1",
-        "printf '%s\\n' {} > {}".format(
-            shlex.quote(benchmark_shell),
-            shlex.quote(str(result_dir / "command.txt")),
-        ),
-        "{} > {} 2> {} &".format(
-            benchmark_shell,
-            shlex.quote(str(result_dir / "stdout.txt")),
-            shlex.quote(str(result_dir / "stderr.txt")),
-        ),
+    ]
+    if replace_mpi_exec:
+        lines.extend(
+            [
+                "resolved_mpi_exec=${OB_MPIEXEC:-" + shlex.quote(mpi_exec) + "}",
+                "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
+                "obgpu_command=(" + " ".join(shlex.quote(part) for part in benchmark_suffix) + ")",
+                "obgpu_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_command[@]}\")",
+                "printf '%s\\n' \"$(printf '%q ' \"${obgpu_command[@]}\")\" > {}".format(
+                    shlex.quote(str(result_dir / "command.txt"))
+                ),
+                "\"${obgpu_command[@]}\" > {} 2> {} &".format(
+                    shlex.quote(str(result_dir / "stdout.txt")),
+                    shlex.quote(str(result_dir / "stderr.txt")),
+                ),
+            ]
+        )
+    else:
+        lines.extend(
+            [
+                "printf '%s\\n' {} > {}".format(
+                    shlex.quote(benchmark_shell),
+                    shlex.quote(str(result_dir / "command.txt")),
+                ),
+                "{} > {} 2> {} &".format(
+                    benchmark_shell,
+                    shlex.quote(str(result_dir / "stdout.txt")),
+                    shlex.quote(str(result_dir / "stderr.txt")),
+                ),
+            ]
+        )
+    lines.extend(
+        [
         "benchmark_pid=$!",
         "wait \"$benchmark_pid\"",
         "benchmark_rc=$?",
         "benchmark_pid=",
         "exit \"$benchmark_rc\"",
         "",
-    ]
+        ]
+    )
     batch_path.write_text("\n".join(lines))
     batch_path.chmod(0o755)
     return batch_path
@@ -207,6 +238,7 @@ def main():
     parser.add_argument("--results-base", required=True)
     parser.add_argument("--label", required=True)
     parser.add_argument("--benchmark-command-b64", required=True)
+    parser.add_argument("--mpi-exec", default="")
     parser.add_argument("--conda-activate-cmd", required=True)
     parser.add_argument("--git-ref", default=None)
     parser.add_argument("--git-fetch", action="store_true")
@@ -234,6 +266,7 @@ def main():
         worktree_root=worktree_root,
         conda_activate_cmd=args.conda_activate_cmd,
         benchmark_command=benchmark_command,
+        mpi_exec=str(args.mpi_exec),
         git_ref=args.git_ref,
         git_fetch=bool(args.git_fetch),
         git_remote=str(args.git_remote),

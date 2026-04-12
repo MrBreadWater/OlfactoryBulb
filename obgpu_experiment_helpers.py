@@ -1293,6 +1293,7 @@ def _build_remote_submit_command(
     remote_repo_root: PurePosixPath,
     remote_results_root: PurePosixPath,
     benchmark_command: list[str],
+    remote_mpi_exec: str,
     remote_git_ref: str | None,
 ) -> str:
     """Build the remote `submit_sol_run.py` invocation shell line."""
@@ -1323,6 +1324,8 @@ def _build_remote_submit_command(
         label,
         "--benchmark-command-b64",
         benchmark_b64,
+        "--mpi-exec",
+        str(remote_mpi_exec),
         "--conda-activate-cmd",
         str(config.get("remote_conda_activate_cmd")),
     ]
@@ -1443,6 +1446,7 @@ def _remote_submission_payload(
         remote_repo_root=remote_repo_root,
         remote_results_root=remote_results_root,
         benchmark_command=remote_command,
+        remote_mpi_exec=str(remote_mpi_exec),
         remote_git_ref=remote_git_ref,
     )
     return (
