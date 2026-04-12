@@ -105,6 +105,7 @@ def write_batch_script(
         "#SBATCH --error={}".format(slurm_log_path),
         "set -Eeuo pipefail",
         "mkdir -p {}".format(shlex.quote(str(result_dir))),
+        "result_dir={}".format(shlex.quote(str(result_dir))),
         "shared_repo_root={}".format(shlex.quote(str(repo_root))),
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
         "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
@@ -178,35 +179,48 @@ def write_batch_script(
                 "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
                 "obgpu_command=(" + " ".join(shlex.quote(part) for part in benchmark_suffix) + ")",
                 "obgpu_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_command[@]}\")",
+                "touch " + shlex.quote(str(result_dir / "command.txt")) + " "
+                + shlex.quote(str(result_dir / "stdout.txt")) + " "
+                + shlex.quote(str(result_dir / "stderr.txt")),
                 "printf '%s\\n' \"$(printf '%q ' \"${obgpu_command[@]}\")\" > "
                 + shlex.quote(str(result_dir / "command.txt")),
+                "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
+                "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
+                "set +e",
                 "\"${obgpu_command[@]}\" > "
                 + shlex.quote(str(result_dir / "stdout.txt"))
                 + " 2> "
-                + shlex.quote(str(result_dir / "stderr.txt"))
-                + " &",
+                + shlex.quote(str(result_dir / "stderr.txt")),
+                "benchmark_rc=$?",
+                "set -e",
             ]
         )
     else:
         lines.extend(
             [
+                "touch " + shlex.quote(str(result_dir / "command.txt")) + " "
+                + shlex.quote(str(result_dir / "stdout.txt")) + " "
+                + shlex.quote(str(result_dir / "stderr.txt")),
                 "printf '%s\\n' {} > {}".format(
                     shlex.quote(benchmark_shell),
                     shlex.quote(str(result_dir / "command.txt")),
                 ),
-                "{} > {} 2> {} &".format(
+                "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
+                "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
+                "set +e",
+                "{} > {} 2> {}".format(
                     benchmark_shell,
                     shlex.quote(str(result_dir / "stdout.txt")),
                     shlex.quote(str(result_dir / "stderr.txt")),
                 ),
+                "benchmark_rc=$?",
+                "set -e",
             ]
         )
     lines.extend(
         [
-        "benchmark_pid=$!",
-        "wait \"$benchmark_pid\"",
-        "benchmark_rc=$?",
-        "benchmark_pid=",
+        "printf '%s\\n' \"[OBGPU batch] benchmark rc=${benchmark_rc}\" >> \"$bootstrap_log\"",
+        "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
         "exit \"$benchmark_rc\"",
         "",
         ]
