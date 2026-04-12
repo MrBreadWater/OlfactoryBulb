@@ -180,7 +180,11 @@ PY
 }
 
 detect_python_runtime_paths() {
-  "${BOOTSTRAP_PYTHON}" - <<'PY'
+  local python_runtime_exe="${CONDA_PREFIX:-}/bin/python"
+  if [[ ! -x "${python_runtime_exe}" ]]; then
+    python_runtime_exe="${BOOTSTRAP_PYTHON}"
+  fi
+  "${python_runtime_exe}" - <<'PY'
 import sys
 import sysconfig
 from pathlib import Path
