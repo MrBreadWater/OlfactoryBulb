@@ -72,6 +72,7 @@ def write_batch_script(
     repo_root,
     result_dir,
     label,
+    repo_mode,
     worktree_root,
     conda_activate_cmd,
     benchmark_command,
@@ -84,18 +85,23 @@ def write_batch_script(
     """Write the Slurm batch script that launches one benchmark run."""
     wrapper_dir = result_dir.parent / ".obgpu-wrapper" / label
     batch_path = wrapper_dir / "slurm_job.sh"
-    worktree_command = relocate_benchmark_command(
-        benchmark_command,
-        repo_root=repo_root,
-        worktree_root=worktree_root,
-        preserved_roots=[result_dir.parent],
-    )
-    benchmark_shell = shell_join(worktree_command)
-    benchmark_suffix = list(worktree_command)
+    if repo_mode == "snapshot":
+        effective_command = relocate_benchmark_command(
+            benchmark_command,
+            repo_root=repo_root,
+            worktree_root=worktree_root,
+            preserved_roots=[result_dir.parent],
+        )
+    elif repo_mode == "shared":
+        effective_command = list(benchmark_command)
+    else:
+        raise ValueError("Unsupported repo_mode={!r}".format(repo_mode))
+    benchmark_shell = shell_join(effective_command)
+    benchmark_suffix = list(effective_command)
     requested_mpi_parts = shlex.split(mpi_exec) if mpi_exec else []
-    replace_mpi_exec = bool(requested_mpi_parts) and worktree_command[: len(requested_mpi_parts)] == requested_mpi_parts
+    replace_mpi_exec = bool(requested_mpi_parts) and effective_command[: len(requested_mpi_parts)] == requested_mpi_parts
     if replace_mpi_exec:
-        benchmark_suffix = worktree_command[len(requested_mpi_parts):]
+        benchmark_suffix = effective_command[len(requested_mpi_parts):]
     slurm_log_path = wrapper_dir / "slurm-%j.out"
     bootstrap_log_path = wrapper_dir / "bootstrap.log"
     git_ref_value = git_ref or ""
@@ -110,6 +116,7 @@ def write_batch_script(
         "result_dir={}".format(shlex.quote(str(result_dir))),
         "wrapper_dir={}".format(shlex.quote(str(wrapper_dir))),
         "shared_repo_root={}".format(shlex.quote(str(repo_root))),
+        "job_repo_mode={}".format(shlex.quote(str(repo_mode))),
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
         "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
         "touch \"$bootstrap_log\"",
@@ -132,6 +139,9 @@ def write_batch_script(
         "}",
         "cleanup_worktree() {",
         "  set +e",
+        "  if [[ \"$job_repo_mode\" != \"snapshot\" ]]; then",
+        "    return 0",
+        "  fi",
         "  cd \"$shared_repo_root\" || true",
         "  if [[ -e \"$job_worktree\" ]]; then",
         "    git -C \"$shared_repo_root\" worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || rm -rf \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
@@ -163,20 +173,29 @@ def write_batch_script(
         "trap 'on_signal TERM' TERM",
         "{",
         "printf '%s\\n' '[OBGPU batch] bootstrap start'",
-        "mkdir -p {}".format(shlex.quote(str(worktree_root.parent))),
         "cd \"$shared_repo_root\"",
         'if [[ "{}" == "1" ]]; then git fetch --tags --prune {}; fi'.format(
             "1" if git_fetch else "0",
             shlex.quote(str(git_remote)),
         ),
-        "git worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
-        "rm -rf \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
         'if [[ -n "{}" ]]; then job_git_ref={}; else job_git_ref=HEAD; fi'.format(
             git_ref_value,
             shlex.quote(git_ref_value),
         ),
-        "git worktree add --force --detach \"$job_worktree\" \"$job_git_ref\"",
-        "cd \"$job_worktree\"",
+        "if [[ \"$job_repo_mode\" == \"snapshot\" ]]; then",
+        "  mkdir -p {}".format(shlex.quote(str(worktree_root.parent))),
+        "  git worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
+        "  rm -rf \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
+        "  git worktree add --force --detach \"$job_worktree\" \"$job_git_ref\"",
+        "  job_repo_root=\"$job_worktree\"",
+        "else",
+        "  if [[ -n \"$job_git_ref\" && \"$job_git_ref\" != \"HEAD\" ]]; then",
+        "    printf '%s\\n' '[OBGPU batch] shared repo mode does not support git_ref checkout' >> \"$bootstrap_log\"",
+        "    exit 2",
+        "  fi",
+        "  job_repo_root=\"$shared_repo_root\"",
+        "fi",
+        "cd \"$job_repo_root\"",
         "git rev-parse HEAD > {}".format(shlex.quote(str(result_dir / "git_commit.txt"))),
         'if [[ -n "{}" ]]; then printf "%s\\n" {} > {}; fi'.format(
             git_ref_value,
@@ -283,6 +302,7 @@ def main():
     parser.add_argument("--results-base", required=True)
     parser.add_argument("--label", required=True)
     parser.add_argument("--benchmark-command-b64", required=True)
+    parser.add_argument("--repo-mode", default="shared")
     parser.add_argument("--mpi-exec", default="")
     parser.add_argument("--conda-activate-cmd", required=True)
     parser.add_argument("--git-ref", default=None)
@@ -302,6 +322,7 @@ def main():
     result_dir = Path(args.results_base).expanduser().resolve() / args.label
     wrapper_dir = result_dir.parent / ".obgpu-wrapper" / args.label
     worktree_root = repo_root.parent / ".obgpu-worktrees" / args.label
+    repo_mode = str(args.repo_mode).strip().lower()
     result_dir.mkdir(parents=True, exist_ok=True)
     wrapper_dir.mkdir(parents=True, exist_ok=True)
 
@@ -310,6 +331,7 @@ def main():
         repo_root=repo_root,
         result_dir=result_dir,
         label=args.label,
+        repo_mode=repo_mode,
         worktree_root=worktree_root,
         conda_activate_cmd=args.conda_activate_cmd,
         benchmark_command=benchmark_command,
@@ -324,23 +346,29 @@ def main():
         "submitted": False,
         "job_id": None,
         "label": args.label,
+        "repo_mode": repo_mode,
         "result_dir": str(result_dir),
         "wrapper_dir": str(wrapper_dir),
-        "worktree_path": str(worktree_root),
         "batch_script": str(batch_path),
         "stdout_path": str(result_dir / "stdout.txt"),
         "stderr_path": str(result_dir / "stderr.txt"),
         "slurm_stdout_path": str(wrapper_dir / "slurm-%j.out"),
-        "benchmark_command": relocate_benchmark_command(
-            benchmark_command,
-            repo_root=repo_root,
-            worktree_root=worktree_root,
-            preserved_roots=[result_dir.parent],
+        "benchmark_command": (
+            relocate_benchmark_command(
+                benchmark_command,
+                repo_root=repo_root,
+                worktree_root=worktree_root,
+                preserved_roots=[result_dir.parent],
+            )
+            if repo_mode == "snapshot"
+            else list(benchmark_command)
         ),
         "git_ref": args.git_ref,
         "git_fetch": bool(args.git_fetch),
         "git_remote": str(args.git_remote),
     }
+    if repo_mode == "snapshot":
+        payload["worktree_path"] = str(worktree_root)
 
     if not args.dry_run:
         payload["job_id"] = submit_batch(batch_path)

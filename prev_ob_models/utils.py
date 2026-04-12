@@ -100,6 +100,11 @@ def load_mechanisms_from_candidates(load_mechanisms,
     arch_names.extend(["aarch64", "x86_64", "i686", "powerpc", "umac"])
 
     candidates = []
+    shared_mechanism_root = os.environ.get("OBGPU_MECHANISM_ROOT") or os.environ.get("OBGPU_SHARED_REPO_ROOT")
+    if shared_mechanism_root:
+        shared_path = Path(shared_mechanism_root).resolve()
+        candidates.append(shared_path / mechanism_dir_name)
+        candidates.append(shared_path)
     for parent in [anchor, *anchor.parents]:
         candidates.append(parent / mechanism_dir_name)
         candidates.append(parent)

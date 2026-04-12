@@ -21,6 +21,8 @@ TERMINAL_FAIL = {
     "TIMEOUT",
 }
 
+TAIL_BYTES = 4096
+
 
 def run_command(command):
     """Return one completed subprocess without raising on non-zero exit."""
@@ -107,22 +109,50 @@ def cleanup_worktree(repo_root, worktree_path):
     }
 
 
+def read_tail(path):
+    """Return the trailing text from one file when it exists."""
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return ""
+    with open(file_path, "rb") as handle:
+        handle.seek(0, 2)
+        size = handle.tell()
+        handle.seek(max(size - TAIL_BYTES, 0))
+        return handle.read().decode("utf-8", errors="replace")
+
+
 def main():
     """Emit JSON job state and result readiness for one remote run."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--job-id", required=True)
     parser.add_argument("--result-dir", required=True)
+    parser.add_argument("--wrapper-dir", default=None)
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--worktree-path", default=None)
     args = parser.parse_args()
 
     result_dir = Path(args.result_dir).expanduser().resolve()
+    wrapper_dir = (
+        Path(args.wrapper_dir).expanduser().resolve()
+        if args.wrapper_dir not in (None, "")
+        else result_dir.parent / ".obgpu-wrapper" / result_dir.name
+    )
     summary_exists = (result_dir / "summary.json").exists()
-    stdout_exists = (result_dir / "stdout.txt").exists()
-    stderr_exists = (result_dir / "stderr.txt").exists()
-    bootstrap_exists = (result_dir / "bootstrap.log").exists()
-    command_exists = (result_dir / "command.txt").exists()
-    slurm_logs = sorted(result_dir.glob("slurm-*.out"))
+    stdout_path = wrapper_dir / "stdout.txt" if (wrapper_dir / "stdout.txt").exists() else result_dir / "stdout.txt"
+    stderr_path = wrapper_dir / "stderr.txt" if (wrapper_dir / "stderr.txt").exists() else result_dir / "stderr.txt"
+    bootstrap_path = (
+        wrapper_dir / "bootstrap.log"
+        if (wrapper_dir / "bootstrap.log").exists()
+        else result_dir / "bootstrap.log"
+    )
+    command_path = wrapper_dir / "command.txt" if (wrapper_dir / "command.txt").exists() else result_dir / "command.txt"
+    wrapper_slurm_logs = sorted(wrapper_dir.glob("slurm-*.out")) if wrapper_dir.exists() else []
+    result_slurm_logs = sorted(result_dir.glob("slurm-*.out"))
+    slurm_logs = wrapper_slurm_logs or result_slurm_logs
+    stdout_exists = stdout_path.exists()
+    stderr_exists = stderr_path.exists()
+    bootstrap_exists = bootstrap_path.exists()
+    command_exists = command_path.exists()
     slurm_log_exists = bool(slurm_logs)
 
     state = query_state(args.job_id)
@@ -157,9 +187,14 @@ def main():
         "stdout_exists": stdout_exists,
         "stderr_exists": stderr_exists,
         "bootstrap_exists": bootstrap_exists,
+        "bootstrap_tail": read_tail(bootstrap_path),
         "command_exists": command_exists,
+        "stdout_tail": read_tail(stdout_path),
+        "stderr_tail": read_tail(stderr_path),
         "slurm_log_exists": slurm_log_exists,
         "slurm_logs": [str(path) for path in slurm_logs],
+        "slurm_tail": read_tail(slurm_logs[-1]) if slurm_logs else "",
+        "wrapper_dir": str(wrapper_dir),
         "cleanup": cleanup_payload,
     }
     print(json.dumps(payload, sort_keys=True))

@@ -104,11 +104,13 @@ CONTROL_HELP = {
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
     "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command. Defaults to 'source tools/setup/activate_sol_obgpu.sh'.",
-    "remote_git_ref": "Git commit, tag, or branch to check out on Sol before running. Defaults to the current local HEAD commit.",
-    "remote_git_fetch": "When True, fetch the configured remote on Sol before checking out remote_git_ref.",
+    "remote_repo_mode": "How Sol should choose the repo tree for a run: 'shared' uses remote_repo_root directly, while 'snapshot' stages a detached per-run worktree.",
+    "remote_git_ref": "Optional git commit, tag, or branch for Sol snapshot mode. Shared mode ignores this and runs the current shared checkout.",
+    "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref or before shared-mode preflight.",
     "remote_git_remote": "Git remote name on Sol used when remote_git_fetch=True. Defaults to 'origin'.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
+    "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
     "slurm_partition": "Optional Slurm partition for remote submission. Use 'arm' on Sol for Grace Hopper.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
@@ -238,11 +240,13 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_repo_root": None,
         "remote_results_root": None,
         "remote_conda_activate_cmd": "source tools/setup/activate_sol_obgpu.sh",
+        "remote_repo_mode": "shared",
         "remote_git_ref": None,
         "remote_git_fetch": False,
         "remote_git_remote": "origin",
         "remote_poll_interval_s": 10.0,
         "remote_live_status": True,
+        "remote_live_logs": True,
         "slurm_partition": "arm",
         "slurm_account": None,
         "slurm_time": None,
@@ -280,6 +284,8 @@ def build_sol_remote_config(
     slurm_mem: str | None = None,
     remote_poll_interval_s: float = 15.0,
     remote_live_status: bool = True,
+    remote_live_logs: bool = True,
+    remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
     remote_git_remote: str = "origin",
@@ -306,6 +312,8 @@ def build_sol_remote_config(
         "remote_mpi_exec": default_remote_mpi_exec(),
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
+        "remote_live_logs": bool(remote_live_logs),
+        "remote_repo_mode": str(remote_repo_mode),
         "remote_git_ref": remote_git_ref,
         "remote_git_fetch": bool(remote_git_fetch),
         "remote_git_remote": str(remote_git_remote),
@@ -588,11 +596,14 @@ def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
 
 
 def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
-    """Return the requested Sol git ref, defaulting to the current local HEAD commit."""
+    """Return the requested Sol git ref, defaulting to local HEAD only in snapshot mode."""
+    repo_mode = str(config.get("remote_repo_mode", "shared")).strip().lower()
     configured = config.get("remote_git_ref")
     if configured not in (None, ""):
         return str(configured)
-    return _resolve_local_git_head()
+    if repo_mode == "snapshot":
+        return _resolve_local_git_head()
+    return None
 
 
 def _require_remote_host(config: dict[str, Any]) -> str:
@@ -1328,6 +1339,8 @@ def _build_remote_submit_command(
         label,
         "--benchmark-command-b64",
         benchmark_b64,
+        "--repo-mode",
+        str(config.get("remote_repo_mode", "shared")),
         "--mpi-exec",
         str(remote_mpi_exec),
         "--conda-activate-cmd",
@@ -1370,6 +1383,7 @@ def _build_remote_poll_command(
     remote_repo_root: PurePosixPath,
     remote_result_dir: PurePosixPath,
     job_id: str,
+    wrapper_dir: str | None = None,
     worktree_path: str | None = None,
 ) -> str:
     """Build the remote `poll_sol_run.py` invocation shell line."""
@@ -1396,6 +1410,8 @@ def _build_remote_poll_command(
         "--result-dir",
         remote_result_dir.as_posix(),
     ]
+    if wrapper_dir not in (None, ""):
+        command.extend(["--wrapper-dir", str(wrapper_dir)])
     if worktree_path not in (None, ""):
         command.extend(
             [
@@ -1476,6 +1492,7 @@ def _remote_submission_payload(
             "remote_repo_root": remote_repo_root.as_posix(),
             "remote_results_root": remote_results_root.as_posix(),
             "remote_mpi_exec": str(remote_mpi_exec),
+            "remote_repo_mode": str(config.get("remote_repo_mode", "shared")),
             "remote_git_ref": remote_git_ref,
             "remote_git_fetch": bool(config.get("remote_git_fetch", False)),
             "remote_git_remote": str(config.get("remote_git_remote", "origin")),
@@ -1577,6 +1594,8 @@ def _ensure_remote_git_ref_available(
     remote_git_ref: str | None,
 ) -> None:
     """Ensure the current local commit exists in the remote repo without requiring manual git push."""
+    if str(config.get("remote_repo_mode", "shared")).strip().lower() != "snapshot":
+        return
     if not remote_git_ref:
         return
 
@@ -1723,10 +1742,17 @@ def _run_remote_simulation(
     print(f"[Sol remote] Submitted job {submission['job_id']}.", flush=True)
     poll_interval_s = max(float(config.get("remote_poll_interval_s", 10.0)), 1.0)
     live_status = bool(config.get("remote_live_status", True))
+    live_logs = bool(config.get("remote_live_logs", True))
     poll_transcript: list[dict[str, Any]] = []
     final_status: dict[str, Any] | None = None
     missing_artifact_retries = 0
     last_status_signature: tuple[Any, ...] | None = None
+    last_live_tails = {
+        "bootstrap": "",
+        "stdout": "",
+        "stderr": "",
+        "slurm": "",
+    }
 
     while True:
         poll_shell = _build_remote_poll_command(
@@ -1734,6 +1760,7 @@ def _run_remote_simulation(
             remote_repo_root=remote_repo_root,
             remote_result_dir=remote_result_dir,
             job_id=str(submission["job_id"]),
+            wrapper_dir=str(submission.get("wrapper_dir") or ""),
             worktree_path=str(submission.get("worktree_path") or ""),
         )
         poll_completed = _run_ssh_shell(config, poll_shell)
@@ -1779,6 +1806,21 @@ def _run_remote_simulation(
             flag_text = ", ".join(flags) if flags else "no artifacts yet"
             print(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})", flush=True)
             last_status_signature = status_signature
+        if live_logs:
+            for kind in ("bootstrap", "stdout", "stderr", "slurm"):
+                tail_text = str(status.get(f"{kind}_tail") or "")
+                if not tail_text or tail_text == last_live_tails[kind]:
+                    continue
+                previous = last_live_tails[kind]
+                if previous and tail_text.startswith(previous):
+                    delta_text = tail_text[len(previous):]
+                else:
+                    delta_text = tail_text
+                delta_text = delta_text.strip("\n")
+                if delta_text:
+                    for line in delta_text.splitlines():
+                        print(f"[Sol remote][{kind}] {line}", flush=True)
+                last_live_tails[kind] = tail_text
         if status.get("done"):
             if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
                 missing_artifact_retries += 1
@@ -2592,10 +2634,12 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "remote_repo_root",
         "remote_results_root",
         "remote_conda_activate_cmd",
+        "remote_repo_mode",
         "remote_git_ref",
         "remote_git_fetch",
         "remote_poll_interval_s",
         "remote_live_status",
+        "remote_live_logs",
         "remote_mpi_exec",
         "slurm_partition",
         "slurm_account",
