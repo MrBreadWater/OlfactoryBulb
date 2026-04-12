@@ -128,6 +128,31 @@ apply_runtime_toolchain_hints() {
   fi
 }
 
+ensure_native_slurm_bin() {
+  local machine_arch=""
+  local preferred_slurm_bin=""
+
+  machine_arch="$(uname -m)"
+  case "${machine_arch}" in
+    aarch64|arm64)
+      preferred_slurm_bin="/packages/apps/slurm-aarch64/current/bin"
+      ;;
+    x86_64|amd64)
+      preferred_slurm_bin="/packages/apps/slurm-x86_64/current/bin"
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  if [[ -x "${preferred_slurm_bin}/srun" ]]; then
+    case ":${PATH}:" in
+      *":${preferred_slurm_bin}:"*) ;;
+      *) export PATH="${preferred_slurm_bin}:${PATH}" ;;
+    esac
+  fi
+}
+
 detect_srun_mpi_exec() {
   if ! command -v srun >/dev/null 2>&1; then
     return 1
@@ -225,6 +250,7 @@ activate_env "${ENV_NAME}"
 if [[ "${OBGPU_RUNTIME_ONLY}" == "1" ]]; then
   apply_runtime_toolchain_hints
 fi
+ensure_native_slurm_bin
 
 if [[ -n "${SLURM_JOB_ID:-}" ]] && [[ -z "${OB_MPIEXEC:-}" ]]; then
   if detected_mpi_exec="$(detect_srun_mpi_exec)"; then
