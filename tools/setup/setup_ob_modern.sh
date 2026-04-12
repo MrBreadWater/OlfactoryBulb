@@ -779,15 +779,17 @@ if [[ -n "\${CORENEURONLIB+x}" ]]; then
   export _OBGPU_OLD_CORENEURONLIB="\${CORENEURONLIB}"
 fi
 export CORENEURONLIB=${REPO_ROOT}/$(uname -m)/libcorenrnmech.so
-if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
-  if [[ -n "\${LD_LIBRARY_PATH:-}" ]]; then
-    export _OBGPU_OLD_LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}"
-    export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m):\${LD_LIBRARY_PATH}"
-  else
-    unset _OBGPU_OLD_LD_LIBRARY_PATH
-    export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m)"
-  fi
+if [[ -n "\${LD_LIBRARY_PATH:-}" ]]; then
+  export _OBGPU_OLD_LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}"
+else
+  unset _OBGPU_OLD_LD_LIBRARY_PATH
 fi
+_obgpu_ld_path="${CONDA_PREFIX}/lib"
+if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
+  _obgpu_ld_path="${REPO_ROOT}/$(uname -m):\${_obgpu_ld_path}"
+fi
+export LD_LIBRARY_PATH="\${_obgpu_ld_path}\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
+unset _obgpu_ld_path
 EOF
 cat > "${CONDA_PREFIX}/etc/conda/deactivate.d/ob_modern_neuron.sh" <<'EOF'
 unset OMPI_MCA_opal_cuda_support
@@ -822,6 +824,7 @@ export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
 unset NRN_NMODL_PATH
 export OBGPU_MECHANISM_ROOT="${REPO_ROOT}"
 export CORENEURONLIB="${REPO_ROOT}/$(uname -m)/libcorenrnmech.so"
+export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
   export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m)${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 fi

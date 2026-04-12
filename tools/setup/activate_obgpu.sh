@@ -26,6 +26,11 @@ if [[ -f "${arch_dir}/libcorenrnmech.so" ]]; then
   export CORENEURONLIB="${arch_dir}/libcorenrnmech.so"
 fi
 
+case ":${LD_LIBRARY_PATH:-}:" in
+  *":${CONDA_PREFIX}/lib:"*) ;;
+  *) export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}" ;;
+esac
+
 if [[ -d "${arch_dir}" ]]; then
   case ":${LD_LIBRARY_PATH:-}:" in
     *":${arch_dir}:"*) ;;
