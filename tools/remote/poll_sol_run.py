@@ -42,6 +42,25 @@ def normalize_state(raw_state):
 
 def query_state(job_id):
     """Query Slurm for the top-level job state using sacct first, then squeue."""
+    squeue_reason = ""
+    squeue_location = ""
+    squeue_completed = run_command(["squeue", "-j", str(job_id), "-h", "-o", "%T|%R"])
+    squeue_output = (squeue_completed.stdout or "").strip()
+    if squeue_completed.returncode == 0 and squeue_output:
+        first_line = squeue_output.splitlines()[0]
+        parts = first_line.split("|", 1)
+        if len(parts) == 2:
+            squeue_state = normalize_state(parts[0])
+            squeue_detail = parts[1].strip()
+            if squeue_state == "PENDING":
+                squeue_reason = squeue_detail
+            else:
+                squeue_location = squeue_detail
+        else:
+            squeue_state = normalize_state(first_line)
+        if squeue_state == "PENDING":
+            return {"state": squeue_state, "reason": squeue_reason, "location": squeue_location}
+
     sacct_completed = run_command(
         [
             "sacct",
@@ -62,21 +81,23 @@ def query_state(job_id):
             if raw_job_id.strip() == str(job_id):
                 state = normalize_state(raw_state)
                 if state:
-                    return state
+                    return {"state": state, "reason": squeue_reason, "location": squeue_location}
         for line in sacct_output.splitlines():
             parts = line.split("|", 1)
             if len(parts) != 2:
                 continue
             state = normalize_state(parts[1])
             if state:
-                return state
+                return {"state": state, "reason": squeue_reason, "location": squeue_location}
 
-    squeue_completed = run_command(["squeue", "-j", str(job_id), "-h", "-o", "%T"])
-    squeue_output = (squeue_completed.stdout or "").strip()
     if squeue_completed.returncode == 0 and squeue_output:
-        return normalize_state(squeue_output)
+        return {
+            "state": normalize_state(squeue_output.split("|", 1)[0]),
+            "reason": squeue_reason,
+            "location": squeue_location,
+        }
 
-    return "UNKNOWN"
+    return {"state": "UNKNOWN", "reason": "", "location": ""}
 
 
 def cleanup_worktree(repo_root, worktree_path):
@@ -155,7 +176,8 @@ def main():
     command_exists = command_path.exists()
     slurm_log_exists = bool(slurm_logs)
 
-    state = query_state(args.job_id)
+    state_payload = query_state(args.job_id)
+    state = state_payload["state"]
     done = False
     ok = False
 
@@ -180,6 +202,8 @@ def main():
     payload = {
         "job_id": str(args.job_id),
         "state": state,
+        "reason": state_payload.get("reason", ""),
+        "location": state_payload.get("location", ""),
         "done": done,
         "ok": ok,
         "result_dir": str(result_dir),

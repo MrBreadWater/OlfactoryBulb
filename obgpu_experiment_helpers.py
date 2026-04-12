@@ -2127,6 +2127,8 @@ def _run_remote_simulation(
         )
         if live_status and status_signature != last_status_signature:
             state = str(status.get("state", "UNKNOWN"))
+            reason = str(status.get("reason") or "").strip()
+            location = str(status.get("location") or "").strip()
             flags = []
             if status.get("bootstrap_exists"):
                 flags.append("bootstrap")
@@ -2141,6 +2143,10 @@ def _run_remote_simulation(
             if status.get("summary_exists"):
                 flags.append("summary")
             flag_text = ", ".join(flags) if flags else "no artifacts yet"
+            if state == "PENDING" and reason:
+                flag_text = f"{flag_text}; reason={reason}"
+            elif location and state not in {"PENDING", "UNKNOWN"}:
+                flag_text = f"{flag_text}; where={location}"
             print(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})", flush=True)
             last_status_signature = status_signature
         if live_logs:
