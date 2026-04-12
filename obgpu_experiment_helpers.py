@@ -102,13 +102,13 @@ CONTROL_HELP = {
     "extra_overrides": "Any raw paramset overrides not exposed above.",
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
     "wavelet_signal": "Signal for wavelet plots, e.g. 'lfp', 'mean_TC_voltage', or a soma label.",
-    "runner_backend": "Execution backend: 'local' or 'sol_slurm'.",
+    "runner_backend": "Execution backend: 'local', 'sol_slurm', or 'slurm_remote'.",
     "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec' or 'srun --mpi=pmi2'.",
     "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'srun' or 'mpiexec'.",
     "remote_host": "SSH target used by the Sol backend, e.g. 'user@sol.asu.edu'.",
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
-    "remote_conda_activate_cmd": "Shell snippet used on Sol before launching the benchmark command. Defaults to 'source tools/setup/activate_sol_obgpu.sh'.",
+    "remote_conda_activate_cmd": "Shell snippet used on the remote cluster before launching the benchmark command. Sol defaults to 'source tools/setup/activate_sol_obgpu.sh'.",
     "remote_repo_mode": "How Sol should choose the repo tree for a run: 'shared' temporarily checks out the requested commit in remote_repo_root and restores it afterward, while 'snapshot' stages a detached per-run worktree.",
     "remote_git_ref": "Optional git commit, tag, or branch for Sol runs. Defaults to the current local HEAD commit so notebook runs can auto-publish exact code.",
     "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref.",
@@ -362,15 +362,16 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
     return base
 
 
-def build_sol_remote_config(
+def build_slurm_remote_config(
     *,
     remote_host: str,
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
-    slurm_partition: str = "arm",
+    remote_conda_activate_cmd: str = "source tools/setup/activate_sol_obgpu.sh",
+    slurm_partition: str | None = None,
     slurm_account: str | None = None,
     slurm_time: str = "02:00:00",
-    slurm_gpus: int = 1,
+    slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
     remote_poll_interval_s: float = 15.0,
@@ -384,22 +385,17 @@ def build_sol_remote_config(
     rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Return a Sol-specific remote runner config with Grace Hopper defaults.
-
-    This helper is the supported notebook-facing way to send runs to Sol. By
-    default it chooses the `arm` partition for Grace Hopper, uses the Sol
-    activation helper, and launches the benchmark through plain `srun`.
-    """
+    """Return a generic remote Slurm config for notebook-driven runs."""
     remote_repo_root = str(remote_repo_root)
     if remote_results_root is None:
         remote_results_root = str(PurePosixPath(remote_repo_root) / "results" / "notebook_runs")
 
-    return {
-        "runner_backend": "sol_slurm",
+    config = {
+        "runner_backend": "slurm_remote",
         "remote_host": str(remote_host),
         "remote_repo_root": remote_repo_root,
         "remote_results_root": str(remote_results_root),
-        "remote_conda_activate_cmd": "source tools/setup/activate_sol_obgpu.sh",
+        "remote_conda_activate_cmd": str(remote_conda_activate_cmd),
         "remote_mpi_exec": default_remote_mpi_exec(),
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
@@ -410,10 +406,10 @@ def build_sol_remote_config(
         "remote_git_ref": remote_git_ref,
         "remote_git_fetch": bool(remote_git_fetch),
         "remote_git_remote": str(remote_git_remote),
-        "slurm_partition": str(slurm_partition),
+        "slurm_partition": None if slurm_partition in (None, "") else str(slurm_partition),
         "slurm_account": slurm_account,
         "slurm_time": str(slurm_time),
-        "slurm_gpus": int(slurm_gpus),
+        "slurm_gpus": None if slurm_gpus in (None, "") else int(slurm_gpus),
         "slurm_cpus_per_task": slurm_cpus_per_task,
         "slurm_mem": slurm_mem,
         "slurm_extra_args": list(slurm_extra_args or []),
@@ -422,8 +418,57 @@ def build_sol_remote_config(
         "ssh_keepalive_s": 30,
         "rsync_options": list(rsync_options or ["-az"]),
     }
+    return config
 
 
+def build_sol_remote_config(
+    *,
+    remote_host: str,
+    remote_repo_root: str | Path,
+    remote_results_root: str | Path | None = None,
+    remote_conda_activate_cmd: str = "source tools/setup/activate_sol_obgpu.sh",
+    slurm_partition: str = "arm",
+    slurm_account: str | None = None,
+    slurm_time: str = "02:00:00",
+    slurm_gpus: int | None = 1,
+    slurm_cpus_per_task: int | None = None,
+    slurm_mem: str | None = None,
+    remote_poll_interval_s: float = 15.0,
+    remote_live_status: bool = True,
+    remote_live_logs: bool = True,
+    remote_repo_mode: str = "shared",
+    remote_git_ref: str | None = None,
+    remote_git_fetch: bool = False,
+    remote_git_remote: str = "origin",
+    ssh_options: list[str] | None = None,
+    rsync_options: list[str] | None = None,
+    slurm_extra_args: list[str] | None = None,
+) -> dict[str, Any]:
+    """Return a Sol-specific remote runner config with Grace Hopper defaults."""
+    config = build_slurm_remote_config(
+        remote_host=remote_host,
+        remote_repo_root=remote_repo_root,
+        remote_results_root=remote_results_root,
+        remote_conda_activate_cmd=remote_conda_activate_cmd,
+        slurm_partition=slurm_partition,
+        slurm_account=slurm_account,
+        slurm_time=slurm_time,
+        slurm_gpus=slurm_gpus,
+        slurm_cpus_per_task=slurm_cpus_per_task,
+        slurm_mem=slurm_mem,
+        remote_poll_interval_s=remote_poll_interval_s,
+        remote_live_status=remote_live_status,
+        remote_live_logs=remote_live_logs,
+        remote_repo_mode=remote_repo_mode,
+        remote_git_ref=remote_git_ref,
+        remote_git_fetch=remote_git_fetch,
+        remote_git_remote=remote_git_remote,
+        ssh_options=ssh_options,
+        rsync_options=rsync_options,
+        slurm_extra_args=slurm_extra_args,
+    )
+    config["runner_backend"] = "sol_slurm"
+    return config
 def make_label(config: dict[str, Any], timestamp: str | None = None) -> str:
     """Build the timestamped notebook label for a run configuration."""
     timestamp = timestamp or make_timestamp()
@@ -606,7 +651,7 @@ def _remote_repo_root(config: dict[str, Any]) -> PurePosixPath:
     """Return the configured repo root on the remote Sol host."""
     remote_repo_root = config.get("remote_repo_root")
     if not remote_repo_root:
-        raise ValueError("runner_backend='sol_slurm' requires remote_repo_root")
+        raise ValueError("remote Slurm runner requires remote_repo_root")
     return PurePosixPath(str(remote_repo_root))
 
 
@@ -701,7 +746,7 @@ def _require_remote_host(config: dict[str, Any]) -> str:
     """Return the configured remote SSH target."""
     remote_host = str(config.get("remote_host") or "").strip()
     if not remote_host:
-        raise ValueError("runner_backend='sol_slurm' requires remote_host")
+        raise ValueError("remote Slurm runner requires remote_host")
     return remote_host
 
 
@@ -1822,7 +1867,7 @@ def _remote_submission_payload(
         remote_results_root,
         remote_command,
         {
-            "runner_backend": "sol_slurm",
+            "runner_backend": str(config.get("runner_backend", "slurm_remote")),
             "remote_host": _require_remote_host(config),
             "remote_repo_root": remote_repo_root.as_posix(),
             "remote_results_root": remote_results_root.as_posix(),
@@ -2436,7 +2481,7 @@ def run_simulation(config: dict[str, Any] | None = None) -> RunRecord:
     result_dir = Path(config.get("results_base", DEFAULT_RESULTS_BASE)) / label
     runner_backend = str(config.get("runner_backend", "local"))
 
-    if runner_backend == "sol_slurm":
+    if runner_backend in {"sol_slurm", "slurm_remote"}:
         return _run_remote_simulation(
             config,
             label=label,
