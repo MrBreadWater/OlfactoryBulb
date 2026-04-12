@@ -1887,15 +1887,24 @@ def _run_remote_simulation(
                 break
             time.sleep(poll_interval_s)
     except KeyboardInterrupt:
-        print(f"[Sol remote] Interrupt received; cancelling job {submission['job_id']}...", flush=True)
+        print(
+            f"[Sol remote] Interrupt received; beginning shutdown for job {submission['job_id']}...",
+            flush=True,
+        )
         cancel_completed = _run_ssh_shell(
             config,
             _build_remote_cancel_command(job_id=str(submission["job_id"])),
         )
         if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
             print(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}", flush=True)
+        else:
+            print(
+                f"[Sol remote] Cancellation requested; waiting for remote cleanup...",
+                flush=True,
+            )
 
         cancel_deadline = time.time() + 30.0
+        cancel_confirmed = False
         while time.time() < cancel_deadline:
             try:
                 status = poll_remote_status_once()
@@ -1904,9 +1913,21 @@ def _run_remote_simulation(
             emit_live_remote_updates(status)
             if status.get("done"):
                 final_status = status
+                cancel_confirmed = True
+                print(
+                    f"[Sol remote] Job {submission['job_id']} reached terminal state {status.get('state', 'UNKNOWN')}.",
+                    flush=True,
+                )
                 break
             time.sleep(2.0)
 
+        if not cancel_confirmed:
+            print(
+                f"[Sol remote] Remote shutdown not yet confirmed; syncing partial artifacts anyway...",
+                flush=True,
+            )
+        else:
+            print(f"[Sol remote] Syncing partial remote artifacts...", flush=True)
         sync_completed = _sync_remote_result_dir(
             config,
             remote_result_dir=remote_result_dir,
@@ -1914,6 +1935,7 @@ def _run_remote_simulation(
         )
         (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
         (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+        print(f"[Sol remote] Partial artifacts synced to {local_result_dir}", flush=True)
         raise KeyboardInterrupt(
             f"Interrupted remote Sol run and requested cancellation for job {submission['job_id']}."
         )
