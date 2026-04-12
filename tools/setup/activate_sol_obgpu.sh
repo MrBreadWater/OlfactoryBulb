@@ -10,6 +10,7 @@ fi
 
 ENV_NAME="${1:-${ENV_NAME:-OBGPU}}"
 SOL_MODULE_PURGE="${SOL_MODULE_PURGE:-0}"
+OBGPU_RUNTIME_ONLY="${OBGPU_RUNTIME_ONLY:-0}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/obgpu_sol_module_utils.sh"
@@ -90,6 +91,43 @@ activate_env() {
   return 0
 }
 
+apply_runtime_toolchain_hints() {
+  local repo_root="${OBGPU_SHARED_REPO_ROOT:-}"
+  local meta_path=""
+  local compiler_dir=""
+  local cuda_bin_dir=""
+
+  if [[ -z "${repo_root}" ]]; then
+    repo_root="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+  fi
+
+  meta_path="$(
+    find "${repo_root}/external/nrn-9.0.1" -maxdepth 2 -name '.obgpu_build_meta.sh' -type f 2>/dev/null | sort | tail -n 1
+  )"
+  if [[ -z "${meta_path}" || ! -f "${meta_path}" ]]; then
+    return 0
+  fi
+
+  # shellcheck disable=SC1090
+  source "${meta_path}"
+
+  compiler_dir="$(dirname "${OBGPU_STAMP_NVHPC_C_COMPILER:-}")"
+  if [[ -n "${compiler_dir}" && -d "${compiler_dir}" ]]; then
+    case ":${PATH}:" in
+      *":${compiler_dir}:"*) ;;
+      *) export PATH="${compiler_dir}:${PATH}" ;;
+    esac
+  fi
+
+  cuda_bin_dir="$(dirname "${OBGPU_STAMP_CUDA_COMPILER:-}")"
+  if [[ -n "${cuda_bin_dir}" && -d "${cuda_bin_dir}" ]]; then
+    case ":${PATH}:" in
+      *":${cuda_bin_dir}:"*) ;;
+      *) export PATH="${cuda_bin_dir}:${PATH}" ;;
+    esac
+  fi
+}
+
 detect_srun_mpi_exec() {
   if ! command -v srun >/dev/null 2>&1; then
     return 1
@@ -145,6 +183,9 @@ for explicit_module in "${SOL_MAMBA_MODULE:-}" "${SOL_NVHPC_MODULE:-}" "${SOL_CU
   fi
 done
 for required_tool in nvc nvcc; do
+  if [[ "${OBGPU_RUNTIME_ONLY}" == "1" && "${required_tool}" == "nvc" ]]; then
+    continue
+  fi
   if ! command -v "${required_tool}" >/dev/null 2>&1; then
     need_module_cmd=1
     break
@@ -181,6 +222,9 @@ fi
 
 ensure_env_activation_cmd
 activate_env "${ENV_NAME}"
+if [[ "${OBGPU_RUNTIME_ONLY}" == "1" ]]; then
+  apply_runtime_toolchain_hints
+fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]] && [[ -z "${OB_MPIEXEC:-}" ]]; then
   if detected_mpi_exec="$(detect_srun_mpi_exec)"; then
@@ -190,6 +234,9 @@ fi
 
 missing_tools=()
 for tool_name in nvc "nvc++" nvcc; do
+  if [[ "${OBGPU_RUNTIME_ONLY}" == "1" && ( "${tool_name}" == "nvc" || "${tool_name}" == "nvc++" ) ]]; then
+    continue
+  fi
   if ! command -v "${tool_name}" >/dev/null 2>&1; then
     missing_tools+=("${tool_name}")
   fi

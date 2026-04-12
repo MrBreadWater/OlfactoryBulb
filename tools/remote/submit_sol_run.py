@@ -151,6 +151,8 @@ def write_batch_script(
             shlex.quote(git_ref_value),
             shlex.quote(str(result_dir / "git_ref.txt")),
         ),
+        "export OBGPU_RUNTIME_ONLY=1",
+        "export OBGPU_SHARED_REPO_ROOT=\"$shared_repo_root\"",
         "eval {}".format(shlex.quote(conda_activate_cmd)),
         "} >> \"$bootstrap_log\" 2>&1",
         "printf '%s\\n' {} > {}".format(
