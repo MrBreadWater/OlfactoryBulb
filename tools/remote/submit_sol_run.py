@@ -169,13 +169,13 @@ def write_batch_script(
                 "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
                 "obgpu_command=(" + " ".join(shlex.quote(part) for part in benchmark_suffix) + ")",
                 "obgpu_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_command[@]}\")",
-                "printf '%s\\n' \"$(printf '%q ' \"${obgpu_command[@]}\")\" > {}".format(
-                    shlex.quote(str(result_dir / "command.txt"))
-                ),
-                "\"${obgpu_command[@]}\" > {} 2> {} &".format(
-                    shlex.quote(str(result_dir / "stdout.txt")),
-                    shlex.quote(str(result_dir / "stderr.txt")),
-                ),
+                "printf '%s\\n' \"$(printf '%q ' \"${obgpu_command[@]}\")\" > "
+                + shlex.quote(str(result_dir / "command.txt")),
+                "\"${obgpu_command[@]}\" > "
+                + shlex.quote(str(result_dir / "stdout.txt"))
+                + " 2> "
+                + shlex.quote(str(result_dir / "stderr.txt"))
+                + " &",
             ]
         )
     else:
