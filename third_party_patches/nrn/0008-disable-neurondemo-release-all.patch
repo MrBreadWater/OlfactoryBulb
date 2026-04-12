@@ -1,0 +1,13 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 80132bd8f..d5d1d1f4e 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1050,7 +1050,7 @@ elseif(NOT WIN32)
+   add_subdirectory(share/demo/release)
+ 
+   add_custom_target(
+-    neurondemo_release ALL
++    neurondemo_release
+     COMMAND ${CMAKE_COMMAND} -E rm -fr --
+             "${NRN_BUILD_SHARE_DIR}/demo/release/${CMAKE_HOST_SYSTEM_PROCESSOR}"
+     COMMAND ${CMAKE_COMMAND} -E env ${NRN_RUN_FROM_BUILD_DIR_ENV}

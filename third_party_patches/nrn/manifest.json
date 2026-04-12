@@ -36,6 +36,11 @@
       "file": "0007-sonata-shim-use-corenrn-mpi-allgatherv.patch",
       "category": "required",
       "description": "Keep the local SONATA report shim linked only against CoreNEURON MPI symbols so libcorenrnmech loads cleanly."
+    },
+    {
+      "file": "0008-disable-neurondemo-release-all.patch",
+      "category": "required",
+      "description": "Keep the upstream demo-release mechanism build out of the default target graph so cluster builds do not fail on its separate nrnivmodl environment."
     }
   ]
 }
