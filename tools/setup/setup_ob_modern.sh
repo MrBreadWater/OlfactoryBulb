@@ -398,33 +398,42 @@ activate_conda_env() {
   local env_name="$1"
   local hook_output=""
   local conda_bin=""
-  local activate_script=""
+  local conda_real=""
+  local conda_base=""
+  local conda_sh=""
 
-  if command -v activate >/dev/null 2>&1; then
-    # Sol's mamba module documents `source activate <env>` as the supported
-    # activation path in non-interactive shells.
-    # shellcheck disable=SC1090
-    source activate "${env_name}"
-    return 0
+  if ! command -v conda >/dev/null 2>&1; then
+    echo "Could not activate environment '${env_name}': conda is not available." >&2
+    return 1
   fi
 
-  if command -v conda >/dev/null 2>&1; then
-    conda_bin="$(command -v conda)"
-    activate_script="$(dirname "${conda_bin}")/activate"
-    if [[ -f "${activate_script}" ]]; then
+  conda_bin="$(command -v conda)"
+  conda_real="$(python - <<'PY' "${conda_bin}" 2>/dev/null || true
+import os
+import sys
+print(os.path.realpath(sys.argv[1]))
+PY
+)"
+
+  for conda_base in \
+    "$(cd "$(dirname "${conda_bin}")/.." 2>/dev/null && pwd || true)" \
+    "$(cd "$(dirname "${conda_real}")/.." 2>/dev/null && pwd || true)" \
+    "$(conda info --base 2>/dev/null || true)"; do
+    [[ -z "${conda_base}" ]] && continue
+    conda_sh="${conda_base}/etc/profile.d/conda.sh"
+    if [[ -f "${conda_sh}" ]]; then
       # shellcheck disable=SC1090
-      source "${activate_script}" "${env_name}"
-      return 0
-    fi
-  fi
-
-  if command -v conda >/dev/null 2>&1; then
-    hook_output="$(conda shell.bash hook 2>/dev/null || true)"
-    if [[ -n "${hook_output}" ]] && grep -q '__conda_' <<<"${hook_output}"; then
-      eval "${hook_output}"
+      source "${conda_sh}"
       conda activate "${env_name}"
       return 0
     fi
+  done
+
+  hook_output="$(conda shell.bash hook 2>/dev/null || true)"
+  if [[ -n "${hook_output}" ]] && grep -q '__conda_' <<<"${hook_output}"; then
+    eval "${hook_output}"
+    conda activate "${env_name}"
+    return 0
   fi
 
   echo "Could not activate environment '${env_name}'." >&2
