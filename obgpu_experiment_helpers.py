@@ -542,6 +542,21 @@ def _resolve_local_git_branch() -> str | None:
     return branch or None
 
 
+def _resolve_local_git_upstream_ref() -> str | None:
+    """Return the current branch upstream ref, or ``None`` when unavailable."""
+    completed = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    upstream = (completed.stdout or "").strip()
+    return upstream or None
+
+
 def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
     """Return whether one local git ref currently resolves to the requested commit."""
     completed = subprocess.run(
@@ -554,6 +569,18 @@ def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
     if completed.returncode != 0:
         return False
     return (completed.stdout or "").strip() == commit_sha
+
+
+def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
+    """Return whether one git ref is an ancestor of another."""
+    completed = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", ancestor_ref, descendant_ref],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return completed.returncode == 0
 
 
 def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
@@ -1439,6 +1466,7 @@ def _remote_submission_payload(
 def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
     """Create a temporary git bundle that carries the requested local commit."""
     branch_name = _resolve_local_git_branch()
+    upstream_ref = _resolve_local_git_upstream_ref()
     temp_ref: str | None = None
     source_ref: str
 
@@ -1466,8 +1494,15 @@ def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
     bundle_handle.close()
 
     try:
+        bundle_args = ["git", "bundle", "create", str(bundle_path), source_ref]
+        if (
+            upstream_ref
+            and not _git_ref_points_to_commit(upstream_ref, commit_sha)
+            and _git_ref_is_ancestor(upstream_ref, commit_sha)
+        ):
+            bundle_args.append(f"^{upstream_ref}")
         created = subprocess.run(
-            ["git", "bundle", "create", str(bundle_path), source_ref],
+            bundle_args,
             cwd=REPO_ROOT,
             capture_output=True,
             text=True,
@@ -1525,6 +1560,7 @@ def _ensure_remote_git_ref_available(
 
     connection = _connect_paramiko(config)
     sftp = connection["sftp"]
+    print(f"[Sol remote] Publishing local commit {remote_git_ref[:12]} to remote repo...", flush=True)
     bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref)
     remote_bundle_path = f"/tmp/obgpu-sync-{remote_git_ref[:12]}-{os.getpid()}.bundle"
     remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
@@ -1579,6 +1615,7 @@ def _run_remote_simulation(
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_metadata.get("remote_git_ref"),
     )
+    print("[Sol remote] Running remote preflight checks...", flush=True)
 
     preflight_completed = _run_ssh_shell(
         config,
@@ -1608,6 +1645,7 @@ def _run_remote_simulation(
             f"Stderr:\n{preflight_completed.stderr}"
         )
 
+    print("[Sol remote] Submitting Slurm job...", flush=True)
     submit_completed = _run_ssh_shell(config, submit_shell)
     local_result_dir.mkdir(parents=True, exist_ok=True)
     (local_result_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
@@ -1641,9 +1679,10 @@ def _run_remote_simulation(
         raise RuntimeError(
             "Remote Sol submission did not return valid JSON.\n"
             f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-        ) from exc
+            ) from exc
 
     remote_result_dir = PurePosixPath(submission["result_dir"])
+    print(f"[Sol remote] Submitted job {submission['job_id']}.", flush=True)
     poll_interval_s = max(float(config.get("remote_poll_interval_s", 10.0)), 1.0)
     poll_transcript: list[dict[str, Any]] = []
     final_status: dict[str, Any] | None = None
