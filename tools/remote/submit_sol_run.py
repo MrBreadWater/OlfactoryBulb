@@ -186,13 +186,15 @@ def write_batch_script(
                 + shlex.quote(str(result_dir / "command.txt")),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
-                "set +e",
-                "\"${obgpu_command[@]}\" > "
+                "if \"${obgpu_command[@]}\" > "
                 + shlex.quote(str(result_dir / "stdout.txt"))
                 + " 2> "
-                + shlex.quote(str(result_dir / "stderr.txt")),
-                "benchmark_rc=$?",
-                "set -e",
+                + shlex.quote(str(result_dir / "stderr.txt"))
+                + "; then",
+                "  benchmark_rc=0",
+                "else",
+                "  benchmark_rc=$?",
+                "fi",
             ]
         )
     else:
@@ -207,14 +209,15 @@ def write_batch_script(
                 ),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
-                "set +e",
-                "{} > {} 2> {}".format(
+                "if {} > {} 2> {}; then".format(
                     benchmark_shell,
                     shlex.quote(str(result_dir / "stdout.txt")),
                     shlex.quote(str(result_dir / "stderr.txt")),
                 ),
-                "benchmark_rc=$?",
-                "set -e",
+                "  benchmark_rc=0",
+                "else",
+                "  benchmark_rc=$?",
+                "fi",
             ]
         )
     lines.extend(
