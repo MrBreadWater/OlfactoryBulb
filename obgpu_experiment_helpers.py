@@ -123,6 +123,7 @@ CONTROL_HELP = {
     "ssh_transport": "Remote transport for the Sol backend: 'auto', 'paramiko', or 'openssh'.",
     "ssh_multiplex": "When True, reuse a persistent SSH control socket so Sol auth happens once instead of on every submit/poll/sync step.",
     "ssh_allow_interactive_auth": "When True, open the initial SSH control master through an interactive PTY so notebook-launched Sol runs can prompt for password and 2FA once.",
+    "ssh_keepalive_s": "Paramiko keepalive interval in seconds for notebook-managed SSH sessions. Higher values reduce background traffic; lower values make idle sessions less likely to die between runs.",
     "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under XDG_RUNTIME_DIR, TMPDIR, or the system temp directory.",
     "ssh_control_persist_s": "How long to keep the SSH control master alive after the last use.",
     "rsync_binary": "rsync executable used to sync remote results back locally.",
@@ -259,6 +260,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "ssh_transport": "auto",
         "ssh_multiplex": True,
         "ssh_allow_interactive_auth": True,
+        "ssh_keepalive_s": 30,
         "ssh_control_path": None,
         "ssh_control_persist_s": 28800,
         "rsync_binary": "rsync",
@@ -326,6 +328,7 @@ def build_sol_remote_config(
         "slurm_extra_args": list(slurm_extra_args or []),
         "ssh_options": list(ssh_options or []),
         "ssh_transport": "auto",
+        "ssh_keepalive_s": 30,
         "rsync_options": list(rsync_options or ["-az"]),
     }
 
@@ -696,6 +699,25 @@ def _paramiko_prompt_response(prompt_text: str) -> str:
     return input(prompt + " ")
 
 
+def _drop_paramiko_connection(config: dict[str, Any]) -> None:
+    """Close and forget one cached Paramiko connection."""
+    cached = _LIVE_PARAMIKO_CONNECTIONS.pop(_paramiko_connection_key(config), None)
+    if cached is None:
+        return
+    sftp = cached.get("sftp")
+    if sftp is not None:
+        try:
+            sftp.close()
+        except Exception:
+            pass
+    transport = cached.get("transport")
+    if transport is not None:
+        try:
+            transport.close()
+        except Exception:
+            pass
+
+
 def _connect_paramiko(config: dict[str, Any]) -> Any:
     """Open or reuse one persistent Paramiko transport for the Sol backend."""
     if paramiko is None:
@@ -718,6 +740,9 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
         raw_sock = socket.create_connection((hostname, port), timeout=30.0)
         transport = paramiko.Transport(raw_sock)
         transport.start_client(timeout=30.0)
+        keepalive_seconds = int(config.get("ssh_keepalive_s", 30) or 0)
+        if keepalive_seconds > 0:
+            transport.set_keepalive(keepalive_seconds)
 
         auth_methods: list[str] = []
         try:
@@ -807,21 +832,32 @@ def _run_paramiko_shell(
     remote_shell_command: str,
 ) -> subprocess.CompletedProcess[str]:
     """Run one shell command over a persistent Paramiko transport."""
-    connection = _connect_paramiko(config)
-    transport = connection["transport"]
-    channel = transport.open_session()
-    try:
-        channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
-        stdout_data = channel.makefile("rb").read().decode("utf-8", errors="replace")
-        stderr_data = channel.makefile_stderr("rb").read().decode("utf-8", errors="replace")
-        return subprocess.CompletedProcess(
-            args=["paramiko", connection["hostname"], remote_shell_command],
-            returncode=channel.recv_exit_status(),
-            stdout=stdout_data,
-            stderr=stderr_data,
-        )
-    finally:
-        channel.close()
+    last_exc: Exception | None = None
+    for attempt in range(2):
+        connection = _connect_paramiko(config)
+        transport = connection["transport"]
+        channel = None
+        try:
+            channel = transport.open_session()
+            channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
+            stdout_data = channel.makefile("rb").read().decode("utf-8", errors="replace")
+            stderr_data = channel.makefile_stderr("rb").read().decode("utf-8", errors="replace")
+            return subprocess.CompletedProcess(
+                args=["paramiko", connection["hostname"], remote_shell_command],
+                returncode=channel.recv_exit_status(),
+                stdout=stdout_data,
+                stderr=stderr_data,
+            )
+        except Exception as exc:
+            last_exc = exc
+            _drop_paramiko_connection(config)
+            if attempt == 0:
+                continue
+            raise
+        finally:
+            if channel is not None:
+                channel.close()
+    raise RuntimeError(f"Paramiko shell command failed unexpectedly: {last_exc}")
 
 
 def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:
@@ -1242,21 +1278,33 @@ def _sync_remote_result_dir(
     """Sync one remote result directory back into the local notebook results tree."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
     if _remote_transport(config) == "paramiko":
-        try:
-            connection = _connect_paramiko(config)
-            _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
-        except Exception as exc:
+        last_exc: Exception | None = None
+        for attempt in range(2):
+            try:
+                connection = _connect_paramiko(config)
+                _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
+            except Exception as exc:
+                last_exc = exc
+                _drop_paramiko_connection(config)
+                if attempt == 0:
+                    continue
+                return subprocess.CompletedProcess(
+                    args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
+                    returncode=1,
+                    stdout="",
+                    stderr=str(exc),
+                )
             return subprocess.CompletedProcess(
                 args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-                returncode=1,
+                returncode=0,
                 stdout="",
-                stderr=str(exc),
+                stderr="",
             )
         return subprocess.CompletedProcess(
             args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-            returncode=0,
+            returncode=1,
             stdout="",
-            stderr="",
+            stderr=str(last_exc) if last_exc is not None else "unknown paramiko sftp failure",
         )
 
     _ensure_ssh_master(config)
@@ -2647,6 +2695,7 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "ssh_options",
         "ssh_multiplex",
         "ssh_allow_interactive_auth",
+        "ssh_keepalive_s",
         "ssh_control_path",
         "ssh_control_persist_s",
         "rsync_binary",
