@@ -18,6 +18,8 @@ BOOTSTRAP_PYTHON="${BOOTSTRAP_PYTHON:-$(command -v python3 || command -v python 
 
 # shellcheck disable=SC1091
 source "${REPO_ROOT}/tools/setup/obgpu_conda_utils.sh"
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/tools/setup/obgpu_sol_module_utils.sh"
 
 if [[ -z "${BOOTSTRAP_PYTHON}" ]]; then
   echo "setup_ob_modern.sh requires python3 or python on PATH before the conda env exists." >&2
@@ -28,6 +30,35 @@ if [[ ! -f "${PATCH_MANIFEST}" ]]; then
   echo "Patch manifest not found: ${PATCH_MANIFEST}" >&2
   exit 1
 fi
+
+obgpu_load_generic_modules_if_needed() {
+  local requested_tool="$1"
+  local module_prefix="$2"
+  local explicit_module="$3"
+  local resolved_module=""
+
+  if declare -F obgpu_sol_ensure_module_cmd >/dev/null 2>&1; then
+    obgpu_sol_ensure_module_cmd >/dev/null 2>&1 || true
+  fi
+
+  if [[ -n "${explicit_module}" ]]; then
+    resolved_module="${explicit_module}"
+  elif command -v "${requested_tool}" >/dev/null 2>&1; then
+    return 0
+  elif declare -F obgpu_sol_resolve_module >/dev/null 2>&1; then
+    resolved_module="$(obgpu_sol_resolve_module "${module_prefix}" "")" || true
+  fi
+
+  if [[ -n "${resolved_module}" ]]; then
+    if ! obgpu_sol_maybe_load_module "${resolved_module}"; then
+      echo "Failed to load module '${resolved_module}'." >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  return 1
+}
 
 mapfile -t manifest_lines < <(
   "${BOOTSTRAP_PYTHON}" - "${PATCH_MANIFEST}" <<'PY'
@@ -438,6 +469,11 @@ gpu_cmake_args=()
 
 if [[ "${ENABLE_GPU}" == "1" ]]; then
   log_step "Resolving GPU toolchain configuration"
+  if ! command -v nvc >/dev/null 2>&1 || ! command -v nvc++ >/dev/null 2>&1 || ! command -v nvcc >/dev/null 2>&1; then
+    log_step "GPU compilers are not on PATH; attempting to load NVHPC/CUDA modules"
+    obgpu_load_generic_modules_if_needed nvc nvhpc "${NVHPC_MODULE:-${NVHPC_MODULE_NAME:-${OBGPU_NVHPC_MODULE:-${OBGPU_SOL_NVHPC_MODULE:-}}}}"
+    obgpu_load_generic_modules_if_needed nvcc cuda "${CUDA_MODULE:-${CUDA_MODULE_NAME:-${OBGPU_CUDA_MODULE:-${OBGPU_SOL_CUDA_MODULE:-}}}}"
+  fi
   NVHPC_SDK_ROOT="${NVHPC_SDK_ROOT:-${HOME}/.local/nvidia/hpc_sdk}"
   NVHPC_VERSION="${NVHPC_VERSION:-}"
   NVHPC_ARCH_ROOT="${NVHPC_SDK_ROOT}/$(uname -s)_$(uname -m)"
