@@ -705,14 +705,21 @@ fi
 
 NRN_BUILD_STAMP_PATH="${NRN_BUILD_DIR}/.obgpu_build_stamp"
 NRN_BUILD_FINGERPRINT="$(build_stamp_fingerprint)"
+build_ld_library_path="${CONDA_PREFIX}/lib"
+if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
+  build_ld_library_path="${REPO_ROOT}/$(uname -m):${build_ld_library_path}"
+fi
+if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
+  build_ld_library_path="${build_ld_library_path}:${LD_LIBRARY_PATH}"
+fi
 
 if stamp_matches "${NRN_BUILD_STAMP_PATH}" "${NRN_BUILD_FINGERPRINT}" && neuron_install_ok; then
   log_step "Skipping NEURON/CoreNEURON build; matching successful stamp found at ${NRN_BUILD_STAMP_PATH}"
 else
   log_step "Configuring and building NEURON/CoreNEURON in ${NRN_BUILD_DIR}"
   cmake "${cmake_args[@]}"
-  cmake --build "${NRN_BUILD_DIR}" --parallel "${OBGPU_BUILD_JOBS}"
-  cmake --install "${NRN_BUILD_DIR}"
+  env LD_LIBRARY_PATH="${build_ld_library_path}" cmake --build "${NRN_BUILD_DIR}" --parallel "${OBGPU_BUILD_JOBS}"
+  env LD_LIBRARY_PATH="${build_ld_library_path}" cmake --install "${NRN_BUILD_DIR}"
   mkdir -p "${NRN_BUILD_DIR}"
   printf '%s\n' "${NRN_BUILD_FINGERPRINT}" > "${NRN_BUILD_STAMP_PATH}"
   write_build_meta "${NRN_BUILD_META_PATH}"
