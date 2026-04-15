@@ -206,6 +206,7 @@ class OlfactoryBulb:
         self._status_is_tty = sys.stdout.isatty()
         self._status_mode = os.environ.get("OBGPU_STATUS_MODE", "auto").strip().lower()
         self._last_status_percent = None
+        self._last_status_ms = None
 
         # Just use the BlenderNEURON package functions (e.g. no server/client)
         self.bn_server = OBNeuronNode(server_end='Package')
@@ -689,6 +690,8 @@ class OlfactoryBulb:
 
         h = self.h
         h.tstop = tstop
+        if self.mpirank == 0:
+            self.write_progress_status(float(h.t), float(h.tstop))
 
         coreneuron_cfg = getattr(self.params, "coreneuron", None)
         coreneuron_enabled = bool(coreneuron_cfg is not None and getattr(coreneuron_cfg, "enable", False))
@@ -787,13 +790,15 @@ class OlfactoryBulb:
             percent = None
             line = "Time: %.1f ms" % current_ms
 
-        if percent is not None and percent == self._last_status_percent:
-            return
-
         use_stdout = self._status_mode == "stdout" or (
             self._status_mode not in {"file", "off"} and self._status_is_tty
         )
         if self._status_mode == "off":
+            return
+
+        if use_stdout and percent is not None and percent == self._last_status_percent:
+            return
+        if (not use_stdout) and self._last_status_ms is not None and current_ms <= self._last_status_ms:
             return
 
         if use_stdout:
@@ -802,6 +807,7 @@ class OlfactoryBulb:
         else:
             self.write_progress_status(current_ms, total_ms)
         self._last_status_percent = percent
+        self._last_status_ms = current_ms
 
     def setup_status_reporter(self):
         """
