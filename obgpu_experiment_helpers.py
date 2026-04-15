@@ -47,9 +47,12 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     paramiko = None
 try:
-    from tqdm.auto import tqdm
+    from tqdm.notebook import tqdm
 except ImportError:  # pragma: no cover - optional runtime dependency
-    tqdm = None
+    try:
+        from tqdm.auto import tqdm
+    except ImportError:  # pragma: no cover - optional runtime dependency
+        tqdm = None
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -207,6 +210,7 @@ class _ProgressBar:
                 unit_scale=unit_scale,
                 leave=False,
                 dynamic_ncols=True,
+                mininterval=0.1,
             )
 
     def update_to(self, current: int) -> None:
@@ -2591,6 +2595,8 @@ def _run_remote_simulation(
                 delta_text = delta_text.strip("\n")
                 if delta_text:
                     for line in delta_text.replace("\r", "\n").splitlines():
+                        if kind == "stdout" and line.lstrip().startswith("Sim ["):
+                            continue
                         if line.strip():
                             _progress_write(f"[Sol remote][{kind}] {line}")
                 last_live_tails[kind] = tail_text

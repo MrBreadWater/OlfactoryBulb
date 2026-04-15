@@ -204,6 +204,7 @@ class OlfactoryBulb:
         self._native_lfp_gid_source = {}
         self._native_lfp_mappings_registered = False
         self._status_is_tty = sys.stdout.isatty()
+        self._status_mode = os.environ.get("OBGPU_STATUS_MODE", "auto").strip().lower()
         self._last_status_percent = None
 
         # Just use the BlenderNEURON package functions (e.g. no server/client)
@@ -789,7 +790,13 @@ class OlfactoryBulb:
         if percent is not None and percent == self._last_status_percent:
             return
 
-        if self._status_is_tty:
+        use_stdout = self._status_mode == "stdout" or (
+            self._status_mode not in {"file", "off"} and self._status_is_tty
+        )
+        if self._status_mode == "off":
+            return
+
+        if use_stdout:
             sys.stdout.write("\r" + line)
             sys.stdout.flush()
         else:
@@ -806,7 +813,12 @@ class OlfactoryBulb:
 
             collector_stim = h.NetStim(0.5)
             collector_stim.start = 0
-            collector_stim.interval = getattr(self.params, "status_report_interval", 25)
+            collector_stim.interval = float(
+                os.environ.get(
+                    "OBGPU_STATUS_INTERVAL_MS",
+                    getattr(self.params, "status_report_interval", 25),
+                )
+            )
             collector_stim.number = 1e9
             collector_stim.noise = 0
 
