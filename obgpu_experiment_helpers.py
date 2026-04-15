@@ -106,6 +106,8 @@ CONTROL_HELP = {
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
     "wavelet_signal": "Signal for wavelet plots, e.g. 'lfp', 'mean_TC_voltage', or a soma label.",
     "runner_backend": "Execution backend: 'local', 'sol_slurm', or 'slurm_remote'.",
+    "use_corenrn": "Local-run CoreNEURON toggle. Remote Slurm runs infer this from the Slurm resource request unless you explicitly override it after applying the remote config.",
+    "use_gpu": "Local-run GPU toggle. Remote Slurm runs infer this from slurm_gpus unless you explicitly override it after applying the remote config.",
     "mpi_exec": "MPI launcher for local notebook runs, e.g. 'mpiexec' or 'srun --mpi=pmi2'.",
     "remote_mpi_exec": "MPI launcher on the remote host, e.g. 'srun' or 'mpiexec'.",
     "remote_host": "SSH target used by the Sol backend, e.g. 'user@sol.asu.edu'.",
@@ -444,8 +446,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "label_prefix": "obgpu_experiment",
         "results_base": str(DEFAULT_RESULTS_BASE),
         "nranks": 1 if mode == "fast" else 2,
-        "use_corenrn": True,
-        "use_gpu": True,
+        "use_corenrn": None,
+        "use_gpu": None,
         "cell_permute": 2,
         "tstop_ms": None,
         "sim_dt_ms": 0.1,
@@ -569,6 +571,8 @@ def build_slurm_remote_config(
 
     config = {
         "runner_backend": "slurm_remote",
+        "use_corenrn": None,
+        "use_gpu": None,
         "remote_host": str(remote_host),
         "remote_repo_root": remote_repo_root,
         "remote_results_root": str(remote_results_root),
@@ -668,6 +672,35 @@ def make_label(config: dict[str, Any], timestamp: str | None = None) -> str:
     paramset = str(config.get("paramset", "Paramset"))
     prefix = str(config.get("label_prefix", "obgpu_experiment"))
     return f"{prefix}_{paramset}_{mode}_{timestamp}"
+
+
+def _resolve_execution_mode(config: dict[str, Any]) -> dict[str, Any]:
+    """Resolve the effective CoreNEURON/GPU execution mode for one run config."""
+    runner_backend = str(config.get("runner_backend", "local"))
+    explicit_corenrn = config.get("use_corenrn")
+    explicit_gpu = config.get("use_gpu")
+
+    if explicit_corenrn is not None or explicit_gpu is not None:
+        resolved_corenrn = bool(explicit_corenrn)
+        resolved_gpu = bool(explicit_gpu)
+        if resolved_gpu and not resolved_corenrn:
+            resolved_corenrn = True
+        source = "explicit"
+    elif runner_backend in {"sol_slurm", "slurm_remote"}:
+        slurm_gpus = config.get("slurm_gpus")
+        resolved_gpu = False if slurm_gpus in (None, "") else int(slurm_gpus) > 0
+        resolved_corenrn = resolved_gpu
+        source = "remote_slurm"
+    else:
+        resolved_corenrn = True
+        resolved_gpu = True
+        source = "local_default"
+
+    return {
+        "use_corenrn": resolved_corenrn,
+        "use_gpu": resolved_gpu,
+        "source": source,
+    }
 
 
 def deep_update(target: dict[str, Any], source: dict[str, Any]) -> dict[str, Any]:
@@ -797,6 +830,7 @@ def build_run_command(
     repo_root = repo_root or REPO_ROOT
     results_base = results_base or config.get("results_base", DEFAULT_RESULTS_BASE)
     benchmark_script = Path(repo_root) / "tools" / "benchmarks" / "benchmark_ob.py"
+    execution_mode = _resolve_execution_mode(config)
     command: list[str] = []
     if include_mpi_launcher:
         mpi_exec = mpi_exec or str(config.get("mpi_exec", default_local_mpi_exec()))
@@ -830,9 +864,9 @@ def build_run_command(
     if config.get("tstop_ms") is not None:
         command.extend(["--tstop-override", str(float(config["tstop_ms"]))])
 
-    if config.get("use_corenrn", True):
+    if execution_mode["use_corenrn"]:
         command.append("--coreneuron")
-    if config.get("use_gpu", True):
+    if execution_mode["use_gpu"]:
         command.append("--coreneuron-gpu")
     if config.get("disable_status_report", True):
         command.append("--disable-status-report")
@@ -3257,6 +3291,7 @@ def _write_notebook_run_info(
             },
         }
     )
+    payload["resolved_execution_mode"] = _json_ready(_resolve_execution_mode(config))
 
     try:
         payload["effective_params"] = _json_ready(resolve_effective_params(config))
@@ -3515,13 +3550,48 @@ def load_pickle(path: str | Path) -> Any:
         return pickle.load(f)
 
 
-def load_result(run_or_dir: RunRecord | str | Path) -> dict[str, Any]:
+class LazyResult(dict):
+    """Result dict that loads selected heavy payloads on first access."""
+
+    def __init__(self, *args: Any, lazy_loaders: dict[str, Any] | None = None, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self._lazy_loaders = dict(lazy_loaders or {})
+
+    def _ensure_loaded(self, key: str) -> None:
+        if key not in self._lazy_loaders:
+            return
+        loader = self._lazy_loaders.pop(key)
+        _progress_write(f"[OBGPU load] Lazy-loading {key}...")
+        started = time.perf_counter()
+        value = loader()
+        dict.__setitem__(self, key, value)
+        elapsed_s = time.perf_counter() - started
+        _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
+
+    def __getitem__(self, key: str) -> Any:
+        self._ensure_loaded(key)
+        return dict.__getitem__(self, key)
+
+    def get(self, key: str, default: Any = None) -> Any:
+        if key in self._lazy_loaders:
+            self._ensure_loaded(key)
+        return dict.get(self, key, default)
+
+    def __contains__(self, key: object) -> bool:
+        return dict.__contains__(self, key) or key in self._lazy_loaders
+
+
+def load_result(
+    run_or_dir: RunRecord | str | Path,
+    *,
+    lazy_soma_vs: bool = True,
+) -> dict[str, Any]:
     """Load the standard saved outputs for a notebook run directory."""
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
     summary = _read_json_if_present(result_dir / "summary.json")
     run_info = _read_json_if_present(result_dir / "run_info.json")
 
-    result = {
+    result = LazyResult({
         "result_dir": result_dir,
         "summary": summary,
         "run_info": run_info,
@@ -3530,14 +3600,14 @@ def load_result(run_or_dir: RunRecord | str | Path) -> dict[str, Any]:
         "gc_output_events": [],
         "lfp_t": np.array([]),
         "lfp": np.array([]),
-    }
+    })
 
     load_plan: list[tuple[str, Path]] = []
     input_path = result_dir / "input_times.pkl"
     if input_path.exists():
         load_plan.append(("input_times", input_path))
     soma_path = result_dir / "soma_vs.pkl"
-    if soma_path.exists():
+    if soma_path.exists() and not lazy_soma_vs:
         load_plan.append(("soma_vs", soma_path))
     gc_output_path = result_dir / "gc_output_events.pkl"
     if gc_output_path.exists():
@@ -3576,6 +3646,13 @@ def load_result(run_or_dir: RunRecord | str | Path) -> dict[str, Any]:
             f"(loaded {path.name} in {elapsed_s:.1f}s)",
         )
     progress.close()
+
+    if soma_path.exists() and lazy_soma_vs:
+        result["soma_vs_file"] = soma_path
+        result._lazy_loaders["soma_vs"] = lambda path=soma_path: load_pickle(path)
+        _progress_write(
+            f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
+        )
 
     return result
 
@@ -3936,7 +4013,9 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "rsync_binary",
         "rsync_options",
     ]
-    return {key: _json_ready(config.get(key)) for key in runtime_keys if key in config}
+    snapshot = {key: _json_ready(config.get(key)) for key in runtime_keys if key in config}
+    snapshot["resolved_execution_mode"] = _json_ready(_resolve_execution_mode(config))
+    return snapshot
 
 
 def build_live_inspection_model(
