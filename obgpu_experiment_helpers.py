@@ -194,8 +194,8 @@ def _progress_write(message: str) -> None:
 class _ProgressBar:
     """Small wrapper around tqdm with a plain-print fallback."""
 
-    def __init__(self, *, total: int, desc: str, unit: str = "B", unit_scale: bool = False):
-        self.total = int(total)
+    def __init__(self, *, total: int | None, desc: str, unit: str = "B", unit_scale: bool = False):
+        self.total = None if total is None else int(total)
         self.current = 0
         self.desc = desc
         self.unit = unit
@@ -204,7 +204,7 @@ class _ProgressBar:
         self._bar = None
         if tqdm is not None:
             self._bar = tqdm(
-                total=max(self.total, 0),
+                total=max(self.total, 0) if self.total is not None else None,
                 desc=desc,
                 unit=unit,
                 unit_scale=unit_scale,
@@ -223,6 +223,17 @@ class _ProgressBar:
             return
 
         self.current = current
+        if self.total is None:
+            step_bytes = 64 * 1024 * 1024
+            progress_step = self.current // step_bytes
+            if progress_step == self._last_step:
+                return
+            self._last_step = progress_step
+            print(
+                f"{self.desc} {_format_bytes(self.current)} transferred",
+                flush=True,
+            )
+            return
         if self.total <= 0:
             return
         progress_step = int((self.current * 100.0) / self.total) // 5
@@ -1567,6 +1578,49 @@ def _build_remote_archive_command(remote_result_dir: PurePosixPath) -> str:
     )
 
 
+def _build_remote_archive_probe_command(remote_result_dir: PurePosixPath) -> str:
+    """Build one remote shell command that selects a compressor and reports stream metadata."""
+    return (
+        "set -euo pipefail && "
+        f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
+        "raw_bytes=$(du -sb \"$result_dir\" 2>/dev/null | awk '{print $1}') && "
+        "if command -v zstd >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'zstd' \"${raw_bytes:-0}\" '.tar.zst'; "
+        "elif command -v pigz >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'pigz' \"${raw_bytes:-0}\" '.tar.gz'; "
+        "elif command -v gzip >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'gzip' \"${raw_bytes:-0}\" '.tar.gz'; "
+        "elif command -v xz >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'xz' \"${raw_bytes:-0}\" '.tar.xz'; "
+        "else "
+        "  printf '%s\\n' 'No supported compressor found on remote host' >&2; "
+        "  exit 1; "
+        "fi"
+    )
+
+
+def _build_remote_stream_archive_command(
+    remote_result_dir: PurePosixPath,
+    *,
+    compressor: str,
+) -> str:
+    """Build one remote shell command that streams a compressed tar archive to stdout."""
+    compressor = str(compressor)
+    compressor_commands = {
+        "zstd": 'tar -C "$result_dir" -cf - . | zstd -T0 -15 -q -c',
+        "pigz": 'tar -C "$result_dir" -cf - . | pigz -6',
+        "gzip": 'tar -C "$result_dir" -cf - . | gzip -6',
+        "xz": 'tar -C "$result_dir" -cf - . | xz -6 -T0',
+    }
+    if compressor not in compressor_commands:
+        raise ValueError(f"Unsupported archive compressor {compressor!r}")
+    return (
+        "set -euo pipefail && "
+        f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
+        + compressor_commands[compressor]
+    )
+
+
 def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
     """Best-effort remote file removal used for temporary sync archives."""
     remote_shell = "rm -f {}".format(shlex.quote(remote_path))
@@ -1632,6 +1686,85 @@ def _extract_local_archive(local_archive_path: Path, local_result_dir: Path) -> 
     )
 
 
+def _stream_paramiko_archive_to_local(
+    config: dict[str, Any],
+    *,
+    remote_result_dir: PurePosixPath,
+    local_archive_path: Path,
+    compressor: str,
+    raw_bytes: int,
+) -> subprocess.CompletedProcess[str]:
+    """Stream one remote compressed tar archive over Paramiko into a local file."""
+    connection = _connect_paramiko(config)
+    transport = connection["transport"]
+    channel = None
+    stderr_chunks: list[bytes] = []
+    bytes_written = 0
+    completed_ok = False
+    progress = _ProgressBar(
+        total=None,
+        desc="[OBGPU load] Download compressed stream",
+        unit="B",
+        unit_scale=True,
+    )
+    stream_command = _build_remote_stream_archive_command(
+        remote_result_dir,
+        compressor=compressor,
+    )
+    local_archive_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_archive_path = local_archive_path.with_suffix(local_archive_path.suffix + ".part")
+    try:
+        channel = transport.open_session()
+        channel.exec_command(f"bash -lc {shlex.quote(stream_command)}")
+        with open(tmp_archive_path, "wb") as handle:
+            while True:
+                if channel.recv_ready():
+                    data = channel.recv(1024 * 1024)
+                    if data:
+                        handle.write(data)
+                        bytes_written += len(data)
+                        progress.update_to(bytes_written)
+                if channel.recv_stderr_ready():
+                    stderr_chunks.append(channel.recv_stderr(65536))
+                if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                    break
+                if not channel.recv_ready() and not channel.recv_stderr_ready():
+                    time.sleep(0.05)
+        returncode = channel.recv_exit_status()
+        if bytes_written:
+            progress.update_to(bytes_written)
+        progress.close()
+        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+        if returncode == 0:
+            tmp_archive_path.replace(local_archive_path)
+            completed_ok = True
+            ratio = (bytes_written / raw_bytes) if raw_bytes > 0 else 0.0
+            _progress_write(
+                f"[OBGPU load] Streamed archive via {compressor}: "
+                f"{_format_bytes(raw_bytes)} -> {_format_bytes(bytes_written)} ({ratio:.1%})"
+            )
+        else:
+            try:
+                tmp_archive_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        return subprocess.CompletedProcess(
+            args=["paramiko-stream", remote_result_dir.as_posix(), str(local_archive_path)],
+            returncode=returncode,
+            stdout="",
+            stderr=stderr_text,
+        )
+    finally:
+        progress.close()
+        if not completed_ok:
+            try:
+                tmp_archive_path.unlink(missing_ok=True)
+            except Exception:
+                pass
+        if channel is not None:
+            channel.close()
+
+
 def _sync_remote_result_dir(
     config: dict[str, Any],
     *,
@@ -1646,48 +1779,42 @@ def _sync_remote_result_dir(
             try:
                 connection = _connect_paramiko(config)
                 if bool(config.get("remote_sync_compress", True)):
-                    _progress_write("[OBGPU load] Packing remote result directory for transfer...")
-                    archive_completed = _run_paramiko_shell(
+                    _progress_write("[OBGPU load] Probing remote compression stream...")
+                    probe_completed = _run_paramiko_shell(
                         config,
-                        _build_remote_archive_command(remote_result_dir),
+                        _build_remote_archive_probe_command(remote_result_dir),
                     )
-                    if archive_completed.returncode != 0:
+                    if probe_completed.returncode != 0:
                         return subprocess.CompletedProcess(
-                            args=["paramiko-pack", remote_result_dir.as_posix(), str(local_result_dir)],
+                            args=["paramiko-probe", remote_result_dir.as_posix(), str(local_result_dir)],
                             returncode=1,
-                            stdout=archive_completed.stdout or "",
-                            stderr=archive_completed.stderr or "",
+                            stdout=probe_completed.stdout or "",
+                            stderr=probe_completed.stderr or "",
                         )
-                    archive_lines = [line.strip() for line in (archive_completed.stdout or "").splitlines() if line.strip()]
-                    if len(archive_lines) < 4:
+                    probe_lines = [line.strip() for line in (probe_completed.stdout or "").splitlines() if line.strip()]
+                    if len(probe_lines) < 3:
                         return subprocess.CompletedProcess(
-                            args=["paramiko-pack", remote_result_dir.as_posix(), str(local_result_dir)],
+                            args=["paramiko-probe", remote_result_dir.as_posix(), str(local_result_dir)],
                             returncode=1,
-                            stdout=archive_completed.stdout or "",
-                            stderr="Remote archive command did not return the expected metadata",
+                            stdout=probe_completed.stdout or "",
+                            stderr="Remote archive probe did not return the expected metadata",
                         )
-                    remote_archive_path, compressor, raw_bytes_text, archive_bytes_text = archive_lines[:4]
+                    compressor, raw_bytes_text, archive_suffix = probe_lines[:3]
                     raw_bytes = int(raw_bytes_text or "0")
-                    archive_bytes = int(archive_bytes_text or "0")
-                    ratio = (archive_bytes / raw_bytes) if raw_bytes > 0 else 0.0
                     _progress_write(
-                        f"[OBGPU load] Remote archive ready via {compressor}: "
-                        f"{_format_bytes(raw_bytes)} -> {_format_bytes(archive_bytes)} ({ratio:.1%})"
+                        f"[OBGPU load] Streaming compressed result via {compressor} "
+                        f"(raw size { _format_bytes(raw_bytes) })..."
                     )
-                    local_archive_path = local_result_dir.parent / Path(remote_archive_path).name
-                    progress = _ProgressBar(
-                        total=archive_bytes,
-                        desc="[OBGPU load] Download compressed result",
-                        unit="B",
-                        unit_scale=True,
+                    local_archive_path = local_result_dir.parent / f"{remote_result_dir.name}{archive_suffix}"
+                    stream_completed = _stream_paramiko_archive_to_local(
+                        config,
+                        remote_result_dir=remote_result_dir,
+                        local_archive_path=local_archive_path,
+                        compressor=compressor,
+                        raw_bytes=raw_bytes,
                     )
-
-                    def archive_callback(current_bytes: int, _total_bytes: int) -> None:
-                        progress.update_to(current_bytes)
-
-                    connection["sftp"].get(remote_archive_path, str(local_archive_path), callback=archive_callback)
-                    progress.update_to(archive_bytes)
-                    progress.close()
+                    if stream_completed.returncode != 0:
+                        return stream_completed
                     _progress_write(
                         f"[OBGPU load] Extracting {local_archive_path.name} into {local_result_dir.name}..."
                     )
@@ -1696,7 +1823,6 @@ def _sync_remote_result_dir(
                         local_archive_path.unlink(missing_ok=True)
                     except Exception:
                         pass
-                    _remove_remote_file(config, remote_archive_path)
                     if extract_completed.returncode != 0:
                         return extract_completed
                 else:
