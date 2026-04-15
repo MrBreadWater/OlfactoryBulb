@@ -408,9 +408,11 @@ _NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
 _NOTEBOOK_RUNTIME.setdefault("ssh_masters", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
+_NOTEBOOK_RUNTIME.setdefault("remote_git_refs", {})
 _LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 _LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
+_LIVE_REMOTE_GIT_REFS: dict[str, set[str]] = _NOTEBOOK_RUNTIME["remote_git_refs"]
 
 
 def default_local_mpi_exec() -> str:
@@ -1088,6 +1090,11 @@ def _paramiko_connection_key(config: dict[str, Any]) -> str:
     """Build the cache key for one persistent Paramiko connection."""
     hostname, port, username = _remote_endpoint(config)
     return f"{username}@{hostname}:{port}"
+
+
+def _remote_git_ref_cache_key(config: dict[str, Any], remote_repo_root: PurePosixPath) -> str:
+    """Build the runtime cache key for remote git-object presence checks."""
+    return f"{_paramiko_connection_key(config)}::{remote_repo_root.as_posix()}"
 
 
 def _normalize_slurm_state(raw_state: str) -> str:
@@ -2768,6 +2775,12 @@ def _ensure_remote_git_ref_available(
     if not remote_git_ref:
         return
 
+    cache_key = _remote_git_ref_cache_key(config, remote_repo_root)
+    cached_refs = _LIVE_REMOTE_GIT_REFS.setdefault(cache_key, set())
+    if remote_git_ref in cached_refs:
+        _progress_write(f"[Sol remote] Remote git cache hit for commit {remote_git_ref[:12]}.")
+        return
+
     _progress_write(f"[Sol remote] Checking whether remote repo already has commit {remote_git_ref[:12]}...")
     check_command = (
         f"git -C {shlex.quote(remote_repo_root.as_posix())} "
@@ -2775,6 +2788,7 @@ def _ensure_remote_git_ref_available(
     )
     check_completed = _run_ssh_shell(config, check_command)
     if check_completed.returncode == 0:
+        cached_refs.add(remote_git_ref)
         _progress_write(f"[Sol remote] Remote repo already has commit {remote_git_ref[:12]}.")
         return
 
@@ -2814,6 +2828,7 @@ def _ensure_remote_git_ref_available(
                 f"Stdout:\n{fetch_completed.stdout}\n\n"
                 f"Stderr:\n{fetch_completed.stderr}"
             )
+        cached_refs.add(remote_git_ref)
         _progress_write(f"[Sol remote] Remote repo now has commit {remote_git_ref[:12]}.")
     finally:
         try:
