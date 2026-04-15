@@ -355,15 +355,25 @@ def _compact_remote_poll_events(poll_transcript: list[dict[str, Any]]) -> list[d
 class _ProgressBar:
     """Small wrapper around tqdm with a plain-print fallback."""
 
-    def __init__(self, *, total: int | None, desc: str, unit: str = "B", unit_scale: bool = False):
+    def __init__(
+        self,
+        *,
+        total: int | None,
+        desc: str,
+        unit: str = "B",
+        unit_scale: bool = False,
+        display_step: int = 1,
+    ):
         self.total = None if total is None else int(total)
         self.current = 0
         self.desc = desc
         self.unit = unit
         self.unit_scale = unit_scale
+        self.display_step = max(int(display_step), 1)
         self._last_step = -1
         self._bar = None
         self._fallback_active = False
+        self._display_current = 0
         if tqdm is not None:
             self._bar = tqdm(
                 total=max(self.total, 0) if self.total is not None else None,
@@ -377,16 +387,21 @@ class _ProgressBar:
 
     def update_to(self, current: int) -> None:
         current = max(0, int(current))
+        self.current = current
+        should_render = (current - self._display_current) >= self.display_step
+        if self.total is not None and current >= self.total:
+            should_render = True
+        if not should_render:
+            return
         if self._bar is not None:
-            delta = current - self.current
+            delta = current - self._display_current
             if delta > 0:
                 self._bar.update(delta)
-            self.current = current
+            self._display_current = current
             return
 
-        self.current = current
         if self.total is None:
-            step = 1 if self.unit != "B" else 64 * 1024 * 1024
+            step = self.display_step
             progress_step = self.current // step
             if progress_step == self._last_step:
                 return
@@ -396,6 +411,7 @@ class _ProgressBar:
                 "\r" + f"{self.desc} {_format_progress_value(self.current, self.unit, self.unit_scale)}"
             )
             sys.stdout.flush()
+            self._display_current = current
             return
         if self.total <= 0:
             return
@@ -411,12 +427,32 @@ class _ProgressBar:
             + f"{_format_progress_value(self.total, self.unit, self.unit_scale)}"
         )
         sys.stdout.flush()
+        self._display_current = current
 
     def tick(self, delta: int = 1) -> None:
         """Advance one indeterminate progress bar."""
         self.update_to(self.current + max(0, int(delta)))
 
     def close(self) -> None:
+        if self._display_current < self.current:
+            if self._bar is not None:
+                delta = self.current - self._display_current
+                if delta > 0:
+                    self._bar.update(delta)
+            elif self._fallback_active:
+                if self.total is None:
+                    sys.stdout.write(
+                        "\r" + f"{self.desc} {_format_progress_value(self.current, self.unit, self.unit_scale)}"
+                    )
+                else:
+                    sys.stdout.write(
+                        "\r"
+                        + f"{self.desc} {_render_progress_bar(self.current, self.total)} "
+                        + f"{_format_progress_value(self.current, self.unit, self.unit_scale)} / "
+                        + f"{_format_progress_value(self.total, self.unit, self.unit_scale)}"
+                    )
+                sys.stdout.flush()
+            self._display_current = self.current
         if self._bar is not None:
             self._bar.close()
         elif self._fallback_active:
@@ -1945,6 +1981,7 @@ def _stream_paramiko_archive_to_local(
         desc="[OBGPU load] Download compressed stream",
         unit="B",
         unit_scale=True,
+        display_step=10 * 1024 * 1024,
     )
     stream_command = _build_remote_stream_archive_command(
         remote_result_dir,
@@ -1977,11 +2014,6 @@ def _stream_paramiko_archive_to_local(
         if returncode == 0:
             tmp_archive_path.replace(local_archive_path)
             completed_ok = True
-            ratio = (bytes_written / raw_bytes) if raw_bytes > 0 else 0.0
-            _progress_write(
-                f"[OBGPU load] Streamed archive via {compressor}: "
-                f"{_format_bytes(raw_bytes)} -> {_format_bytes(bytes_written)} ({ratio:.1%})"
-            )
         else:
             try:
                 tmp_archive_path.unlink(missing_ok=True)
@@ -2023,6 +2055,7 @@ def _stream_paramiko_archive_to_local_dir(
         desc="[OBGPU load] Stream download/extract",
         unit="B",
         unit_scale=True,
+        display_step=10 * 1024 * 1024,
     )
     local_result_dir.mkdir(parents=True, exist_ok=True)
     stream_command = _build_remote_stream_archive_command(
@@ -2086,12 +2119,6 @@ def _stream_paramiko_archive_to_local_dir(
         if Path(tar_stderr.name).exists():
             stderr_text += Path(tar_stderr.name).read_text(errors="replace")
         returncode = 0 if remote_returncode == 0 and decompress_returncode == 0 and tar_returncode == 0 else 1
-        if returncode == 0:
-            ratio = (bytes_written / raw_bytes) if raw_bytes > 0 else 0.0
-            _progress_write(
-                f"[OBGPU load] Streamed+extracted via {compressor}: "
-                f"{_format_bytes(raw_bytes)} -> {_format_bytes(bytes_written)} ({ratio:.1%})"
-            )
         return subprocess.CompletedProcess(
             args=["paramiko-stream-extract", remote_result_dir.as_posix(), str(local_result_dir)],
             returncode=returncode,
@@ -2139,7 +2166,6 @@ def _sync_remote_result_dir(
             try:
                 connection = _connect_paramiko(config)
                 if bool(config.get("remote_sync_compress", True)):
-                    _progress_write("[OBGPU load] Probing remote compression stream...")
                     probe_completed = _run_paramiko_shell(
                         config,
                         _build_remote_archive_probe_command(remote_result_dir),
@@ -2161,10 +2187,6 @@ def _sync_remote_result_dir(
                         )
                     compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
                     raw_bytes = int(raw_bytes_text or "0")
-                    _progress_write(
-                        f"[OBGPU load] Streaming compressed result via {compressor} "
-                        f"(raw size { _format_bytes(raw_bytes) })..."
-                    )
                     stream_completed = _stream_paramiko_archive_to_local_dir(
                         config,
                         remote_result_dir=remote_result_dir,
