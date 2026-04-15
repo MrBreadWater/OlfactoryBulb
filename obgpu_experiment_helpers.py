@@ -1165,6 +1165,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
     try:
         import socket
 
+        _progress_write(f"[Sol remote] Opening SSH session to {username}@{hostname}:{port}...")
         raw_sock = socket.create_connection((hostname, port), timeout=30.0)
         transport = paramiko.Transport(raw_sock)
         transport.start_client(timeout=30.0)
@@ -1240,6 +1241,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
             "username": username,
         }
         _LIVE_PARAMIKO_CONNECTIONS[cache_key] = connection
+        _progress_write(f"[Sol remote] SSH session ready for {username}@{hostname}:{port}.")
         return connection
     except Exception:
         if transport is not None:
@@ -2766,12 +2768,14 @@ def _ensure_remote_git_ref_available(
     if not remote_git_ref:
         return
 
+    _progress_write(f"[Sol remote] Checking whether remote repo already has commit {remote_git_ref[:12]}...")
     check_command = (
         f"git -C {shlex.quote(remote_repo_root.as_posix())} "
         f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
     )
     check_completed = _run_ssh_shell(config, check_command)
     if check_completed.returncode == 0:
+        _progress_write(f"[Sol remote] Remote repo already has commit {remote_git_ref[:12]}.")
         return
 
     if _remote_transport(config) != "paramiko":
@@ -2784,7 +2788,7 @@ def _ensure_remote_git_ref_available(
 
     connection = _connect_paramiko(config)
     sftp = connection["sftp"]
-    print(f"[Sol remote] Publishing local commit {remote_git_ref[:12]} to remote repo...", flush=True)
+    _progress_write(f"[Sol remote] Building local git bundle for commit {remote_git_ref[:12]}...")
     bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref)
     remote_bundle_path = f"/tmp/obgpu-sync-{remote_git_ref[:12]}-{os.getpid()}.bundle"
     remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
@@ -2798,7 +2802,9 @@ def _ensure_remote_git_ref_available(
     )
 
     try:
+        _progress_write(f"[Sol remote] Uploading git bundle for commit {remote_git_ref[:12]}...")
         sftp.put(str(bundle_path), remote_bundle_path)
+        _progress_write(f"[Sol remote] Publishing local commit {remote_git_ref[:12]} to remote repo...")
         fetch_completed = _run_paramiko_shell(config, fetch_command)
         if fetch_completed.returncode != 0:
             raise RuntimeError(
@@ -2808,6 +2814,7 @@ def _ensure_remote_git_ref_available(
                 f"Stdout:\n{fetch_completed.stdout}\n\n"
                 f"Stderr:\n{fetch_completed.stderr}"
             )
+        _progress_write(f"[Sol remote] Remote repo now has commit {remote_git_ref[:12]}.")
     finally:
         try:
             bundle_path.unlink(missing_ok=True)
