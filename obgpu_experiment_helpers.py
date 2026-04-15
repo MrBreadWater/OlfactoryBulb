@@ -191,6 +191,152 @@ def _progress_write(message: str) -> None:
         print(message, flush=True)
 
 
+def _is_permission_listing_line(line: str) -> bool:
+    """Return whether one line looks like `ls -l` file-listing noise."""
+    text = str(line or "").strip()
+    if len(text) < 10:
+        return False
+    return (
+        text[:1] in {"d", "-", "l"}
+        and all(char in "rwxstST-" for char in text[1:10])
+        and text[10:11] == " "
+    )
+
+
+def _filter_live_remote_log_line(kind: str, line: str) -> str | None:
+    """Return a cleaned live-log line, or None when the line is routine noise."""
+    text = str(line or "").rstrip()
+    stripped = text.strip()
+    if not stripped:
+        return None
+
+    if kind == "stdout":
+        if stripped.startswith("Sim ["):
+            return None
+        if stripped.startswith("numprocs="):
+            return None
+        if stripped.startswith("Rank Complexity "):
+            return None
+        return stripped
+
+    if kind == "bootstrap":
+        if stripped.startswith("Updating files:"):
+            return None
+        if stripped.startswith("HEAD is now at"):
+            return None
+        if stripped.startswith("Previous HEAD position was"):
+            return None
+        if stripped.startswith("total "):
+            return None
+        if _is_permission_listing_line(stripped):
+            return None
+        return stripped
+
+    if kind == "stderr":
+        if stripped.startswith("NEURON -- VERSION"):
+            return None
+        if stripped.startswith("Duke, Yale, and the BlueBrain Project"):
+            return None
+        if stripped.startswith("See http://neuron.yale.edu/neuron/credits"):
+            return None
+        if stripped.startswith("Additional mechanisms from files"):
+            return None
+        if stripped.startswith('"prev_ob_models/') or stripped.startswith('" "prev_ob_models/'):
+            return None
+        return stripped
+
+    return stripped
+
+
+def _summarize_remote_status(status: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Return a compact JSON-safe remote status summary without duplicated tails."""
+    if not status:
+        return None
+    return {
+        "state": status.get("state"),
+        "reason": status.get("reason"),
+        "location": status.get("location"),
+        "done": bool(status.get("done")),
+        "ok": bool(status.get("ok")),
+        "summary_exists": bool(status.get("summary_exists")),
+        "stdout_exists": bool(status.get("stdout_exists")),
+        "stderr_exists": bool(status.get("stderr_exists")),
+        "bootstrap_exists": bool(status.get("bootstrap_exists")),
+        "command_exists": bool(status.get("command_exists")),
+        "slurm_log_exists": bool(status.get("slurm_log_exists")),
+        "progress_percent": status.get("progress_percent"),
+        "progress_current_ms": status.get("progress_current_ms"),
+        "progress_total_ms": status.get("progress_total_ms"),
+    }
+
+
+def _summarize_remote_submit_response(submission: dict[str, Any]) -> dict[str, Any]:
+    """Return a compact remote submission summary for run_info."""
+    return {
+        "job_id": submission.get("job_id"),
+        "result_dir": submission.get("result_dir"),
+        "wrapper_dir": submission.get("wrapper_dir"),
+        "batch_script": submission.get("batch_script"),
+        "worktree_path": submission.get("worktree_path"),
+    }
+
+
+def _compact_remote_poll_events(poll_transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Compress raw remote polling samples into state changes and new log deltas."""
+    events: list[dict[str, Any]] = []
+    last_signature: tuple[Any, ...] | None = None
+    last_tails = {"bootstrap": "", "stdout": "", "stderr": "", "slurm": ""}
+    last_progress_bucket: int | None = None
+    for status in poll_transcript:
+        event: dict[str, Any] = {}
+        signature = (
+            status.get("state"),
+            status.get("reason"),
+            status.get("location"),
+            bool(status.get("summary_exists")),
+            bool(status.get("stdout_exists")),
+            bool(status.get("stderr_exists")),
+            bool(status.get("bootstrap_exists")),
+            bool(status.get("command_exists")),
+            bool(status.get("slurm_log_exists")),
+            bool(status.get("done")),
+            bool(status.get("ok")),
+        )
+        if signature != last_signature:
+            event.update(_summarize_remote_status(status) or {})
+            last_signature = signature
+
+        progress_percent = status.get("progress_percent")
+        if progress_percent not in (None, ""):
+            progress_bucket = int(progress_percent) // 5
+            if progress_bucket != last_progress_bucket or status.get("done"):
+                event["progress_percent"] = int(progress_percent)
+                event["progress_current_ms"] = status.get("progress_current_ms")
+                event["progress_total_ms"] = status.get("progress_total_ms")
+                last_progress_bucket = progress_bucket
+
+        new_logs: dict[str, list[str]] = {}
+        for kind in ("bootstrap", "stdout", "stderr", "slurm"):
+            tail_text = str(status.get(f"{kind}_tail") or "")
+            previous = last_tails[kind]
+            if tail_text and tail_text != previous:
+                delta_text = tail_text[len(previous):] if previous and tail_text.startswith(previous) else tail_text
+                lines: list[str] = []
+                for line in delta_text.replace("\r", "\n").splitlines():
+                    cleaned = _filter_live_remote_log_line(kind, line)
+                    if cleaned:
+                        lines.append(cleaned)
+                if lines:
+                    new_logs[kind] = lines
+            last_tails[kind] = tail_text
+        if new_logs:
+            event["new_logs"] = new_logs
+
+        if event:
+            events.append(event)
+    return events
+
+
 class _ProgressBar:
     """Small wrapper around tqdm with a plain-print fallback."""
 
@@ -1686,6 +1832,18 @@ def _extract_local_archive(local_archive_path: Path, local_result_dir: Path) -> 
     )
 
 
+def _local_archive_decompress_command(compressor: str) -> list[str]:
+    """Return a local decompressor command for one archive stream."""
+    compressor = str(compressor)
+    if compressor == "zstd":
+        return [str(shutil.which("zstd") or "zstd"), "-d", "-q"]
+    if compressor in {"pigz", "gzip"}:
+        return [str(shutil.which("gzip") or "gzip"), "-d"]
+    if compressor == "xz":
+        return [str(shutil.which("xz") or "xz"), "-d"]
+    raise ValueError(f"Unsupported archive compressor {compressor!r}")
+
+
 def _stream_paramiko_archive_to_local(
     config: dict[str, Any],
     *,
@@ -1765,6 +1923,127 @@ def _stream_paramiko_archive_to_local(
             channel.close()
 
 
+def _stream_paramiko_archive_to_local_dir(
+    config: dict[str, Any],
+    *,
+    remote_result_dir: PurePosixPath,
+    local_result_dir: Path,
+    compressor: str,
+    raw_bytes: int,
+) -> subprocess.CompletedProcess[str]:
+    """Stream one remote compressed tar archive over Paramiko directly into local extraction."""
+    connection = _connect_paramiko(config)
+    transport = connection["transport"]
+    channel = None
+    stderr_chunks: list[bytes] = []
+    bytes_written = 0
+    progress = _ProgressBar(
+        total=None,
+        desc="[OBGPU load] Stream download/extract",
+        unit="B",
+        unit_scale=True,
+    )
+    local_result_dir.mkdir(parents=True, exist_ok=True)
+    stream_command = _build_remote_stream_archive_command(
+        remote_result_dir,
+        compressor=compressor,
+    )
+    decompress_cmd = _local_archive_decompress_command(compressor)
+    decompress_stderr = tempfile.NamedTemporaryFile(prefix="obgpu-decompress-", suffix=".log", delete=False)
+    tar_stderr = tempfile.NamedTemporaryFile(prefix="obgpu-tar-", suffix=".log", delete=False)
+    decompress_proc = None
+    tar_proc = None
+    decompress_stderr_handle = None
+    tar_stderr_handle = None
+    try:
+        decompress_stderr.close()
+        tar_stderr.close()
+        decompress_stderr_handle = open(decompress_stderr.name, "wb")
+        tar_stderr_handle = open(tar_stderr.name, "wb")
+        decompress_proc = subprocess.Popen(
+            decompress_cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=decompress_stderr_handle,
+        )
+        tar_proc = subprocess.Popen(
+            ["tar", "-xf", "-", "-C", str(local_result_dir)],
+            stdin=decompress_proc.stdout,
+            stdout=subprocess.DEVNULL,
+            stderr=tar_stderr_handle,
+        )
+        if decompress_proc.stdout is not None:
+            decompress_proc.stdout.close()
+        if decompress_proc.stdin is None:
+            raise RuntimeError("Could not open decompressor stdin for streaming extraction.")
+
+        channel = transport.open_session()
+        channel.exec_command(f"bash -lc {shlex.quote(stream_command)}")
+        while True:
+            if channel.recv_ready():
+                data = channel.recv(1024 * 1024)
+                if data:
+                    decompress_proc.stdin.write(data)
+                    bytes_written += len(data)
+                    progress.update_to(bytes_written)
+                    continue
+            if channel.recv_stderr_ready():
+                stderr_chunks.append(channel.recv_stderr(65536))
+            if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                break
+            time.sleep(0.05)
+
+        if decompress_proc.stdin is not None:
+            decompress_proc.stdin.close()
+        remote_returncode = channel.recv_exit_status()
+        decompress_returncode = decompress_proc.wait()
+        tar_returncode = tar_proc.wait()
+        progress.close()
+        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+        if Path(decompress_stderr.name).exists():
+            stderr_text += Path(decompress_stderr.name).read_text(errors="replace")
+        if Path(tar_stderr.name).exists():
+            stderr_text += Path(tar_stderr.name).read_text(errors="replace")
+        returncode = 0 if remote_returncode == 0 and decompress_returncode == 0 and tar_returncode == 0 else 1
+        if returncode == 0:
+            ratio = (bytes_written / raw_bytes) if raw_bytes > 0 else 0.0
+            _progress_write(
+                f"[OBGPU load] Streamed+extracted via {compressor}: "
+                f"{_format_bytes(raw_bytes)} -> {_format_bytes(bytes_written)} ({ratio:.1%})"
+            )
+        return subprocess.CompletedProcess(
+            args=["paramiko-stream-extract", remote_result_dir.as_posix(), str(local_result_dir)],
+            returncode=returncode,
+            stdout="",
+            stderr=stderr_text,
+        )
+    finally:
+        progress.close()
+        if channel is not None:
+            channel.close()
+        for handle in (decompress_stderr_handle, tar_stderr_handle):
+            if handle is not None:
+                try:
+                    handle.close()
+                except Exception:
+                    pass
+        if decompress_proc is not None and decompress_proc.poll() is None:
+            try:
+                decompress_proc.kill()
+            except Exception:
+                pass
+        if tar_proc is not None and tar_proc.poll() is None:
+            try:
+                tar_proc.kill()
+            except Exception:
+                pass
+        for path in (decompress_stderr.name, tar_stderr.name):
+            try:
+                Path(path).unlink(missing_ok=True)
+            except Exception:
+                pass
+
+
 def _sync_remote_result_dir(
     config: dict[str, Any],
     *,
@@ -1799,32 +2078,21 @@ def _sync_remote_result_dir(
                             stdout=probe_completed.stdout or "",
                             stderr="Remote archive probe did not return the expected metadata",
                         )
-                    compressor, raw_bytes_text, archive_suffix = probe_lines[:3]
+                    compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
                     raw_bytes = int(raw_bytes_text or "0")
                     _progress_write(
                         f"[OBGPU load] Streaming compressed result via {compressor} "
                         f"(raw size { _format_bytes(raw_bytes) })..."
                     )
-                    local_archive_path = local_result_dir.parent / f"{remote_result_dir.name}{archive_suffix}"
-                    stream_completed = _stream_paramiko_archive_to_local(
+                    stream_completed = _stream_paramiko_archive_to_local_dir(
                         config,
                         remote_result_dir=remote_result_dir,
-                        local_archive_path=local_archive_path,
+                        local_result_dir=local_result_dir,
                         compressor=compressor,
                         raw_bytes=raw_bytes,
                     )
                     if stream_completed.returncode != 0:
                         return stream_completed
-                    _progress_write(
-                        f"[OBGPU load] Extracting {local_archive_path.name} into {local_result_dir.name}..."
-                    )
-                    extract_completed = _extract_local_archive(local_archive_path, local_result_dir)
-                    try:
-                        local_archive_path.unlink(missing_ok=True)
-                    except Exception:
-                        pass
-                    if extract_completed.returncode != 0:
-                        return extract_completed
                 else:
                     _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
             except Exception as exc:
@@ -2626,6 +2894,12 @@ def _run_remote_simulation(
         "stderr": "",
         "slurm": "",
     }
+    last_live_lines = {
+        "bootstrap": None,
+        "stdout": None,
+        "stderr": None,
+        "slurm": None,
+    }
     sim_progress_bar: _ProgressBar | None = None
     sim_progress_total_ms: int | None = None
 
@@ -2721,10 +2995,13 @@ def _run_remote_simulation(
                 delta_text = delta_text.strip("\n")
                 if delta_text:
                     for line in delta_text.replace("\r", "\n").splitlines():
-                        if kind == "stdout" and line.lstrip().startswith("Sim ["):
+                        filtered = _filter_live_remote_log_line(kind, line)
+                        if filtered is None:
                             continue
-                        if line.strip():
-                            _progress_write(f"[Sol remote][{kind}] {line}")
+                        if filtered == last_live_lines[kind]:
+                            continue
+                        _progress_write(f"[Sol remote][{kind}] {filtered}")
+                        last_live_lines[kind] = filtered
                 last_live_tails[kind] = tail_text
         if status.get("done") and sim_progress_bar is not None:
             sim_progress_bar.close()
@@ -2860,6 +3137,12 @@ def _run_remote_simulation(
         with open(summary_path) as f:
             summary = json.load(f)
 
+    compact_poll_events = _compact_remote_poll_events(poll_transcript)
+    poll_events_path = None
+    if compact_poll_events:
+        poll_events_path = local_result_dir / "remote_poll_events.json"
+        poll_events_path.write_text(json.dumps(_json_ready(compact_poll_events), indent=2, sort_keys=True))
+
     _write_notebook_run_info(
         local_result_dir,
         config=effective_config,
@@ -2874,9 +3157,11 @@ def _run_remote_simulation(
                 **remote_metadata,
                 "job_id": submission.get("job_id"),
                 "remote_result_dir": str(remote_result_dir),
-                "submit_response": submission,
-                "final_status": final_status,
-                "poll_transcript": poll_transcript,
+                "submit_response": _summarize_remote_submit_response(submission),
+                "final_status": _summarize_remote_status(final_status),
+                "poll_sample_count": len(poll_transcript),
+                "poll_event_count": len(compact_poll_events),
+                "poll_events_file": poll_events_path.name if poll_events_path is not None else None,
                 "resolved_git_ref": remote_git_ref,
                 "resolved_git_commit": remote_git_commit,
             }
