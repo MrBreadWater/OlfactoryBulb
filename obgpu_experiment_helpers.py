@@ -53,7 +53,10 @@ except ImportError:  # pragma: no cover - optional runtime dependency
     try:
         from tqdm.auto import tqdm
     except ImportError:  # pragma: no cover - optional runtime dependency
-        tqdm = None
+        try:
+            from tqdm import tqdm
+        except ImportError:  # pragma: no cover - optional runtime dependency
+            tqdm = None
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -184,6 +187,15 @@ def _render_progress_bar(current: int | float, total: int | float, width: int = 
     progress = max(0.0, min(float(current) / float(total), 1.0))
     filled = int(round(progress * width))
     return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+
+
+def _format_progress_value(value: int | float, unit: str, unit_scale: bool) -> str:
+    """Format one progress value using either byte or plain-unit rendering."""
+    if unit_scale and unit == "B":
+        return _format_bytes(value)
+    if unit:
+        return f"{float(value):.1f} {unit}" if isinstance(value, float) or isinstance(value, np.floating) else f"{int(value)} {unit}"
+    return str(value)
 
 
 def _progress_write(message: str) -> None:
@@ -351,6 +363,7 @@ class _ProgressBar:
         self.unit_scale = unit_scale
         self._last_step = -1
         self._bar = None
+        self._fallback_active = False
         if tqdm is not None:
             self._bar = tqdm(
                 total=max(self.total, 0) if self.total is not None else None,
@@ -373,15 +386,16 @@ class _ProgressBar:
 
         self.current = current
         if self.total is None:
-            step_bytes = 64 * 1024 * 1024
-            progress_step = self.current // step_bytes
+            step = 1 if self.unit != "B" else 64 * 1024 * 1024
+            progress_step = self.current // step
             if progress_step == self._last_step:
                 return
             self._last_step = progress_step
-            print(
-                f"{self.desc} {_format_bytes(self.current)} transferred",
-                flush=True,
+            self._fallback_active = True
+            sys.stdout.write(
+                "\r" + f"{self.desc} {_format_progress_value(self.current, self.unit, self.unit_scale)}"
             )
+            sys.stdout.flush()
             return
         if self.total <= 0:
             return
@@ -389,15 +403,26 @@ class _ProgressBar:
         if progress_step == self._last_step and self.current < self.total:
             return
         self._last_step = progress_step
-        print(
-            f"{self.desc} {_render_progress_bar(self.current, self.total)} "
-            f"{_format_bytes(self.current)} / {_format_bytes(self.total)}",
-            flush=True,
+        self._fallback_active = True
+        sys.stdout.write(
+            "\r"
+            + f"{self.desc} {_render_progress_bar(self.current, self.total)} "
+            + f"{_format_progress_value(self.current, self.unit, self.unit_scale)} / "
+            + f"{_format_progress_value(self.total, self.unit, self.unit_scale)}"
         )
+        sys.stdout.flush()
+
+    def tick(self, delta: int = 1) -> None:
+        """Advance one indeterminate progress bar."""
+        self.update_to(self.current + max(0, int(delta)))
 
     def close(self) -> None:
         if self._bar is not None:
             self._bar.close()
+        elif self._fallback_active:
+            sys.stdout.write("\r" + (" " * 120) + "\r")
+            sys.stdout.flush()
+            self._fallback_active = False
 
 
 _LIVE_INSPECTION_MODEL = None
@@ -2971,6 +2996,8 @@ def _run_remote_simulation(
     }
     sim_progress_bar: _ProgressBar | None = None
     sim_progress_total_ms: int | None = None
+    sim_heartbeat_bar: _ProgressBar | None = None
+    sim_last_progress_ms: int | None = None
 
     def poll_remote_status_once() -> dict[str, Any]:
         poll_shell = _build_remote_poll_command(
@@ -3000,7 +3027,7 @@ def _run_remote_simulation(
         return status
 
     def emit_live_remote_updates(status: dict[str, Any]) -> None:
-        nonlocal last_status_signature, sim_progress_bar, sim_progress_total_ms
+        nonlocal last_status_signature, sim_progress_bar, sim_progress_total_ms, sim_heartbeat_bar, sim_last_progress_ms
         status_signature = (
             status.get("state"),
             bool(status.get("summary_exists")),
@@ -3036,6 +3063,7 @@ def _run_remote_simulation(
             last_status_signature = status_signature
         progress_total_ms = status.get("progress_total_ms")
         progress_current_ms = status.get("progress_current_ms")
+        progress_advanced = False
         if progress_total_ms not in (None, "", 0) and progress_current_ms is not None:
             total_ms = max(int(float(progress_total_ms)), 0)
             current_ms = max(0, min(int(float(progress_current_ms)), total_ms))
@@ -3051,6 +3079,22 @@ def _run_remote_simulation(
                         unit_scale=False,
                     )
                 sim_progress_bar.update_to(current_ms)
+                progress_advanced = sim_last_progress_ms is not None and current_ms > sim_last_progress_ms
+                sim_last_progress_ms = current_ms
+                if progress_advanced and sim_heartbeat_bar is not None:
+                    sim_heartbeat_bar.close()
+                    sim_heartbeat_bar = None
+        state = str(status.get("state", "UNKNOWN"))
+        if state == "RUNNING":
+            if sim_progress_bar is None or not progress_advanced:
+                if sim_heartbeat_bar is None:
+                    sim_heartbeat_bar = _ProgressBar(
+                        total=None,
+                        desc="Sim running",
+                        unit="s",
+                        unit_scale=False,
+                    )
+                sim_heartbeat_bar.tick(max(int(poll_interval_s), 1))
         if live_logs:
             for kind in ("bootstrap", "stdout", "stderr", "slurm"):
                 tail_text = str(status.get(f"{kind}_tail") or "")
@@ -3072,10 +3116,14 @@ def _run_remote_simulation(
                         _progress_write(f"[Sol remote][{kind}] {filtered}")
                         last_live_lines[kind] = filtered
                 last_live_tails[kind] = tail_text
-        if status.get("done") and sim_progress_bar is not None:
-            sim_progress_bar.close()
-            sim_progress_bar = None
-            sim_progress_total_ms = None
+        if status.get("done"):
+            if sim_progress_bar is not None:
+                sim_progress_bar.close()
+                sim_progress_bar = None
+                sim_progress_total_ms = None
+            if sim_heartbeat_bar is not None:
+                sim_heartbeat_bar.close()
+                sim_heartbeat_bar = None
 
     try:
         while True:
