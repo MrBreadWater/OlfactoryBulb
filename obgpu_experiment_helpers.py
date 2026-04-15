@@ -1253,6 +1253,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
 
         authenticated = False
         if "keyboard-interactive" in auth_methods or not auth_methods:
+            _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
             def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
                 responses: list[str] = []
                 if title:
@@ -1271,6 +1272,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
 
         if not authenticated and "password" in auth_methods:
             try:
+                _progress_write(f"[Sol remote] Waiting for password authentication...")
                 transport.auth_password(
                     username,
                     _paramiko_prompt_response(f"Password for {username}@{hostname}:"),
@@ -1281,6 +1283,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                 authenticated = False
 
         if not authenticated and "keyboard-interactive" in auth_methods:
+            _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
             def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
                 responses: list[str] = []
                 if title:
@@ -1301,6 +1304,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                 f"Auth methods: {auth_methods}"
             )
 
+        _progress_write(f"[Sol remote] SSH authentication complete; opening SFTP channel...")
         connection = {
             "transport": transport,
             "sftp": paramiko.SFTPClient.from_transport(transport),
