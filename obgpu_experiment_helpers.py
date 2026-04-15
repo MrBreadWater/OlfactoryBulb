@@ -20,6 +20,7 @@ import sys
 import tempfile
 import time
 import builtins
+import warnings
 from base64 import b64encode
 from collections import Counter
 from copy import deepcopy
@@ -565,6 +566,7 @@ def build_slurm_remote_config(
 
     Slurm arguments are only emitted when explicitly provided.
     """
+    _warn_remote_execution_mode_reset()
     remote_repo_root = str(remote_repo_root)
     if remote_results_root is None:
         remote_results_root = str(PurePosixPath(remote_repo_root) / "results" / "notebook_runs")
@@ -672,6 +674,17 @@ def make_label(config: dict[str, Any], timestamp: str | None = None) -> str:
     paramset = str(config.get("paramset", "Paramset"))
     prefix = str(config.get("label_prefix", "obgpu_experiment"))
     return f"{prefix}_{paramset}_{mode}_{timestamp}"
+
+
+def _warn_remote_execution_mode_reset() -> None:
+    """Warn that remote configs clear local acceleration toggles and infer mode from Slurm."""
+    warnings.warn(
+        "Remote Slurm configs reset use_corenrn/use_gpu to auto. "
+        "If you apply them via RUN_CONFIG.update(...), any previous local values for those keys "
+        "will be cleared. Remote execution mode will then be inferred from slurm_gpus unless you "
+        "explicitly set use_corenrn/use_gpu again after applying the remote config.",
+        stacklevel=2,
+    )
 
 
 def _resolve_execution_mode(config: dict[str, Any]) -> dict[str, Any]:
