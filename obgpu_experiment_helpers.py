@@ -48,15 +48,17 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     paramiko = None
 try:
-    from tqdm.notebook import tqdm
+    from tqdm.notebook import tqdm as _tqdm_notebook
+except ImportError:  # pragma: no cover - optional runtime dependency
+    _tqdm_notebook = None
+try:
+    from tqdm.std import tqdm as _tqdm_plain
 except ImportError:  # pragma: no cover - optional runtime dependency
     try:
-        from tqdm.auto import tqdm
+        from tqdm import tqdm as _tqdm_plain
     except ImportError:  # pragma: no cover - optional runtime dependency
-        try:
-            from tqdm import tqdm
-        except ImportError:  # pragma: no cover - optional runtime dependency
-            tqdm = None
+        _tqdm_plain = None
+tqdm = _tqdm_notebook or _tqdm_plain
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -200,10 +202,37 @@ def _format_progress_value(value: int | float, unit: str, unit_scale: bool) -> s
 
 def _progress_write(message: str) -> None:
     """Write one progress message without corrupting active tqdm bars."""
+    global tqdm
     if tqdm is not None:
-        tqdm.write(message)
-    else:
-        print(message, flush=True)
+        try:
+            tqdm.write(message)
+            return
+        except Exception:
+            tqdm = _tqdm_plain
+            if tqdm is not None:
+                try:
+                    tqdm.write(message)
+                    return
+                except Exception:
+                    pass
+    print(message, flush=True)
+
+
+def _make_tqdm_bar(**kwargs: Any) -> Any | None:
+    """Create one tqdm instance, falling back to plain tqdm when notebook widgets fail."""
+    global tqdm
+    if tqdm is None:
+        return None
+    try:
+        return tqdm(**kwargs)
+    except Exception:
+        tqdm = _tqdm_plain
+        if tqdm is not None:
+            try:
+                return tqdm(**kwargs)
+            except Exception:
+                return None
+    return None
 
 
 def _is_permission_listing_line(line: str) -> bool:
@@ -374,16 +403,15 @@ class _ProgressBar:
         self._bar = None
         self._fallback_active = False
         self._display_current = 0
-        if tqdm is not None:
-            self._bar = tqdm(
-                total=max(self.total, 0) if self.total is not None else None,
-                desc=desc,
-                unit=unit,
-                unit_scale=unit_scale,
-                leave=False,
-                dynamic_ncols=True,
-                mininterval=0.1,
-            )
+        self._bar = _make_tqdm_bar(
+            total=max(self.total, 0) if self.total is not None else None,
+            desc=desc,
+            unit=unit,
+            unit_scale=unit_scale,
+            leave=False,
+            dynamic_ncols=True,
+            mininterval=0.1,
+        )
 
     def update_to(self, current: int) -> None:
         current = max(0, int(current))
@@ -395,10 +423,17 @@ class _ProgressBar:
             return
         if self._bar is not None:
             delta = current - self._display_current
-            if delta > 0:
-                self._bar.update(delta)
-            self._display_current = current
-            return
+            try:
+                if delta > 0:
+                    self._bar.update(delta)
+                self._display_current = current
+                return
+            except Exception:
+                try:
+                    self._bar.close()
+                except Exception:
+                    pass
+                self._bar = None
 
         if self.total is None:
             step = self.display_step
@@ -437,8 +472,15 @@ class _ProgressBar:
         if self._display_current < self.current:
             if self._bar is not None:
                 delta = self.current - self._display_current
-                if delta > 0:
-                    self._bar.update(delta)
+                try:
+                    if delta > 0:
+                        self._bar.update(delta)
+                except Exception:
+                    try:
+                        self._bar.close()
+                    except Exception:
+                        pass
+                    self._bar = None
             elif self._fallback_active:
                 if self.total is None:
                     sys.stdout.write(
@@ -454,7 +496,10 @@ class _ProgressBar:
                 sys.stdout.flush()
             self._display_current = self.current
         if self._bar is not None:
-            self._bar.close()
+            try:
+                self._bar.close()
+            except Exception:
+                pass
         elif self._fallback_active:
             sys.stdout.write("\r" + (" " * 120) + "\r")
             sys.stdout.flush()

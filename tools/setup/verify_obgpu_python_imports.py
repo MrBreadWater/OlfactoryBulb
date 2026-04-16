@@ -33,6 +33,7 @@ THIRD_PARTY_IMPORTS = [
     "matplotlib",
     "matplotlib.pyplot",
     "matplotlib.animation",
+    "ipywidgets",
     "mpi4py.MPI",
     "peewee",
     "lmfit",

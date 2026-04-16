@@ -12,6 +12,7 @@ dependencies:
   - pandas
   - matplotlib
   - ipykernel
+  - ipywidgets
   - cython
   - jupyterlab
   - openmpi
