@@ -2745,9 +2745,7 @@ def _remote_submission_payload(
     allocation_job_id = config.get("slurm_allocation_job_id")
     include_mpi_launcher = True
     if allocation_job_id not in (None, ""):
-        if int(config.get("nranks", 1)) != 1:
-            raise ValueError("slurm_allocation_job_id currently supports only nranks=1")
-        include_mpi_launcher = False
+        include_mpi_launcher = int(config.get("nranks", 1)) != 1
     remote_command = build_run_command(
         config,
         label,
