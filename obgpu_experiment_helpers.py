@@ -261,6 +261,16 @@ def _filter_live_remote_log_line(kind: str, line: str) -> str | None:
             return None
         if stripped.startswith("Rank Complexity "):
             return None
+        if stripped in {"{", "}", "[", "]", "},", "],"}:
+            return None
+        if re.match(r'^"[^"]+":\s*[{[]?$', stripped):
+            return None
+        if re.match(r'^"[^"]+":\s*".*"[,\s]*$', stripped):
+            return None
+        if re.match(r'^"[^"]+":\s*-?\d+(\.\d+)?[,\s]*$', stripped):
+            return None
+        if re.match(r'^"[^"]+":\s*(true|false|null)[,\s]*$', stripped, re.IGNORECASE):
+            return None
         return stripped
 
     if kind == "bootstrap":
@@ -3067,8 +3077,9 @@ def _run_remote_simulation(
     }
     sim_progress_bar: _ProgressBar | None = None
     sim_progress_total_ms: int | None = None
-    sim_heartbeat_bar: _ProgressBar | None = None
     sim_last_progress_ms: int | None = None
+    sim_waiting_for_progress_logged = False
+    sim_progress_complete = False
 
     def poll_remote_status_once() -> dict[str, Any]:
         poll_shell = _build_remote_poll_command(
@@ -3098,7 +3109,12 @@ def _run_remote_simulation(
         return status
 
     def emit_live_remote_updates(status: dict[str, Any]) -> None:
-        nonlocal last_status_signature, sim_progress_bar, sim_progress_total_ms, sim_heartbeat_bar, sim_last_progress_ms
+        nonlocal last_status_signature
+        nonlocal sim_progress_bar
+        nonlocal sim_progress_total_ms
+        nonlocal sim_last_progress_ms
+        nonlocal sim_waiting_for_progress_logged
+        nonlocal sim_progress_complete
         status_signature = (
             status.get("state"),
             bool(status.get("summary_exists")),
@@ -3134,8 +3150,11 @@ def _run_remote_simulation(
             last_status_signature = status_signature
         progress_total_ms = status.get("progress_total_ms")
         progress_current_ms = status.get("progress_current_ms")
-        progress_advanced = False
-        if progress_total_ms not in (None, "", 0) and progress_current_ms is not None:
+        if (
+            not sim_progress_complete
+            and progress_total_ms not in (None, "", 0)
+            and progress_current_ms is not None
+        ):
             total_ms = max(int(float(progress_total_ms)), 0)
             current_ms = max(0, min(int(float(progress_current_ms)), total_ms))
             if total_ms > 0:
@@ -3149,23 +3168,29 @@ def _run_remote_simulation(
                         unit="ms",
                         unit_scale=False,
                     )
+                    sim_waiting_for_progress_logged = False
                 sim_progress_bar.update_to(current_ms)
-                progress_advanced = sim_last_progress_ms is not None and current_ms > sim_last_progress_ms
                 sim_last_progress_ms = current_ms
-                if progress_advanced and sim_heartbeat_bar is not None:
-                    sim_heartbeat_bar.close()
-                    sim_heartbeat_bar = None
         state = str(status.get("state", "UNKNOWN"))
-        if state == "RUNNING":
-            if sim_progress_bar is None or not progress_advanced:
-                if sim_heartbeat_bar is None:
-                    sim_heartbeat_bar = _ProgressBar(
-                        total=None,
-                        desc="Sim running",
-                        unit="s",
-                        unit_scale=False,
-                    )
-                sim_heartbeat_bar.tick(max(int(poll_interval_s), 1))
+        if (
+            state == "RUNNING"
+            and sim_progress_bar is None
+            and not sim_waiting_for_progress_logged
+            and not sim_progress_complete
+            and not status.get("summary_exists")
+        ):
+            _progress_write("[Sol remote] Simulation started; waiting for first progress update...")
+            sim_waiting_for_progress_logged = True
+        if (
+            sim_progress_bar is not None
+            and sim_progress_total_ms is not None
+            and sim_last_progress_ms is not None
+            and sim_last_progress_ms >= sim_progress_total_ms
+        ) or status.get("summary_exists"):
+            sim_progress_bar.close()
+            sim_progress_bar = None
+            sim_progress_total_ms = None
+            sim_progress_complete = True
         if live_logs:
             for kind in ("bootstrap", "stdout", "stderr", "slurm"):
                 tail_text = str(status.get(f"{kind}_tail") or "")
@@ -3192,19 +3217,13 @@ def _run_remote_simulation(
                 sim_progress_bar.close()
                 sim_progress_bar = None
                 sim_progress_total_ms = None
-            if sim_heartbeat_bar is not None:
-                sim_heartbeat_bar.close()
-                sim_heartbeat_bar = None
 
     def close_live_progress_bars() -> None:
-        nonlocal sim_progress_bar, sim_progress_total_ms, sim_heartbeat_bar
+        nonlocal sim_progress_bar, sim_progress_total_ms
         if sim_progress_bar is not None:
             sim_progress_bar.close()
             sim_progress_bar = None
             sim_progress_total_ms = None
-        if sim_heartbeat_bar is not None:
-            sim_heartbeat_bar.close()
-            sim_heartbeat_bar = None
 
     def cancel_remote_job_and_sync(reason_text: str) -> None:
         nonlocal final_status
