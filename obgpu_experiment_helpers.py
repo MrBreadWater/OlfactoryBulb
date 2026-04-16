@@ -3151,39 +3151,46 @@ def _run_remote_simulation(
                 sim_heartbeat_bar.close()
                 sim_heartbeat_bar = None
 
-    try:
-        while True:
-            status = poll_remote_status_once()
-            emit_live_remote_updates(status)
-            if status.get("done"):
-                if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
-                    missing_artifact_retries += 1
-                    time.sleep(3.0)
-                    continue
-                final_status = status
-                break
-            time.sleep(poll_interval_s)
-    except KeyboardInterrupt:
+    def close_live_progress_bars() -> None:
+        nonlocal sim_progress_bar, sim_progress_total_ms, sim_heartbeat_bar
+        if sim_progress_bar is not None:
+            sim_progress_bar.close()
+            sim_progress_bar = None
+            sim_progress_total_ms = None
+        if sim_heartbeat_bar is not None:
+            sim_heartbeat_bar.close()
+            sim_heartbeat_bar = None
+
+    def cancel_remote_job_and_sync(reason_text: str) -> None:
+        nonlocal final_status
+        close_live_progress_bars()
         _progress_write(
-            f"[Sol remote] Interrupt received; beginning shutdown for job {submission['job_id']}..."
+            f"[Sol remote] {reason_text}; beginning shutdown for job {submission['job_id']}..."
         )
-        cancel_completed = _run_ssh_shell(
-            effective_config,
-            _build_remote_cancel_command(job_id=str(submission["job_id"])),
-        )
-        if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
-            _progress_write(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}")
-        else:
-            _progress_write(f"[Sol remote] Cancellation requested; waiting for remote cleanup...")
+        try:
+            cancel_completed = _run_ssh_shell(
+                effective_config,
+                _build_remote_cancel_command(job_id=str(submission["job_id"])),
+            )
+            if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
+                _progress_write(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}")
+            else:
+                _progress_write(f"[Sol remote] Cancellation requested; waiting for remote cleanup...")
+        except Exception as exc:
+            _progress_write(f"[Sol remote] Failed to request cancellation: {exc}")
 
         cancel_deadline = time.time() + 30.0
         cancel_confirmed = False
         while time.time() < cancel_deadline:
             try:
                 status = poll_remote_status_once()
-            except Exception:
+            except Exception as exc:
+                _progress_write(f"[Sol remote] Remote shutdown poll failed: {exc}")
                 break
-            emit_live_remote_updates(status)
+            try:
+                emit_live_remote_updates(status)
+            except Exception as exc:
+                _progress_write(f"[Sol remote] Remote shutdown status rendering failed: {exc}")
             if status.get("done"):
                 final_status = status
                 cancel_confirmed = True
@@ -3199,17 +3206,43 @@ def _run_remote_simulation(
             )
         else:
             _progress_write(f"[Sol remote] Syncing partial remote artifacts...")
-        sync_completed = _sync_remote_result_dir(
-            effective_config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=local_result_dir,
-        )
-        (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
-        (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
-        _progress_write(f"[Sol remote] Partial artifacts synced to {local_result_dir}")
+        try:
+            sync_completed = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_result_dir,
+                local_result_dir=local_result_dir,
+            )
+            (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
+            (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+            if sync_completed.returncode == 0:
+                _progress_write(f"[Sol remote] Partial artifacts synced to {local_result_dir}")
+            else:
+                _progress_write(
+                    f"[Sol remote] Partial artifact sync failed (rc={sync_completed.returncode})."
+                )
+        except Exception as exc:
+            _progress_write(f"[Sol remote] Partial artifact sync failed: {exc}")
+
+    try:
+        while True:
+            status = poll_remote_status_once()
+            emit_live_remote_updates(status)
+            if status.get("done"):
+                if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
+                    missing_artifact_retries += 1
+                    time.sleep(3.0)
+                    continue
+                final_status = status
+                break
+            time.sleep(poll_interval_s)
+    except KeyboardInterrupt:
+        cancel_remote_job_and_sync("Interrupt received")
         raise KeyboardInterrupt(
             f"Interrupted remote Sol run and requested cancellation for job {submission['job_id']}."
         )
+    except Exception:
+        cancel_remote_job_and_sync("Local notebook error while monitoring remote run")
+        raise
 
     sync_completed = _sync_remote_result_dir(
         effective_config,
