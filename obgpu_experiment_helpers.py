@@ -288,6 +288,26 @@ def _filter_live_remote_log_line(kind: str, line: str) -> str | None:
         return stripped
 
     if kind == "stderr":
+        if stripped.startswith("A requested component was not found"):
+            return None
+        if stripped.startswith("This means that this component is either not installed"):
+            return None
+        if stripped.startswith("means that this component is either not installed"):
+            return None
+        if stripped.startswith("used on your system"):
+            return None
+        if stripped.startswith("that the component requires are unable to be found/loaded"):
+            return None
+        if stripped.startswith("PMIx stopped checking at the first component"):
+            return None
+        if stripped.startswith("Host:"):
+            return None
+        if stripped.startswith("Framework: psec"):
+            return None
+        if stripped.startswith("Component: munge"):
+            return None
+        if stripped == "--------------------------------------------------------------------------":
+            return None
         if stripped.startswith("NEURON -- VERSION"):
             return None
         if stripped.startswith("Duke, Yale, and the BlueBrain Project"):
@@ -3170,6 +3190,12 @@ def _run_remote_simulation(
         "stderr": None,
         "slurm": None,
     }
+    last_live_partials = {
+        "bootstrap": "",
+        "stdout": "",
+        "stderr": "",
+        "slurm": "",
+    }
     sim_progress_bar: _ProgressBar | None = None
     sim_progress_total_ms: int | None = None
     sim_last_progress_ms: int | None = None
@@ -3296,9 +3322,14 @@ def _run_remote_simulation(
                     delta_text = tail_text[len(previous):]
                 else:
                     delta_text = tail_text
-                delta_text = delta_text.strip("\n")
+                delta_text = last_live_partials[kind] + delta_text.replace("\r", "\n")
                 if delta_text:
-                    for line in delta_text.replace("\r", "\n").splitlines():
+                    segments = delta_text.split("\n")
+                    if delta_text.endswith("\n"):
+                        last_live_partials[kind] = ""
+                    else:
+                        last_live_partials[kind] = segments.pop() if segments else delta_text
+                    for line in segments:
                         filtered = _filter_live_remote_log_line(kind, line)
                         if filtered is None:
                             continue
@@ -3306,6 +3337,8 @@ def _run_remote_simulation(
                             continue
                         _progress_write(f"[Sol remote][{kind}] {filtered}")
                         last_live_lines[kind] = filtered
+                else:
+                    last_live_partials[kind] = ""
                 last_live_tails[kind] = tail_text
         if status.get("done"):
             if sim_progress_bar is not None:
