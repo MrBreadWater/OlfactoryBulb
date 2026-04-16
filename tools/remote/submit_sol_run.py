@@ -348,32 +348,69 @@ def submit_allocation_step(batch_path, allocation_job_id, wrapper_dir):
     step_id_path = wrapper_dir / "srun-step-id.txt"
     launcher_stderr_path = wrapper_dir / "srun-launch.stderr"
     launcher_pid_path = wrapper_dir / "srun-launch.pid"
+    launcher_stdout_path = wrapper_dir / "srun-launch.stdout"
     slurm_log_path = wrapper_dir / "slurm-%j-%s.out"
+    step_name = "obgpu-step-{}".format(wrapper_dir.name)[:120]
 
     step_id_path.write_text("")
     launcher_stderr_path.write_text("")
+    launcher_stdout_path.write_text("")
 
     shell_script = """
 set -euo pipefail
 step_id_path={step_id_path}
 launcher_stderr_path={launcher_stderr_path}
 launcher_pid_path={launcher_pid_path}
+launcher_stdout_path={launcher_stdout_path}
 batch_path={batch_path}
 allocation_job_id={allocation_job_id}
 slurm_log_path={slurm_log_path}
+step_name={step_name}
 
-srun --jobid "$allocation_job_id" --overlap --parsable --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$step_id_path" 2> "$launcher_stderr_path" &
+srun --jobid "$allocation_job_id" --overlap --job-name "$step_name" --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$launcher_stdout_path" 2> "$launcher_stderr_path" &
 launcher_pid=$!
 printf '%s\\n' "$launcher_pid" > "$launcher_pid_path"
 
-for _ in $(seq 1 100); do
+squeue_lookup() {{
+  squeue -s -j "$allocation_job_id" -h -o "%i|%j" 2>/dev/null || true
+}}
+
+sacct_lookup() {{
+  sacct -j "$allocation_job_id" --format=JobIDRaw,JobName --parsable2 --noheader 2>/dev/null || true
+}}
+
+capture_step_id() {{
+  local listing raw_id raw_name
+  while IFS='|' read -r raw_id raw_name; do
+    [[ -n "$raw_id" ]] || continue
+    [[ "$raw_name" == "$step_name" ]] || continue
+    printf '%s\\n' "$raw_id" > "$step_id_path"
+    return 0
+  done
+  return 1
+}}
+
+for _ in $(seq 1 150); do
   if [[ -s "$step_id_path" ]]; then
     break
   fi
-  if ! kill -0 "$launcher_pid" 2>/dev/null; then
-    break
+  listing="$(squeue_lookup)"
+  if [[ -n "$listing" ]]; then
+    if capture_step_id <<< "$listing"; then
+      break
+    fi
   fi
-  sleep 0.1
+  listing="$(sacct_lookup)"
+  if [[ -n "$listing" ]]; then
+    if capture_step_id <<< "$listing"; then
+      break
+    fi
+  fi
+  if ! kill -0 "$launcher_pid" 2>/dev/null; then
+    sleep 0.2
+  else
+    sleep 0.2
+  fi
 done
 
 if [[ ! -s "$step_id_path" ]]; then
@@ -390,9 +427,11 @@ head -n 1 "$step_id_path"
         step_id_path=shlex.quote(str(step_id_path)),
         launcher_stderr_path=shlex.quote(str(launcher_stderr_path)),
         launcher_pid_path=shlex.quote(str(launcher_pid_path)),
+        launcher_stdout_path=shlex.quote(str(launcher_stdout_path)),
         batch_path=shlex.quote(str(batch_path)),
         allocation_job_id=shlex.quote(str(allocation_job_id)),
         slurm_log_path=shlex.quote(str(slurm_log_path)),
+        step_name=shlex.quote(step_name),
     )
     completed = subprocess.run(
         ["bash", "-lc", shell_script],
