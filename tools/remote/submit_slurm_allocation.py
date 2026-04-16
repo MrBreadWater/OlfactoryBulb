@@ -57,7 +57,7 @@ def write_holder_script(args, alloc_root):
         "set -Eeuo pipefail",
         "trap 'exit 0' TERM INT HUP",
         "printf '%s\\n' \"$SLURM_JOB_ID\" > {}".format(alloc_root / "job_id.txt"),
-        "printf '%s\\n' \"${SLURM_JOB_NODELIST:-}\" > {}".format(alloc_root / "nodelist.txt"),
+        "printf '%s\\n' \"${{SLURM_JOB_NODELIST:-}}\" > {}".format(alloc_root / "nodelist.txt"),
         "while true; do sleep 300; done",
     ]
     alloc_root.mkdir(parents=True, exist_ok=True)
