@@ -3201,6 +3201,7 @@ def _run_remote_simulation(
     sim_last_progress_ms: int | None = None
     sim_waiting_for_progress_logged = False
     sim_progress_complete = False
+    sim_finalizing_logged = False
 
     def poll_remote_status_once() -> dict[str, Any]:
         poll_shell = _build_remote_poll_command(
@@ -3236,6 +3237,7 @@ def _run_remote_simulation(
         nonlocal sim_last_progress_ms
         nonlocal sim_waiting_for_progress_logged
         nonlocal sim_progress_complete
+        nonlocal sim_finalizing_logged
         status_signature = (
             status.get("state"),
             bool(status.get("summary_exists")),
@@ -3308,9 +3310,13 @@ def _run_remote_simulation(
             and sim_last_progress_ms is not None
             and sim_last_progress_ms >= sim_progress_total_ms
         ) or status.get("summary_exists"):
-            sim_progress_bar.close()
-            sim_progress_bar = None
-            sim_progress_total_ms = None
+            if sim_progress_bar is not None:
+                sim_progress_bar.close()
+                sim_progress_bar = None
+                sim_progress_total_ms = None
+            if status.get("summary_exists") and not sim_finalizing_logged:
+                _progress_write("[Sol remote] Remote simulation finished; finalizing artifacts...")
+                sim_finalizing_logged = True
             sim_progress_complete = True
         if live_logs:
             for kind in ("bootstrap", "stdout", "stderr", "slurm"):
