@@ -49,17 +49,17 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     paramiko = None
 try:
-    from tqdm.notebook import tqdm as _tqdm_notebook
-except ImportError:  # pragma: no cover - optional runtime dependency
-    _tqdm_notebook = None
-try:
     from tqdm.std import tqdm as _tqdm_plain
 except ImportError:  # pragma: no cover - optional runtime dependency
     try:
         from tqdm import tqdm as _tqdm_plain
     except ImportError:  # pragma: no cover - optional runtime dependency
         _tqdm_plain = None
-tqdm = _tqdm_notebook or _tqdm_plain
+try:
+    from tqdm.notebook import tqdm as _tqdm_notebook
+except ImportError:  # pragma: no cover - optional runtime dependency
+    _tqdm_notebook = None
+tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
 from modify_model import (
@@ -3002,13 +3002,18 @@ def _ensure_remote_git_ref_available(
     bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref)
     remote_bundle_path = f"/tmp/obgpu-sync-{remote_git_ref[:12]}-{os.getpid()}.bundle"
     remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
-    fetch_command = (
+    remote_git_lock = shlex.quote((remote_repo_root / ".obgpu-git.lock").as_posix())
+    fetch_body = (
         f"git -C {shlex.quote(remote_repo_root.as_posix())} fetch --force --no-tags "
         f"{shlex.quote(remote_bundle_path)} "
         f"{shlex.quote(source_ref)}:{shlex.quote(remote_private_ref)}"
         f" && git -C {shlex.quote(remote_repo_root.as_posix())} "
         f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
         f" && rm -f {shlex.quote(remote_bundle_path)}"
+    )
+    fetch_command = (
+        f"if command -v flock >/dev/null 2>&1; then flock {remote_git_lock} bash -lc {shlex.quote(fetch_body)}; "
+        f"else {fetch_body}; fi"
     )
 
     try:

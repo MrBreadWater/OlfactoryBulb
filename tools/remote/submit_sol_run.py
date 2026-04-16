@@ -136,8 +136,16 @@ def write_batch_script(
         "shared_repo_root={}".format(shlex.quote(str(repo_root))),
         "job_repo_mode={}".format(shlex.quote(str(repo_mode))),
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
+        "git_lock_path=\"$shared_repo_root/.obgpu-git.lock\"",
         "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
         "touch \"$bootstrap_log\"",
+        "run_git_locked() {",
+        "  if command -v flock >/dev/null 2>&1; then",
+        "    flock \"$git_lock_path\" \"$@\"",
+        "  else",
+        "    \"$@\"",
+        "  fi",
+        "}",
         "sync_wrapper_artifacts() {",
         "  set +e",
         "  mkdir -p \"$result_dir\" || true",
@@ -162,9 +170,9 @@ def write_batch_script(
         "  fi",
         "  cd \"$shared_repo_root\" || true",
         "  if [[ -e \"$job_worktree\" ]]; then",
-        "    git -C \"$shared_repo_root\" worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || rm -rf \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
+        "    run_git_locked git -C \"$shared_repo_root\" worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || rm -rf \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
         "  fi",
-        "  git -C \"$shared_repo_root\" worktree prune >> \"$bootstrap_log\" 2>&1 || true",
+        "  run_git_locked git -C \"$shared_repo_root\" worktree prune >> \"$bootstrap_log\" 2>&1 || true",
         "}",
         "restore_shared_repo() {",
         "  set +e",
@@ -176,9 +184,9 @@ def write_batch_script(
         "  fi",
         "  cd \"$shared_repo_root\" || true",
         "  if [[ -n \"${shared_repo_original_branch:-}\" ]]; then",
-        "    git checkout --force \"$shared_repo_original_branch\" >> \"$bootstrap_log\" 2>&1 || git checkout --detach \"$shared_repo_original_commit\" >> \"$bootstrap_log\" 2>&1 || true",
+        "    run_git_locked git checkout --force \"$shared_repo_original_branch\" >> \"$bootstrap_log\" 2>&1 || run_git_locked git checkout --detach \"$shared_repo_original_commit\" >> \"$bootstrap_log\" 2>&1 || true",
         "  else",
-        "    git checkout --detach \"$shared_repo_original_commit\" >> \"$bootstrap_log\" 2>&1 || true",
+        "    run_git_locked git checkout --detach \"$shared_repo_original_commit\" >> \"$bootstrap_log\" 2>&1 || true",
         "  fi",
         "}",
         "on_exit() {",
@@ -209,7 +217,7 @@ def write_batch_script(
         "{",
         "printf '%s\\n' '[OBGPU batch] bootstrap start'",
         "cd \"$shared_repo_root\"",
-        'if [[ "{}" == "1" ]]; then git fetch --tags --prune {}; fi'.format(
+        'if [[ "{}" == "1" ]]; then run_git_locked git fetch --tags --prune {}; fi'.format(
             "1" if git_fetch else "0",
             shlex.quote(str(git_remote)),
         ),
@@ -219,9 +227,9 @@ def write_batch_script(
         ),
         "if [[ \"$job_repo_mode\" == \"snapshot\" ]]; then",
         "  mkdir -p {}".format(shlex.quote(str(worktree_root.parent))),
-        "  git worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
+        "  run_git_locked git worktree remove --force \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
         "  rm -rf \"$job_worktree\" >> \"$bootstrap_log\" 2>&1 || true",
-        "  git worktree add --force --detach \"$job_worktree\" \"$job_git_ref\"",
+        "  run_git_locked git worktree add --force --detach \"$job_worktree\" \"$job_git_ref\"",
         "  job_repo_root=\"$job_worktree\"",
         "else",
         "  shared_repo_original_commit=$(git rev-parse HEAD)",
@@ -234,7 +242,7 @@ def write_batch_script(
         "        git status --short --untracked-files=no >> \"$bootstrap_log\" 2>&1 || true",
         "        exit 2",
         "      fi",
-        "      git checkout --force --detach \"$job_git_ref\"",
+        "      run_git_locked git checkout --force --detach \"$job_git_ref\"",
         "      shared_repo_needs_restore=1",
         "    fi",
         "  fi",
@@ -367,7 +375,7 @@ allocation_job_id={allocation_job_id}
 slurm_log_path={slurm_log_path}
 step_name={step_name}
 
-srun --jobid "$allocation_job_id" --overlap --job-name "$step_name" --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$launcher_stdout_path" 2> "$launcher_stderr_path" &
+srun --jobid "$allocation_job_id" --overlap --cpu-bind=none --job-name "$step_name" --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$launcher_stdout_path" 2> "$launcher_stderr_path" &
 launcher_pid=$!
 printf '%s\\n' "$launcher_pid" > "$launcher_pid_path"
 
