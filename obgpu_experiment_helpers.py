@@ -7,6 +7,7 @@ notebook reruns do not corrupt the live HOC state.
 
 from __future__ import annotations
 
+import atexit
 import json
 import os
 import pickle
@@ -525,10 +526,51 @@ _NOTEBOOK_RUNTIME.setdefault("ssh_masters", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_git_refs", {})
+_NOTEBOOK_RUNTIME.setdefault("slurm_allocation_atexit_registered", False)
 _LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 _LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
 _LIVE_REMOTE_GIT_REFS: dict[str, set[str]] = _NOTEBOOK_RUNTIME["remote_git_refs"]
+
+
+def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
+    """Return the SSH/runtime subset needed to rediscover or cancel one allocation."""
+    keys = (
+        "remote_host",
+        "remote_results_root",
+        "runner_backend",
+        "ssh_binary",
+        "ssh_options",
+        "ssh_transport",
+        "ssh_multiplex",
+        "ssh_allow_interactive_auth",
+        "ssh_keepalive_s",
+        "ssh_control_path",
+        "ssh_control_persist_s",
+    )
+    return {key: deepcopy(config.get(key)) for key in keys if key in config}
+
+
+def _cleanup_notebook_remote_allocations() -> None:
+    """Best-effort shutdown cleanup for notebook-managed reusable Slurm allocations."""
+    allocations = list(_LIVE_SLURM_ALLOCATIONS.items())
+    _LIVE_SLURM_ALLOCATIONS.clear()
+    for _cache_key, allocation in allocations:
+        if allocation.get("manual", False):
+            continue
+        job_id = allocation.get("job_id")
+        runtime_config = allocation.get("config")
+        if job_id in (None, "") or not isinstance(runtime_config, dict):
+            continue
+        try:
+            _run_ssh_shell(runtime_config, _build_remote_cancel_command(job_id=str(job_id)))
+        except Exception:
+            continue
+
+
+if not _NOTEBOOK_RUNTIME["slurm_allocation_atexit_registered"]:
+    atexit.register(_cleanup_notebook_remote_allocations)
+    _NOTEBOOK_RUNTIME["slurm_allocation_atexit_registered"] = True
 
 
 def default_local_mpi_exec() -> str:
@@ -2374,6 +2416,20 @@ def _build_remote_allocation_submit_command(
     return python_exec + " " + _shell_join(command), allocation_root, allocation_name
 
 
+def _build_remote_allocation_discovery_command(
+    config: dict[str, Any],
+) -> tuple[str, PurePosixPath, str]:
+    """Build the remote command that returns allocation metadata for one config, if present."""
+    _submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(config)
+    allocation_json = allocation_root / "allocation.json"
+    command = (
+        f"if test -f {shlex.quote(allocation_json.as_posix())}; then "
+        f"cat {shlex.quote(allocation_json.as_posix())}; "
+        "fi"
+    )
+    return command, allocation_root, allocation_name
+
+
 def _build_remote_submit_command(
     config: dict[str, Any],
     *,
@@ -2625,6 +2681,7 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
     cache_key = _slurm_allocation_cache_key(config)
     allocation = _LIVE_SLURM_ALLOCATIONS.get(cache_key)
     created_now = False
+    runtime_config = _slurm_allocation_runtime_config(config)
 
     if allocation is not None:
         status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
@@ -2634,6 +2691,39 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
             allocation = None
         else:
             print(f"[Sol remote] Reusing cached allocation {allocation['job_id']}.", flush=True)
+
+    if allocation is None:
+        discover_command, allocation_root, allocation_name = _build_remote_allocation_discovery_command(config)
+        discover_completed = _run_ssh_shell(config, discover_command)
+        if discover_completed.returncode != 0:
+            raise RuntimeError(
+                "Remote Slurm allocation discovery failed.\n"
+                f"Stdout:\n{discover_completed.stdout}\n\nStderr:\n{discover_completed.stderr}"
+            )
+        discovered_text = (discover_completed.stdout or "").strip()
+        if discovered_text:
+            try:
+                discovered = json.loads(discovered_text)
+            except json.JSONDecodeError:
+                discovered = None
+            if isinstance(discovered, dict) and discovered.get("job_id") not in (None, ""):
+                discovered_job_id = str(discovered["job_id"])
+                status = _query_remote_slurm_job_state(config, discovered_job_id)
+                state = status.get("state", "UNKNOWN")
+                if state not in _REMOTE_SLURM_TERMINAL_OK and state not in _REMOTE_SLURM_TERMINAL_FAIL and state != "UNKNOWN":
+                    allocation = {
+                        "job_id": discovered_job_id,
+                        "cache_key": cache_key,
+                        "allocation_root": str(discovered.get("allocation_root") or allocation_root.as_posix()),
+                        "batch_script": str(discovered.get("batch_script") or ""),
+                        "slurm_log_pattern": str(discovered.get("slurm_log_pattern") or ""),
+                        "name": str(discovered.get("name") or allocation_name),
+                        "cached": True,
+                        "manual": False,
+                        "config": runtime_config,
+                    }
+                    _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
+                    print(f"[Sol remote] Reusing discovered allocation {allocation['job_id']}.", flush=True)
 
     if allocation is None:
         print("[Sol remote] Requesting reusable Slurm allocation...", flush=True)
@@ -2660,6 +2750,7 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
             "name": str(submission.get("name") or allocation_name),
             "cached": True,
             "manual": False,
+            "config": runtime_config,
         }
         _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
         created_now = True
@@ -2690,6 +2781,7 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
                         "state": state,
                         "reason": reason,
                         "location": location,
+                        "config": runtime_config,
                     }
                 )
                 _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
