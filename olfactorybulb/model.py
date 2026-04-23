@@ -37,6 +37,7 @@ from olfactorybulb.output_paths import get_results_dir, write_run_info
 from olfactorybulb.paramsets.base import *
 from olfactorybulb.paramsets.case_studies import *
 from olfactorybulb.paramsets.sensitivity import *
+from olfactorybulb.inputs import InputSpec
 
 CELL_MODEL_FACTORIES = {
     name: value
@@ -276,9 +277,28 @@ class OlfactoryBulb:
                     for synapse in getattr(h, syn_mech):
                         setattr(synapse, syn_attrib, attrib_value)
 
+        _has_odors = bool(getattr(params, "input_odors", {}))
+        _has_stimuli = bool(getattr(params, "input_stimuli", {}))
+        assert not (_has_odors and _has_stimuli), (
+            "input_odors and input_stimuli cannot both be non-empty. "
+            "Use input_odors for odor-DB-driven inputs or input_stimuli for "
+            "custom InputSpec-driven inputs, but not both at once."
+        )
+
         # Add glomerular inputs
         for time, odor_info in params.input_odors.items():
             self.add_inputs(odor=odor_info["name"], t=time, rel_conc=odor_info["rel_conc"])
+
+        # Add custom InputSpec-based stimuli
+        for time, entry in getattr(params, "input_stimuli", {}).items():
+            if isinstance(entry, InputSpec):
+                spec, intensity, cell_types = entry, 1.0, None
+            else:
+                spec = entry["input"]
+                intensity = float(entry.get("intensity", 1.0))
+                cell_types = entry.get("cell_types", None)
+            self.add_stimulus_inputs(t=float(time), input_spec=spec,
+                                     intensity=intensity, cell_types=cell_types)
 
         # LFP electrode creation is deferred until run() so modern NEURON can
         # set up ParallelContext transfer state before any implicit h.init().
@@ -327,45 +347,38 @@ class OlfactoryBulb:
                 self.h.quit()
 
 
-    def stim_glom_segments(self, time, input_segs, intensity):
+    def stim_glom_segments(self, time, input_segs, intensity, input_spec=None):
         """
-        Adds input synapses onto glomerular tufts at specified start time and intensity
+        Adds input synapses onto glomerular tufts at specified start time and intensity.
 
-        The inhalation part of a sniff cycle is modeled as a gaussian probability that is centered at
-        the midpoint of the inhalation onset and end. The probability is translated into spikes. The spikes
-        then trigger the excitatory synapses placed at the mitral/tufted cell tufts.
-
-        Intensity regulates how many spikes to pick from the gaussian.
+        When ``input_spec`` is None the existing Gaussian spike-train behavior is
+        used (backward compatible).  When an InputSpec is provided its
+        ``generate_spike_times`` method is called instead; per-segment independent
+        randomization is preserved through the same seed scheme.
 
         :param time: the inhalation onset time in ms
-
-        :param input_segs: a list containing tuples of:
-            a) The name of the segment to stimulate as it appears on the current MPI rank
-            b) segment gid
-            c) segment name as it appears when there is only one rank. If not using MPI a) and c) are same.
-        :param intensity: 0-1 representing odor intensity
-
-        :return: None
+        :param input_segs: list of (rank_seg_name, seg_gid, single_rank_seg_name) tuples
+        :param intensity: 0-1 scaling factor
+        :param input_spec: optional InputSpec; None uses the Gaussian default
         """
 
         h = self.h
 
         inhale_duration = self.params.inhale_duration
-
-        # ORN firing rate
         max_firing_rate = self.params.max_firing_rate
 
-        # Translate intensity to number of spikes per inhalation
+        # Only used for the Gaussian fallback path
         spike_count = int(round(max_firing_rate * intensity * (inhale_duration / 1000.0)))
 
         for seg_name, seg_gid, single_rank_seg_name in input_segs:
-            # Randomize spikes to each tufted segment
+            # Per-segment independent RNG seeded identically to the existing scheme
             seed_source = "%s|%s|%s|%s" % (self.rnd_seed, time, single_rank_seg_name, intensity)
             rng = np.random.RandomState(self.stable_hash(seed_source))
 
-            # Odor is modeled as a gaussian spike train representing OSN spikes during inhalation
-            # exhalation is assumed to not generate OSN spikes
-            spike_times = self.get_gaussian_spike_train(spike_count, time, inhale_duration, rng=rng)
+            if input_spec is not None:
+                spike_times = input_spec.generate_spike_times(time, rng, intensity)
+            else:
+                spike_times = self.get_gaussian_spike_train(spike_count, time, inhale_duration, rng=rng)
 
             # Create synapse point process
             seg = self.resolve_segment(seg_name)
@@ -1126,6 +1139,31 @@ class OlfactoryBulb:
             if len(input_segs) > 0:
                 glom_intensity = glom_intensities[glom_id] * rel_conc
                 self.stim_glom_segments(t, input_segs, glom_intensity)
+
+    def add_stimulus_inputs(self, t, input_spec, intensity=1.0, cell_types=None):
+        """
+        Stimulate glomerular tuft segments using a custom InputSpec.
+
+        Targets the same tuft segments as odor inputs (all glomeruli, both MC
+        and TC by default).  Glomerulus-specific intensity weighting is not
+        applied; every glomerulus receives the same flat ``intensity``.
+
+        :param t: Onset time in ms
+        :param input_spec: InputSpec instance defining spike generation
+        :param intensity: Scaling factor 0-1 passed to the spec
+        :param cell_types: Optional list e.g. ['MC'] to restrict targeting;
+                           None stimulates both MC and TC tufts
+        """
+        for glom_id, input_segs in self.get_glom_input_seg_cache().items():
+            if not input_segs:
+                continue
+            if cell_types is not None:
+                input_segs = [
+                    seg for seg in input_segs
+                    if any(ct in seg[0] for ct in cell_types)
+                ]
+            if input_segs:
+                self.stim_glom_segments(t, input_segs, intensity, input_spec=input_spec)
 
     def load_glom_cells(self):
         """

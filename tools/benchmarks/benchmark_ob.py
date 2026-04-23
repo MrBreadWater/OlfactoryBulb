@@ -123,6 +123,10 @@ def apply_param_overrides(params: Any, overrides: dict[str, Any]) -> None:
     for key, value in overrides.items():
         if key == "input_odors":
             value = normalize_input_odors(value)
+        elif key == "input_stimuli":
+            from olfactorybulb.inputs import deserialize_json_input_stimuli
+
+            value = deserialize_json_input_stimuli(value)
         current = getattr(params, key, None)
         if isinstance(value, dict):
             if isinstance(current, dict):
@@ -154,6 +158,7 @@ def main() -> None:
     parser.add_argument("--parallel-timeout", type=float, default=None)
     parser.add_argument("--overrides-json", default=None)
     parser.add_argument("--overrides-file", default=None)
+    parser.add_argument("--input-spec-file", default=None)
     parser.add_argument("--add-connections-json", default=None)
     parser.add_argument("--modify-connections-json", default=None)
     parser.add_argument("--swap-cell-types-json", default=None)
@@ -221,6 +226,12 @@ def main() -> None:
         raise ValueError("Use only one of --overrides-json or --overrides-file")
     if overrides_json is not None:
         apply_param_overrides(params, overrides_json)
+    if args.input_spec_file is not None:
+        import dill
+
+        with open(args.input_spec_file, "rb") as f:
+            input_stimuli = dill.load(f)
+        params.input_stimuli = input_stimuli
     if args.overrides_file is not None:
         with open(args.overrides_file) as f:
             apply_param_overrides(params, json.load(f))

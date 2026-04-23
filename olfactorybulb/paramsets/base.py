@@ -94,5 +94,12 @@ class SilentNetwork:
 
     record_from_somas = ['MC', 'TC', 'GC']
 
+    # Custom input stimuli keyed by onset time (ms).
+    # Each entry is either an InputSpec instance or a dict:
+    #   {"input": <InputSpec>, "intensity": 0–1, "cell_types": ["MC","TC"]}
+    # When present, these stimulate all glomerular tuft segments of the
+    # specified cell types using the given InputSpec instead of the odor DB.
+    input_stimuli = {}
+
 class ParameterSetBase(SilentNetwork):
     pass
