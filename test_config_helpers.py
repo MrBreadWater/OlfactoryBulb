@@ -1,0 +1,79 @@
+"""Simple smoke tests for the config save/load helpers in obgpu_experiment_helpers.
+
+Run with:
+    python test_config_helpers.py
+"""
+
+import tempfile
+from copy import deepcopy
+from pathlib import Path
+
+from obgpu_experiment_helpers import (
+    build_run_config,
+    config_diff,
+    list_paramsets,
+    list_saved_configs,
+    load_config,
+    save_config,
+)
+
+with tempfile.TemporaryDirectory() as tmp:
+    tmp = Path(tmp)
+
+    # --- save_config / load_config round-trip ---
+    cfg = build_run_config(paramset="GammaSignature", gaba_tau2_ms=36.0, gap_mc=32.0)
+    p = save_config(cfg, tmp / "smoke.json")
+    assert p.exists(), "save_config did not create file"
+    loaded = load_config(p)
+    assert loaded["paramset"] == "GammaSignature"
+    assert loaded["gaba_tau2_ms"] == 36.0
+    assert loaded["gap_mc"] == 32.0
+    print("save_config / load_config: OK")
+
+    # --- odor key normalization (JSON turns int keys to strings) ---
+    cfg2 = build_run_config(
+        input_odors={0: {"name": "Apple", "rel_conc": 0.1}, 200: {"name": "Apple", "rel_conc": 0.2}}
+    )
+    save_config(cfg2, tmp / "odors.json")
+    loaded2 = load_config(tmp / "odors.json")
+    assert all(isinstance(k, int) for k in loaded2["input_odors"])
+    assert loaded2["input_odors"][0]["name"] == "Apple"
+    print("odor key normalization: OK")
+
+    # --- list_saved_configs ---
+    results = list_saved_configs(tmp)
+    assert len(results) == 2
+    assert all(p.suffix == ".json" for p in results)
+    print("list_saved_configs: OK")
+
+    # --- list_paramsets (builtin only) ---
+    names = list_paramsets()
+    assert isinstance(names, list) and len(names) > 0
+    assert "GammaSignature" in names
+    assert "SilentNetwork" not in names  # base class should be excluded
+    assert names == sorted(names)
+    print(f"list_paramsets: OK  ({len(names)} paramsets found)")
+
+    # --- list_paramsets (include_saved) ---
+    save_config(cfg, tmp / "custom_experiment.json")
+    sources = list_paramsets(include_saved=True, configs_dir=tmp)
+    assert isinstance(sources, dict)
+    assert "builtin" in sources and "saved" in sources
+    assert "GammaSignature" in sources["builtin"]
+    assert any(p.name == "custom_experiment.json" for p in sources["saved"])
+    print(f"list_paramsets(include_saved=True): OK  ({len(sources['saved'])} saved config(s) found)")
+
+    # --- config_diff ---
+    cfg_a = build_run_config(paramset="GammaSignature", gaba_tau2_ms=36.0)
+    cfg_b = build_run_config(paramset="GammaSignature", gaba_tau2_ms=50.0)
+    changes = config_diff(cfg_a, cfg_b)
+    assert len(changes) > 0
+    tau_change = next(c for c in changes if "tau2" in c["path"])
+    assert tau_change["before"] == 36.0
+    assert tau_change["after"] == 50.0
+
+    no_changes = config_diff(cfg_a, deepcopy(cfg_a))
+    assert no_changes == []
+    print("config_diff: OK")
+
+print("\nAll tests passed.")
