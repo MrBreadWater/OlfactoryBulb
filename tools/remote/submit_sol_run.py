@@ -103,6 +103,7 @@ def write_batch_script(
     """Write the Slurm batch script that launches one benchmark run."""
     wrapper_dir = result_dir.parent / ".obgpu-wrapper" / label
     batch_path = wrapper_dir / "slurm_job.sh"
+    heartbeat_path = wrapper_dir / "notebook-heartbeat.txt"
     if repo_mode == "snapshot":
         effective_command = relocate_benchmark_command(
             benchmark_command,
@@ -123,6 +124,9 @@ def write_batch_script(
     slurm_log_path = wrapper_dir / "slurm-%j.out"
     bootstrap_log_path = wrapper_dir / "bootstrap.log"
     git_ref_value = git_ref or ""
+    heartbeat_timeout_s = max(int(getattr(args, "heartbeat_timeout_s", 120)), 0)
+    heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
+    heartbeat_path.write_text("")
     lines = [
         "#!/usr/bin/env bash",
         *slurm_directives(args, label),
@@ -138,7 +142,12 @@ def write_batch_script(
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
         "git_lock_path=\"$shared_repo_root/.obgpu-git.lock\"",
         "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
+        "notebook_heartbeat_path={}".format(shlex.quote(str(heartbeat_path))),
+        "notebook_heartbeat_timeout_s={}".format(heartbeat_timeout_s),
+        "heartbeat_watchdog_pid=\"\"",
+        "benchmark_pid=\"\"",
         "touch \"$bootstrap_log\"",
+        "touch \"$notebook_heartbeat_path\"",
         "run_git_locked() {",
         "  if command -v flock >/dev/null 2>&1; then",
         "    flock \"$git_lock_path\" \"$@\"",
@@ -157,8 +166,44 @@ def write_batch_script(
         "  done",
         "  shopt -u nullglob",
         "}",
+        "start_notebook_heartbeat_watchdog() {",
+        "  if [[ \"$notebook_heartbeat_timeout_s\" -le 0 ]]; then",
+        "    return 0",
+        "  fi",
+        "  (",
+        "    set +e",
+        "    while true; do",
+        "      sleep 10",
+        "      now=$(date +%s)",
+        "      if [[ -e \"$notebook_heartbeat_path\" ]]; then",
+        "        last=$(stat -c %Y \"$notebook_heartbeat_path\" 2>/dev/null || echo 0)",
+        "      else",
+        "        last=0",
+        "      fi",
+        "      age=$((now - last))",
+        "      if [[ \"$age\" -gt \"$notebook_heartbeat_timeout_s\" ]]; then",
+        "        printf '[OBGPU batch] notebook heartbeat expired after %ss at %s; terminating benchmark\\n' \"$age\" \"$(date -Is)\" >> \"$bootstrap_log\"",
+        "        if [[ -n \"${benchmark_pid:-}\" ]]; then",
+        "          kill -TERM \"$benchmark_pid\" 2>/dev/null || true",
+        "          sleep 10",
+        "          kill -KILL \"$benchmark_pid\" 2>/dev/null || true",
+        "        fi",
+        "        exit 0",
+        "      fi",
+        "    done",
+        "  ) &",
+        "  heartbeat_watchdog_pid=$!",
+        "}",
+        "stop_notebook_heartbeat_watchdog() {",
+        "  if [[ -n \"${heartbeat_watchdog_pid:-}\" ]]; then",
+        "    kill \"$heartbeat_watchdog_pid\" 2>/dev/null || true",
+        "    wait \"$heartbeat_watchdog_pid\" 2>/dev/null || true",
+        "    heartbeat_watchdog_pid=\"\"",
+        "  fi",
+        "}",
         "on_err() {",
         "  local rc=$?",
+        "  stop_notebook_heartbeat_watchdog",
         "  printf '[OBGPU batch] failed at line %s: %s (exit %s)\\n' \"${BASH_LINENO[0]:-?}\" \"${BASH_COMMAND:-<unknown>}\" \"$rc\" >> \"$bootstrap_log\"",
         "  sync_wrapper_artifacts",
         "  exit \"$rc\"",
@@ -192,6 +237,7 @@ def write_batch_script(
         "on_exit() {",
         "  local exit_code=$?",
         "  trap - EXIT",
+        "  stop_notebook_heartbeat_watchdog",
         "  sync_wrapper_artifacts",
         "  restore_shared_repo",
         "  cleanup_worktree",
@@ -204,6 +250,7 @@ def write_batch_script(
         "    kill -\"$signal\" \"$benchmark_pid\" 2>/dev/null || kill \"$benchmark_pid\" 2>/dev/null || true",
         "    wait \"$benchmark_pid\" 2>/dev/null || true",
         "  fi",
+        "  stop_notebook_heartbeat_watchdog",
         "  sync_wrapper_artifacts",
         "  restore_shared_repo",
         "  cleanup_worktree",
@@ -277,15 +324,20 @@ def write_batch_script(
                 + shlex.quote(str(wrapper_dir / "command.txt")),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
-                "if \"${obgpu_command[@]}\" > "
+                "\"${obgpu_command[@]}\" > "
                 + shlex.quote(str(wrapper_dir / "stdout.txt"))
                 + " 2> "
                 + shlex.quote(str(wrapper_dir / "stderr.txt"))
-                + "; then",
+                + " &",
+                "benchmark_pid=$!",
+                "start_notebook_heartbeat_watchdog",
+                "if wait \"$benchmark_pid\"; then",
                 "  benchmark_rc=0",
                 "else",
                 "  benchmark_rc=$?",
                 "fi",
+                "benchmark_pid=\"\"",
+                "stop_notebook_heartbeat_watchdog",
             ]
         )
     else:
@@ -300,15 +352,20 @@ def write_batch_script(
                 ),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
-                "if {} > {} 2> {}; then".format(
+                "({}) > {} 2> {} &".format(
                     benchmark_shell,
                     shlex.quote(str(wrapper_dir / "stdout.txt")),
                     shlex.quote(str(wrapper_dir / "stderr.txt")),
                 ),
+                "benchmark_pid=$!",
+                "start_notebook_heartbeat_watchdog",
+                "if wait \"$benchmark_pid\"; then",
                 "  benchmark_rc=0",
                 "else",
                 "  benchmark_rc=$?",
                 "fi",
+                "benchmark_pid=\"\"",
+                "stop_notebook_heartbeat_watchdog",
             ]
         )
     lines.extend(
@@ -485,6 +542,7 @@ def main():
     parser.add_argument("--gpus", type=int, default=None)
     parser.add_argument("--cpus-per-task", type=int, default=None)
     parser.add_argument("--mem", default=None)
+    parser.add_argument("--heartbeat-timeout-s", type=int, default=120)
     parser.add_argument("--sbatch-arg", action="append", default=[])
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -522,6 +580,8 @@ def main():
         "result_dir": str(result_dir),
         "wrapper_dir": str(wrapper_dir),
         "batch_script": str(batch_path),
+        "heartbeat_path": str(wrapper_dir / "notebook-heartbeat.txt"),
+        "heartbeat_timeout_s": max(int(args.heartbeat_timeout_s), 0),
         "stdout_path": str(result_dir / "stdout.txt"),
         "stderr_path": str(result_dir / "stderr.txt"),
         "slurm_stdout_path": str(wrapper_dir / "slurm-%j.out"),

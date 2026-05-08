@@ -39,7 +39,7 @@ if [[ -d "${arch_dir}" ]]; then
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v srun >/dev/null 2>&1; then
-  export OB_MPIEXEC="${OB_MPIEXEC:-srun}"
+  export OB_MPIEXEC="${OB_MPIEXEC:-srun --cpu-bind=none}"
 elif command -v mpiexec >/dev/null 2>&1; then
   export OB_MPIEXEC="${OB_MPIEXEC:-mpiexec}"
 fi
