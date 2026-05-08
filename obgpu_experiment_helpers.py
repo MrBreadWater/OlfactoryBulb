@@ -94,6 +94,7 @@ CONTROL_HELP = {
     "input_max_segments": "Maximum odor-input target segments to include in the input raster.",
     "input_rate_normalization": "How to normalize odor-input rates: 'per_target_cell', 'per_segment', or 'total'.",
     "input_odors": "Full odor schedule dict keyed by onset ms.",
+    "input_stimuli": "Custom InputSpec-driven stimuli keyed by onset ms. Cannot be combined with input_odors.",
     "max_firing_rate_hz": "Maximum ORN firing rate.",
     "inhale_duration_ms": "Inhalation duration in ms.",
     "input_syn_tau1_ms": "Input Exp2Syn tau1.",
@@ -132,6 +133,8 @@ CONTROL_HELP = {
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
+    "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
+    "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
     "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
@@ -353,6 +356,8 @@ def _summarize_remote_submit_response(submission: dict[str, Any]) -> dict[str, A
         "wrapper_dir": submission.get("wrapper_dir"),
         "batch_script": submission.get("batch_script"),
         "worktree_path": submission.get("worktree_path"),
+        "heartbeat_path": submission.get("heartbeat_path"),
+        "heartbeat_timeout_s": submission.get("heartbeat_timeout_s"),
     }
 
 
@@ -558,6 +563,7 @@ def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
     keys = (
         "remote_host",
         "remote_results_root",
+        "remote_heartbeat_timeout_s",
         "runner_backend",
         "ssh_binary",
         "ssh_options",
@@ -652,6 +658,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "input_rate_normalization": "per_target_cell",
         "lfp_electrode_location": [116, 1078, -61],
         "input_odors": None,
+        "input_stimuli": None,
         "max_firing_rate_hz": None,
         "inhale_duration_ms": None,
         "input_syn_tau1_ms": None,
@@ -690,6 +697,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_poll_interval_s": 1.0,
         "remote_live_status": True,
         "remote_live_logs": True,
+        "remote_heartbeat_timeout_s": 120,
+        "remote_cleanup_stale_allocations": True,
         "slurm_partition": None,
         "slurm_account": None,
         "slurm_time": None,
@@ -730,6 +739,8 @@ def build_slurm_remote_config(
     remote_poll_interval_s: float = 1.0,
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
+    remote_heartbeat_timeout_s: int = 120,
+    remote_cleanup_stale_allocations: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -763,6 +774,8 @@ def build_slurm_remote_config(
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
         "remote_live_logs": bool(remote_live_logs),
+        "remote_heartbeat_timeout_s": int(remote_heartbeat_timeout_s),
+        "remote_cleanup_stale_allocations": bool(remote_cleanup_stale_allocations),
         "remote_sync_compress": True,
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
@@ -803,6 +816,8 @@ def build_sol_remote_config(
     remote_poll_interval_s: float = 1.0,
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
+    remote_heartbeat_timeout_s: int = 120,
+    remote_cleanup_stale_allocations: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -833,6 +848,8 @@ def build_sol_remote_config(
         remote_poll_interval_s=remote_poll_interval_s,
         remote_live_status=remote_live_status,
         remote_live_logs=remote_live_logs,
+        remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
+        remote_cleanup_stale_allocations=remote_cleanup_stale_allocations,
         remote_repo_mode=remote_repo_mode,
         remote_git_ref=remote_git_ref,
         remote_git_fetch=remote_git_fetch,
@@ -944,6 +961,30 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         overrides["rnd_seed"] = int(config["rnd_seed"])
     if config.get("input_odors") is not None:
         overrides["input_odors"] = normalize_input_odors(config["input_odors"])
+    if config.get("input_stimuli") is not None:
+        from olfactorybulb.inputs import serialize_input_stimuli
+        raw = config["input_stimuli"]
+        # Normalize onset-time keys (JSON round-trips string keys)
+        normalized = {}
+        for k, v in raw.items():
+            try:
+                nk = int(float(k)) if float(k).is_integer() else float(k)
+            except (TypeError, ValueError):
+                nk = k
+            normalized[nk] = v
+        json_safe, dill_blob = serialize_input_stimuli(normalized)
+        if dill_blob is not None:
+            # Callable specs are written to a temp file; the path is stored in
+            # the config so build_run_command can pass --input-spec-file.
+            import tempfile, os
+            tmp = tempfile.NamedTemporaryFile(
+                delete=False, suffix=".inputspec.dill", prefix="ob_"
+            )
+            tmp.write(dill_blob)
+            tmp.close()
+            overrides["_input_spec_file"] = tmp.name
+        else:
+            overrides["input_stimuli"] = json_safe
     if config.get("max_firing_rate_hz") is not None:
         overrides["max_firing_rate"] = float(config["max_firing_rate_hz"])
     if config.get("inhale_duration_ms") is not None:
@@ -1035,6 +1076,8 @@ def build_run_command(
             ]
         )
 
+    param_overrides = build_param_overrides(config)
+    input_spec_file = param_overrides.pop("_input_spec_file", None)
     command.extend(
         [
             "nrniv",
@@ -1050,9 +1093,11 @@ def build_run_command(
             "--results-base",
             str(results_base),
             "--overrides-json",
-            json.dumps(build_param_overrides(config), sort_keys=True),
+            json.dumps(param_overrides, sort_keys=True),
         ]
     )
+    if input_spec_file is not None:
+        command.extend(["--input-spec-file", str(input_spec_file)])
 
     if config.get("tstop_ms") is not None:
         command.extend(["--tstop-override", str(float(config["tstop_ms"]))])
@@ -1278,6 +1323,15 @@ def _remote_git_ref_cache_key(config: dict[str, Any], remote_repo_root: PurePosi
 def _normalize_slurm_state(raw_state: str) -> str:
     """Normalize Slurm state tokens by removing suffixes such as '+'."""
     return raw_state.split()[0].split("+", 1)[0].strip().upper()
+
+
+def _remote_heartbeat_timeout_s(config: dict[str, Any]) -> int:
+    """Return the notebook heartbeat timeout used by remote Slurm watchdogs."""
+    value = config.get("remote_heartbeat_timeout_s", 120)
+    try:
+        return max(int(float(value)), 0)
+    except (TypeError, ValueError):
+        return 120
 
 
 def _slurm_allocation_signature(config: dict[str, Any]) -> dict[str, Any]:
@@ -2424,6 +2478,7 @@ def _build_remote_allocation_submit_command(
             command.extend([flag, str(value)])
     if allocation_time not in (None, ""):
         command.extend(["--time", str(allocation_time)])
+    command.extend(["--heartbeat-timeout-s", str(_remote_heartbeat_timeout_s(config))])
     for key, flag in (
         ("slurm_gpus", "--gpus"),
         ("slurm_cpus_per_task", "--cpus-per-task"),
@@ -2434,6 +2489,132 @@ def _build_remote_allocation_submit_command(
     for extra in config.get("slurm_extra_args", []):
         command.append("--sbatch-arg={}".format(str(extra)))
     return python_exec + " " + _shell_join(command), allocation_root, allocation_name
+
+
+def _build_remote_touch_command(path_value: str | PurePosixPath) -> str:
+    """Build a remote command that refreshes one heartbeat path."""
+    path = PurePosixPath(str(path_value))
+    return (
+        f"mkdir -p {shlex.quote(path.parent.as_posix())} && "
+        f"touch {shlex.quote(path.as_posix())}"
+    )
+
+
+def _refresh_remote_heartbeat(
+    config: dict[str, Any],
+    heartbeat_path: str | PurePosixPath | None,
+    *,
+    warn: bool = False,
+) -> bool:
+    """Best-effort refresh of a remote notebook heartbeat file."""
+    if heartbeat_path in (None, ""):
+        return False
+    try:
+        completed = _run_ssh_shell(config, _build_remote_touch_command(str(heartbeat_path)))
+    except Exception as exc:
+        if warn:
+            _progress_write(f"[Sol remote] Heartbeat refresh failed: {exc}")
+        return False
+    if completed.returncode != 0:
+        if warn:
+            stderr = (completed.stderr or "").strip()
+            _progress_write(f"[Sol remote] Heartbeat refresh failed: {stderr or 'unknown error'}")
+        return False
+    return True
+
+
+def _build_remote_cleanup_allocations_command(config: dict[str, Any]) -> str:
+    """Build a remote command that cancels stale notebook-managed allocations."""
+    cleanup_root = _remote_results_root(config) / ".obgpu-allocations"
+    script = r'''
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+root = Path(sys.argv[1]).expanduser()
+default_timeout_s = int(sys.argv[2])
+now = time.time()
+actions = []
+if root.exists():
+    for allocation_json in sorted(root.glob("*/allocation.json")):
+        try:
+            payload = json.loads(allocation_json.read_text())
+        except Exception as exc:
+            actions.append({"allocation_json": str(allocation_json), "action": "skip", "reason": "invalid_json", "error": str(exc)})
+            continue
+        job_id = str(payload.get("job_id") or "").strip()
+        if not job_id:
+            continue
+        heartbeat_path = str(payload.get("heartbeat_path") or "").strip()
+        try:
+            timeout_s = int(payload.get("heartbeat_timeout_s") or default_timeout_s)
+        except Exception:
+            timeout_s = default_timeout_s
+        reason = ""
+        if not heartbeat_path:
+            reason = "legacy_no_heartbeat"
+        else:
+            heartbeat = Path(heartbeat_path)
+            if not heartbeat.exists():
+                reason = "missing_heartbeat"
+            elif timeout_s > 0 and now - heartbeat.stat().st_mtime > timeout_s:
+                reason = "expired_heartbeat"
+        if not reason:
+            continue
+        completed = subprocess.run(
+            ["scancel", job_id],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        actions.append({
+            "job_id": job_id,
+            "action": "cancel_requested",
+            "reason": reason,
+            "returncode": completed.returncode,
+            "stderr": (completed.stderr or "").strip(),
+        })
+print(json.dumps(actions, sort_keys=True))
+'''
+    script_b64 = b64encode(script.encode("utf-8")).decode("ascii")
+    python_exec = (
+        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
+        ' && test -n "$REMOTE_PYTHON"'
+        ' && exec "$REMOTE_PYTHON" -c '
+        + shlex.quote(
+            'import base64,sys; '
+            'script_b64=sys.argv[1]; '
+            'sys.argv=sys.argv[1:]; '
+            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), "<obgpu-cleanup-allocations>", "exec"))'
+        )
+    )
+    return python_exec + " " + _shell_join(
+        [script_b64, cleanup_root.as_posix(), str(_remote_heartbeat_timeout_s(config))]
+    )
+
+
+def _cleanup_stale_remote_slurm_allocations(config: dict[str, Any]) -> list[dict[str, Any]]:
+    """Cancel stale remote notebook-managed reusable allocations before a new run."""
+    completed = _run_ssh_shell(config, _build_remote_cleanup_allocations_command(config))
+    if completed.returncode != 0:
+        _progress_write(f"[Sol remote] Stale allocation cleanup failed: {(completed.stderr or '').strip()}")
+        return []
+    try:
+        actions = json.loads((completed.stdout or "").strip() or "[]")
+    except json.JSONDecodeError:
+        _progress_write("[Sol remote] Stale allocation cleanup returned invalid JSON.")
+        return []
+    if not isinstance(actions, list):
+        return []
+    cancelled = [action for action in actions if isinstance(action, dict) and action.get("action") == "cancel_requested"]
+    for action in cancelled:
+        job_id = action.get("job_id")
+        reason = action.get("reason")
+        _progress_write(f"[Sol remote] Cancelled stale reusable allocation {job_id} ({reason}).")
+    return [action for action in actions if isinstance(action, dict)]
 
 
 def _build_remote_allocation_discovery_command(
@@ -2494,6 +2675,8 @@ def _build_remote_submit_command(
         str(remote_mpi_exec),
         "--conda-activate-cmd",
         str(config.get("remote_conda_activate_cmd")),
+        "--heartbeat-timeout-s",
+        str(_remote_heartbeat_timeout_s(config)),
     ]
 
     if remote_git_ref:
@@ -2589,6 +2772,7 @@ def _build_remote_preflight_command(
         'command -v git >/dev/null',
         'command -v sbatch >/dev/null',
         'command -v sacct >/dev/null',
+        'command -v scancel >/dev/null',
         'command -v squeue >/dev/null',
         'command -v srun >/dev/null',
     ]
@@ -2704,6 +2888,13 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
     runtime_config = _slurm_allocation_runtime_config(config)
 
     if allocation is not None:
+        if allocation.get("heartbeat_path") in (None, ""):
+            _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
+            allocation = None
+        else:
+            _refresh_remote_heartbeat(config, str(allocation["heartbeat_path"]), warn=True)
+
+    if allocation is not None:
         status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
         state = status.get("state", "UNKNOWN")
         if state in _REMOTE_SLURM_TERMINAL_OK or state in _REMOTE_SLURM_TERMINAL_FAIL or state == "UNKNOWN":
@@ -2731,19 +2922,30 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
                 status = _query_remote_slurm_job_state(config, discovered_job_id)
                 state = status.get("state", "UNKNOWN")
                 if state not in _REMOTE_SLURM_TERMINAL_OK and state not in _REMOTE_SLURM_TERMINAL_FAIL and state != "UNKNOWN":
-                    allocation = {
-                        "job_id": discovered_job_id,
-                        "cache_key": cache_key,
-                        "allocation_root": str(discovered.get("allocation_root") or allocation_root.as_posix()),
-                        "batch_script": str(discovered.get("batch_script") or ""),
-                        "slurm_log_pattern": str(discovered.get("slurm_log_pattern") or ""),
-                        "name": str(discovered.get("name") or allocation_name),
-                        "cached": True,
-                        "manual": False,
-                        "config": runtime_config,
-                    }
-                    _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
-                    print(f"[Sol remote] Reusing discovered allocation {allocation['job_id']}.", flush=True)
+                    heartbeat_path = str(discovered.get("heartbeat_path") or "")
+                    if not heartbeat_path:
+                        print(
+                            f"[Sol remote] Cancelling legacy reusable allocation {discovered_job_id} without heartbeat lease.",
+                            flush=True,
+                        )
+                        _run_ssh_shell(config, _build_remote_cancel_command(job_id=discovered_job_id))
+                    else:
+                        _refresh_remote_heartbeat(config, heartbeat_path, warn=True)
+                        allocation = {
+                            "job_id": discovered_job_id,
+                            "cache_key": cache_key,
+                            "allocation_root": str(discovered.get("allocation_root") or allocation_root.as_posix()),
+                            "batch_script": str(discovered.get("batch_script") or ""),
+                            "heartbeat_path": heartbeat_path,
+                            "heartbeat_timeout_s": discovered.get("heartbeat_timeout_s"),
+                            "slurm_log_pattern": str(discovered.get("slurm_log_pattern") or ""),
+                            "name": str(discovered.get("name") or allocation_name),
+                            "cached": True,
+                            "manual": False,
+                            "config": runtime_config,
+                        }
+                        _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
+                        print(f"[Sol remote] Reusing discovered allocation {allocation['job_id']}.", flush=True)
 
     if allocation is None:
         print("[Sol remote] Requesting reusable Slurm allocation...", flush=True)
@@ -2766,6 +2968,8 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
             "cache_key": cache_key,
             "allocation_root": str(submission.get("allocation_root") or allocation_root.as_posix()),
             "batch_script": str(submission.get("batch_script") or ""),
+            "heartbeat_path": str(submission.get("heartbeat_path") or allocation_root / "notebook-heartbeat.txt"),
+            "heartbeat_timeout_s": submission.get("heartbeat_timeout_s"),
             "slurm_log_pattern": str(submission.get("slurm_log_pattern") or ""),
             "name": str(submission.get("name") or allocation_name),
             "cached": True,
@@ -2778,6 +2982,7 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
     last_signature: tuple[str, str, str] | None = None
     try:
         while True:
+            _refresh_remote_heartbeat(config, str(allocation.get("heartbeat_path") or ""), warn=False)
             status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
             state = status.get("state", "UNKNOWN")
             reason = str(status.get("reason") or "").strip()
@@ -2828,14 +3033,28 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
 
 
 def release_remote_slurm_allocation(config: dict[str, Any]) -> bool:
-    """Cancel and forget the cached reusable remote Slurm allocation for one config."""
+    """Cancel and forget the cached or remotely-discovered reusable Slurm allocation."""
     cache_key = _slurm_allocation_cache_key(config)
     allocation = _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
     if allocation is None:
-        print("[Sol remote] No cached reusable allocation for this config.", flush=True)
-        return False
+        discover_command, _allocation_root, _allocation_name = _build_remote_allocation_discovery_command(config)
+        discover_completed = _run_ssh_shell(config, discover_command)
+        if discover_completed.returncode != 0:
+            print(f"[Sol remote] Allocation discovery stderr: {(discover_completed.stderr or '').strip()}", flush=True)
+            return False
+        discovered_text = (discover_completed.stdout or "").strip()
+        if discovered_text:
+            try:
+                discovered = json.loads(discovered_text)
+            except json.JSONDecodeError:
+                discovered = None
+            if isinstance(discovered, dict) and discovered.get("job_id") not in (None, ""):
+                allocation = {"job_id": str(discovered["job_id"])}
+        if allocation is None:
+            print("[Sol remote] No cached or discovered reusable allocation for this config.", flush=True)
+            return False
     job_id = str(allocation["job_id"])
-    print(f"[Sol remote] Releasing cached allocation {job_id}...", flush=True)
+    print(f"[Sol remote] Releasing reusable allocation {job_id}...", flush=True)
     completed = _run_ssh_shell(config, _build_remote_cancel_command(job_id=job_id))
     if completed.returncode != 0:
         print(f"[Sol remote] scancel stderr: {(completed.stderr or '').strip()}", flush=True)
@@ -3115,9 +3334,14 @@ def _run_remote_simulation(
             f"Stderr:\n{preflight_completed.stderr}"
         )
 
+    if bool(effective_config.get("remote_cleanup_stale_allocations", True)):
+        _cleanup_stale_remote_slurm_allocations(effective_config)
+
     allocation_info = _ensure_cached_remote_slurm_allocation(effective_config)
+    allocation_heartbeat_path = None
     if allocation_info.get("job_id") not in (None, ""):
         effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
+        allocation_heartbeat_path = allocation_info.get("heartbeat_path")
         (
             _remote_repo_root_value,
             _remote_results_root_value,
@@ -3132,6 +3356,7 @@ def _run_remote_simulation(
         remote_metadata["allocation_state"] = allocation_info.get("state", "")
         remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
         remote_metadata["allocation_location"] = allocation_info.get("location", "")
+        remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
 
     _progress_write("[Sol remote] Submitting Slurm job...")
     submit_completed = _run_ssh_shell(effective_config, submit_shell)
@@ -3170,6 +3395,12 @@ def _run_remote_simulation(
             ) from exc
 
     remote_result_dir = PurePosixPath(submission["result_dir"])
+    remote_job_heartbeat_path = submission.get("heartbeat_path")
+    remote_metadata["job_heartbeat_path"] = remote_job_heartbeat_path
+    remote_metadata["heartbeat_timeout_s"] = submission.get(
+        "heartbeat_timeout_s",
+        _remote_heartbeat_timeout_s(effective_config),
+    )
     _progress_write(f"[Sol remote] Submitted job {submission['job_id']}.")
     poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
     live_status = bool(effective_config.get("remote_live_status", True))
@@ -3203,7 +3434,13 @@ def _run_remote_simulation(
     sim_progress_complete = False
     sim_finalizing_logged = False
 
-    def poll_remote_status_once() -> dict[str, Any]:
+    def refresh_remote_leases(*, warn: bool = False) -> None:
+        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
+        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
+
+    def poll_remote_status_once(*, refresh_heartbeat: bool = True) -> dict[str, Any]:
+        if refresh_heartbeat:
+            refresh_remote_leases()
         poll_shell = _build_remote_poll_command(
             effective_config,
             remote_repo_root=remote_repo_root,
@@ -3381,7 +3618,7 @@ def _run_remote_simulation(
         cancel_confirmed = False
         while time.time() < cancel_deadline:
             try:
-                status = poll_remote_status_once()
+                status = poll_remote_status_once(refresh_heartbeat=False)
             except Exception as exc:
                 _progress_write(f"[Sol remote] Remote shutdown poll failed: {exc}")
                 break
@@ -3423,7 +3660,8 @@ def _run_remote_simulation(
 
     try:
         while True:
-            status = poll_remote_status_once()
+            refresh_remote_leases(warn=True)
+            status = poll_remote_status_once(refresh_heartbeat=False)
             emit_live_remote_updates(status)
             if status.get("done"):
                 if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
@@ -3863,25 +4101,113 @@ def set_path_value(obj: Any, path: Any, value: Any) -> None:
 
 def run_parameter_sweep(
     base_config: dict[str, Any],
-    sweep_path: str | list[str],
-    values: list[Any] | tuple[Any, ...],
+    sweep_path: str | list[str] | dict[str, list[Any]],
+    values: list[Any] | tuple[Any, ...] | None = None,
 ) -> dict[str, Any]:
-    """Run a one-parameter sweep by repeatedly calling :func:`run_and_load`."""
-    base_config = build_run_config(**deepcopy(base_config))
-    items = []
-    for value in values:
-        sweep_config = deepcopy(base_config)
-        set_path_value(sweep_config, sweep_path, value)
-        run, result = run_and_load(sweep_config)
-        items.append(
-            {
-                "value": value,
-                "config": sweep_config,
-                "run": run,
-                "result": result,
-            }
+    """Run a parameter sweep by repeatedly calling :func:`run_and_load`.
+
+    Single-axis form (original)::
+
+        sweep = run_parameter_sweep(config, 'gaba_gmax', [0, 1, 2, 4])
+
+    Joint form — pairs parameters by list index::
+
+        sweep = run_parameter_sweep(
+            config,
+            {'gaba_gmax': [0, 1, 2], 'gap_mc': [16, 32, 64]},
         )
-    return {"path": sweep_path, "values": list(values), "items": items}
+        # Runs 3 simulations: (gaba_gmax=0, gap_mc=16), (1, 32), (2, 64)
+
+    The returned dict always has the same shape:
+    ``{"path": ..., "values": [...], "items": [...], "paramset": ...}``.
+    For joint sweeps ``path`` is the param dict and each item's ``value`` is a
+    sub-dict of ``{path: value}`` pairs.
+    """
+    base_config = build_run_config(**deepcopy(base_config))
+
+    if isinstance(sweep_path, dict):
+        # Joint sweep — validate lengths match
+        paths = list(sweep_path.keys())
+        all_values = list(sweep_path.values())
+        lengths = [len(v) for v in all_values]
+        if len(set(lengths)) != 1:
+            raise ValueError(
+                f"All parameter lists must have the same length for a joint sweep; "
+                f"got lengths {dict(zip(paths, lengths))}"
+            )
+        paired_values = [dict(zip(paths, combo)) for combo in zip(*all_values)]
+        items = []
+        for value_dict in paired_values:
+            sweep_config = deepcopy(base_config)
+            for path, val in value_dict.items():
+                set_path_value(sweep_config, path, val)
+            run, result = run_and_load(sweep_config)
+            items.append({"value": value_dict, "config": sweep_config, "run": run, "result": result})
+        sweep = {
+            "path": sweep_path,
+            "values": paired_values,
+            "items": items,
+            "paramset": base_config.get("paramset"),
+        }
+    else:
+        if values is None:
+            raise ValueError("values must be provided for single-axis sweeps")
+        items = []
+        for value in values:
+            sweep_config = deepcopy(base_config)
+            set_path_value(sweep_config, sweep_path, value)
+            run, result = run_and_load(sweep_config)
+            items.append({"value": value, "config": sweep_config, "run": run, "result": result})
+        sweep = {
+            "path": sweep_path,
+            "values": list(values),
+            "items": items,
+            "paramset": base_config.get("paramset"),
+        }
+
+    save_sweep(sweep)
+    return sweep
+
+
+def run_grid_sweep(
+    base_config: dict[str, Any],
+    param_grid: dict[str, list[Any]],
+) -> dict[str, Any]:
+    """Run every combination (cartesian product) of the provided parameter grid.
+
+    Example::
+
+        sweep = run_grid_sweep(config, {'gaba_gmax': [0, 1, 2], 'gap_mc': [16, 32]})
+        # 6 runs: (0,16), (0,32), (1,16), (1,32), (2,16), (2,32)
+
+    Items are ordered row-major (first parameter varies slowest).  Each item's
+    ``value`` is a ``{path: value}`` dict, matching the joint-sweep convention.
+    """
+    from itertools import product as _product
+
+    base_config = build_run_config(**deepcopy(base_config))
+    paths = list(param_grid.keys())
+    value_lists = list(param_grid.values())
+    items = []
+    all_values = []
+    for combo in _product(*value_lists):
+        value_dict = dict(zip(paths, combo))
+        sweep_config = deepcopy(base_config)
+        for path, val in value_dict.items():
+            set_path_value(sweep_config, path, val)
+        run, result = run_and_load(sweep_config)
+        items.append({"value": value_dict, "config": sweep_config, "run": run, "result": result})
+        all_values.append(value_dict)
+
+    sweep = {
+        "path": param_grid,
+        "values": all_values,
+        "items": items,
+        "paramset": base_config.get("paramset"),
+        "grid": {p: list(v) for p, v in param_grid.items()},
+    }
+    save_sweep(sweep)
+    return sweep
 
 
 def load_pickle(path: str | Path) -> Any:
@@ -5679,6 +6005,109 @@ def _safe_name(name: Any) -> str:
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name)).strip("._") or "animation"
 
 
+def _fig_to_rgb_array(fig: Any) -> np.ndarray:
+    """Render a matplotlib figure to an H×W×3 uint8 numpy array."""
+    from matplotlib.backends.backend_agg import FigureCanvasAgg
+    canvas = FigureCanvasAgg(fig)
+    canvas.draw()
+    w, h = canvas.get_width_height()
+    return np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+
+
+def animate_sweep(
+    sweep: dict[str, Any],
+    plot_fn: Any,
+    figsize: tuple[float, float] = (12, 5),
+    interval: int = 1000,
+    title_fn: Any = None,
+    close_frames: bool = True,
+) -> animation.FuncAnimation:
+    """Animate any plot function across a parameter sweep.
+
+    ``plot_fn(result) -> matplotlib.Figure`` is called once per sweep item.
+    The figure is rendered to a pixel array so *any* plotting code works —
+    multi-panel layouts, seaborn, custom axes, etc.  No changes to existing
+    plot functions are needed.
+
+    Parameters
+    ----------
+    sweep:
+        Dict returned by :func:`run_parameter_sweep` or :func:`run_grid_sweep`.
+    plot_fn:
+        Callable that accepts a result dict and returns (or leaves as current)
+        a ``matplotlib.Figure``.  If it returns None, ``plt.gcf()`` is used.
+    figsize:
+        Size of the *display* figure used for the animation.  Does not affect
+        the rendered frames (those use whatever size ``plot_fn`` creates).
+    interval:
+        Milliseconds between frames.
+    title_fn:
+        Optional ``title_fn(value) -> str`` for per-frame titles.  When None
+        the title is taken from the sweep path and value.
+    close_frames:
+        When True (default), close each frame figure after rendering to avoid
+        leaking matplotlib figures.
+
+    Example
+    -------
+    ::
+
+        anim = animate_sweep(
+            sweep,
+            lambda r: plot_lfp_overview(r, dt_ms=0.1),
+        )
+        gif = save_animation(anim, 'my_sweep', sweep=sweep)
+    """
+    frames_rgb: list[np.ndarray] = []
+    frame_titles: list[str] = []
+
+    for item in sweep["items"]:
+        result = item["result"]
+        value = item["value"]
+
+        returned = plot_fn(result)
+        fig = returned if returned is not None else plt.gcf()
+
+        frames_rgb.append(_fig_to_rgb_array(fig))
+
+        if title_fn is not None:
+            frame_titles.append(str(title_fn(value)))
+        else:
+            path = sweep.get("path", "")
+            if isinstance(path, dict):
+                title = ", ".join(f"{k}={_format_sweep_value(v)}" for k, v in value.items())
+            else:
+                title = f"{path} = {_format_sweep_value(value)}"
+            frame_titles.append(title)
+
+        if close_frames:
+            plt.close(fig)
+
+    if not frames_rgb:
+        raise ValueError("sweep has no items to animate")
+
+    display_fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+    display_fig.tight_layout(pad=0)
+    im = ax.imshow(frames_rgb[0])
+    title_obj = ax.set_title(frame_titles[0])
+
+    def _update(i: int) -> list:
+        im.set_data(frames_rgb[i])
+        title_obj.set_text(frame_titles[i])
+        return [im, title_obj]
+
+    anim = animation.FuncAnimation(
+        display_fig,
+        _update,
+        frames=len(frames_rgb),
+        interval=interval,
+        repeat=True,
+    )
+    plt.close(display_fig)
+    return anim
+
+
 def animate_lfp_sweep(
     sweep: dict[str, Any],
     signal: str = "lfp",
@@ -5843,13 +6272,162 @@ def animate_sniff_average_sweep(
     return anim
 
 
+SWEEPS_BASE = REPO_ROOT / "results" / "sweeps"
+
+
+def save_sweep(
+    sweep: dict[str, Any],
+    name: str | None = None,
+    base_dir: str | Path | None = None,
+) -> Path:
+    """Persist a completed sweep to an organised directory tree.
+
+    Creates::
+
+        <base_dir>/<name>_<timestamp>/
+            sweep_info.json
+            runs/
+                00_<val>/run_info.json  (copy of each run's run_info.json)
+            animations/               (empty; filled by save_animation)
+            figures/                  (empty; filled by save_figure)
+
+    The sweep dict is updated in-place with ``sweep["sweep_dir"]``.
+    """
+    base_dir = Path(base_dir or SWEEPS_BASE)
+    timestamp = make_timestamp()
+    path_label = sweep.get("path", "sweep")
+    if isinstance(path_label, dict):
+        path_label = "_".join(str(k) for k in path_label.keys())
+    auto_name = _safe_name(f"{path_label}_{timestamp}")
+    sweep_dir = base_dir / (name or auto_name)
+    sweep_dir.mkdir(parents=True, exist_ok=True)
+    (sweep_dir / "animations").mkdir(exist_ok=True)
+    (sweep_dir / "figures").mkdir(exist_ok=True)
+    runs_dir = sweep_dir / "runs"
+    runs_dir.mkdir(exist_ok=True)
+
+    # Write per-run pointers
+    run_dirs = []
+    for i, item in enumerate(sweep.get("items", [])):
+        val = item.get("value")
+        run = item.get("run")
+        result = item.get("result")
+        result_dir = None
+        if run is not None and hasattr(run, "result_dir"):
+            result_dir = Path(run.result_dir)
+        elif isinstance(result, dict) and "result_dir" in result:
+            result_dir = Path(result["result_dir"])
+
+        val_str = _safe_name(str(val)) if val is not None else str(i)
+        slot = runs_dir / f"{i:02d}_{val_str}"
+        slot.mkdir(exist_ok=True)
+
+        if result_dir is not None:
+            # Write a small pointer file so load_sweep can find the original dir
+            (slot / "result_dir.txt").write_text(str(result_dir))
+            # Copy run_info.json if present for quick inspection
+            src = result_dir / "run_info.json"
+            if src.exists():
+                import shutil as _shutil
+                _shutil.copy2(src, slot / "run_info.json")
+
+        run_dirs.append(str(result_dir) if result_dir else None)
+
+    # Write sweep_info.json
+    git_ref = None
+    try:
+        git_ref = _resolve_local_git_head()
+    except Exception:
+        pass
+
+    sweep_info = {
+        "path": sweep.get("path"),
+        "values": [_json_ready(v) for v in sweep.get("values", [])],
+        "paramset": sweep.get("paramset"),
+        "timestamp": timestamp,
+        "git_ref": git_ref,
+        "run_dirs": run_dirs,
+        "n_items": len(sweep.get("items", [])),
+    }
+    (sweep_dir / "sweep_info.json").write_text(
+        json.dumps(sweep_info, indent=2, sort_keys=True)
+    )
+    sweep["sweep_dir"] = sweep_dir
+    return sweep_dir
+
+
+def load_sweep(path: str | Path) -> dict[str, Any]:
+    """Reconstruct a sweep dict from a directory created by save_sweep.
+
+    Results are loaded lazily (same as load_result) so re-animating old
+    sweeps does not require loading all soma traces upfront.
+    """
+    sweep_dir = Path(path)
+    info_path = sweep_dir / "sweep_info.json"
+    if not info_path.exists():
+        raise FileNotFoundError(f"No sweep_info.json found in {sweep_dir}")
+
+    info = json.loads(info_path.read_text())
+    items = []
+    runs_dir = sweep_dir / "runs"
+    for i, (value, run_dir_str) in enumerate(
+        zip(info.get("values", []), info.get("run_dirs", []))
+    ):
+        result = None
+        if run_dir_str is not None:
+            run_dir = Path(run_dir_str)
+            if run_dir.exists():
+                result = load_result(run_dir)
+            else:
+                # Try the pointer file in the runs/ slot
+                slot = runs_dir / f"{i:02d}_{_safe_name(str(value))}"
+                ptr = slot / "result_dir.txt"
+                if ptr.exists():
+                    alt = Path(ptr.read_text().strip())
+                    if alt.exists():
+                        result = load_result(alt)
+        items.append({"value": value, "config": None, "run": None, "result": result})
+
+    return {
+        "path": info.get("path"),
+        "values": info.get("values", []),
+        "items": items,
+        "sweep_dir": sweep_dir,
+        "sweep_info": info,
+        "paramset": info.get("paramset"),
+    }
+
+
+def list_sweeps(
+    prefix: str | None = None,
+    base_dir: str | Path | None = None,
+) -> list[Path]:
+    """Return saved sweep directories sorted from oldest to newest."""
+    base_dir = Path(base_dir or SWEEPS_BASE)
+    if not base_dir.exists():
+        return []
+    dirs = [
+        d for d in sorted(base_dir.iterdir())
+        if d.is_dir() and (d / "sweep_info.json").exists()
+        and (prefix is None or d.name.startswith(prefix))
+    ]
+    return dirs
+
+
 def save_animation(
     anim: animation.FuncAnimation,
     name: str,
     output_dir: str | Path | None = None,
+    sweep: dict[str, Any] | None = None,
     fps: int = 2,
 ) -> Path:
-    """Save an animation as a GIF and return the written path."""
+    """Save an animation as a GIF and return the written path.
+
+    When ``sweep`` is provided and has a ``sweep_dir``, the GIF is saved to
+    ``sweep_dir/animations/`` automatically (``output_dir`` is ignored).
+    """
+    if output_dir is None and sweep is not None and "sweep_dir" in sweep:
+        output_dir = Path(sweep["sweep_dir"]) / "animations"
     output_dir = Path(output_dir or (DEFAULT_RESULTS_BASE / "animations" / make_timestamp()))
     output_dir.mkdir(parents=True, exist_ok=True)
     gif_path = output_dir / f"{_safe_name(name)}.gif"
@@ -5863,13 +6441,20 @@ def save_figure(
     fig: Any = None,
     run_or_result: RunRecord | dict[str, Any] | None = None,
     output_dir: str | Path | None = None,
+    sweep: dict[str, Any] | None = None,
     dpi: int = 200,
     close: bool = False,
 ) -> Path:
-    """Save a Matplotlib figure near a run directory or in a timestamped folder."""
+    """Save a Matplotlib figure near a run directory or in a timestamped folder.
+
+    When ``sweep`` is provided and has a ``sweep_dir``, the figure is saved to
+    ``sweep_dir/figures/`` automatically (other location hints are ignored).
+    """
     fig = fig or plt.gcf()
 
-    if output_dir is None and run_or_result is not None:
+    if output_dir is None and sweep is not None and "sweep_dir" in sweep:
+        output_dir = Path(sweep["sweep_dir"]) / "figures"
+    elif output_dir is None and run_or_result is not None:
         if isinstance(run_or_result, RunRecord):
             output_dir = Path(run_or_result.result_dir)
         elif isinstance(run_or_result, dict) and "result_dir" in run_or_result:
