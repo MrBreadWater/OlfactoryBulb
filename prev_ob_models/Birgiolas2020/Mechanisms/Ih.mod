@@ -6,16 +6,16 @@ UNITS {
     (mA) = (milliamp)
     (mV) = (millivolt)
 }
- 
+
 NEURON {
     SUFFIX Ih
     USEION h READ eh WRITE ih VALENCE 1
     RANGE gbar, ih
     RANGE rinf, rexp, tau_r
 }
- 
+
 INDEPENDENT {t FROM 0 TO 1 WITH 1 (ms)}
- 
+
 PARAMETER {
     v (mV)
     p = 5 (degC)
@@ -25,23 +25,23 @@ PARAMETER {
     q10=4.5
     celsius
 }
- 
+
 STATE {
     r
 }
- 
+
 ASSIGNED {
     ih (mA/cm2)
 	rinf rexp
 	tau_r
 	qt
 }
- 
+
 BREAKPOINT {
-    SOLVE deriv METHOD derivimplicit
+    SOLVE deriv METHOD cnexp
     ih = gbar*r*(v - eh)
 }
- 
+
 INITIAL {
     qt=q10^((celsius-35)/10)
 	rates(v)
@@ -62,6 +62,6 @@ PROCEDURE rates(v) {  :Computes rate and other constants at current v.
 	tau_r = 100 + 1/(exp(-17.9-0.116*v)+exp(-1.84+0.09*v))
 	tau_r = tau_r / qt
 }
- 
+
 UNITSON
 
