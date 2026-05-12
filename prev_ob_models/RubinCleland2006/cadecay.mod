@@ -10,7 +10,7 @@ NEURON{
 	SUFFIX cad
 	USEION ca READ ica, cai WRITE cai
 	RANGE ica, channel_flow, depth, B
-	GLOBAL cai, tau, cainf
+	GLOBAL tau, cainf
 }
 
 UNITS {
@@ -61,7 +61,7 @@ DERIVATIVE state {
 	if (channel_flow <= 0.0 ) { channel_flow = 0.0 }	: one way flow in channel
 	cai' = channel_flow  - (cai - cainf)/tau
 }
-	
+
 
 
 
