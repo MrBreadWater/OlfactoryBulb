@@ -129,6 +129,7 @@ doctrees/
 261_22158_220-pycharm-support-libs/
 
 # Local build / runtime artifacts
+.obgpu-mechanisms/
 .obsolete-builds/
 external/
 aarch64/

@@ -11,6 +11,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_NAME="${ENV_NAME:-OBGPU}"
 ENABLE_GPU="${ENABLE_GPU:-0}"
 OBGPU_BUILD_JOBS="${OBGPU_BUILD_JOBS:-8}"
+OBGPU_CPU_TARGET="${OBGPU_CPU_TARGET:-}"
+OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:-}"
+OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:-}"
+OBGPU_MECHANISM_PROFILE="${OBGPU_MECHANISM_PROFILE:-}"
 PATCH_MANIFEST="${NRN_PATCH_MANIFEST:-${REPO_ROOT}/third_party_patches/nrn/manifest.json}"
 PATCH_DIR="$(cd "$(dirname "${PATCH_MANIFEST}")" && pwd)"
 NRN_SRC_DIR="${NRN_SRC_DIR:-${REPO_ROOT}/external/nrn-9.0.1}"
@@ -35,6 +39,23 @@ fi
 if [[ ! "${OBGPU_BUILD_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
   echo "OBGPU_BUILD_JOBS must be a positive integer, got '${OBGPU_BUILD_JOBS}'" >&2
   exit 1
+fi
+
+if [[ -z "${OBGPU_MECHANISM_PROFILE}" ]]; then
+  if [[ "${OBGPU_CPU_TARGET}" == "portable" ]]; then
+    OBGPU_MECHANISM_PROFILE="portable"
+  else
+    OBGPU_MECHANISM_PROFILE="default"
+  fi
+fi
+if [[ ! "${OBGPU_MECHANISM_PROFILE}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "OBGPU_MECHANISM_PROFILE must contain only letters, digits, dot, underscore, or dash." >&2
+  exit 1
+fi
+if [[ "${OBGPU_MECHANISM_PROFILE}" == "default" ]]; then
+  OBGPU_MECHANISM_ROOT_PATH="${REPO_ROOT}"
+else
+  OBGPU_MECHANISM_ROOT_PATH="${REPO_ROOT}/.obgpu-mechanisms/${OBGPU_MECHANISM_PROFILE}"
 fi
 
 obgpu_load_generic_modules_if_needed() {
@@ -145,7 +166,7 @@ PY
 }
 
 find_current_arch_libnrnmech() {
-  "${BOOTSTRAP_PYTHON}" - "${REPO_ROOT}" "$(uname -m)" <<'PY'
+  "${BOOTSTRAP_PYTHON}" - "${OBGPU_MECHANISM_ROOT_PATH}" "$(uname -m)" <<'PY'
 from pathlib import Path
 import sys
 
@@ -434,6 +455,11 @@ OBGPU_STAMP_NVHPC_C_COMPILER='${NVHPC_C_COMPILER:-}'
 OBGPU_STAMP_NVHPC_CXX_COMPILER='${NVHPC_CXX_COMPILER:-}'
 OBGPU_STAMP_CUDA_COMPILER='${CUDA_COMPILER:-}'
 OBGPU_STAMP_NVHPC_CUDA_HOME='${NVHPC_CUDA_HOME:-}'
+OBGPU_STAMP_CPU_TARGET='${OBGPU_CPU_TARGET}'
+OBGPU_STAMP_CPU_CFLAGS='${OBGPU_CPU_CFLAGS}'
+OBGPU_STAMP_CPU_CXXFLAGS='${OBGPU_CPU_CXXFLAGS}'
+OBGPU_STAMP_MECHANISM_PROFILE='${OBGPU_MECHANISM_PROFILE}'
+OBGPU_STAMP_MECHANISM_ROOT='${OBGPU_MECHANISM_ROOT_PATH}'
 EOF
 }
 
@@ -457,6 +483,11 @@ build_stamp_fingerprint() {
     printf 'ompi_cxx=%s\n' "${OMPI_CXX}"
     printf 'nrn_src_dir=%s\n' "${NRN_SRC_DIR}"
     printf 'nrn_build_dir=%s\n' "${NRN_BUILD_DIR}"
+    printf 'obgpu_cpu_target=%s\n' "${OBGPU_CPU_TARGET}"
+    printf 'obgpu_cpu_cflags=%s\n' "${OBGPU_CPU_CFLAGS}"
+    printf 'obgpu_cpu_cxxflags=%s\n' "${OBGPU_CPU_CXXFLAGS}"
+    printf 'obgpu_mechanism_profile=%s\n' "${OBGPU_MECHANISM_PROFILE}"
+    printf 'obgpu_mechanism_root=%s\n' "${OBGPU_MECHANISM_ROOT_PATH}"
     printf 'nvhpc_c_compiler=%s\n' "${NVHPC_C_COMPILER:-}"
     printf 'nvhpc_cxx_compiler=%s\n' "${NVHPC_CXX_COMPILER:-}"
     printf 'cuda_compiler=%s\n' "${CUDA_COMPILER:-}"
@@ -477,9 +508,14 @@ mechanism_stamp_fingerprint() {
     {
     printf 'build_fingerprint=%s\n' "${base_fingerprint}"
     printf 'repo_root=%s\n' "${REPO_ROOT}"
+    printf 'mechanism_profile=%s\n' "${OBGPU_MECHANISM_PROFILE}"
+    printf 'mechanism_root=%s\n' "${OBGPU_MECHANISM_ROOT_PATH}"
     printf 'conda_prefix=%s\n' "${CONDA_PREFIX}"
     printf 'ompi_cc=%s\n' "${OMPI_CC}"
     printf 'ompi_cxx=%s\n' "${OMPI_CXX}"
+    printf 'obgpu_cpu_target=%s\n' "${OBGPU_CPU_TARGET}"
+    printf 'obgpu_cpu_cflags=%s\n' "${OBGPU_CPU_CFLAGS}"
+    printf 'obgpu_cpu_cxxflags=%s\n' "${OBGPU_CPU_CXXFLAGS}"
     printf 'machine_arch=%s\n' "$(uname -m)"
     while IFS= read -r mod_file; do
       [[ -z "${mod_file}" ]] && continue
@@ -536,6 +572,11 @@ export OMPI_CXX=g++
 export C_INCLUDE_PATH="${CONDA_PREFIX}/include${C_INCLUDE_PATH:+:${C_INCLUDE_PATH}}"
 export CPLUS_INCLUDE_PATH="${CONDA_PREFIX}/include${CPLUS_INCLUDE_PATH:+:${CPLUS_INCLUDE_PATH}}"
 gpu_cmake_args=()
+
+if [[ "${OBGPU_CPU_TARGET}" == "portable" && "${ENABLE_GPU}" != "1" ]]; then
+  OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:--O2 -march=x86-64 -mtune=generic}"
+  OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:--O2 -march=x86-64 -mtune=generic}"
+fi
 
 if [[ "${ENABLE_GPU}" == "1" ]]; then
   log_step "Resolving GPU toolchain configuration"
@@ -703,6 +744,13 @@ cmake_args=(
   -DMPI_CXX_COMPILER="${CONDA_PREFIX}/bin/mpicxx"
 )
 
+if [[ -n "${OBGPU_CPU_CFLAGS}" ]]; then
+  cmake_args+=(-DCMAKE_C_FLAGS="${OBGPU_CPU_CFLAGS}")
+fi
+if [[ -n "${OBGPU_CPU_CXXFLAGS}" ]]; then
+  cmake_args+=(-DCMAKE_CXX_FLAGS="${OBGPU_CPU_CXXFLAGS}")
+fi
+
 if [[ "${ENABLE_GPU}" == "1" ]]; then
   cmake_args+=("${gpu_cmake_args[@]}")
 fi
@@ -781,23 +829,27 @@ fi
 export OMPI_MCA_opal_cuda_support=true
 export NMODLHOME=${CONDA_PREFIX}
 export NMODL_PYLIB=${PYTHON_SHARED_LIB}
+export OBGPU_CPU_TARGET='${OBGPU_CPU_TARGET}'
+export OBGPU_CPU_CFLAGS='${OBGPU_CPU_CFLAGS}'
+export OBGPU_CPU_CXXFLAGS='${OBGPU_CPU_CXXFLAGS}'
+export OBGPU_MECHANISM_PROFILE='${OBGPU_MECHANISM_PROFILE}'
 if [[ -n "\${NRN_NMODL_PATH+x}" ]]; then
   export _OBGPU_OLD_NRN_NMODL_PATH="\${NRN_NMODL_PATH}"
   unset NRN_NMODL_PATH
 fi
-export OBGPU_MECHANISM_ROOT=${REPO_ROOT}
+export OBGPU_MECHANISM_ROOT=${OBGPU_MECHANISM_ROOT_PATH}
 if [[ -n "\${CORENEURONLIB+x}" ]]; then
   export _OBGPU_OLD_CORENEURONLIB="\${CORENEURONLIB}"
 fi
-export CORENEURONLIB=${REPO_ROOT}/$(uname -m)/libcorenrnmech.so
+export CORENEURONLIB=${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m)/libcorenrnmech.so
 if [[ -n "\${LD_LIBRARY_PATH:-}" ]]; then
   export _OBGPU_OLD_LD_LIBRARY_PATH="\${LD_LIBRARY_PATH}"
 else
   unset _OBGPU_OLD_LD_LIBRARY_PATH
 fi
 _obgpu_ld_path="${CONDA_PREFIX}/lib"
-if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
-  _obgpu_ld_path="${REPO_ROOT}/$(uname -m):\${_obgpu_ld_path}"
+if [[ -d "${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m)" ]]; then
+  _obgpu_ld_path="${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m):\${_obgpu_ld_path}"
 fi
 export LD_LIBRARY_PATH="\${_obgpu_ld_path}\${LD_LIBRARY_PATH:+:\${LD_LIBRARY_PATH}}"
 unset _obgpu_ld_path
@@ -806,6 +858,10 @@ cat > "${CONDA_PREFIX}/etc/conda/deactivate.d/ob_modern_neuron.sh" <<'EOF'
 unset OMPI_MCA_opal_cuda_support
 unset NMODLHOME
 unset NMODL_PYLIB
+unset OBGPU_CPU_TARGET
+unset OBGPU_CPU_CFLAGS
+unset OBGPU_CPU_CXXFLAGS
+unset OBGPU_MECHANISM_PROFILE
 if [[ -n "${_OBGPU_OLD_NRN_NMODL_PATH+x}" ]]; then
   export NRN_NMODL_PATH="${_OBGPU_OLD_NRN_NMODL_PATH}"
   unset _OBGPU_OLD_NRN_NMODL_PATH
@@ -832,17 +888,21 @@ EOF
 export OMPI_MCA_opal_cuda_support=true
 export NMODLHOME="${CONDA_PREFIX}"
 export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
+export OBGPU_CPU_TARGET
+export OBGPU_CPU_CFLAGS
+export OBGPU_CPU_CXXFLAGS
+export OBGPU_MECHANISM_PROFILE
 unset NRN_NMODL_PATH
-export OBGPU_MECHANISM_ROOT="${REPO_ROOT}"
-export CORENEURONLIB="${REPO_ROOT}/$(uname -m)/libcorenrnmech.so"
+export OBGPU_MECHANISM_ROOT="${OBGPU_MECHANISM_ROOT_PATH}"
+export CORENEURONLIB="${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m)/libcorenrnmech.so"
 export LD_LIBRARY_PATH="${CONDA_PREFIX}/lib${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
-  export LD_LIBRARY_PATH="${REPO_ROOT}/$(uname -m)${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+if [[ -d "${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m)" ]]; then
+  export LD_LIBRARY_PATH="${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m)${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
 fi
 
 (
   log_step "Checking Birgiolas mechanism build stamp"
-  MECH_BUILD_STAMP_PATH="${REPO_ROOT}/$(uname -m)/.obgpu_mechanisms_stamp"
+  MECH_BUILD_STAMP_PATH="${OBGPU_MECHANISM_ROOT_PATH}/$(uname -m)/.obgpu_mechanisms_stamp"
   MECH_BUILD_FINGERPRINT="$(mechanism_stamp_fingerprint "${NRN_BUILD_FINGERPRINT}")"
 
   if mechanism_lib_path="$(find_current_arch_libnrnmech 2>/dev/null)"; then
@@ -856,8 +916,9 @@ fi
     log_step "Skipping mechanism rebuild; matching successful stamp found at ${MECH_BUILD_STAMP_PATH}"
   else
     log_step "Building Birgiolas mechanisms with nrnivmodl -coreneuron"
-    cd "${REPO_ROOT}"
-    OMPI_CC=gcc OMPI_CXX=g++ nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms
+    mkdir -p "${OBGPU_MECHANISM_ROOT_PATH}"
+    cd "${OBGPU_MECHANISM_ROOT_PATH}"
+    OMPI_CC=gcc OMPI_CXX=g++ CFLAGS="${OBGPU_CPU_CFLAGS:-${CFLAGS:-}}" CXXFLAGS="${OBGPU_CPU_CXXFLAGS:-${CXXFLAGS:-}}" nrnivmodl -coreneuron "${REPO_ROOT}/prev_ob_models/Birgiolas2020/Mechanisms"
     mechanism_lib_path="$(find_current_arch_libnrnmech)"
     mkdir -p "$(dirname "${MECH_BUILD_STAMP_PATH}")"
     printf '%s\n' "${MECH_BUILD_FINGERPRINT}" > "${MECH_BUILD_STAMP_PATH}"

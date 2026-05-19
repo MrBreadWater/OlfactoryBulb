@@ -138,6 +138,10 @@ CONTROL_HELP = {
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
     "remote_conda_activate_cmd": "Shell snippet used on the remote cluster before launching the benchmark command. Generic remote runs default to 'source tools/setup/activate_obgpu.sh'; Sol uses 'source tools/setup/activate_sol_obgpu.sh'.",
+    "remote_fallback_conda_activate_cmd": "Optional shell snippet used when the allocated Slurm nodes do not all match remote_fast_node_feature.",
+    "remote_fast_node_feature": "Optional Slurm node feature required for the primary remote environment, e.g. 'cascadelake'.",
+    "remote_mechanism_profile": "Mechanism build/cache profile for the primary remote environment. 'default' uses remote_repo_root/x86_64.",
+    "remote_fallback_mechanism_profile": "Mechanism build/cache profile for the fallback remote environment. Non-default profiles use .obgpu-mechanisms/<profile>.",
     "remote_repo_mode": "How Sol should choose the repo tree for a run: 'shared' temporarily checks out the requested commit in remote_repo_root and restores it afterward, while 'snapshot' stages a detached per-run worktree.",
     "remote_git_ref": "Optional git commit, tag, or branch for Sol runs. Defaults to the current local HEAD commit so notebook runs can auto-publish exact code.",
     "remote_git_fetch": "When True, fetch the configured remote on Sol before using remote_git_ref.",
@@ -718,6 +722,10 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_repo_root": None,
         "remote_results_root": None,
         "remote_conda_activate_cmd": "source tools/setup/activate_obgpu.sh",
+        "remote_fallback_conda_activate_cmd": None,
+        "remote_fast_node_feature": None,
+        "remote_mechanism_profile": "default",
+        "remote_fallback_mechanism_profile": "portable",
         "remote_repo_mode": "shared",
         "remote_git_ref": None,
         "remote_git_fetch": False,
@@ -762,6 +770,10 @@ def build_slurm_remote_config(
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
     remote_conda_activate_cmd: str = "source tools/setup/activate_obgpu.sh",
+    remote_fallback_conda_activate_cmd: str | None = None,
+    remote_fast_node_feature: str | None = None,
+    remote_mechanism_profile: str = "default",
+    remote_fallback_mechanism_profile: str = "portable",
     remote_mpi_exec: str | None = None,
     slurm_partition: str | None = None,
     slurm_account: str | None = None,
@@ -803,6 +815,12 @@ def build_slurm_remote_config(
         "remote_repo_root": remote_repo_root,
         "remote_results_root": str(remote_results_root),
         "remote_conda_activate_cmd": str(remote_conda_activate_cmd),
+        "remote_fallback_conda_activate_cmd": None
+        if remote_fallback_conda_activate_cmd in (None, "")
+        else str(remote_fallback_conda_activate_cmd),
+        "remote_fast_node_feature": None if remote_fast_node_feature in (None, "") else str(remote_fast_node_feature),
+        "remote_mechanism_profile": str(remote_mechanism_profile or "default"),
+        "remote_fallback_mechanism_profile": str(remote_fallback_mechanism_profile or "portable"),
         "remote_mpi_exec": str(remote_mpi_exec or default_remote_mpi_exec()),
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
@@ -840,6 +858,10 @@ def build_sol_remote_config(
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
     remote_conda_activate_cmd: str = "source tools/setup/activate_sol_obgpu.sh",
+    remote_fallback_conda_activate_cmd: str | None = None,
+    remote_fast_node_feature: str | None = None,
+    remote_mechanism_profile: str = "default",
+    remote_fallback_mechanism_profile: str = "portable",
     remote_mpi_exec: str | None = None,
     slurm_partition: str | None = None,
     slurm_account: str | None = None,
@@ -873,6 +895,10 @@ def build_sol_remote_config(
         remote_repo_root=remote_repo_root,
         remote_results_root=remote_results_root,
         remote_conda_activate_cmd=remote_conda_activate_cmd,
+        remote_fallback_conda_activate_cmd=remote_fallback_conda_activate_cmd,
+        remote_fast_node_feature=remote_fast_node_feature,
+        remote_mechanism_profile=remote_mechanism_profile,
+        remote_fallback_mechanism_profile=remote_fallback_mechanism_profile,
         remote_mpi_exec=remote_mpi_exec,
         slurm_partition=slurm_partition,
         slurm_account=slurm_account,
@@ -1470,6 +1496,11 @@ def _slurm_allocation_signature(config: dict[str, Any]) -> dict[str, Any]:
         "cpus_per_task": None if config.get("slurm_cpus_per_task") in (None, "") else int(config.get("slurm_cpus_per_task")),
         "mem": None if config.get("slurm_mem") in (None, "") else str(config.get("slurm_mem")),
         "extra_args": [str(arg) for arg in config.get("slurm_extra_args", [])],
+        "remote_conda_activate_cmd": str(config.get("remote_conda_activate_cmd") or ""),
+        "remote_fallback_conda_activate_cmd": str(config.get("remote_fallback_conda_activate_cmd") or ""),
+        "remote_fast_node_feature": str(config.get("remote_fast_node_feature") or ""),
+        "remote_mechanism_profile": str(config.get("remote_mechanism_profile") or "default"),
+        "remote_fallback_mechanism_profile": str(config.get("remote_fallback_mechanism_profile") or "portable"),
         "name": str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc"),
     }
 
@@ -2801,6 +2832,19 @@ def _build_remote_submit_command(
         "--heartbeat-timeout-s",
         str(_remote_heartbeat_timeout_s(config)),
     ]
+
+    fallback_conda_activate_cmd = config.get("remote_fallback_conda_activate_cmd")
+    if fallback_conda_activate_cmd not in (None, ""):
+        command.extend(["--fallback-conda-activate-cmd", str(fallback_conda_activate_cmd)])
+    fast_node_feature = config.get("remote_fast_node_feature")
+    if fast_node_feature not in (None, ""):
+        command.extend(["--fast-node-feature", str(fast_node_feature)])
+    mechanism_profile = config.get("remote_mechanism_profile")
+    if mechanism_profile not in (None, ""):
+        command.extend(["--mechanism-profile", str(mechanism_profile)])
+    fallback_mechanism_profile = config.get("remote_fallback_mechanism_profile")
+    if fallback_mechanism_profile not in (None, ""):
+        command.extend(["--fallback-mechanism-profile", str(fallback_mechanism_profile)])
 
     if remote_git_ref:
         command.extend(["--git-ref", remote_git_ref])
@@ -4835,6 +4879,10 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "remote_repo_root",
         "remote_results_root",
         "remote_conda_activate_cmd",
+        "remote_fallback_conda_activate_cmd",
+        "remote_fast_node_feature",
+        "remote_mechanism_profile",
+        "remote_fallback_mechanism_profile",
         "remote_repo_mode",
         "remote_git_ref",
         "remote_git_fetch",
