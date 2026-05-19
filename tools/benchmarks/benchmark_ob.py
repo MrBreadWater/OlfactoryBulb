@@ -85,6 +85,21 @@ def rank0_path(base_dir: str | Path, label: str) -> Path:
     return Path(base_dir) / label
 
 
+def parse_positive_int_env(*names: str) -> int | None:
+    """Return the first positive integer environment value among names."""
+    for name in names:
+        raw_value = os.environ.get(name)
+        if raw_value in (None, ""):
+            continue
+        try:
+            value = int(raw_value)
+        except ValueError:
+            continue
+        if value > 0:
+            return value
+    return None
+
+
 def deep_update_mapping(target: dict[str, Any], overrides: dict[str, Any]) -> None:
     """Merge nested override dictionaries into a target mapping in place."""
     for key, value in overrides.items():
@@ -197,12 +212,25 @@ def main() -> None:
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
     nranks = comm.Get_size()
+    requested_slurm_tasks = parse_positive_int_env(
+        "SLURM_STEP_NUM_TASKS",
+        "SLURM_NTASKS",
+        "PMI_SIZE",
+        "PMIX_SIZE",
+    )
+    if requested_slurm_tasks and requested_slurm_tasks > 1 and nranks == 1:
+        raise RuntimeError(
+            "MPI launch did not form a multi-rank MPI world: "
+            f"MPI.COMM_WORLD size is {nranks}, but Slurm/PMI requested "
+            f"{requested_slurm_tasks} tasks. Check the remote MPI launcher "
+            "and Slurm --mpi mode before running the benchmark."
+        )
     final_label, run_timestamp = configure_output_env(args.label, comm=comm, results_base=args.results_base)
 
     out_dir = rank0_path(args.results_base, final_label)
 
     if rank == 0 and out_dir.exists():
-        shutil.rmtree(out_dir)
+        shutil.rmtree(out_dir, ignore_errors=True)
     comm.Barrier()
 
     if rank == 0:
