@@ -86,6 +86,54 @@ def relocate_benchmark_command(benchmark_command, repo_root, worktree_root, pres
     return relocated
 
 
+def requested_mpi_rank_count(command):
+    """Return the requested MPI rank count from a command list, if present."""
+    options_with_values = {"-n", "-np", "--np", "--ntasks", "--ntasks-per-job"}
+    for index, part in enumerate(command):
+        if part in options_with_values and index + 1 < len(command):
+            try:
+                return int(command[index + 1])
+            except ValueError:
+                continue
+        for prefix in ("-n", "-np"):
+            suffix = part[len(prefix):]
+            if part.startswith(prefix) and suffix:
+                try:
+                    return int(suffix)
+                except ValueError:
+                    pass
+        for prefix in ("--ntasks=", "--ntasks-per-job="):
+            if part.startswith(prefix):
+                try:
+                    return int(part.split("=", 1)[1])
+                except ValueError:
+                    pass
+    return None
+
+
+def neuron_mpi_preflight_suffix(benchmark_suffix):
+    """Build a cheap nrniv command suffix that verifies NEURON's MPI world."""
+    try:
+        nrniv_index = benchmark_suffix.index("nrniv")
+    except ValueError:
+        return None
+    code = (
+        "import os\n"
+        "from neuron import h\n"
+        "pc = h.ParallelContext()\n"
+        "rank = int(pc.id())\n"
+        "nhost = int(pc.nhost())\n"
+        "expected = int(os.environ.get('OBGPU_EXPECTED_NRANKS') or '0')\n"
+        "if rank == 0:\n"
+        "    print('OBGPU MPI preflight: ParallelContext.nhost()=%d expected=%d' % (nhost, expected), flush=True)\n"
+        "if expected > 1 and nhost != expected:\n"
+        "    raise RuntimeError('NEURON MPI preflight saw %d ranks, expected %d' % (nhost, expected))\n"
+        "pc.barrier()\n"
+        "h.quit()\n"
+    )
+    return benchmark_suffix[: nrniv_index + 1] + ["-mpi", "-python", "-c", code]
+
+
 def write_batch_script(
     repo_root,
     result_dir,
@@ -121,6 +169,8 @@ def write_batch_script(
     replace_mpi_exec = bool(requested_mpi_parts) and effective_command[: len(requested_mpi_parts)] == requested_mpi_parts
     if replace_mpi_exec:
         benchmark_suffix = effective_command[len(requested_mpi_parts):]
+    expected_nhosts = requested_mpi_rank_count(effective_command) or 1
+    preflight_suffix = neuron_mpi_preflight_suffix(benchmark_suffix) if replace_mpi_exec else None
     slurm_log_path = wrapper_dir / "slurm-%j.out"
     bootstrap_log_path = wrapper_dir / "bootstrap.log"
     git_ref_value = git_ref or ""
@@ -347,6 +397,7 @@ def write_batch_script(
         "export OBGPU_STATUS_MODE=file",
         "export OBGPU_STATUS_INTERVAL_MS=${OBGPU_STATUS_INTERVAL_MS:-5}",
         "export OBGPU_SHARED_REPO_ROOT=\"$shared_repo_root\"",
+        "export OBGPU_EXPECTED_NRANKS={}".format(int(expected_nhosts)),
         "eval {}".format(shlex.quote(conda_activate_cmd)),
         "export OBGPU_MECHANISM_ROOT=\"$job_repo_root\"",
         "export CORENEURONLIB=\"$job_repo_root/$(uname -m)/libcorenrnmech.so\"",
@@ -360,6 +411,23 @@ def write_batch_script(
             [
                 "resolved_mpi_exec=${OB_MPIEXEC:-" + shlex.quote(mpi_exec) + "}",
                 "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
+            ]
+        )
+        if preflight_suffix is not None:
+            lines.extend(
+                [
+                    "obgpu_preflight=(" + " ".join(shlex.quote(part) for part in preflight_suffix) + ")",
+                    "obgpu_preflight_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_preflight[@]}\")",
+                    "printf '%s\\n' '[OBGPU batch] running NEURON MPI preflight' >> \"$bootstrap_log\"",
+                    "printf '%s\\n' \"$(printf '%q ' \"${obgpu_preflight_command[@]}\")\" >> \"$bootstrap_log\"",
+                    "if ! \"${obgpu_preflight_command[@]}\" >> \"$bootstrap_log\" 2>&1; then",
+                    "  printf '%s\\n' '[OBGPU batch] NEURON MPI preflight failed' >> \"$bootstrap_log\"",
+                    "  exit 126",
+                    "fi",
+                ]
+            )
+        lines.extend(
+            [
                 "obgpu_command=(" + " ".join(shlex.quote(part) for part in benchmark_suffix) + ")",
                 "obgpu_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_command[@]}\")",
                 "touch " + shlex.quote(str(wrapper_dir / "command.txt")) + " "

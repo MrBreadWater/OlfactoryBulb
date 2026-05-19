@@ -100,6 +100,37 @@ def parse_positive_int_env(*names: str) -> int | None:
     return None
 
 
+class NeuronParallelComm:
+    """Small MPI-like wrapper around NEURON's ParallelContext."""
+
+    def __init__(self, pc: Any):
+        self.pc = pc
+
+    def Get_rank(self) -> int:
+        """Return the current NEURON MPI rank."""
+        return int(self.pc.id())
+
+    def Get_size(self) -> int:
+        """Return the current NEURON MPI world size."""
+        return int(self.pc.nhost())
+
+    def bcast(self, value: Any, root: int = 0) -> Any:
+        """Broadcast a Python object from one NEURON MPI rank."""
+        return self.pc.py_broadcast(value, int(root))
+
+    def Barrier(self) -> None:
+        """Synchronize all NEURON MPI ranks."""
+        self.pc.barrier()
+
+    def allreduce_sum(self, value: int | float) -> int | float:
+        """Return the sum of a scalar over all NEURON MPI ranks."""
+        return self.pc.allreduce(value, 1)
+
+    def allreduce_max(self, value: int | float) -> int | float:
+        """Return the maximum of a scalar over all NEURON MPI ranks."""
+        return self.pc.allreduce(value, 2)
+
+
 def deep_update_mapping(target: dict[str, Any], overrides: dict[str, Any]) -> None:
     """Merge nested override dictionaries into a target mapping in place."""
     for key, value in overrides.items():
@@ -201,7 +232,7 @@ def main() -> None:
     else:
         repo_root = Path.cwd()
 
-    from mpi4py import MPI
+    from neuron import h
     try:
         from neuron import coreneuron
     except ImportError:
@@ -209,7 +240,8 @@ def main() -> None:
     import olfactorybulb.model as obmodel
     from olfactorybulb.model import OlfactoryBulb
 
-    comm = MPI.COMM_WORLD
+    pc = h.ParallelContext()
+    comm = NeuronParallelComm(pc)
     rank = comm.Get_rank()
     nranks = comm.Get_size()
     requested_slurm_tasks = parse_positive_int_env(
@@ -220,10 +252,10 @@ def main() -> None:
     )
     if requested_slurm_tasks and requested_slurm_tasks > 1 and nranks == 1:
         raise RuntimeError(
-            "MPI launch did not form a multi-rank MPI world: "
-            f"MPI.COMM_WORLD size is {nranks}, but Slurm/PMI requested "
-            f"{requested_slurm_tasks} tasks. Check the remote MPI launcher "
-            "and Slurm --mpi mode before running the benchmark."
+            "MPI launch did not form a multi-rank NEURON ParallelContext: "
+            f"ParallelContext.nhost() is {nranks}, but Slurm/PMI requested "
+            f"{requested_slurm_tasks} tasks. Check the remote MPI launcher, "
+            "Slurm --mpi mode, and the MPI implementation used by nrniv."
         )
     final_label, run_timestamp = configure_output_env(args.label, comm=comm, results_base=args.results_base)
 
@@ -289,7 +321,7 @@ def main() -> None:
     if args.parallel_timeout is not None:
         ob.params.parallel_timeout = args.parallel_timeout
     build_local = time.perf_counter() - build_start
-    build_max = comm.allreduce(build_local, op=MPI.MAX)
+    build_max = comm.allreduce_max(build_local)
 
     ob.results_dir = str(out_dir)
     comm.Barrier()
@@ -316,21 +348,21 @@ def main() -> None:
     run_start = time.perf_counter()
     ob.run(ob.params.tstop)
     run_local = time.perf_counter() - run_start
-    run_max = comm.allreduce(run_local, op=MPI.MAX)
+    run_max = comm.allreduce_max(run_local)
 
     save_start = time.perf_counter()
     ob.save_recorded_vectors()
     if getattr(ob.params, "enable_lfp", True):
         ob.get_lfp()
     save_local = time.perf_counter() - save_start
-    save_max = comm.allreduce(save_local, op=MPI.MAX)
+    save_max = comm.allreduce_max(save_local)
 
     total_local = build_local + run_local + save_local
-    total_max = comm.allreduce(total_local, op=MPI.MAX)
+    total_max = comm.allreduce_max(total_local)
 
     local_cell_counts = {cell_type: len(cells) for cell_type, cells in ob.cells.items()}
     total_cell_counts = {
-        cell_type: int(comm.allreduce(count, op=MPI.SUM))
+        cell_type: int(comm.allreduce_sum(count))
         for cell_type, count in local_cell_counts.items()
     }
 
