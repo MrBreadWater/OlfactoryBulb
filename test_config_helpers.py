@@ -9,6 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 
 from obgpu_experiment_helpers import (
+    build_param_overrides,
     build_run_config,
     config_diff,
     list_paramsets,
@@ -75,5 +76,29 @@ with tempfile.TemporaryDirectory() as tmp:
     no_changes = config_diff(cfg_a, deepcopy(cfg_a))
     assert no_changes == []
     print("config_diff: OK")
+
+    # --- KAR / ketamine controls ---
+    cfg_kar = build_run_config(
+        ketamine_block=0.05,
+        ampa_block=1.0,
+        kar_mt_gmax=0.002,
+        kar_tau2_ms=90.0,
+        kar_tau3_ms=480.0,
+        kar_amp2=0.01,
+        enable_gc_kar=True,
+        kar_gc_gmax=0.001,
+        gc_ka_gbar_scale=0.5,
+    )
+    overrides = build_param_overrides(cfg_kar)
+    assert overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block"] == 0.05
+    assert overrides["synapse_properties"]["AmpaNmdaSyn"]["ampa_block"] == 1.0
+    assert overrides["kar_mt_gmax"] == 0.002
+    assert overrides["kar_tau2"] == 90.0
+    assert overrides["kar_tau3"] == 480.0
+    assert overrides["kar_amp2"] == 0.01
+    assert overrides["enable_gc_kar"] is True
+    assert overrides["kar_gc_gmax"] == 0.001
+    assert overrides["gc_ka_gbar_scale"] == 0.5
+    print("KAR / ketamine controls: OK")
 
 print("\nAll tests passed.")

@@ -61,7 +61,7 @@ except ImportError:  # pragma: no cover - optional runtime dependency
     _tqdm_notebook = None
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
-from scipy.signal import butter, filtfilt, lfilter, spectrogram, welch
+from scipy.signal import butter, filtfilt, hilbert, lfilter, spectrogram, welch
 from modify_model import (
     add_synaptic_connection,
     modify_synaptic_connection,
@@ -107,8 +107,24 @@ CONTROL_HELP = {
     "gap_tc": "TC gap-junction conductance.",
     "ampa_nmda_gmax": "Global AmpaNmdaSyn gmax.",
     "ampa_nmda_nmdafactor": "Global AmpaNmdaSyn NMDA factor.",
+    "ketamine_block": "Semantic NMDA block multiplier on AmpaNmdaSyn NMDA current.",
+    "ampa_block": "AMPA current multiplier on AmpaNmdaSyn AMPA current.",
     "gaba_gmax": "Global GabaSyn gmax.",
     "gaba_tau2_ms": "Global GabaSyn tau2.",
+    "kar_mt_gmax": "Slow OSN-glutamate KAR conductance on MC/TC tuft inputs.",
+    "enable_gc_kar": "Enable optional MC/TC->GC KAR conductance at reciprocal excitation sites.",
+    "kar_gc_gmax": "Optional slow MC/TC-glutamate KAR conductance on GCs.",
+    "kar_tau1_ms": "KAR activation rise time.",
+    "kar_tau2_ms": "KAR activation decay time.",
+    "kar_tau3_ms": "Slow KAR tail time constant for the fitted conductance kernel.",
+    "kar_amp1": "First fitted KAR conductance-kernel amplitude.",
+    "kar_amp2": "Second fitted KAR conductance-kernel amplitude.",
+    "kar_amp3": "Third fitted KAR conductance-kernel amplitude.",
+    "kar_kd": "KAR activation half-saturation for event-driven glutamate proxy.",
+    "kar_block": "KAR current multiplier for sensitivity/blockade tests.",
+    "kar_osn_weight_scale": "Multiplier applied to OSN event weights delivered to KAR synapses.",
+    "kar_gc_weight_scale": "Multiplier applied to reciprocal MC/TC event weights delivered to GC KAR synapses.",
+    "gc_ka_gbar_scale": "Scale GC KA/I_A conductance; 0 removes GC I_A.",
     "enable_reciprocal_synapses": "Toggle GC<->MC/TC reciprocal synapses.",
     "extra_overrides": "Any raw paramset overrides not exposed above.",
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
@@ -671,8 +687,24 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "gap_tc": None,
         "ampa_nmda_gmax": None,
         "ampa_nmda_nmdafactor": None,
+        "ketamine_block": None,
+        "ampa_block": None,
         "gaba_gmax": None,
         "gaba_tau2_ms": None,
+        "kar_mt_gmax": None,
+        "enable_gc_kar": None,
+        "kar_gc_gmax": None,
+        "kar_tau1_ms": None,
+        "kar_tau2_ms": None,
+        "kar_tau3_ms": None,
+        "kar_amp1": None,
+        "kar_amp2": None,
+        "kar_amp3": None,
+        "kar_kd": None,
+        "kar_block": None,
+        "kar_osn_weight_scale": None,
+        "kar_gc_weight_scale": None,
+        "gc_ka_gbar_scale": None,
         "analysis_dt_ms": 0.1,
         "spectrogram_signal": "lfp",
         "wavelet_signal": "lfp",
@@ -1009,10 +1041,20 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
             overrides["gap_juction_gmax"]["TC"] = float(config["gap_tc"])
     if any(
         config.get(key) is not None
-        for key in ("ampa_nmda_gmax", "ampa_nmda_nmdafactor", "gaba_gmax", "gaba_tau2_ms")
+        for key in (
+            "ampa_nmda_gmax",
+            "ampa_nmda_nmdafactor",
+            "ketamine_block",
+            "ampa_block",
+            "gaba_gmax",
+            "gaba_tau2_ms",
+        )
     ):
         overrides.setdefault("synapse_properties", {})
-    if config.get("ampa_nmda_gmax") is not None or config.get("ampa_nmda_nmdafactor") is not None:
+    if any(
+        config.get(key) is not None
+        for key in ("ampa_nmda_gmax", "ampa_nmda_nmdafactor", "ketamine_block", "ampa_block")
+    ):
         overrides["synapse_properties"].setdefault("AmpaNmdaSyn", {})
         if config.get("ampa_nmda_gmax") is not None:
             overrides["synapse_properties"]["AmpaNmdaSyn"]["gmax"] = float(config["ampa_nmda_gmax"])
@@ -1020,12 +1062,40 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
             overrides["synapse_properties"]["AmpaNmdaSyn"]["nmdafactor"] = float(
                 config["ampa_nmda_nmdafactor"]
             )
+        if config.get("ketamine_block") is not None:
+            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block"] = float(
+                config["ketamine_block"]
+            )
+        if config.get("ampa_block") is not None:
+            overrides["synapse_properties"]["AmpaNmdaSyn"]["ampa_block"] = float(
+                config["ampa_block"]
+            )
     if config.get("gaba_gmax") is not None or config.get("gaba_tau2_ms") is not None:
         overrides["synapse_properties"].setdefault("GabaSyn", {})
         if config.get("gaba_gmax") is not None:
             overrides["synapse_properties"]["GabaSyn"]["gmax"] = float(config["gaba_gmax"])
         if config.get("gaba_tau2_ms") is not None:
             overrides["synapse_properties"]["GabaSyn"]["tau2"] = float(config["gaba_tau2_ms"])
+    scalar_param_map = {
+        "kar_mt_gmax": "kar_mt_gmax",
+        "kar_gc_gmax": "kar_gc_gmax",
+        "kar_tau1_ms": "kar_tau1",
+        "kar_tau2_ms": "kar_tau2",
+        "kar_tau3_ms": "kar_tau3",
+        "kar_amp1": "kar_amp1",
+        "kar_amp2": "kar_amp2",
+        "kar_amp3": "kar_amp3",
+        "kar_kd": "kar_kd",
+        "kar_block": "kar_block",
+        "kar_osn_weight_scale": "kar_osn_weight_scale",
+        "kar_gc_weight_scale": "kar_gc_weight_scale",
+        "gc_ka_gbar_scale": "gc_ka_gbar_scale",
+    }
+    for config_key, param_key in scalar_param_map.items():
+        if config.get(config_key) is not None:
+            overrides[param_key] = float(config[config_key])
+    if config.get("enable_gc_kar") is not None:
+        overrides["enable_gc_kar"] = bool(config["enable_gc_kar"])
     extra = dict(config.get("extra_overrides", {}))
     deep_update(overrides, extra)
     return overrides
@@ -4937,6 +5007,158 @@ def compute_wavelet_band_power(
     return t, freqs, power, traces
 
 
+DEFAULT_HFO_BANDS = {
+    "hfo_80_130": (80.0, 130.0),
+    "hfo_130_180": (130.0, 180.0),
+}
+
+
+def compute_band_power_summary(
+    signal_t: np.ndarray | list[float],
+    signal_y: np.ndarray | list[float],
+    *,
+    bands: dict[str, tuple[float, float]] | None = None,
+    dt_ms: float | None = 0.1,
+    nperseg: int | None = None,
+    relative_band: tuple[float, float] | None = (30.0, 250.0),
+) -> dict[str, Any]:
+    """Compute integrated Welch band powers for HFO-style summaries."""
+    bands = dict(bands or DEFAULT_HFO_BANDS)
+    t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
+    if len(t) < 4:
+        return {
+            "freqs": np.array([]),
+            "psd": np.array([]),
+            "band_power": {name: 0.0 for name in bands},
+            "relative_band_power": {name: 0.0 for name in bands},
+            "relative_band": relative_band,
+        }
+
+    y = np.asarray(y, dtype=float)
+    y = y - np.mean(y)
+    fs_hz = 1000.0 / float(np.median(np.diff(t)))
+    if nperseg is None:
+        nperseg = min(2048, len(y))
+    else:
+        nperseg = min(int(nperseg), len(y))
+    freqs, psd = welch(y, fs=fs_hz, nperseg=nperseg)
+
+    if relative_band is None:
+        denominator = float(np.trapz(psd, freqs))
+    else:
+        relative_mask = (freqs >= relative_band[0]) & (freqs <= relative_band[1])
+        denominator = float(np.trapz(psd[relative_mask], freqs[relative_mask])) if np.any(relative_mask) else 0.0
+
+    band_power = {}
+    relative_power = {}
+    for name, (lo, hi) in bands.items():
+        mask = (freqs >= float(lo)) & (freqs <= float(hi))
+        power_value = float(np.trapz(psd[mask], freqs[mask])) if np.any(mask) else 0.0
+        band_power[name] = power_value
+        relative_power[name] = power_value / denominator if denominator > 0 else 0.0
+
+    return {
+        "freqs": freqs,
+        "psd": psd,
+        "band_power": band_power,
+        "relative_band_power": relative_power,
+        "relative_band": relative_band,
+    }
+
+
+def compute_hfo_power_summary(
+    result: dict[str, Any],
+    *,
+    signal: str = "lfp",
+    bands: dict[str, tuple[float, float]] | None = None,
+    dt_ms: float = 0.1,
+    relative_band: tuple[float, float] | None = (30.0, 250.0),
+) -> dict[str, Any]:
+    """Compute HFO band-power metrics for a named saved signal."""
+    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
+    summary = compute_band_power_summary(
+        signal_t,
+        signal_y,
+        bands=bands,
+        dt_ms=dt_ms,
+        relative_band=relative_band,
+    )
+    summary["signal"] = signal
+    return summary
+
+
+def compute_spike_phase_locking(
+    result: dict[str, Any],
+    *,
+    signal: str = "lfp",
+    band: tuple[float, float] = (80.0, 130.0),
+    cell_types: tuple[str, ...] | list[str] = ("MC", "TC"),
+    threshold: float = 0.0,
+    dt_ms: float = 0.1,
+) -> dict[str, Any]:
+    """Measure soma-spike phase locking to a band-passed LFP-like signal."""
+    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
+    if len(signal_t) < 4:
+        return {
+            "signal": signal,
+            "band": band,
+            "cell_types": list(cell_types),
+            "n_spikes": 0,
+            "vector_strength": 0.0,
+            "mean_phase_rad": np.nan,
+            "per_cell": [],
+        }
+
+    fs_hz = 1000.0 / float(np.median(np.diff(signal_t)))
+    bandpassed = butter_bandpass_filter(signal_y, band[0], band[1], fs_hz, order=4)
+    phase = np.angle(hilbert(bandpassed))
+    unwrapped_phase = np.unwrap(phase)
+    allowed_types = tuple(str(cell_type) for cell_type in cell_types)
+
+    all_vectors = []
+    per_cell = []
+    for label, t, v in result["soma_vs"]:
+        if not label.startswith(allowed_types):
+            continue
+        spikes = detect_spikes(t, v, threshold=threshold)
+        spikes = spikes[(spikes >= signal_t[0]) & (spikes <= signal_t[-1])]
+        if len(spikes) == 0:
+            continue
+        spike_phase = np.angle(np.exp(1j * np.interp(spikes, signal_t, unwrapped_phase)))
+        vectors = np.exp(1j * spike_phase)
+        cell_vector = np.mean(vectors)
+        per_cell.append(
+            {
+                "label": label,
+                "n_spikes": int(len(spikes)),
+                "vector_strength": float(np.abs(cell_vector)),
+                "mean_phase_rad": float(np.angle(cell_vector)),
+            }
+        )
+        all_vectors.append(vectors)
+
+    if all_vectors:
+        vectors = np.concatenate(all_vectors)
+        mean_vector = np.mean(vectors)
+        vector_strength = float(np.abs(mean_vector))
+        mean_phase = float(np.angle(mean_vector))
+        n_spikes = int(len(vectors))
+    else:
+        vector_strength = 0.0
+        mean_phase = np.nan
+        n_spikes = 0
+
+    return {
+        "signal": signal,
+        "band": tuple(float(value) for value in band),
+        "cell_types": list(cell_types),
+        "n_spikes": n_spikes,
+        "vector_strength": vector_strength,
+        "mean_phase_rad": mean_phase,
+        "per_cell": per_cell,
+    }
+
+
 def load_legacy_wavelet_analysis(
     result: dict[str, Any],
     dt: float = 0.1,
@@ -5909,6 +6131,40 @@ def plot_lfp_overview(
     axes[2].set_title("Welch Power Spectrum")
     fig.tight_layout()
     return fig, axes
+
+
+def plot_hfo_power_summary(
+    result: dict[str, Any],
+    *,
+    signal: str = "lfp",
+    bands: dict[str, tuple[float, float]] | None = None,
+    dt_ms: float = 0.1,
+    relative_band: tuple[float, float] | None = (30.0, 250.0),
+) -> tuple[Any, Any, dict[str, Any]]:
+    """Plot absolute and relative HFO band power for a named signal."""
+    summary = compute_hfo_power_summary(
+        result,
+        signal=signal,
+        bands=bands,
+        dt_ms=dt_ms,
+        relative_band=relative_band,
+    )
+    names = list(summary["band_power"].keys())
+    absolute = [summary["band_power"][name] for name in names]
+    relative = [summary["relative_band_power"][name] for name in names]
+
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharex=False)
+    axes[0].bar(names, absolute, color="tab:blue")
+    axes[0].set_title(f"{signal} HFO Band Power")
+    axes[0].set_ylabel("Integrated PSD")
+    axes[0].tick_params(axis="x", rotation=30)
+
+    axes[1].bar(names, relative, color="tab:green")
+    axes[1].set_title("Relative Band Power")
+    axes[1].set_ylabel("Fraction")
+    axes[1].tick_params(axis="x", rotation=30)
+    fig.tight_layout()
+    return fig, axes, summary
 
 
 def plot_named_signal(

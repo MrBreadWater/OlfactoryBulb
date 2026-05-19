@@ -75,6 +75,29 @@ class SilentNetwork:
     input_syn_tau1 = 6
     input_syn_tau2 = 12
 
+    # Slow kainate-receptor gain. Defaults are non-breaking: OSN KAR hooks are
+    # available, but zero conductance means no current unless explicitly enabled
+    # from a notebook config or paramset.
+    enable_osn_kar = True
+    enable_gc_kar = False
+    kar_mt_gmax = 0.0
+    kar_gc_gmax = 0.0
+    kar_tau1 = 6.728726245
+    kar_tau2 = 81.75126152
+    kar_tau3 = 468.7337682
+    kar_amp1 = 0.06942183802
+    kar_amp2 = 0.008503803144
+    kar_amp3 = 0.01280596195
+    kar_kd = 0
+    kar_e = 0.0
+    kar_block = 1.0
+    kar_osn_weight_scale = 1.0
+    kar_gc_weight_scale = 1.0
+
+    # Granule-cell A-type potassium intervention. 1.0 preserves fitted cells;
+    # 0.0 removes GC I_A for sensitivity tests.
+    gc_ka_gbar_scale = 1.0
+
     # MC input disabled
     mc_input_delay = 50
     mc_input_weight = 0

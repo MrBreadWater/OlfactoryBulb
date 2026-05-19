@@ -184,6 +184,8 @@ class OlfactoryBulb:
         self.slice_dir = os.path.abspath(os.path.join(params.slice_dir, params.slice_name))
         self.cells = {}
         self.inputs = []
+        self.kar_inputs = []
+        self.gc_kar_synapses = []
 
         self.gj_source_gids = set()
         self.gjs = []
@@ -257,9 +259,14 @@ class OlfactoryBulb:
 
             print('Rank Complexity min: %s, mean: %s, max: %s' % (min, mean, max))
 
+        self.apply_gc_ka_gbar_scale()
+
         if getattr(self.params, "enable_reciprocal_synapses", True):
             for synapse_set in ['GCs__MCs', 'GCs__TCs']:
                 self.load_synapse_set(synapse_set)
+            if getattr(self.params, "enable_gc_kar", False) and float(getattr(self.params, "kar_gc_gmax", 0.0)) > 0:
+                for synapse_set in ['GCs__MCs', 'GCs__TCs']:
+                    self.add_gc_kar_synapse_set(synapse_set)
             if getattr(self.params, "record_gc_output_events", False):
                 self.record_gc_output_events()
 
@@ -394,6 +401,9 @@ class OlfactoryBulb:
                 delay = self.params.tc_input_delay
                 weight = self.params.tc_input_weight
 
+            kar_syn = self.create_osn_kar_synapse(seg)
+            kar_weight = float(weight) * float(getattr(self.params, "kar_osn_weight_scale", 1.0))
+
             event_times = [float(t_event) for t_event in spike_times + delay]
             input_event_strategy = getattr(self.params, "input_event_strategy", None)
             if input_event_strategy is None:
@@ -415,11 +425,20 @@ class OlfactoryBulb:
                     0,
                     weight,
                 )
+                kar_netcon = None
+                if kar_syn is not None:
+                    kar_netcon = h.NetCon(
+                        ns,
+                        kar_syn,
+                        0,
+                        0,
+                        kar_weight,
+                    )
 
                 input_vec = h.Vector()
                 netcon.record(input_vec)
                 self.input_vectors.append((single_rank_seg_name, input_vec))
-                self.inputs.append((syn, ns, netcon, event_vec))
+                self.inputs.append((syn, ns, netcon, event_vec, kar_syn, kar_netcon))
             elif input_event_strategy == "patternstim":
                 input_delay = 2.0 * float(self.params.sim_dt)
                 source_gid = self._next_input_source_gid
@@ -428,6 +447,11 @@ class OlfactoryBulb:
                 netcon = self.pc.gid_connect(source_gid, syn)
                 netcon.delay = input_delay
                 netcon.weight[0] = weight
+                kar_netcon = None
+                if kar_syn is not None:
+                    kar_netcon = self.pc.gid_connect(source_gid, kar_syn)
+                    kar_netcon.delay = input_delay
+                    kar_netcon.weight[0] = kar_weight
 
                 scheduled_event_times = [float(t_event - input_delay) for t_event in event_times]
                 pattern_times = h.Vector(scheduled_event_times)
@@ -438,7 +462,7 @@ class OlfactoryBulb:
 
                 input_vec = h.Vector(event_times)
                 self.input_vectors.append((single_rank_seg_name, input_vec))
-                self.inputs.append((syn, netcon, pattern_stim, pattern_times, pattern_gids))
+                self.inputs.append((syn, netcon, pattern_stim, pattern_times, pattern_gids, kar_syn, kar_netcon))
             else:
                 # Use a nil-source NetCon and schedule the precomputed events during
                 # finitialize. This avoids the custom VecStim artificial cell while
@@ -451,12 +475,19 @@ class OlfactoryBulb:
                 netcon = h.NetCon(None, syn)
                 netcon.delay = input_delay
                 netcon.weight[0] = weight
+                event_netcons = [netcon]
+                kar_netcon = None
+                if kar_syn is not None:
+                    kar_netcon = h.NetCon(None, kar_syn)
+                    kar_netcon.delay = input_delay
+                    kar_netcon.weight[0] = kar_weight
+                    event_netcons.append(kar_netcon)
 
                 input_vec = h.Vector()
                 self.input_vectors.append((single_rank_seg_name, input_vec))
 
                 def schedule_events(
-                    nc=netcon,
+                    ncs=tuple(event_netcons),
                     scheduled_times=tuple(event_times),
                     input_record=input_vec,
                     h_ref=self.h,
@@ -465,11 +496,12 @@ class OlfactoryBulb:
                     tstop = float(h_ref.tstop)
                     for event_time in scheduled_times:
                         if event_time <= tstop + 1e-9:
-                            nc.event(event_time)
+                            for nc in ncs:
+                                nc.event(event_time)
                             input_record.append(event_time)
 
                 fih = h.FInitializeHandler(1, schedule_events)
-                self.inputs.append((syn, netcon, fih))
+                self.inputs.append((syn, netcon, fih, kar_syn, kar_netcon))
 
     def stable_hash(self, source, digits=9):
         """
@@ -494,6 +526,54 @@ class OlfactoryBulb:
             seg = eval(normalized_name, {"h": self.h})
             self._segment_cache[normalized_name] = seg
         return seg
+
+    def require_mechanism(self, mechanism_name):
+        if not hasattr(self.h, mechanism_name):
+            raise RuntimeError(
+                "%s is not available in the loaded NEURON mechanisms. "
+                "Run nrnivmodl after adding or updating mechanism .mod files."
+                % mechanism_name
+            )
+
+    def configure_kar_synapse(self, syn, gmax):
+        syn.gmax = float(gmax)
+        for mod_name in ("tau1", "tau2", "tau3", "amp1", "amp2", "amp3"):
+            param_name = "kar_%s" % mod_name
+            if hasattr(syn, mod_name) and hasattr(self.params, param_name):
+                setattr(syn, mod_name, float(getattr(self.params, param_name)))
+        syn.kd = float(getattr(self.params, "kar_kd", 0.0))
+        syn.e = float(getattr(self.params, "kar_e", 0.0))
+        syn.block = float(getattr(self.params, "kar_block", 1.0))
+
+    def create_osn_kar_synapse(self, seg):
+        if not bool(getattr(self.params, "enable_osn_kar", True)):
+            return None
+
+        gmax = float(getattr(self.params, "kar_mt_gmax", 0.0))
+        if gmax <= 0:
+            return None
+
+        self.require_mechanism("KainateSyn")
+        syn = self.h.KainateSyn(seg)
+        self.configure_kar_synapse(syn, gmax)
+        self.kar_inputs.append(syn)
+        return syn
+
+    def apply_gc_ka_gbar_scale(self):
+        scale = float(getattr(self.params, "gc_ka_gbar_scale", 1.0))
+        if scale == 1.0:
+            return
+
+        h = self.h
+        for cell_model in self.cells.get("GC", []):
+            for sec in self.get_cell_sections(cell_model):
+                try:
+                    has_ka = bool(h.ismembrane("KA", sec=sec))
+                except Exception:
+                    has_ka = hasattr(sec, "gbar_KA")
+                if not has_ka or not hasattr(sec, "gbar_KA"):
+                    continue
+                sec.gbar_KA = float(sec.gbar_KA) * scale
 
     def rank_section_name(self, cell_name):
         cached = self._rank_section_name_cache.get(cell_name)
@@ -1390,6 +1470,75 @@ class OlfactoryBulb:
             synapse_set_dict = json.load(f)
 
         self.bn_server.create_synapses(synapse_set_dict)
+
+    def add_gc_kar_synapse_set(self, synapse_set):
+        """
+        Add optional MC/TC->GC kainate receptors at existing reciprocal excitation sites.
+
+        The saved reciprocal synapse JSON names the GC side as ``source`` and
+        the MC/TC side as ``dest`` because GC->MC/TC GABA is the forward
+        connection in that file. For the excitatory reciprocal direction, the
+        presynaptic glutamate source is therefore the saved ``dest_section``
+        and the postsynaptic GC target is the saved ``source_section``.
+        """
+
+        gmax = float(getattr(self.params, "kar_gc_gmax", 0.0))
+        if gmax <= 0:
+            return
+
+        self.require_mechanism("KainateSyn")
+        h = self.h
+
+        path = os.path.join(self.slice_dir, synapse_set + '.json')
+        with open(path, 'r') as f:
+            entries = json.load(f)["entries"]
+
+        for entry in entries:
+            if not entry.get("is_reciprocal", False):
+                continue
+
+            target_section_name = self.rank_section_name(entry["source_section"])
+            source_section_name = self.rank_section_name(entry["dest_section"])
+            syn_on_rank = target_section_name is not None
+            source_on_rank = source_section_name is not None
+
+            if not syn_on_rank and not source_on_rank:
+                continue
+
+            source_gid = self.bn_server.segment_gid(
+                entry["dest_section"],
+                entry["dest_seg_i"],
+                False,
+            )
+
+            if source_on_rank:
+                source_seg = self.resolve_segment(
+                    "h.%s(%s)" % (source_section_name, float(entry.get("dest_x", 0.5)))
+                )
+                if self.pc.gid_exists(source_gid) == 0:
+                    self.bn_server.assign_gid_to_source_seg(
+                        source_seg.sec,
+                        float(entry.get("dest_x", 0.5)),
+                        float(entry.get("threshold", 0.0)),
+                        source_gid,
+                    )
+                self.bn_server.remember_cell_source_gid(source_section_name, source_gid)
+
+            if not syn_on_rank:
+                continue
+
+            target_seg = self.resolve_segment(
+                "h.%s(%s)" % (target_section_name, float(entry.get("source_x", 0.5)))
+            )
+            syn = h.KainateSyn(target_seg)
+            self.configure_kar_synapse(syn, gmax)
+
+            netcon = self.pc.gid_connect(source_gid, syn)
+            netcon.delay = float(entry.get("delay", 0.5))
+            netcon.weight[0] = float(entry.get("weight", 1.0)) * float(
+                getattr(self.params, "kar_gc_weight_scale", 1.0)
+            )
+            self.gc_kar_synapses.append((syn, netcon))
 
     def record_gc_output_events(self):
         h = self.h

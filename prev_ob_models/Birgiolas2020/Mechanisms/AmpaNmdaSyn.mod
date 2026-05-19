@@ -58,6 +58,7 @@ NEURON {
 	POINT_PROCESS AmpaNmdaSyn
 	RANGE R, g, mg, inmda, iampa, gnmda, gampa
 	RANGE x, mgid, ggid, srcgid, gmax, ltdinvl, ltpinvl, nmdafactor
+	RANGE ketamine_block, ampa_block
 	RANGE Rinf, Rtau
 	NONSPECIFIC_CURRENT i
 	GLOBAL Cdur, Alpha, Beta, E, ampatau
@@ -69,6 +70,7 @@ UNITS {
 	(mV) = (millivolt)
 	(umho) = (micromho)
 	(mM) = (milli/liter)
+	(um) = (micron)
 }
 
 PARAMETER {
@@ -81,6 +83,8 @@ PARAMETER {
 	gmax = 2 (umho)		: normally 2
 	gampafactor = 0.001 (1)
 	nmdafactor = 0.0035 (1)
+	ketamine_block = 1 (1)
+	ampa_block = 1 (1)
 	ltdinvl = 250 (ms)		: longer intervals, no change
 	ltpinvl = 33.33 (ms)		: shorter interval, LTP
 	sighalf = 50 (1)
@@ -117,9 +121,9 @@ INITIAL {
 
 BREAKPOINT {
 	SOLVE release METHOD cnexp
-	gnmda = mgblock(v)*(Ron + Roff)*gmax*nmdafactor
+	gnmda = mgblock(v)*(Ron + Roff)*gmax*nmdafactor*ketamine_block
 	inmda = gnmda*(v - E)
-	iampa = gampa*(v - E)
+	iampa = ampa_block*gampa*(v - E)
 	i = iampa + inmda
 }
 
