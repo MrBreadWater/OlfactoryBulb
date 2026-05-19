@@ -409,7 +409,12 @@ def write_batch_script(
     if replace_mpi_exec:
         lines.extend(
             [
-                "resolved_mpi_exec=${OB_MPIEXEC:-" + shlex.quote(mpi_exec) + "}",
+                "configured_mpi_exec=" + shlex.quote(mpi_exec),
+                "if [[ \"$configured_mpi_exec\" == \"srun\" && -n \"${OB_MPIEXEC:-}\" ]]; then",
+                "  resolved_mpi_exec=\"$OB_MPIEXEC\"",
+                "else",
+                "  resolved_mpi_exec=\"$configured_mpi_exec\"",
+                "fi",
                 "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
             ]
         )

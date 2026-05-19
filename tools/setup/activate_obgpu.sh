@@ -65,7 +65,9 @@ detect_srun_mpi_exec() {
   printf 'srun --cpu-bind=none\n'
 }
 
-if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v srun >/dev/null 2>&1; then
+if [[ -n "${SLURM_JOB_ID:-}" ]] && command -v mpiexec >/dev/null 2>&1; then
+  export OB_MPIEXEC="${OB_MPIEXEC:-mpiexec --bind-to none}"
+elif [[ -n "${SLURM_JOB_ID:-}" ]] && command -v srun >/dev/null 2>&1; then
   if [[ -z "${OB_MPIEXEC:-}" ]]; then
     if detected_mpi_exec="$(detect_srun_mpi_exec)"; then
       export OB_MPIEXEC="${detected_mpi_exec}"
