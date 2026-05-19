@@ -2687,7 +2687,7 @@ if root.exists():
             ["scancel", job_id],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            universal_newlines=True,
             check=False,
         )
         actions.append({
