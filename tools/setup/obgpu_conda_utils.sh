@@ -115,7 +115,7 @@ obgpu_activate_conda_env() {
     if [[ -f "${conda_sh}" ]]; then
       # shellcheck disable=SC1090
       source "${conda_sh}"
-      conda activate "${env_name}"
+      conda activate "${env_name}" || return 1
       return 0
     fi
   done
@@ -123,12 +123,12 @@ obgpu_activate_conda_env() {
   hook_output="$(conda shell.bash hook 2>/dev/null || true)"
   if [[ -n "${hook_output}" ]] && grep -q '__conda_' <<<"${hook_output}"; then
     eval "${hook_output}"
-    conda activate "${env_name}"
+    conda activate "${env_name}" || return 1
     return 0
   fi
 
   if type activate >/dev/null 2>&1; then
-    activate "${env_name}"
+    activate "${env_name}" || return 1
     return 0
   fi
 
