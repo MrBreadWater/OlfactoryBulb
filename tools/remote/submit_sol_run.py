@@ -125,6 +125,10 @@ def write_batch_script(
     bootstrap_log_path = wrapper_dir / "bootstrap.log"
     git_ref_value = git_ref or ""
     heartbeat_timeout_s = max(int(getattr(args, "heartbeat_timeout_s", 120)), 0)
+    needs_coreneuron = any(
+        flag in effective_command
+        for flag in ("--coreneuron", "--coreneuron-gpu", "--coreneuron-file-mode")
+    )
     heartbeat_path.parent.mkdir(parents=True, exist_ok=True)
     heartbeat_path.write_text("")
     lines = [
@@ -140,6 +144,7 @@ def write_batch_script(
         "shared_repo_root={}".format(shlex.quote(str(repo_root))),
         "job_repo_mode={}".format(shlex.quote(str(repo_mode))),
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
+        "job_needs_coreneuron={}".format("1" if needs_coreneuron else "0"),
         "git_lock_path=\"$shared_repo_root/.obgpu-git.lock\"",
         "bootstrap_log={}".format(shlex.quote(str(bootstrap_log_path))),
         "notebook_heartbeat_path={}".format(shlex.quote(str(heartbeat_path))),
@@ -163,6 +168,7 @@ def write_batch_script(
         "    printf 'repo_head=%s\\n' \"$(git -C \"$job_repo_root\" rev-parse HEAD 2>/dev/null || true)\"",
         "    printf 'machine_arch=%s\\n' \"$(uname -m)\"",
         "    printf 'nrnivmodl=%s\\n' \"$(command -v nrnivmodl || true)\"",
+        "    printf 'coreneuron=%s\\n' \"$job_needs_coreneuron\"",
         "    find \"$job_repo_root/prev_ob_models/Birgiolas2020/Mechanisms\" -maxdepth 1 -name '*.mod' -type f | sort | while read -r mod_file; do",
         "      printf 'mod=%s sha=%s\\n' \"${mod_file#\"$job_repo_root/\"}\" \"$(file_sha256 \"$mod_file\")\"",
         "    done",
@@ -178,9 +184,13 @@ def write_batch_script(
         "    printf '%s\\n' '[OBGPU batch] mechanisms are current' >> \"$bootstrap_log\"",
         "    return 0",
         "  fi",
-        "  printf '%s\\n' '[OBGPU batch] rebuilding mechanisms for current checkout' >> \"$bootstrap_log\"",
+        "  printf '%s\\n' \"[OBGPU batch] rebuilding mechanisms for current checkout (coreneuron=${job_needs_coreneuron})\" >> \"$bootstrap_log\"",
         "  cd \"$job_repo_root\"",
-        "  run_git_locked env OMPI_CC=\"${OMPI_CC:-gcc}\" OMPI_CXX=\"${OMPI_CXX:-g++}\" nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms >> \"$bootstrap_log\" 2>&1",
+        "  if [[ \"$job_needs_coreneuron\" == \"1\" ]]; then",
+        "    run_git_locked env OMPI_CC=\"${OMPI_CC:-gcc}\" OMPI_CXX=\"${OMPI_CXX:-g++}\" nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms >> \"$bootstrap_log\" 2>&1",
+        "  else",
+        "    run_git_locked env OMPI_CC=\"${OMPI_CC:-gcc}\" OMPI_CXX=\"${OMPI_CXX:-g++}\" nrnivmodl prev_ob_models/Birgiolas2020/Mechanisms >> \"$bootstrap_log\" 2>&1",
+        "  fi",
         "  if [[ -x \"$job_repo_root/tools/setup/fix_nvhpc_libnrnmech.sh\" && -f \"$lib_path\" ]]; then",
         "    \"$job_repo_root/tools/setup/fix_nvhpc_libnrnmech.sh\" \"$lib_path\" >> \"$bootstrap_log\" 2>&1",
         "  fi",
