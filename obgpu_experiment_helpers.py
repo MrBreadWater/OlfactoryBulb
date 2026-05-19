@@ -1267,8 +1267,8 @@ def _resolve_local_git_upstream_ref() -> str | None:
     return upstream or None
 
 
-def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
-    """Return whether one local git ref currently resolves to the requested commit."""
+def _git_rev_parse(ref_name: str) -> str | None:
+    """Resolve one local git ref to a commit SHA."""
     completed = subprocess.run(
         ["git", "rev-parse", ref_name],
         cwd=REPO_ROOT,
@@ -1277,8 +1277,14 @@ def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
         check=False,
     )
     if completed.returncode != 0:
-        return False
-    return (completed.stdout or "").strip() == commit_sha
+        return None
+    sha = (completed.stdout or "").strip()
+    return sha or None
+
+
+def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
+    """Return whether one local git ref currently resolves to the requested commit."""
+    return _git_rev_parse(ref_name) == commit_sha
 
 
 def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
@@ -1291,6 +1297,37 @@ def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
         check=False,
     )
     return completed.returncode == 0
+
+
+def _local_git_sync_base_candidates(commit_sha: str, *, max_count: int = 500) -> list[str]:
+    """Return local ancestor SHAs to test as possible remote bundle bases."""
+    candidates: list[str] = []
+    seen: set[str] = set()
+
+    def add_candidate(ref_name: str | None) -> None:
+        if not ref_name:
+            return
+        sha = _git_rev_parse(ref_name)
+        if not sha or sha == commit_sha or sha in seen:
+            return
+        if not _git_ref_is_ancestor(sha, commit_sha):
+            return
+        seen.add(sha)
+        candidates.append(sha)
+
+    completed = subprocess.run(
+        ["git", "rev-list", "--first-parent", f"--max-count={int(max_count)}", f"{commit_sha}^"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode == 0:
+        for line in (completed.stdout or "").splitlines():
+            add_candidate(line.strip())
+
+    add_candidate(_resolve_local_git_upstream_ref())
+    return candidates
 
 
 def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
@@ -3214,8 +3251,8 @@ def _remote_status_has_artifacts(status: dict[str, Any] | None) -> bool:
     )
 
 
-def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
-    """Create a self-contained temporary git bundle for the requested commit."""
+def _create_git_bundle_for_commit(commit_sha: str, *, exclude_ref: str | None = None) -> tuple[Path, str]:
+    """Create a temporary git bundle for the requested commit."""
     branch_name = _resolve_local_git_branch()
     temp_ref: str | None = None
     source_ref: str
@@ -3244,10 +3281,13 @@ def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
     bundle_handle.close()
 
     try:
-        # Keep the bundle self-contained. The remote Sol clone can lag behind or
-        # have a different upstream history, so excluding the local upstream ref
-        # can produce a thin bundle that the remote cannot fetch.
         bundle_args = ["git", "bundle", "create", str(bundle_path), source_ref]
+        if (
+            exclude_ref
+            and not _git_ref_points_to_commit(exclude_ref, commit_sha)
+            and _git_ref_is_ancestor(exclude_ref, commit_sha)
+        ):
+            bundle_args.append(f"^{exclude_ref}")
         created = subprocess.run(
             bundle_args,
             cwd=REPO_ROOT,
@@ -3277,6 +3317,35 @@ def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
                 text=True,
                 check=False,
             )
+
+
+def _find_remote_git_bundle_base(
+    config: dict[str, Any],
+    *,
+    remote_repo_root: PurePosixPath,
+    candidate_shas: list[str],
+) -> str | None:
+    """Return the newest local ancestor SHA already present in the remote repo."""
+    candidates = [sha for sha in candidate_shas if sha]
+    if not candidates:
+        return None
+
+    quoted_repo = shlex.quote(remote_repo_root.as_posix())
+    quoted_candidates = " ".join(shlex.quote(sha) for sha in candidates)
+    command = (
+        f"for sha in {quoted_candidates}; do "
+        f"if git -C {quoted_repo} cat-file -e \"$sha^{{commit}}\" 2>/dev/null; "
+        "then printf '%s\\n' \"$sha\"; exit 0; fi; "
+        "done; exit 1"
+    )
+    completed = _run_ssh_shell(config, command)
+    if completed.returncode != 0:
+        return None
+    selected = (completed.stdout or "").strip().splitlines()
+    if not selected:
+        return None
+    base_sha = selected[-1].strip()
+    return base_sha if base_sha in candidates else None
 
 
 def _ensure_remote_git_ref_available(
@@ -3330,8 +3399,22 @@ def _ensure_remote_git_ref_available(
 
     connection = _connect_paramiko(config)
     sftp = connection["sftp"]
-    _progress_write(f"[Sol remote] Building local git bundle for commit {remote_git_ref[:12]}...")
-    bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref)
+    bundle_base = _find_remote_git_bundle_base(
+        config,
+        remote_repo_root=remote_repo_root,
+        candidate_shas=_local_git_sync_base_candidates(remote_git_ref),
+    )
+    if bundle_base:
+        _progress_write(
+            f"[Sol remote] Building incremental git bundle for commit "
+            f"{remote_git_ref[:12]} from remote base {bundle_base[:12]}..."
+        )
+    else:
+        _progress_write(
+            f"[Sol remote] Building self-contained git bundle for commit {remote_git_ref[:12]} "
+            "because no tested remote ancestor was found..."
+        )
+    bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref, exclude_ref=bundle_base)
     remote_bundle_path = f"/tmp/obgpu-sync-{remote_git_ref[:12]}-{os.getpid()}.bundle"
     remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
     remote_git_lock = shlex.quote((remote_repo_root / ".obgpu-git.lock").as_posix())
