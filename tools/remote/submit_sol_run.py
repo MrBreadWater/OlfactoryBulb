@@ -165,7 +165,6 @@ def write_batch_script(
         "}",
         "mechanism_fingerprint() {",
         "  {",
-        "    printf 'repo_head=%s\\n' \"$(git -C \"$job_repo_root\" rev-parse HEAD 2>/dev/null || true)\"",
         "    printf 'machine_arch=%s\\n' \"$(uname -m)\"",
         "    printf 'nrnivmodl=%s\\n' \"$(command -v nrnivmodl || true)\"",
         "    printf 'coreneuron=%s\\n' \"$job_needs_coreneuron\"",
