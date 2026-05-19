@@ -3215,9 +3215,8 @@ def _remote_status_has_artifacts(status: dict[str, Any] | None) -> bool:
 
 
 def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
-    """Create a temporary git bundle that carries the requested local commit."""
+    """Create a self-contained temporary git bundle for the requested commit."""
     branch_name = _resolve_local_git_branch()
-    upstream_ref = _resolve_local_git_upstream_ref()
     temp_ref: str | None = None
     source_ref: str
 
@@ -3245,13 +3244,10 @@ def _create_git_bundle_for_commit(commit_sha: str) -> tuple[Path, str]:
     bundle_handle.close()
 
     try:
+        # Keep the bundle self-contained. The remote Sol clone can lag behind or
+        # have a different upstream history, so excluding the local upstream ref
+        # can produce a thin bundle that the remote cannot fetch.
         bundle_args = ["git", "bundle", "create", str(bundle_path), source_ref]
-        if (
-            upstream_ref
-            and not _git_ref_points_to_commit(upstream_ref, commit_sha)
-            and _git_ref_is_ancestor(upstream_ref, commit_sha)
-        ):
-            bundle_args.append(f"^{upstream_ref}")
         created = subprocess.run(
             bundle_args,
             cwd=REPO_ROOT,
