@@ -1390,6 +1390,19 @@ def _remote_git_ref_cache_key(config: dict[str, Any], remote_repo_root: PurePosi
     return f"{_paramiko_connection_key(config)}::{remote_repo_root.as_posix()}"
 
 
+def _build_remote_git_repo_probe_command(remote_repo_root: PurePosixPath) -> str:
+    """Build a remote shell command that verifies the configured repo exists."""
+    repo_root = remote_repo_root.as_posix()
+    quoted_repo = shlex.quote(repo_root)
+    missing_message = shlex.quote(f"remote_repo_root does not exist: {repo_root}")
+    not_git_message = shlex.quote(f"remote_repo_root is not a git work tree: {repo_root}")
+    return (
+        f"if ! test -d {quoted_repo}; then printf '%s\\n' {missing_message} >&2; exit 2; fi; "
+        f"if ! git -C {quoted_repo} rev-parse --is-inside-work-tree >/dev/null 2>&1; "
+        f"then printf '%s\\n' {not_git_message} >&2; exit 3; fi"
+    )
+
+
 def _normalize_slurm_state(raw_state: str) -> str:
     """Normalize Slurm state tokens by removing suffixes such as '+'."""
     return raw_state.split()[0].split("+", 1)[0].strip().upper()
@@ -3286,6 +3299,20 @@ def _ensure_remote_git_ref_available(
         _progress_write(f"[Sol remote] Remote git cache hit for commit {remote_git_ref[:12]}.")
         return
 
+    repo_probe_completed = _run_ssh_shell(
+        config,
+        _build_remote_git_repo_probe_command(remote_repo_root),
+    )
+    if repo_probe_completed.returncode != 0:
+        raise RuntimeError(
+            "The configured Sol remote_repo_root is not an accessible git repo, so the notebook "
+            "cannot publish the local commit there.\n"
+            f"Remote repo: {remote_repo_root.as_posix()}\n"
+            f"Commit: {remote_git_ref}\n"
+            f"Stdout:\n{repo_probe_completed.stdout}\n\n"
+            f"Stderr:\n{repo_probe_completed.stderr}"
+        )
+
     _progress_write(f"[Sol remote] Checking whether remote repo already has commit {remote_git_ref[:12]}...")
     check_command = (
         f"git -C {shlex.quote(remote_repo_root.as_posix())} "
@@ -3321,7 +3348,8 @@ def _ensure_remote_git_ref_available(
         f" && rm -f {shlex.quote(remote_bundle_path)}"
     )
     fetch_command = (
-        f"if command -v flock >/dev/null 2>&1; then flock {remote_git_lock} bash -lc {shlex.quote(fetch_body)}; "
+        f"if command -v flock >/dev/null 2>&1; then "
+        f"touch {remote_git_lock} && flock {remote_git_lock} bash -lc {shlex.quote(fetch_body)}; "
         f"else {fetch_body}; fi"
     )
 
