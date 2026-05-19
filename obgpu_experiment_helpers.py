@@ -138,6 +138,7 @@ CONTROL_HELP = {
     "remote_repo_root": "Absolute repo path on Sol.",
     "remote_results_root": "Remote root directory where timestamped notebook runs are written.",
     "remote_conda_activate_cmd": "Shell snippet used on the remote cluster before launching the benchmark command. Generic remote runs default to 'source tools/setup/activate_obgpu.sh'; Sol uses 'source tools/setup/activate_sol_obgpu.sh'.",
+    "remote_runtime_profiles": "Optional ordered runtime-profile selectors. Each profile can match node arch/features and choose an activation command plus mechanism profile.",
     "remote_fallback_conda_activate_cmd": "Optional shell snippet used when the allocated Slurm nodes do not all match remote_fast_node_feature.",
     "remote_fast_node_feature": "Optional Slurm node feature required for the primary remote environment, e.g. 'cascadelake'.",
     "remote_mechanism_profile": "Mechanism build/cache profile for the primary remote environment. 'default' uses remote_repo_root/x86_64.",
@@ -722,6 +723,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_repo_root": None,
         "remote_results_root": None,
         "remote_conda_activate_cmd": "source tools/setup/activate_obgpu.sh",
+        "remote_runtime_profiles": [],
         "remote_fallback_conda_activate_cmd": None,
         "remote_fast_node_feature": None,
         "remote_mechanism_profile": "default",
@@ -770,6 +772,7 @@ def build_slurm_remote_config(
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
     remote_conda_activate_cmd: str = "source tools/setup/activate_obgpu.sh",
+    remote_runtime_profiles: list[dict[str, Any]] | None = None,
     remote_fallback_conda_activate_cmd: str | None = None,
     remote_fast_node_feature: str | None = None,
     remote_mechanism_profile: str = "default",
@@ -815,6 +818,7 @@ def build_slurm_remote_config(
         "remote_repo_root": remote_repo_root,
         "remote_results_root": str(remote_results_root),
         "remote_conda_activate_cmd": str(remote_conda_activate_cmd),
+        "remote_runtime_profiles": list(remote_runtime_profiles or []),
         "remote_fallback_conda_activate_cmd": None
         if remote_fallback_conda_activate_cmd in (None, "")
         else str(remote_fallback_conda_activate_cmd),
@@ -858,6 +862,7 @@ def build_sol_remote_config(
     remote_repo_root: str | Path,
     remote_results_root: str | Path | None = None,
     remote_conda_activate_cmd: str = "source tools/setup/activate_sol_obgpu.sh",
+    remote_runtime_profiles: list[dict[str, Any]] | None = None,
     remote_fallback_conda_activate_cmd: str | None = None,
     remote_fast_node_feature: str | None = None,
     remote_mechanism_profile: str = "default",
@@ -895,6 +900,7 @@ def build_sol_remote_config(
         remote_repo_root=remote_repo_root,
         remote_results_root=remote_results_root,
         remote_conda_activate_cmd=remote_conda_activate_cmd,
+        remote_runtime_profiles=remote_runtime_profiles,
         remote_fallback_conda_activate_cmd=remote_fallback_conda_activate_cmd,
         remote_fast_node_feature=remote_fast_node_feature,
         remote_mechanism_profile=remote_mechanism_profile,
@@ -925,6 +931,47 @@ def build_sol_remote_config(
     )
     config["runner_backend"] = "sol_slurm"
     return config
+
+
+def default_sol_runtime_profiles(
+    *,
+    grace_hopper_env: str = "OBGPU-gh",
+    arm_env: str = "OBGPU-arm",
+    x86_env: str = "OBGPU",
+    grace_hopper_mechanism_profile: str = "sol-gh",
+    arm_mechanism_profile: str = "sol-arm",
+    x86_mechanism_profile: str = "sol-x86_64",
+) -> list[dict[str, Any]]:
+    """Return ordered runtime profiles for Sol's Grace Hopper, ARM, and x86 nodes.
+
+    The remote batch script selects the first profile whose node-info predicates
+    match every allocated node. Mechanism profiles keep same-architecture builds
+    separate when Sol has more than one CPU/GPU target under one repo checkout.
+    """
+    return [
+        {
+            "name": "sol-grace-hopper",
+            "conda_activate_cmd": f"source tools/setup/activate_sol_obgpu.sh {grace_hopper_env}",
+            "mechanism_profile": grace_hopper_mechanism_profile,
+            "match_arch": ["aarch64", "arm64"],
+            "match_any": ["grace", "hopper", "gh200"],
+        },
+        {
+            "name": "sol-arm",
+            "conda_activate_cmd": f"source tools/setup/activate_sol_obgpu.sh {arm_env}",
+            "mechanism_profile": arm_mechanism_profile,
+            "match_arch": ["aarch64", "arm64"],
+            "reject_any": ["grace", "hopper", "gh200"],
+        },
+        {
+            "name": "sol-x86_64",
+            "conda_activate_cmd": f"source tools/setup/activate_sol_obgpu.sh {x86_env}",
+            "mechanism_profile": x86_mechanism_profile,
+            "match_arch": ["x86_64", "amd64"],
+        },
+    ]
+
+
 def make_label(config: dict[str, Any], timestamp: str | None = None) -> str:
     """Build the timestamped notebook label for a run configuration."""
     timestamp = timestamp or make_timestamp()
@@ -1497,6 +1544,7 @@ def _slurm_allocation_signature(config: dict[str, Any]) -> dict[str, Any]:
         "mem": None if config.get("slurm_mem") in (None, "") else str(config.get("slurm_mem")),
         "extra_args": [str(arg) for arg in config.get("slurm_extra_args", [])],
         "remote_conda_activate_cmd": str(config.get("remote_conda_activate_cmd") or ""),
+        "remote_runtime_profiles": _json_ready(config.get("remote_runtime_profiles") or []),
         "remote_fallback_conda_activate_cmd": str(config.get("remote_fallback_conda_activate_cmd") or ""),
         "remote_fast_node_feature": str(config.get("remote_fast_node_feature") or ""),
         "remote_mechanism_profile": str(config.get("remote_mechanism_profile") or "default"),
@@ -2834,6 +2882,10 @@ def _build_remote_submit_command(
     ]
 
     fallback_conda_activate_cmd = config.get("remote_fallback_conda_activate_cmd")
+    runtime_profiles = config.get("remote_runtime_profiles") or []
+    if runtime_profiles:
+        profiles_b64 = b64encode(json.dumps(runtime_profiles, sort_keys=True).encode("utf-8")).decode("ascii")
+        command.extend(["--runtime-profiles-b64", profiles_b64])
     if fallback_conda_activate_cmd not in (None, ""):
         command.extend(["--fallback-conda-activate-cmd", str(fallback_conda_activate_cmd)])
     fast_node_feature = config.get("remote_fast_node_feature")
@@ -4879,6 +4931,7 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "remote_repo_root",
         "remote_results_root",
         "remote_conda_activate_cmd",
+        "remote_runtime_profiles",
         "remote_fallback_conda_activate_cmd",
         "remote_fast_node_feature",
         "remote_mechanism_profile",

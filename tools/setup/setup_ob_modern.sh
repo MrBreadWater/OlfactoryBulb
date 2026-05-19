@@ -9,8 +9,10 @@ trap 'status=$?; echo "[OBGPU setup] failed (exit ${status}) at line ${LINENO}: 
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENV_NAME="${ENV_NAME:-OBGPU}"
+ENABLE_GPU_WAS_SET="${ENABLE_GPU+x}"
 ENABLE_GPU="${ENABLE_GPU:-0}"
 OBGPU_BUILD_JOBS="${OBGPU_BUILD_JOBS:-8}"
+OBGPU_SOL_PROFILE="${OBGPU_SOL_PROFILE:-}"
 OBGPU_CPU_TARGET="${OBGPU_CPU_TARGET:-}"
 OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:-}"
 OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:-}"
@@ -40,6 +42,24 @@ if [[ ! "${OBGPU_BUILD_JOBS}" =~ ^[1-9][0-9]*$ ]]; then
   echo "OBGPU_BUILD_JOBS must be a positive integer, got '${OBGPU_BUILD_JOBS}'" >&2
   exit 1
 fi
+
+case "${OBGPU_SOL_PROFILE,,}" in
+  grace-hopper|grace_hopper|gh|gh200)
+    if [[ -z "${ENABLE_GPU_WAS_SET}" ]]; then
+      ENABLE_GPU=1
+    fi
+    OBGPU_MECHANISM_PROFILE="${OBGPU_MECHANISM_PROFILE:-sol-gh}"
+    CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-90}"
+    NVHPC_COMPUTE_CAPABILITIES="${NVHPC_COMPUTE_CAPABILITIES:-90}"
+    GPU_BUILD_TAG="${GPU_BUILD_TAG:-sol-gh}"
+    ;;
+  arm|aarch64|arm64)
+    OBGPU_MECHANISM_PROFILE="${OBGPU_MECHANISM_PROFILE:-sol-arm}"
+    ;;
+  x86|x86_64|amd64)
+    OBGPU_MECHANISM_PROFILE="${OBGPU_MECHANISM_PROFILE:-sol-x86_64}"
+    ;;
+esac
 
 if [[ -z "${OBGPU_MECHANISM_PROFILE}" ]]; then
   if [[ "${OBGPU_CPU_TARGET}" == "portable" ]]; then
@@ -458,6 +478,7 @@ OBGPU_STAMP_NVHPC_CUDA_HOME='${NVHPC_CUDA_HOME:-}'
 OBGPU_STAMP_CPU_TARGET='${OBGPU_CPU_TARGET}'
 OBGPU_STAMP_CPU_CFLAGS='${OBGPU_CPU_CFLAGS}'
 OBGPU_STAMP_CPU_CXXFLAGS='${OBGPU_CPU_CXXFLAGS}'
+OBGPU_STAMP_SOL_PROFILE='${OBGPU_SOL_PROFILE}'
 OBGPU_STAMP_MECHANISM_PROFILE='${OBGPU_MECHANISM_PROFILE}'
 OBGPU_STAMP_MECHANISM_ROOT='${OBGPU_MECHANISM_ROOT_PATH}'
 EOF
@@ -486,6 +507,7 @@ build_stamp_fingerprint() {
     printf 'obgpu_cpu_target=%s\n' "${OBGPU_CPU_TARGET}"
     printf 'obgpu_cpu_cflags=%s\n' "${OBGPU_CPU_CFLAGS}"
     printf 'obgpu_cpu_cxxflags=%s\n' "${OBGPU_CPU_CXXFLAGS}"
+    printf 'obgpu_sol_profile=%s\n' "${OBGPU_SOL_PROFILE}"
     printf 'obgpu_mechanism_profile=%s\n' "${OBGPU_MECHANISM_PROFILE}"
     printf 'obgpu_mechanism_root=%s\n' "${OBGPU_MECHANISM_ROOT_PATH}"
     printf 'nvhpc_c_compiler=%s\n' "${NVHPC_C_COMPILER:-}"
@@ -516,6 +538,7 @@ mechanism_stamp_fingerprint() {
     printf 'obgpu_cpu_target=%s\n' "${OBGPU_CPU_TARGET}"
     printf 'obgpu_cpu_cflags=%s\n' "${OBGPU_CPU_CFLAGS}"
     printf 'obgpu_cpu_cxxflags=%s\n' "${OBGPU_CPU_CXXFLAGS}"
+    printf 'obgpu_sol_profile=%s\n' "${OBGPU_SOL_PROFILE}"
     printf 'machine_arch=%s\n' "$(uname -m)"
     while IFS= read -r mod_file; do
       [[ -z "${mod_file}" ]] && continue
@@ -574,8 +597,20 @@ export CPLUS_INCLUDE_PATH="${CONDA_PREFIX}/include${CPLUS_INCLUDE_PATH:+:${CPLUS
 gpu_cmake_args=()
 
 if [[ "${OBGPU_CPU_TARGET}" == "portable" && "${ENABLE_GPU}" != "1" ]]; then
-  OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:--O2 -march=x86-64 -mtune=generic}"
-  OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:--O2 -march=x86-64 -mtune=generic}"
+  case "$(uname -m)" in
+    x86_64|amd64)
+      OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:--O2 -march=x86-64 -mtune=generic}"
+      OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:--O2 -march=x86-64 -mtune=generic}"
+      ;;
+    aarch64|arm64)
+      OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:--O2}"
+      OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:--O2}"
+      ;;
+    *)
+      OBGPU_CPU_CFLAGS="${OBGPU_CPU_CFLAGS:--O2}"
+      OBGPU_CPU_CXXFLAGS="${OBGPU_CPU_CXXFLAGS:--O2}"
+      ;;
+  esac
 fi
 
 if [[ "${ENABLE_GPU}" == "1" ]]; then
@@ -832,6 +867,7 @@ export NMODL_PYLIB=${PYTHON_SHARED_LIB}
 export OBGPU_CPU_TARGET='${OBGPU_CPU_TARGET}'
 export OBGPU_CPU_CFLAGS='${OBGPU_CPU_CFLAGS}'
 export OBGPU_CPU_CXXFLAGS='${OBGPU_CPU_CXXFLAGS}'
+export OBGPU_SOL_PROFILE='${OBGPU_SOL_PROFILE}'
 export OBGPU_MECHANISM_PROFILE='${OBGPU_MECHANISM_PROFILE}'
 if [[ -n "\${NRN_NMODL_PATH+x}" ]]; then
   export _OBGPU_OLD_NRN_NMODL_PATH="\${NRN_NMODL_PATH}"
@@ -861,6 +897,7 @@ unset NMODL_PYLIB
 unset OBGPU_CPU_TARGET
 unset OBGPU_CPU_CFLAGS
 unset OBGPU_CPU_CXXFLAGS
+unset OBGPU_SOL_PROFILE
 unset OBGPU_MECHANISM_PROFILE
 if [[ -n "${_OBGPU_OLD_NRN_NMODL_PATH+x}" ]]; then
   export NRN_NMODL_PATH="${_OBGPU_OLD_NRN_NMODL_PATH}"
@@ -891,6 +928,7 @@ export NMODL_PYLIB="${PYTHON_SHARED_LIB}"
 export OBGPU_CPU_TARGET
 export OBGPU_CPU_CFLAGS
 export OBGPU_CPU_CXXFLAGS
+export OBGPU_SOL_PROFILE
 export OBGPU_MECHANISM_PROFILE
 unset NRN_NMODL_PATH
 export OBGPU_MECHANISM_ROOT="${OBGPU_MECHANISM_ROOT_PATH}"
