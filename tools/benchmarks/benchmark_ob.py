@@ -421,12 +421,13 @@ def main() -> None:
         except Exception:
             pass
 
-    try:
-        from neuron import h
+    if os.environ.get("OBGPU_SKIP_H_QUIT", "0") != "1":
+        try:
+            from neuron import h
 
-        h.quit()
-    except Exception:
-        pass
+            h.quit()
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

@@ -129,7 +129,6 @@ def neuron_mpi_preflight_suffix(benchmark_suffix):
         "if expected > 1 and nhost != expected:\n"
         "    raise RuntimeError('NEURON MPI preflight saw %d ranks, expected %d' % (nhost, expected))\n"
         "pc.barrier()\n"
-        "h.quit()\n"
     )
     return benchmark_suffix[: nrniv_index + 1] + ["-mpi", "-python", "-c", code]
 
@@ -385,6 +384,39 @@ def write_batch_script(
         "  fi",
         "  printf '[OBGPU batch] mechanism root: %s\\n' \"$job_mechanism_root\" >> \"$bootstrap_log\"",
         "}",
+        "configure_neuron_launch() {",
+        "  obgpu_mechanism_dll=\"$job_mechanism_root/$(uname -m)/libnrnmech.so\"",
+        "  obgpu_neuron_launch_dir=\"$job_repo_root\"",
+        "  obgpu_neuron_dll_args=()",
+        "  if [[ \"$selected_mechanism_profile\" != \"default\" ]]; then",
+        "    if [[ ! -f \"$obgpu_mechanism_dll\" ]]; then",
+        "      printf '[OBGPU batch] expected mechanism dll is missing: %s\\n' \"$obgpu_mechanism_dll\" >> \"$bootstrap_log\"",
+        "      return 2",
+        "    fi",
+        "    obgpu_neuron_launch_dir=\"$wrapper_dir/neuron-launch\"",
+        "    mkdir -p \"$obgpu_neuron_launch_dir\"",
+        "    obgpu_neuron_dll_args=(-dll \"$obgpu_mechanism_dll\")",
+        "    export OBGPU_SKIP_H_QUIT=1",
+        "    printf '[OBGPU batch] launching NEURON from neutral cwd with dll %s\\n' \"$obgpu_mechanism_dll\" >> \"$bootstrap_log\"",
+        "  else",
+        "    unset OBGPU_SKIP_H_QUIT || true",
+        "  fi",
+        "}",
+        "inject_neuron_dll_args() {",
+        "  local inserted=0",
+        "  local part base",
+        "  obgpu_injected_command=()",
+        "  for part in \"$@\"; do",
+        "    obgpu_injected_command+=(\"$part\")",
+        "    base=\"$(basename \"$part\")\"",
+        "    if [[ \"$inserted\" == \"0\" && \"$base\" == \"nrniv\" ]]; then",
+        "      if [[ \"${#obgpu_neuron_dll_args[@]}\" -gt 0 ]]; then",
+        "        obgpu_injected_command+=(\"${obgpu_neuron_dll_args[@]}\")",
+        "      fi",
+        "      inserted=1",
+        "    fi",
+        "  done",
+        "}",
         "mechanism_fingerprint() {",
         "  {",
         "    printf 'mechanism_profile=%s\\n' \"$selected_mechanism_profile\"",
@@ -587,6 +619,7 @@ def write_batch_script(
         "export CORENEURONLIB=\"$job_mechanism_root/$(uname -m)/libcorenrnmech.so\"",
         "export LD_LIBRARY_PATH=\"$job_mechanism_root/$(uname -m)${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\"",
         "ensure_mechanisms_current",
+        "configure_neuron_launch",
         "printf '%s\\n' '[OBGPU batch] bootstrap complete'",
         "} >> \"$bootstrap_log\" 2>&1",
     ]
@@ -606,10 +639,12 @@ def write_batch_script(
             lines.extend(
                 [
                     "obgpu_preflight=(" + " ".join(shlex.quote(part) for part in preflight_suffix) + ")",
+                    "inject_neuron_dll_args \"${obgpu_preflight[@]}\"",
+                    "obgpu_preflight=(\"${obgpu_injected_command[@]}\")",
                     "obgpu_preflight_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_preflight[@]}\")",
                     "printf '%s\\n' '[OBGPU batch] running NEURON MPI preflight' >> \"$bootstrap_log\"",
                     "printf '%s\\n' \"$(printf '%q ' \"${obgpu_preflight_command[@]}\")\" >> \"$bootstrap_log\"",
-                    "if ! \"${obgpu_preflight_command[@]}\" >> \"$bootstrap_log\" 2>&1; then",
+                    "if ! (cd \"$obgpu_neuron_launch_dir\" && \"${obgpu_preflight_command[@]}\") >> \"$bootstrap_log\" 2>&1; then",
                     "  printf '%s\\n' '[OBGPU batch] NEURON MPI preflight failed' >> \"$bootstrap_log\"",
                     "  exit 126",
                     "fi",
@@ -618,6 +653,8 @@ def write_batch_script(
         lines.extend(
             [
                 "obgpu_command=(" + " ".join(shlex.quote(part) for part in benchmark_suffix) + ")",
+                "inject_neuron_dll_args \"${obgpu_command[@]}\"",
+                "obgpu_command=(\"${obgpu_injected_command[@]}\")",
                 "obgpu_command=(\"${_obgpu_mpi_parts[@]}\" \"${obgpu_command[@]}\")",
                 "touch " + shlex.quote(str(wrapper_dir / "command.txt")) + " "
                 + shlex.quote(str(wrapper_dir / "stdout.txt")) + " "
@@ -626,7 +663,7 @@ def write_batch_script(
                 + shlex.quote(str(wrapper_dir / "command.txt")),
                 "printf '%s\\n' '[OBGPU batch] launching command' >> \"$bootstrap_log\"",
                 "ls -lah \"$result_dir\" >> \"$bootstrap_log\" 2>&1 || true",
-                "\"${obgpu_command[@]}\" > "
+                "(cd \"$obgpu_neuron_launch_dir\" && \"${obgpu_command[@]}\") > "
                 + shlex.quote(str(wrapper_dir / "stdout.txt"))
                 + " 2> "
                 + shlex.quote(str(wrapper_dir / "stderr.txt"))
