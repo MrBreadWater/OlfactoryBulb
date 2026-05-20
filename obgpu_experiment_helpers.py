@@ -947,8 +947,8 @@ def build_sol_remote_config(
 
 def default_sol_runtime_profiles(
     *,
-    grace_hopper_env: str = "OBGPU-gh",
-    arm_env: str = "OBGPU-arm",
+    grace_hopper_env: str = "OBGPU",
+    arm_env: str = "OBGPU",
     x86_env: str = "OBGPU",
     grace_hopper_mechanism_profile: str = "sol-gh",
     arm_mechanism_profile: str = "sol-arm",
@@ -959,6 +959,8 @@ def default_sol_runtime_profiles(
     The remote batch script selects the first profile whose node-info predicates
     match every allocated node. Mechanism profiles keep same-architecture builds
     separate when Sol has more than one CPU/GPU target under one repo checkout.
+    The conda environment defaults to the shared Sol OBGPU env that existing
+    notebook runs use; callers can still pass architecture-specific env names.
     """
     return [
         {
