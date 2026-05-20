@@ -164,6 +164,9 @@ CONTROL_HELP = {
     "slurm_reuse_allocation": "When True, cache one reusable Slurm allocation in the notebook runtime and launch runs as srun steps inside it.",
     "slurm_allocation_time": "Optional walltime for the cached reusable allocation. Defaults to slurm_time when unset.",
     "slurm_allocation_name": "Optional job-name prefix for cached reusable allocations. Defaults to 'obgpu_notebook_alloc'.",
+    "sweep_engine": "Sweep execution engine: 'auto', 'legacy', or 'remote_batch'.",
+    "sweep_parallelism": "Maximum concurrent sweep items inside one remote batch job. None/0 uses an automatic best-effort choice.",
+    "sweep_sync_live": "When True, sync completed remote sweep items back locally while later items are still running.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
@@ -784,6 +787,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "slurm_reuse_allocation": False,
         "slurm_allocation_time": None,
         "slurm_allocation_name": None,
+        "sweep_engine": "auto",
+        "sweep_parallelism": None,
+        "sweep_sync_live": True,
         "remote_poll_interval_s": 1.0,
         "remote_live_status": True,
         "remote_live_logs": True,
@@ -1310,6 +1316,122 @@ def build_run_command(
         command.extend(["--parallel-timeout", str(float(config["parallel_timeout"]))])
 
     return command
+
+
+def _safe_sweep_path_label(path_value: Any) -> str:
+    """Return a compact label component for one sweep path or path mapping."""
+    if isinstance(path_value, dict):
+        raw = "_".join(str(key) for key in path_value.keys())
+    elif isinstance(path_value, (list, tuple)):
+        raw = "_".join(str(part) for part in path_value)
+    else:
+        raw = str(path_value)
+    cleaned = _safe_name(raw.replace(".", "_"))
+    return cleaned or "sweep"
+
+
+def _make_sweep_label(base_config: dict[str, Any], *, sweep_path: Any, timestamp: str) -> str:
+    """Build the top-level label for one completed sweep."""
+    sweep_config = deepcopy(base_config)
+    prefix = str(sweep_config.get("label_prefix", "sweep"))
+    sweep_config["label_prefix"] = f"{prefix}_{_safe_sweep_path_label(sweep_path)}_sweep"
+    return make_label(sweep_config, timestamp=timestamp)
+
+
+def _make_sweep_item_label(
+    base_config: dict[str, Any],
+    *,
+    sweep_path: Any,
+    timestamp: str,
+    index: int,
+) -> str:
+    """Build one stable per-item label nested under a sweep."""
+    base_label = _make_sweep_label(base_config, sweep_path=sweep_path, timestamp=timestamp)
+    return f"{base_label}_{index:03d}"
+
+
+def _requested_task_count_from_slurm_args(values: list[str] | tuple[str, ...] | None) -> int | None:
+    """Best-effort parse of one total Slurm task count from extra args."""
+    args = [str(value) for value in (values or [])]
+    for index, part in enumerate(args):
+        if part in {"-n", "--ntasks"} and index + 1 < len(args):
+            try:
+                return max(int(args[index + 1]), 1)
+            except ValueError:
+                continue
+        if part.startswith("--ntasks="):
+            try:
+                return max(int(part.split("=", 1)[1]), 1)
+            except ValueError:
+                continue
+        if part.startswith("-n") and part != "-n":
+            try:
+                return max(int(part[2:]), 1)
+            except ValueError:
+                continue
+    return None
+
+
+def _requested_gpus_from_slurm_args(values: list[str] | tuple[str, ...] | None) -> int | None:
+    """Best-effort parse of one total Slurm GPU count from extra args."""
+    args = [str(value) for value in (values or [])]
+    for index, part in enumerate(args):
+        if part == "--gpus" and index + 1 < len(args):
+            try:
+                return max(int(args[index + 1]), 0)
+            except ValueError:
+                continue
+        if part.startswith("--gpus="):
+            raw = part.split("=", 1)[1]
+            if ":" in raw:
+                raw = raw.rsplit(":", 1)[-1]
+            try:
+                return max(int(raw), 0)
+            except ValueError:
+                continue
+    return None
+
+
+def _remote_sweep_parallelism(config: dict[str, Any], *, tasks_per_item: int) -> int:
+    """Choose one best-effort concurrent item count for a remote sweep batch job."""
+    explicit = config.get("sweep_parallelism")
+    if explicit not in (None, "", 0):
+        return max(int(explicit), 1)
+
+    remote_mpi_exec = str(config.get("remote_mpi_exec") or default_remote_mpi_exec()).strip()
+    launcher_head = shlex.split(remote_mpi_exec)[0] if remote_mpi_exec else ""
+    if os.path.basename(launcher_head) != "srun":
+        return 1
+
+    # GPU sweeps are intentionally conservative unless the caller specifies otherwise.
+    slurm_gpus = config.get("slurm_gpus")
+    if slurm_gpus in (None, ""):
+        slurm_gpus = _requested_gpus_from_slurm_args(config.get("slurm_extra_args", []))
+    try:
+        gpu_count = int(slurm_gpus) if slurm_gpus not in (None, "") else 0
+    except (TypeError, ValueError):
+        gpu_count = 0
+    if gpu_count > 0:
+        return 1
+
+    total_tasks = _requested_task_count_from_slurm_args(config.get("slurm_extra_args", []))
+    if total_tasks is None:
+        allocation_job_id = config.get("slurm_allocation_job_id")
+        if allocation_job_id not in (None, "") and config.get("nranks") not in (None, ""):
+            total_tasks = int(config.get("nranks", 1))
+    if total_tasks is None or tasks_per_item <= 0:
+        return 1
+    return max(total_tasks // max(tasks_per_item, 1), 1)
+
+
+def _sweep_uses_remote_batch_engine(config: dict[str, Any]) -> bool:
+    """Return whether sweeps should run through one remote batch job."""
+    engine = str(config.get("sweep_engine", "auto")).strip().lower()
+    if engine == "legacy":
+        return False
+    if engine == "remote_batch":
+        return True
+    return str(config.get("runner_backend", "local")) in {"sol_slurm", "slurm_remote"}
 
 
 def _shell_join(command: list[str] | tuple[str, ...]) -> str:
@@ -4487,12 +4609,499 @@ def set_path_value(obj: Any, path: Any, value: Any) -> None:
         current[final] = value
 
 
+def _prepare_sweep_plan(
+    base_config: dict[str, Any],
+    sweep_path: str | list[str] | dict[str, list[Any]],
+    values: list[Any] | tuple[Any, ...] | None = None,
+    *,
+    grid: bool = False,
+) -> dict[str, Any]:
+    """Normalize one sweep request into explicit per-item configs and labels."""
+    from itertools import product as _product
+
+    base_config = build_run_config(**deepcopy(base_config))
+    timestamp = make_timestamp()
+    sweep_label = _make_sweep_label(base_config, sweep_path=sweep_path, timestamp=timestamp)
+
+    items: list[dict[str, Any]] = []
+    normalized_values: list[Any] = []
+
+    if grid:
+        if not isinstance(sweep_path, dict):
+            raise TypeError("Grid sweeps require a dict of {path: values}")
+        paths = list(sweep_path.keys())
+        value_lists = list(sweep_path.values())
+        iterable = [dict(zip(paths, combo)) for combo in _product(*value_lists)]
+    elif isinstance(sweep_path, dict):
+        paths = list(sweep_path.keys())
+        value_lists = list(sweep_path.values())
+        lengths = [len(v) for v in value_lists]
+        if len(set(lengths)) != 1:
+            raise ValueError(
+                f"All parameter lists must have the same length for a joint sweep; "
+                f"got lengths {dict(zip(paths, lengths))}"
+            )
+        iterable = [dict(zip(paths, combo)) for combo in zip(*value_lists)]
+    else:
+        if values is None:
+            raise ValueError("values must be provided for single-axis sweeps")
+        iterable = list(values)
+
+    for index, value in enumerate(iterable):
+        sweep_config = deepcopy(base_config)
+        if isinstance(value, dict):
+            for path, path_value in value.items():
+                set_path_value(sweep_config, path, path_value)
+            item_value = dict(value)
+        else:
+            set_path_value(sweep_config, sweep_path, value)
+            item_value = value
+        item_label = _make_sweep_item_label(
+            base_config,
+            sweep_path=sweep_path,
+            timestamp=timestamp,
+            index=index,
+        )
+        items.append(
+            {
+                "index": index,
+                "value": item_value,
+                "config": sweep_config,
+                "label": item_label,
+            }
+        )
+        normalized_values.append(item_value)
+
+    return {
+        "path": sweep_path,
+        "values": normalized_values,
+        "items": items,
+        "paramset": base_config.get("paramset"),
+        "timestamp": timestamp,
+        "sweep_label": sweep_label,
+        "base_config": base_config,
+        "grid": {p: list(v) for p, v in sweep_path.items()} if grid and isinstance(sweep_path, dict) else None,
+    }
+
+
+def _write_sweep_info(
+    sweep: dict[str, Any],
+    *,
+    sweep_dir: str | Path,
+    timestamp: str,
+) -> Path:
+    """Persist sweep metadata for both local and remote-batch sweep runs."""
+    sweep_dir = Path(sweep_dir)
+    sweep_dir.mkdir(parents=True, exist_ok=True)
+    (sweep_dir / "animations").mkdir(exist_ok=True)
+    (sweep_dir / "figures").mkdir(exist_ok=True)
+    (sweep_dir / "runs").mkdir(exist_ok=True)
+
+    git_ref = None
+    try:
+        git_ref = _resolve_local_git_head()
+    except Exception:
+        pass
+
+    sweep_info = {
+        "path": sweep.get("path"),
+        "values": [_json_ready(v) for v in sweep.get("values", [])],
+        "paramset": sweep.get("paramset"),
+        "timestamp": timestamp,
+        "git_ref": git_ref,
+        "run_dirs": [str(item["run"].result_dir) for item in sweep.get("items", []) if item.get("run") is not None],
+        "n_items": len(sweep.get("items", [])),
+    }
+    if sweep.get("grid") is not None:
+        sweep_info["grid"] = _json_ready(sweep.get("grid"))
+    (sweep_dir / "sweep_info.json").write_text(json.dumps(sweep_info, indent=2, sort_keys=True))
+    sweep["sweep_dir"] = sweep_dir
+    sweep["sweep_info"] = sweep_info
+    return sweep_dir
+
+
+def _build_remote_sweep_driver_command(
+    config: dict[str, Any],
+    *,
+    sweep_plan: dict[str, Any],
+    remote_repo_root: PurePosixPath,
+    remote_sweep_root: PurePosixPath,
+) -> tuple[list[str], list[dict[str, Any]], int]:
+    """Build the one driver command that runs an entire sweep inside one Slurm job."""
+    remote_driver = Path(remote_repo_root) / "tools" / "remote" / "remote_sweep_driver.py"
+    remote_runs_root = remote_sweep_root / "runs"
+    remote_mpi_exec = str(config.get("remote_mpi_exec") or default_remote_mpi_exec())
+    tasks_per_item = max(int(config.get("nranks", 1) or 1), 1)
+    max_concurrent = _remote_sweep_parallelism(config, tasks_per_item=tasks_per_item)
+
+    manifest_items: list[dict[str, Any]] = []
+    for item in sweep_plan["items"]:
+        remote_result_dir = remote_runs_root / item["label"]
+        benchmark_command = build_run_command(
+            item["config"],
+            item["label"],
+            repo_root=remote_repo_root,
+            results_base=remote_runs_root,
+            mpi_exec=remote_mpi_exec,
+            include_mpi_launcher=True,
+        )
+        manifest_items.append(
+            {
+                "index": int(item["index"]),
+                "label": str(item["label"]),
+                "value": _json_ready(item["value"]),
+                "result_dir": remote_result_dir.as_posix(),
+                "command": benchmark_command,
+            }
+        )
+
+    manifest_b64 = b64encode(json.dumps(manifest_items, sort_keys=True).encode("utf-8")).decode("ascii")
+    driver_command = [
+        "python3",
+        str(remote_driver),
+        "--repo-root",
+        remote_repo_root.as_posix(),
+        "--sweep-root",
+        remote_sweep_root.as_posix(),
+        "--items-b64",
+        manifest_b64,
+        "--max-concurrent",
+        str(max_concurrent),
+    ]
+    return driver_command, manifest_items, max_concurrent
+
+
+def _finalize_synced_sweep_item(
+    *,
+    item: dict[str, Any],
+    local_result_dir: Path,
+    timestamp: str,
+    remote_payload: dict[str, Any],
+    returncode: int,
+) -> tuple[RunRecord, dict[str, Any]]:
+    """Write run_info for one synced sweep item, then return the standard run/result pair."""
+    stdout = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
+    stderr = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
+    summary = _read_json_if_present(local_result_dir / "summary.json")
+    completed = SimpleNamespace(returncode=int(returncode), stdout=stdout, stderr=stderr)
+    _write_notebook_run_info(
+        local_result_dir,
+        config=item["config"],
+        label=item["label"],
+        timestamp=timestamp,
+        command=item["command"],
+        env={},
+        completed=completed,
+        summary=summary,
+        extra_payload={
+            "remote": remote_payload,
+            "sweep_item": {
+                "index": int(item["index"]),
+                "value": _json_ready(item["value"]),
+            },
+        },
+    )
+    run = load_run_record(local_result_dir)
+    result = load_result(run)
+    return run, result
+
+
+def _run_remote_sweep(
+    sweep_plan: dict[str, Any],
+) -> dict[str, Any]:
+    """Run a remote sweep as one Slurm job, with optional concurrent in-job steps."""
+    base_config = dict(sweep_plan["base_config"])
+    effective_config = dict(base_config)
+    sweep_label = str(sweep_plan["sweep_label"])
+    timestamp = str(sweep_plan["timestamp"])
+    local_sweep_dir = SWEEPS_BASE / sweep_label
+    local_runs_dir = local_sweep_dir / "runs"
+    local_sweep_dir.mkdir(parents=True, exist_ok=True)
+    local_runs_dir.mkdir(parents=True, exist_ok=True)
+
+    remote_repo_root = _remote_repo_root(effective_config)
+    remote_git_ref = _resolve_remote_git_ref(effective_config)
+    remote_sweeps_root = _remote_results_root(effective_config) / ".obgpu-sweeps"
+    remote_sweep_root = remote_sweeps_root / sweep_label
+    remote_driver_command, manifest_items, max_concurrent = _build_remote_sweep_driver_command(
+        effective_config,
+        sweep_plan=sweep_plan,
+        remote_repo_root=remote_repo_root,
+        remote_sweep_root=remote_sweep_root,
+    )
+    remote_metadata = {
+        "runner_backend": str(effective_config.get("runner_backend", "slurm_remote")),
+        "remote_host": _require_remote_host(effective_config),
+        "remote_repo_root": remote_repo_root.as_posix(),
+        "remote_results_root": remote_sweeps_root.as_posix(),
+        "remote_mpi_exec": str(effective_config.get("remote_mpi_exec") or default_remote_mpi_exec()),
+        "remote_repo_mode": str(effective_config.get("remote_repo_mode", "shared")),
+        "remote_git_ref": remote_git_ref,
+        "remote_git_fetch": bool(effective_config.get("remote_git_fetch", False)),
+        "remote_git_remote": str(effective_config.get("remote_git_remote", "origin")),
+        "sweep_label": sweep_label,
+        "sweep_parallelism": int(max_concurrent),
+        "sweep_items": len(manifest_items),
+    }
+
+    _ensure_remote_git_ref_available(
+        effective_config,
+        remote_repo_root=remote_repo_root,
+        remote_git_ref=remote_git_ref,
+    )
+    _progress_write("[Sol remote] Running remote preflight checks for sweep...")
+    preflight_completed = _run_ssh_shell(
+        effective_config,
+        _build_remote_preflight_command(remote_repo_root=remote_repo_root),
+    )
+    if preflight_completed.returncode != 0:
+        raise RuntimeError(
+            "Remote sweep preflight failed.\n"
+            f"Stdout:\n{preflight_completed.stdout}\n\n"
+            f"Stderr:\n{preflight_completed.stderr}"
+        )
+
+    if bool(effective_config.get("remote_cleanup_stale_allocations", True)):
+        _cleanup_stale_remote_slurm_allocations(effective_config)
+
+    allocation_info = _ensure_cached_remote_slurm_allocation(effective_config)
+    allocation_heartbeat_path = None
+    if allocation_info.get("job_id") not in (None, ""):
+        effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
+        allocation_heartbeat_path = allocation_info.get("heartbeat_path")
+        remote_metadata["auto_reused_allocation"] = bool(
+            effective_config.get("slurm_reuse_allocation", False)
+            and not allocation_info.get("manual", False)
+        )
+        remote_metadata["allocation_state"] = allocation_info.get("state", "")
+        remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
+        remote_metadata["allocation_location"] = allocation_info.get("location", "")
+        remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
+
+    submit_shell = _build_remote_submit_command(
+        effective_config,
+        label=sweep_label,
+        remote_repo_root=remote_repo_root,
+        remote_results_root=remote_sweeps_root,
+        benchmark_command=remote_driver_command,
+        remote_mpi_exec=str(effective_config.get("remote_mpi_exec") or default_remote_mpi_exec()),
+        remote_git_ref=remote_git_ref,
+    )
+
+    _progress_write("[Sol remote] Submitting remote sweep batch job...")
+    submit_completed = _run_ssh_shell(effective_config, submit_shell)
+    (local_sweep_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
+    (local_sweep_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
+    if submit_completed.returncode != 0:
+        raise RuntimeError(
+            "Remote sweep submission failed.\n"
+            f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
+        )
+
+    try:
+        submission = json.loads((submit_completed.stdout or "").strip())
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(
+            "Remote sweep submission did not return valid JSON.\n"
+            f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
+        ) from exc
+
+    remote_job_heartbeat_path = submission.get("heartbeat_path")
+    remote_metadata["job_heartbeat_path"] = remote_job_heartbeat_path
+    remote_metadata["heartbeat_timeout_s"] = submission.get(
+        "heartbeat_timeout_s",
+        _remote_heartbeat_timeout_s(effective_config),
+    )
+
+    manifest_by_label = {item["label"]: item for item in manifest_items}
+    synced_labels: set[str] = set()
+    item_status_by_label: dict[str, dict[str, Any]] = {}
+    final_status: dict[str, Any] | None = None
+    live_status = bool(effective_config.get("remote_live_status", True))
+    last_signature: tuple[Any, ...] | None = None
+
+    def refresh_remote_leases(*, warn: bool = False) -> None:
+        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
+        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
+
+    def poll_status_once(*, refresh_heartbeat: bool = True) -> dict[str, Any]:
+        if refresh_heartbeat:
+            refresh_remote_leases()
+        poll_shell = _build_remote_poll_command(
+            effective_config,
+            remote_repo_root=remote_repo_root,
+            remote_result_dir=remote_sweep_root,
+            job_id=str(submission["job_id"]),
+            wrapper_dir=str(submission.get("wrapper_dir") or ""),
+            worktree_path=str(submission.get("worktree_path") or ""),
+        )
+        poll_completed = _run_ssh_shell(effective_config, poll_shell)
+        if poll_completed.returncode != 0:
+            raise RuntimeError(
+                "Remote sweep status poll failed.\n"
+                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+            )
+        try:
+            return json.loads((poll_completed.stdout or "").strip())
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(
+                "Remote sweep poll did not return valid JSON.\n"
+                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+            ) from exc
+
+    def sync_finished_items(status: dict[str, Any]) -> None:
+        if not bool(effective_config.get("sweep_sync_live", True)):
+            return
+        progress_payload = status.get("progress_payload") or {}
+        finished_items = progress_payload.get("finished_items") or []
+        for finished in finished_items:
+            if not isinstance(finished, dict):
+                continue
+            label = str(finished.get("label") or "").strip()
+            if not label or label in synced_labels or label not in manifest_by_label:
+                continue
+            manifest_item = manifest_by_label[label]
+            remote_result_dir = PurePosixPath(str(finished.get("result_dir") or manifest_item["result_dir"]))
+            local_result_dir = local_runs_dir / label
+            sync_completed = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_result_dir,
+                local_result_dir=local_result_dir,
+            )
+            if sync_completed.returncode != 0:
+                continue
+            item_status_by_label[label] = dict(finished)
+            synced_labels.add(label)
+
+    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
+    _progress_write(
+        f"[Sol remote] Submitted sweep job {submission['job_id']} "
+        f"for {len(manifest_items)} items (parallelism={max_concurrent})."
+    )
+    try:
+        while True:
+            status = poll_status_once(refresh_heartbeat=True)
+            status_signature = (
+                status.get("state"),
+                status.get("progress_current_ms"),
+                status.get("progress_total_ms"),
+                bool(status.get("summary_exists")),
+            )
+            if live_status and status_signature != last_signature:
+                detail = f"{status.get('state', 'UNKNOWN')}"
+                current = status.get("progress_current_ms")
+                total = status.get("progress_total_ms")
+                if current is not None and total not in (None, 0, ""):
+                    detail += f" ({int(float(current))}/{int(float(total))} items)"
+                reason = str(status.get("reason") or "").strip()
+                location = str(status.get("location") or "").strip()
+                if detail.startswith("PENDING") and reason:
+                    detail += f"; reason={reason}"
+                elif location and not detail.startswith("PENDING"):
+                    detail += f"; where={location}"
+                _progress_write(f"[Sol remote] Sweep job {submission['job_id']}: {detail}")
+                last_signature = status_signature
+            sync_finished_items(status)
+            if status.get("done"):
+                final_status = status
+                break
+            time.sleep(poll_interval_s)
+    except KeyboardInterrupt:
+        _progress_write(f"[Sol remote] Interrupt received; cancelling sweep job {submission['job_id']}...")
+        try:
+            _run_ssh_shell(
+                effective_config,
+                _build_remote_cancel_command(job_id=str(submission["job_id"])),
+            )
+        finally:
+            raise KeyboardInterrupt(
+                f"Interrupted remote sweep and requested cancellation for job {submission['job_id']}."
+            )
+
+    final_sync = _sync_remote_result_dir(
+        effective_config,
+        remote_result_dir=remote_sweep_root,
+        local_result_dir=local_sweep_dir,
+    )
+    (local_sweep_dir / "sync_stdout.txt").write_text(final_sync.stdout or "")
+    (local_sweep_dir / "sync_stderr.txt").write_text(final_sync.stderr or "")
+    if final_sync.returncode != 0:
+        raise RuntimeError(
+            "Remote sweep result sync failed.\n"
+            f"Sweep dir: {local_sweep_dir}\n"
+            f"Stderr:\n{final_sync.stderr}"
+        )
+
+    sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or {}
+    for bucket in ("completed_items", "failed_items", "items"):
+        for payload in sweep_summary.get(bucket, []) or []:
+            if isinstance(payload, dict) and payload.get("label"):
+                item_status_by_label[str(payload["label"])] = dict(payload)
+
+    completed_items = []
+    for item in manifest_items:
+        local_result_dir = local_runs_dir / item["label"]
+        if not local_result_dir.exists():
+            continue
+        status_payload = item_status_by_label.get(item["label"], {})
+        run, result = _finalize_synced_sweep_item(
+            item=item,
+            local_result_dir=local_result_dir,
+            timestamp=timestamp,
+            remote_payload=remote_metadata,
+            returncode=int(status_payload.get("returncode", 0) or 0),
+        )
+        completed_items.append(
+            {
+                "value": sweep_plan["items"][int(item["index"])]["value"],
+                "config": sweep_plan["items"][int(item["index"])]["config"],
+                "run": run,
+                "result": result,
+            }
+        )
+
+    if len(completed_items) != len(sweep_plan["items"]):
+        missing = [item["label"] for item in manifest_items if not (local_runs_dir / item["label"]).exists()]
+        raise RuntimeError(
+            "Remote sweep finished without syncing every item result directory.\n"
+            f"Missing items: {missing}"
+        )
+
+    sweep = {
+        "path": sweep_plan["path"],
+        "values": list(sweep_plan["values"]),
+        "items": completed_items,
+        "paramset": sweep_plan["paramset"],
+    }
+    if sweep_plan.get("grid") is not None:
+        sweep["grid"] = sweep_plan["grid"]
+    _write_sweep_info(sweep, sweep_dir=local_sweep_dir, timestamp=timestamp)
+
+    failed_labels = []
+    for failed in sweep_summary.get("failed_items", []):
+        if isinstance(failed, dict) and failed.get("label"):
+            failed_labels.append(str(failed["label"]))
+    if failed_labels:
+        raise RuntimeError(
+            "Remote sweep completed with failed items.\n"
+            f"Failed labels: {failed_labels}\n"
+            f"Sweep dir: {local_sweep_dir}"
+        )
+    if final_status is not None and not final_status.get("ok", True) and not sweep_summary:
+        raise RuntimeError(
+            "Remote sweep failed before writing a summary.\n"
+            f"Sweep dir: {local_sweep_dir}\n"
+            f"State: {final_status.get('state')}"
+        )
+    return sweep
+
+
 def run_parameter_sweep(
     base_config: dict[str, Any],
     sweep_path: str | list[str] | dict[str, list[Any]],
     values: list[Any] | tuple[Any, ...] | None = None,
 ) -> dict[str, Any]:
-    """Run a parameter sweep by repeatedly calling :func:`run_and_load`.
+    """Run a parameter sweep locally or via the configured remote sweep engine.
 
     Single-axis form (original)::
 
@@ -4509,51 +5118,24 @@ def run_parameter_sweep(
     The returned dict always has the same shape:
     ``{"path": ..., "values": [...], "items": [...], "paramset": ...}``.
     For joint sweeps ``path`` is the param dict and each item's ``value`` is a
-    sub-dict of ``{path: value}`` pairs.
+    sub-dict of ``{path: value}`` pairs. Remote Slurm backends default to a
+    single submitted sweep job unless ``sweep_engine='legacy'`` is requested.
     """
-    base_config = build_run_config(**deepcopy(base_config))
+    sweep_plan = _prepare_sweep_plan(base_config, sweep_path, values, grid=False)
+    if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
+        return _run_remote_sweep(sweep_plan)
 
-    if isinstance(sweep_path, dict):
-        # Joint sweep — validate lengths match
-        paths = list(sweep_path.keys())
-        all_values = list(sweep_path.values())
-        lengths = [len(v) for v in all_values]
-        if len(set(lengths)) != 1:
-            raise ValueError(
-                f"All parameter lists must have the same length for a joint sweep; "
-                f"got lengths {dict(zip(paths, lengths))}"
-            )
-        paired_values = [dict(zip(paths, combo)) for combo in zip(*all_values)]
-        items = []
-        for value_dict in paired_values:
-            sweep_config = deepcopy(base_config)
-            for path, val in value_dict.items():
-                set_path_value(sweep_config, path, val)
-            run, result = run_and_load(sweep_config)
-            items.append({"value": value_dict, "config": sweep_config, "run": run, "result": result})
-        sweep = {
-            "path": sweep_path,
-            "values": paired_values,
-            "items": items,
-            "paramset": base_config.get("paramset"),
-        }
-    else:
-        if values is None:
-            raise ValueError("values must be provided for single-axis sweeps")
-        items = []
-        for value in values:
-            sweep_config = deepcopy(base_config)
-            set_path_value(sweep_config, sweep_path, value)
-            run, result = run_and_load(sweep_config)
-            items.append({"value": value, "config": sweep_config, "run": run, "result": result})
-        sweep = {
-            "path": sweep_path,
-            "values": list(values),
-            "items": items,
-            "paramset": base_config.get("paramset"),
-        }
-
-    save_sweep(sweep)
+    items = []
+    for item in sweep_plan["items"]:
+        run, result = run_and_load(item["config"])
+        items.append({"value": item["value"], "config": item["config"], "run": run, "result": result})
+    sweep = {
+        "path": sweep_plan["path"],
+        "values": list(sweep_plan["values"]),
+        "items": items,
+        "paramset": sweep_plan["paramset"],
+    }
+    save_sweep(sweep, name=sweep_plan["sweep_label"])
     return sweep
 
 
@@ -4561,40 +5143,33 @@ def run_grid_sweep(
     base_config: dict[str, Any],
     param_grid: dict[str, list[Any]],
 ) -> dict[str, Any]:
-    """Run every combination (cartesian product) of the provided parameter grid.
+    """Run every combination of the provided parameter grid.
 
     Example::
 
         sweep = run_grid_sweep(config, {'gaba_gmax': [0, 1, 2], 'gap_mc': [16, 32]})
         # 6 runs: (0,16), (0,32), (1,16), (1,32), (2,16), (2,32)
 
-    Items are ordered row-major (first parameter varies slowest).  Each item's
+    Items are ordered row-major (first parameter varies slowest). Each item's
     ``value`` is a ``{path: value}`` dict, matching the joint-sweep convention.
     """
-    from itertools import product as _product
+    sweep_plan = _prepare_sweep_plan(base_config, param_grid, grid=True)
+    if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
+        return _run_remote_sweep(sweep_plan)
 
-    base_config = build_run_config(**deepcopy(base_config))
-    paths = list(param_grid.keys())
-    value_lists = list(param_grid.values())
     items = []
-    all_values = []
-    for combo in _product(*value_lists):
-        value_dict = dict(zip(paths, combo))
-        sweep_config = deepcopy(base_config)
-        for path, val in value_dict.items():
-            set_path_value(sweep_config, path, val)
-        run, result = run_and_load(sweep_config)
-        items.append({"value": value_dict, "config": sweep_config, "run": run, "result": result})
-        all_values.append(value_dict)
+    for item in sweep_plan["items"]:
+        run, result = run_and_load(item["config"])
+        items.append({"value": item["value"], "config": item["config"], "run": run, "result": result})
 
     sweep = {
         "path": param_grid,
-        "values": all_values,
+        "values": list(sweep_plan["values"]),
         "items": items,
-        "paramset": base_config.get("paramset"),
-        "grid": {p: list(v) for p, v in param_grid.items()},
+        "paramset": sweep_plan["paramset"],
+        "grid": sweep_plan["grid"],
     }
-    save_sweep(sweep)
+    save_sweep(sweep, name=sweep_plan["sweep_label"])
     return sweep
 
 

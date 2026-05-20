@@ -231,6 +231,7 @@ def main():
         "progress_current_ms": progress_payload.get("current_ms"),
         "progress_total_ms": progress_payload.get("total_ms"),
         "progress_percent": progress_payload.get("percent"),
+        "progress_payload": progress_payload,
         "stdout_tail": read_tail(stdout_path),
         "stderr_tail": read_tail(stderr_path),
         "slurm_log_exists": slurm_log_exists,
