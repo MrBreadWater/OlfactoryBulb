@@ -46,6 +46,11 @@
       "file": "0009-link-nocmodl-stdcxxfs-gcc8.patch",
       "category": "required",
       "description": "Link nocmodl against libstdc++fs on GCC 8 so std::filesystem path handling does not crash during MOD translation."
+    },
+    {
+      "file": "0010-link-nmodl-stdcxxfs-gcc8.patch",
+      "category": "required",
+      "description": "Link nmodl against libstdc++fs on GCC 8 so CoreNEURON MOD translation does not crash during setup."
     }
   ]
 }

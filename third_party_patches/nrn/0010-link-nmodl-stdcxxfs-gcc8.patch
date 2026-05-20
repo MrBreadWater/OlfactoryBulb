@@ -1,0 +1,17 @@
+diff --git a/src/nmodl/CMakeLists.txt b/src/nmodl/CMakeLists.txt
+index e0e7bb7..0df5d61 100644
+--- a/src/nmodl/CMakeLists.txt
++++ b/src/nmodl/CMakeLists.txt
+@@ -112,6 +112,12 @@ target_link_libraries(
+   lexer
+   ${NMODL_WRAPPER_LIBS})
+ add_dependencies(nmodl nmodl_copy_python_files nmodl_copy_solver_files)
++# GCC 8's std::filesystem implementation lives in libstdc++fs. Without this
++# explicit link, nmodl can build but segfault while constructing filesystem
++# paths during CoreNEURON MOD translation on RHEL8-era cluster toolchains.
++if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
++  target_link_libraries(nmodl stdc++fs)
++endif()
+ cpp_cc_configure_sanitizers(TARGET nmodl)
+ 
+ # set(nmodl_BINARY bin/nmodl${CMAKE_EXECUTABLE_SUFFIX})
