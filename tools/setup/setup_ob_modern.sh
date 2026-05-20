@@ -153,7 +153,7 @@ prepare_nrn_source() {
 
   git -C "${NRN_SRC_DIR}" checkout --force "${UPSTREAM_REF}"
   git -C "${NRN_SRC_DIR}" reset --hard "${UPSTREAM_REF}"
-  git -C "${NRN_SRC_DIR}" clean -fdx -e build-ob-modern -e build-ob-modern-gpu-*
+  git -C "${NRN_SRC_DIR}" clean -fdx -e build-ob-modern -e build-ob-modern-* -e build-ob-modern-gpu-*
   git -C "${NRN_SRC_DIR}" submodule sync --recursive
   git -C "${NRN_SRC_DIR}" submodule update --init --recursive --force
 
@@ -756,7 +756,11 @@ EOF
     )
   fi
 else
-  NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern}"
+  if [[ "${OBGPU_CPU_TARGET}" == "portable" || "${OBGPU_MECHANISM_PROFILE}" != "default" ]]; then
+    NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern-${OBGPU_MECHANISM_PROFILE}}"
+  else
+    NRN_BUILD_DIR="${NRN_BUILD_DIR:-${NRN_SRC_DIR}/build-ob-modern}"
+  fi
   NRN_BUILD_META_PATH="${NRN_BUILD_DIR}/.obgpu_build_meta.sh"
 fi
 
@@ -793,10 +797,7 @@ fi
 NRN_BUILD_STAMP_PATH="${NRN_BUILD_DIR}/.obgpu_build_stamp"
 NRN_BUILD_FINGERPRINT="$(build_stamp_fingerprint)"
 build_ld_library_path="${CONDA_PREFIX}/lib"
-if [[ -d "${REPO_ROOT}/$(uname -m)" ]]; then
-  build_ld_library_path="${REPO_ROOT}/$(uname -m):${build_ld_library_path}"
-fi
-if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
+if [[ "${ENABLE_GPU}" == "1" && -n "${LD_LIBRARY_PATH:-}" ]]; then
   build_ld_library_path="${build_ld_library_path}:${LD_LIBRARY_PATH}"
 fi
 
