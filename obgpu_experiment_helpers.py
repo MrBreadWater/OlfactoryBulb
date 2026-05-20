@@ -2586,7 +2586,17 @@ def _sync_remote_result_dir(
                         raw_bytes=raw_bytes,
                     )
                     if stream_completed.returncode != 0:
-                        return stream_completed
+                        _progress_write(
+                            "[OBGPU load] Streamed archive sync failed; retrying the same result dir over SFTP..."
+                        )
+                        _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
+                        return subprocess.CompletedProcess(
+                            args=["paramiko-stream-extract-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
+                            returncode=0,
+                            stdout=stream_completed.stdout or "",
+                            stderr=(stream_completed.stderr or "")
+                            + "\n[OBGPU load] Stream archive sync failed, but SFTP fallback completed successfully.\n",
+                        )
                 else:
                     _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
             except Exception as exc:
@@ -2650,6 +2660,40 @@ def _sync_remote_result_dir(
             env=_ssh_command_env(),
         )
     return completed
+
+
+def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
+    """Return True when the local result directory already has standard notebook payloads."""
+    result_dir = Path(result_dir)
+    for filename in ("input_times.pkl", "soma_vs.pkl", "gc_output_events.pkl", "lfp.pkl"):
+        if (result_dir / filename).exists():
+            return True
+    return False
+
+
+def _synthesize_partial_sync_summary(
+    result_dir: str | Path,
+    *,
+    label: str,
+    timestamp: str,
+    config: dict[str, Any],
+) -> dict[str, Any]:
+    """Create a minimal summary when the payload files arrived but metadata did not."""
+    result_dir = Path(result_dir)
+    files = {}
+    for filename in ("input_times.pkl", "soma_vs.pkl", "gc_output_events.pkl", "lfp.pkl"):
+        path = result_dir / filename
+        if path.exists():
+            files[filename] = {"size_bytes": int(path.stat().st_size)}
+    return {
+        "label": label,
+        "requested_label": label,
+        "timestamp": timestamp,
+        "paramset": config.get("paramset"),
+        "nranks": config.get("nranks"),
+        "files": files,
+        "partial_sync": True,
+    }
 
 
 def _build_remote_allocation_submit_command(
@@ -3977,12 +4021,21 @@ def _run_remote_simulation(
     )
     (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
     (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+    sync_warning = None
     if sync_completed.returncode != 0:
-        raise RuntimeError(
-            "Remote Sol result sync failed.\n"
-            f"Result dir: {local_result_dir}\n"
-            f"rsync stderr:\n{sync_completed.stderr}"
-        )
+        if _local_result_dir_has_loadable_payload(local_result_dir):
+            sync_warning = (
+                "Remote Sol result sync reported an error, but standard payload files were already present locally. "
+                "Proceeding with the partial local copy.\n"
+                f"{sync_completed.stderr}"
+            )
+            _progress_write(f"[OBGPU load] {sync_warning}")
+        else:
+            raise RuntimeError(
+                "Remote Sol result sync failed.\n"
+                f"Result dir: {local_result_dir}\n"
+                f"rsync stderr:\n{sync_completed.stderr}"
+            )
     _progress_write(f"[OBGPU load] Remote sync finished: {local_result_dir}")
 
     stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
@@ -4038,6 +4091,14 @@ def _run_remote_simulation(
     if summary_path.exists():
         with open(summary_path) as f:
             summary = json.load(f)
+    elif sync_warning is not None and _local_result_dir_has_loadable_payload(local_result_dir):
+        summary = _synthesize_partial_sync_summary(
+            local_result_dir,
+            label=label,
+            timestamp=timestamp,
+            config=effective_config,
+        )
+        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
 
     compact_poll_events = _compact_remote_poll_events(poll_transcript)
     poll_events_path = None
@@ -4061,6 +4122,7 @@ def _run_remote_simulation(
                 "remote_result_dir": str(remote_result_dir),
                 "submit_response": _summarize_remote_submit_response(submission),
                 "final_status": _summarize_remote_status(final_status),
+                "sync_warning": sync_warning,
                 "poll_sample_count": len(poll_transcript),
                 "poll_event_count": len(compact_poll_events),
                 "poll_events_file": poll_events_path.name if poll_events_path is not None else None,
