@@ -59,6 +59,18 @@ try:
     from tqdm.notebook import tqdm as _tqdm_notebook
 except ImportError:  # pragma: no cover - optional runtime dependency
     _tqdm_notebook = None
+
+if paramiko is None:  # pragma: no cover - optional runtime dependency
+    _PARAMIKO_PARTIAL_AUTH_EXC: tuple[type[BaseException], ...] = ()
+else:
+    _PARAMIKO_PARTIAL_AUTH_EXC = tuple(
+        exc
+        for exc in (
+            getattr(paramiko, "PartialAuthentication", None),
+            getattr(getattr(paramiko, "ssh_exception", None), "PartialAuthentication", None),
+        )
+        if exc is not None
+    )
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, hilbert, lfilter, spectrogram, welch
@@ -1619,7 +1631,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
             transport.auth_none(username)
         except paramiko.BadAuthenticationType as exc:
             auth_methods = list(exc.allowed_types)
-        except paramiko.PartialAuthentication as exc:  # pragma: no cover - defensive
+        except _PARAMIKO_PARTIAL_AUTH_EXC as exc:  # pragma: no cover - defensive
             auth_methods = list(exc.allowed_types)
         except paramiko.AuthenticationException:
             auth_methods = []
@@ -1651,7 +1663,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                     _paramiko_prompt_response(f"Password for {username}@{hostname}:"),
                 )
                 authenticated = transport.is_authenticated()
-            except paramiko.PartialAuthentication as exc:
+            except _PARAMIKO_PARTIAL_AUTH_EXC as exc:
                 auth_methods = list(exc.allowed_types)
                 authenticated = False
 
