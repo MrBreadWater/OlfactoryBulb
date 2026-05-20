@@ -74,6 +74,7 @@ else:
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
 from scipy.signal import butter, filtfilt, find_peaks, hilbert, lfilter, spectrogram, welch
+from scipy.stats import gaussian_kde
 from modify_model import (
     add_synaptic_connection,
     modify_synaptic_connection,
@@ -205,6 +206,41 @@ class RunRecord:
     command: list[str]
     stdout: str
     stderr: str
+
+
+@dataclass
+class FrequencyPlotConfig:
+    """Shared rendering controls for spike/event frequency distribution plots."""
+
+    modulus: float | None = 1e8
+    max_freq_hz: float = 200.0
+    kde_bw_method: str | float = "scott"
+    kde_bw_x: float = 0.15
+    kde_bw_y: float = 0.2
+    kde_resolution_t: int = 100
+    kde_resolution_f: int = 100
+    kde_f_resolution: int = 1600
+    num_time_bins: int = 32
+    bin_alpha: float = 0.5
+    kde_cmap: str = "inferno"
+    dot_size: float = 5.0
+    dot_alpha: float = 0.2
+    strip_plot: bool = True
+    guide_line_spacing_ms: float = 2000.0
+
+
+@dataclass
+class SweepPlotSpec:
+    """One sweep-animation artifact generated from an existing sweep."""
+
+    name: str
+    plot: str | Any
+    plot_kwargs: dict[str, Any] | None = None
+    filename: str | None = None
+    figsize: tuple[float, float] = (12.0, 5.0)
+    interval: int = 1000
+    fps: int = 2
+    title_fn: Any = None
 
 
 def _format_bytes(num_bytes: int | float) -> str:
@@ -5681,6 +5717,260 @@ def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarr
     return t_freq, event_hz
 
 
+def _coerce_frequency_plot_config(
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    **overrides: Any,
+) -> FrequencyPlotConfig:
+    """Normalize a frequency-plot config input into a dataclass instance."""
+    if config is None:
+        base = FrequencyPlotConfig()
+    elif isinstance(config, FrequencyPlotConfig):
+        base = FrequencyPlotConfig(**vars(config))
+    elif isinstance(config, dict):
+        base = FrequencyPlotConfig(**config)
+    else:
+        raise TypeError(f"Unsupported frequency-plot config type {type(config)!r}")
+
+    for key, value in overrides.items():
+        if value is not None:
+            setattr(base, key, value)
+    return base
+
+
+def _apply_frequency_kde_y_scale(kde: Any, scale_y: float) -> None:
+    """Rescale a 1D KDE in-place along its frequency axis."""
+    if float(scale_y) == 1.0:
+        return
+    kde.covariance *= float(scale_y) ** 2
+    kde.cho_cov = np.linalg.cholesky(kde.covariance)
+    kde.log_det = 2 * np.log(np.diag(kde.cho_cov * np.sqrt(2 * np.pi))).sum()
+
+
+def _apply_frequency_kde_xy_scale(kernel: Any, scale_x: float, scale_y: float) -> None:
+    """Rescale a 2D time/frequency KDE in-place."""
+    if float(scale_x) == 1.0 and float(scale_y) == 1.0:
+        return
+    kernel.covariance[0, 0] *= float(scale_x) ** 2
+    kernel.covariance[1, 1] *= float(scale_y) ** 2
+    kernel.covariance[0, 1] *= float(scale_x) * float(scale_y)
+    kernel.covariance[1, 0] *= float(scale_x) * float(scale_y)
+    kernel.cho_cov = np.linalg.cholesky(kernel.covariance)
+    kernel.log_det = 2 * np.log(np.diag(kernel.cho_cov * np.sqrt(2 * np.pi))).sum()
+
+
+def collect_spike_frequency_samples(
+    result: dict[str, Any],
+    indices: list[int] | range | None = None,
+    cell_types: list[str] | tuple[str, ...] | None = ("TC", "MC"),
+    modulus: float | None = 1e8,
+    threshold: float | None = None,
+) -> dict[str, Any]:
+    """Collect midpoint/frequency samples from detected soma spikes."""
+    soma_vs = list(result.get("soma_vs", []))
+    if indices is None:
+        indices = range(len(soma_vs))
+
+    prefixes = tuple(str(name) for name in cell_types) if cell_types else None
+    all_freq_t = []
+    all_freq = []
+    labels = []
+
+    for i in indices:
+        if i >= len(soma_vs):
+            break
+        label, t, mp = soma_vs[i]
+        if prefixes is not None and not any(label.startswith(prefix) for prefix in prefixes):
+            continue
+
+        t_freq, spiking_hz = calculate_instantaneous_frequency(t, mp, threshold=threshold)
+        if len(t_freq) == 0:
+            continue
+        t_freq = np.asarray(t_freq, dtype=float)
+        if modulus is not None:
+            t_freq = np.mod(t_freq, float(modulus))
+        all_freq_t.append(t_freq)
+        all_freq.append(np.asarray(spiking_hz, dtype=float))
+        labels.append(str(label))
+
+    if all_freq_t:
+        times = np.concatenate(all_freq_t)
+        freqs = np.concatenate(all_freq)
+    else:
+        times = np.array([], dtype=float)
+        freqs = np.array([], dtype=float)
+
+    return {
+        "times": times,
+        "freqs": freqs,
+        "labels": labels,
+        "n_traces": len(labels),
+        "cell_types": list(prefixes) if prefixes is not None else None,
+    }
+
+
+def _plot_frequency_kde_1d_from_samples(
+    freqs: np.ndarray,
+    *,
+    config: FrequencyPlotConfig,
+    title: str,
+    ax: Any = None,
+) -> Any:
+    """Plot a 1D KDE from frequency samples."""
+    ax = ax or plt.subplots(figsize=(10, 5))[1]
+    freqs = np.asarray(freqs, dtype=float)
+    if len(freqs) == 0:
+        ax.text(0.5, 0.5, "No frequency samples", ha="center", va="center", transform=ax.transAxes)
+        ax.set_title(title)
+        ax.set_xlabel("Frequency (Hz)")
+        ax.set_ylabel("Density")
+        ax.set_xlim(0, float(config.max_freq_hz))
+        return ax
+
+    kde = gaussian_kde(freqs, bw_method=config.kde_bw_method)
+    _apply_frequency_kde_y_scale(kde, config.kde_bw_y)
+
+    f_upper = max(float(config.max_freq_hz), float(np.max(freqs)) * 1.1)
+    f_range = np.linspace(0.0, f_upper, int(config.kde_f_resolution))
+    density = kde(f_range)
+    ax.plot(f_range, density)
+    ax.fill_between(f_range, density, alpha=0.3)
+    ax.set_xlabel("Frequency (Hz)")
+    ax.set_ylabel("Density")
+    ax.set_title(title)
+    ax.set_xlim(0, float(config.max_freq_hz))
+    return ax
+
+
+def _plot_frequency_kde_2d_from_samples(
+    times: np.ndarray,
+    freqs: np.ndarray,
+    *,
+    config: FrequencyPlotConfig,
+    title: str,
+    ax: Any = None,
+) -> Any:
+    """Plot a 2D time/frequency KDE from samples."""
+    ax = ax or plt.subplots(figsize=(14, 8))[1]
+    times = np.asarray(times, dtype=float)
+    freqs = np.asarray(freqs, dtype=float)
+    if len(times) < 2 or len(freqs) < 2:
+        ax.text(0.5, 0.5, "Not enough frequency samples", ha="center", va="center", transform=ax.transAxes)
+        ax.set_title(title)
+        ax.set_xlabel("Time (ms)")
+        ax.set_ylabel("Frequency (Hz)")
+        ax.set_ylim(0, float(config.max_freq_hz))
+        return ax
+
+    kernel = gaussian_kde(np.vstack([times, freqs]), bw_method=config.kde_bw_method)
+    _apply_frequency_kde_xy_scale(kernel, config.kde_bw_x, config.kde_bw_y)
+
+    tstop = float(np.max(times))
+    t_grid = np.linspace(0.0, tstop, int(config.kde_resolution_t))
+    f_grid = np.linspace(0.0, float(config.max_freq_hz), int(config.kde_resolution_f))
+    t_mesh, f_mesh = np.meshgrid(t_grid, f_grid)
+    positions = np.vstack([t_mesh.ravel(), f_mesh.ravel()])
+    density = np.reshape(kernel(positions).T, t_mesh.shape)
+
+    im = ax.imshow(
+        density,
+        origin="lower",
+        extent=[0, tstop, 0, float(config.max_freq_hz)],
+        aspect="auto",
+        cmap=config.kde_cmap,
+        interpolation="bilinear",
+    )
+    if float(config.guide_line_spacing_ms) > 0:
+        for x in np.arange(0.0, tstop, float(config.guide_line_spacing_ms)):
+            ax.axvline(x, color="white", alpha=0.35)
+    plt.colorbar(im, ax=ax, label="Density (KDE)")
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Frequency (Hz)")
+    ax.set_title(title)
+    return ax
+
+
+def _plot_frequency_time_binned_from_samples(
+    times: np.ndarray,
+    freqs: np.ndarray,
+    *,
+    config: FrequencyPlotConfig,
+    title: str,
+    ax: Any = None,
+    show_dots: bool = True,
+    show_ridgeline_kde: bool = False,
+) -> Any:
+    """Plot time-binned frequency distributions from midpoint/frequency samples."""
+    ax = ax or plt.subplots(figsize=(14, 8))[1]
+    times = np.asarray(times, dtype=float)
+    freqs = np.asarray(freqs, dtype=float)
+    if len(times) == 0 or len(freqs) == 0:
+        ax.text(0.5, 0.5, "No frequency samples", ha="center", va="center", transform=ax.transAxes)
+        ax.set_title(title)
+        ax.set_xlabel("Time (ms)")
+        ax.set_ylabel("Frequency (Hz)")
+        ax.set_ylim(0, float(config.max_freq_hz))
+        return ax
+
+    tstop = float(np.max(times))
+    t_bins = np.linspace(0.0, tstop, int(config.num_time_bins) + 1)
+    if len(t_bins) < 2:
+        t_bins = np.array([0.0, max(tstop, 1.0)], dtype=float)
+    bin_width = float(t_bins[1] - t_bins[0])
+
+    for tb in t_bins:
+        ax.axvline(tb, color="gray", alpha=0.1, linestyle="--")
+
+    for i in range(len(t_bins) - 1):
+        t_start, t_end = float(t_bins[i]), float(t_bins[i + 1])
+        mask = (times >= t_start) & (times < t_end)
+        if not np.any(mask):
+            continue
+        bin_f = freqs[mask]
+
+        if show_dots:
+            if bool(config.strip_plot):
+                x_pos = np.full_like(bin_f, t_start + bin_width / 2.0)
+            else:
+                jitter = np.random.uniform(0.0, bin_width * 0.8, size=len(bin_f))
+                x_pos = t_start + jitter
+            ax.scatter(
+                x_pos,
+                bin_f,
+                s=float(config.dot_size),
+                alpha=float(config.dot_alpha),
+                color="black",
+                edgecolors="none",
+            )
+
+        if show_ridgeline_kde and len(bin_f) > 2:
+            kde = gaussian_kde(bin_f, bw_method=config.kde_bw_method)
+            _apply_frequency_kde_y_scale(kde, config.kde_bw_y)
+            f_range = np.linspace(0.0, max(float(np.max(freqs)) * 1.1, float(config.max_freq_hz)), int(config.kde_f_resolution))
+            density = kde(f_range)
+            if float(np.max(density)) > 0:
+                density = density / float(np.max(density))
+            ax.fill_betweenx(
+                f_range,
+                t_start,
+                t_start + density * bin_width * 0.8,
+                alpha=float(config.bin_alpha),
+            )
+            ax.plot(
+                t_start + density * bin_width * 0.8,
+                f_range,
+                linewidth=1.0,
+                color="black",
+                alpha=0.3,
+            )
+
+    ax.set_xlabel("Time (ms)")
+    ax.set_ylabel("Frequency (Hz)")
+    ax.set_title(title)
+    ax.set_ylim(0, float(config.max_freq_hz))
+    ax.grid(True, alpha=0.3)
+    return ax
+
+
 def plot_spiking_frequencies(
     result: dict[str, Any],
     indices: list[int] | range | None = None,
@@ -5779,6 +6069,180 @@ def collect_gc_output_frequency_samples(
         "events": selected_events,
         "n_events": len(selected_events),
     }
+
+
+def plot_spike_frequency_kde_1d(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    cell_types: list[str] | tuple[str, ...] | None = ("TC", "MC"),
+    threshold: float | None = None,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+) -> Any:
+    """Plot a 1D KDE of detected soma spike frequencies."""
+    plot_config = _coerce_frequency_plot_config(config)
+    data = collect_spike_frequency_samples(
+        result,
+        indices=indices,
+        cell_types=cell_types,
+        modulus=plot_config.modulus,
+        threshold=threshold,
+    )
+    label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
+    return _plot_frequency_kde_1d_from_samples(
+        data["freqs"],
+        config=plot_config,
+        title=title or f"Soma Spike Frequency Distribution ({label})",
+        ax=ax,
+    )
+
+
+def plot_spike_frequency_kde_2d(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    cell_types: list[str] | tuple[str, ...] | None = ("TC", "MC"),
+    threshold: float | None = None,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+) -> Any:
+    """Plot a 2D time/frequency KDE of detected soma spike frequencies."""
+    plot_config = _coerce_frequency_plot_config(config)
+    data = collect_spike_frequency_samples(
+        result,
+        indices=indices,
+        cell_types=cell_types,
+        modulus=plot_config.modulus,
+        threshold=threshold,
+    )
+    label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
+    return _plot_frequency_kde_2d_from_samples(
+        data["times"],
+        data["freqs"],
+        config=plot_config,
+        title=title or f"Soma Spike Time/Frequency KDE ({label})",
+        ax=ax,
+    )
+
+
+def plot_spike_frequency_time_binned(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    cell_types: list[str] | tuple[str, ...] | None = ("TC", "MC"),
+    threshold: float | None = None,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+    show_dots: bool = True,
+    show_ridgeline_kde: bool = False,
+) -> Any:
+    """Plot time-binned soma spike-frequency distributions."""
+    plot_config = _coerce_frequency_plot_config(config)
+    data = collect_spike_frequency_samples(
+        result,
+        indices=indices,
+        cell_types=cell_types,
+        modulus=plot_config.modulus,
+        threshold=threshold,
+    )
+    label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
+    return _plot_frequency_time_binned_from_samples(
+        data["times"],
+        data["freqs"],
+        config=plot_config,
+        title=title or f"Soma Spike Frequency Distributions ({label})",
+        ax=ax,
+        show_dots=show_dots,
+        show_ridgeline_kde=show_ridgeline_kde,
+    )
+
+
+def plot_gc_output_frequency_kde_1d(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    target_types: list[str] | tuple[str, ...] | None = ("MC", "TC"),
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+) -> Any:
+    """Plot a 1D KDE of reciprocal GC inhibitory-output frequencies."""
+    plot_config = _coerce_frequency_plot_config(config)
+    data = collect_gc_output_frequency_samples(
+        result,
+        indices=indices,
+        target_types=target_types,
+        modulus=plot_config.modulus,
+    )
+    label = "all" if not target_types else "_".join(str(name) for name in target_types)
+    return _plot_frequency_kde_1d_from_samples(
+        data["freqs"],
+        config=plot_config,
+        title=title or f"GC Inhibitory Output Frequency Distribution ({label})",
+        ax=ax,
+    )
+
+
+def plot_gc_output_frequency_kde_2d(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    target_types: list[str] | tuple[str, ...] | None = ("MC", "TC"),
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+) -> Any:
+    """Plot a 2D time/frequency KDE of reciprocal GC inhibitory-output frequencies."""
+    plot_config = _coerce_frequency_plot_config(config)
+    data = collect_gc_output_frequency_samples(
+        result,
+        indices=indices,
+        target_types=target_types,
+        modulus=plot_config.modulus,
+    )
+    label = "all" if not target_types else "_".join(str(name) for name in target_types)
+    return _plot_frequency_kde_2d_from_samples(
+        data["times"],
+        data["freqs"],
+        config=plot_config,
+        title=title or f"GC Inhibitory Output Time/Frequency KDE ({label})",
+        ax=ax,
+    )
+
+
+def plot_gc_output_frequency_time_binned(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    target_types: list[str] | tuple[str, ...] | None = ("MC", "TC"),
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+    show_dots: bool = True,
+    show_ridgeline_kde: bool = False,
+) -> Any:
+    """Plot time-binned reciprocal GC inhibitory-output frequency distributions."""
+    plot_config = _coerce_frequency_plot_config(config)
+    data = collect_gc_output_frequency_samples(
+        result,
+        indices=indices,
+        target_types=target_types,
+        modulus=plot_config.modulus,
+    )
+    label = "all" if not target_types else "_".join(str(name) for name in target_types)
+    return _plot_frequency_time_binned_from_samples(
+        data["times"],
+        data["freqs"],
+        config=plot_config,
+        title=title or f"GC Inhibitory Output Frequency Distributions ({label})",
+        ax=ax,
+        show_dots=show_dots,
+        show_ridgeline_kde=show_ridgeline_kde,
+    )
 
 
 def _resolve_event_tstop(result: dict[str, Any], event_series: list[np.ndarray]) -> float:
@@ -6434,11 +6898,133 @@ def plot_gc_output_overview(
     return fig, axes
 
 
+def plot_spike_frequency_overview(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    cell_types: list[str] | tuple[str, ...] | None = ("TC", "MC"),
+    threshold: float | None = None,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    show_kde1d: bool = True,
+    show_kde2d: bool = True,
+    show_time_binned: bool = False,
+    show_dots: bool = True,
+    show_ridgeline_kde: bool = False,
+) -> tuple[Any, list[Any]]:
+    """Render the notebook-style soma spike frequency plots in one figure."""
+    panels = []
+    if show_kde1d:
+        panels.append("kde1d")
+    if show_kde2d:
+        panels.append("kde2d")
+    if show_time_binned:
+        panels.append("time_binned")
+    if not panels:
+        raise ValueError("At least one spike-frequency panel must be enabled")
+
+    height = 5.0 if len(panels) == 1 else 4.0 * len(panels)
+    fig, axes = plt.subplots(len(panels), 1, figsize=(14, height), squeeze=False)
+    axes_list = list(axes[:, 0])
+
+    for panel, ax in zip(panels, axes_list):
+        if panel == "kde1d":
+            plot_spike_frequency_kde_1d(
+                result,
+                indices=indices,
+                cell_types=cell_types,
+                threshold=threshold,
+                config=config,
+                ax=ax,
+            )
+        elif panel == "kde2d":
+            plot_spike_frequency_kde_2d(
+                result,
+                indices=indices,
+                cell_types=cell_types,
+                threshold=threshold,
+                config=config,
+                ax=ax,
+            )
+        else:
+            plot_spike_frequency_time_binned(
+                result,
+                indices=indices,
+                cell_types=cell_types,
+                threshold=threshold,
+                config=config,
+                ax=ax,
+                show_dots=show_dots,
+                show_ridgeline_kde=show_ridgeline_kde,
+            )
+
+    fig.tight_layout()
+    return fig, axes_list
+
+
+def plot_gc_output_frequency_overview(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    target_types: list[str] | tuple[str, ...] | None = ("MC", "TC"),
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    show_kde1d: bool = True,
+    show_kde2d: bool = True,
+    show_time_binned: bool = False,
+    show_dots: bool = True,
+    show_ridgeline_kde: bool = False,
+) -> tuple[Any, list[Any]]:
+    """Render the notebook-style GC-output frequency plots in one figure."""
+    panels = []
+    if show_kde1d:
+        panels.append("kde1d")
+    if show_kde2d:
+        panels.append("kde2d")
+    if show_time_binned:
+        panels.append("time_binned")
+    if not panels:
+        raise ValueError("At least one GC-output frequency panel must be enabled")
+
+    height = 5.0 if len(panels) == 1 else 4.0 * len(panels)
+    fig, axes = plt.subplots(len(panels), 1, figsize=(14, height), squeeze=False)
+    axes_list = list(axes[:, 0])
+
+    for panel, ax in zip(panels, axes_list):
+        if panel == "kde1d":
+            plot_gc_output_frequency_kde_1d(
+                result,
+                indices=indices,
+                target_types=target_types,
+                config=config,
+                ax=ax,
+            )
+        elif panel == "kde2d":
+            plot_gc_output_frequency_kde_2d(
+                result,
+                indices=indices,
+                target_types=target_types,
+                config=config,
+                ax=ax,
+            )
+        else:
+            plot_gc_output_frequency_time_binned(
+                result,
+                indices=indices,
+                target_types=target_types,
+                config=config,
+                ax=ax,
+                show_dots=show_dots,
+                show_ridgeline_kde=show_ridgeline_kde,
+            )
+
+    fig.tight_layout()
+    return fig, axes_list
+
+
 def plot_lfp_overview(
     result: dict[str, Any],
     dt_ms: float = 0.1,
     lowcut_hz: float = 30.0,
-    highcut_hz: float = 120.0,
+    highcut_hz: float = 200.0,
 ) -> tuple[Any, Any]:
     """Plot raw LFP, band-passed LFP, and a Welch PSD summary."""
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=False)
@@ -6534,7 +7120,11 @@ def plot_spectrogram(
         nperseg=nperseg,
         noverlap=noverlap,
     )
-    mesh = ax.pcolormesh(times_ms, freqs, 10.0 * np.log10(power + 1e-12), shading="auto")
+    #power = np.clip(power, power.mean()-power.std()*200, power.mean()+power.std()*50)
+    powerval = np.log(power+1e-8)
+    powerval -= powerval.min()
+    #powerval **= 2
+    mesh = ax.pcolormesh(times_ms, freqs, powerval, shading="auto")
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
     ax.set_title(f"{signal.upper()} Spectrogram")
@@ -6580,6 +7170,157 @@ def plot_wavelet_band_power(
     return ax
 
 
+def _extract_figure_from_plot_result(plot_result: Any) -> Any:
+    """Best-effort extraction of a Matplotlib figure from a plot return value."""
+    if plot_result is None:
+        return plt.gcf()
+    if hasattr(plot_result, "savefig"):
+        return plot_result
+    if hasattr(plot_result, "figure"):
+        return plot_result.figure
+    if isinstance(plot_result, tuple):
+        for item in plot_result:
+            if hasattr(item, "savefig"):
+                return item
+            if hasattr(item, "figure"):
+                return item.figure
+    return plt.gcf()
+
+
+def get_builtin_sweep_plot_names() -> list[str]:
+    """Return built-in plot names that can be rendered across a sweep."""
+    return sorted([
+        "gc_output_frequency_kde_1d",
+        "gc_output_frequency_kde_2d",
+        "gc_output_frequency_overview",
+        "gc_output_frequency_time_binned",
+        "gc_output_overview",
+        "hfo_power_summary",
+        "input_overview",
+        "lfp_overview",
+        "named_signal",
+        "spectrogram",
+        "spike_frequency_kde_1d",
+        "spike_frequency_kde_2d",
+        "spike_frequency_overview",
+        "spike_frequency_time_binned",
+        "spike_raster",
+        "voltage_traces",
+        "wavelet",
+        "wavelet_band_power",
+    ])
+
+
+def _get_builtin_sweep_plot(plot_name: str) -> Any:
+    """Resolve a built-in sweep-plot name to a plotting helper."""
+    mapping = {
+        "voltage_traces": plot_voltage_traces,
+        "spike_raster": plot_spike_raster,
+        "gc_output_overview": plot_gc_output_overview,
+        "input_overview": plot_input_overview,
+        "lfp_overview": plot_lfp_overview,
+        "hfo_power_summary": plot_hfo_power_summary,
+        "named_signal": plot_named_signal,
+        "spectrogram": plot_spectrogram,
+        "wavelet": plot_wavelet,
+        "wavelet_band_power": plot_wavelet_band_power,
+        "spike_frequency_kde_1d": plot_spike_frequency_kde_1d,
+        "spike_frequency_kde_2d": plot_spike_frequency_kde_2d,
+        "spike_frequency_time_binned": plot_spike_frequency_time_binned,
+        "spike_frequency_overview": plot_spike_frequency_overview,
+        "gc_output_frequency_kde_1d": plot_gc_output_frequency_kde_1d,
+        "gc_output_frequency_kde_2d": plot_gc_output_frequency_kde_2d,
+        "gc_output_frequency_time_binned": plot_gc_output_frequency_time_binned,
+        "gc_output_frequency_overview": plot_gc_output_frequency_overview,
+    }
+    if plot_name not in mapping:
+        available = ", ".join(get_builtin_sweep_plot_names())
+        raise KeyError(f"Unknown built-in sweep plot {plot_name!r}. Available: {available}")
+    return mapping[plot_name]
+
+
+def make_sweep_plot_spec(
+    plot: str | Any,
+    *,
+    name: str | None = None,
+    plot_kwargs: dict[str, Any] | None = None,
+    filename: str | None = None,
+    figsize: tuple[float, float] = (12.0, 5.0),
+    interval: int = 1000,
+    fps: int = 2,
+    title_fn: Any = None,
+) -> SweepPlotSpec:
+    """Build a sweep-plot spec from a built-in plot name or custom callable."""
+    if name is None:
+        if isinstance(plot, str):
+            name = plot
+        else:
+            name = getattr(plot, "__name__", "custom_plot")
+    return SweepPlotSpec(
+        name=str(name),
+        plot=plot,
+        plot_kwargs=dict(plot_kwargs or {}),
+        filename=filename,
+        figsize=figsize,
+        interval=int(interval),
+        fps=int(fps),
+        title_fn=title_fn,
+    )
+
+
+def _normalize_sweep_plot_spec(plot_spec: SweepPlotSpec | str | Any | dict[str, Any]) -> SweepPlotSpec:
+    """Accept ergonomic plot-spec forms and normalize them."""
+    if isinstance(plot_spec, SweepPlotSpec):
+        return make_sweep_plot_spec(
+            plot_spec.plot,
+            name=plot_spec.name,
+            plot_kwargs=plot_spec.plot_kwargs,
+            filename=plot_spec.filename,
+            figsize=plot_spec.figsize,
+            interval=plot_spec.interval,
+            fps=plot_spec.fps,
+            title_fn=plot_spec.title_fn,
+        )
+    if isinstance(plot_spec, str) or callable(plot_spec):
+        return make_sweep_plot_spec(plot_spec)
+    if isinstance(plot_spec, dict):
+        plot = plot_spec.get("plot")
+        if plot is None:
+            if "plot_fn" in plot_spec:
+                plot = plot_spec["plot_fn"]
+            elif "name" in plot_spec:
+                plot = plot_spec["name"]
+            else:
+                raise ValueError("Plot-spec dict must include 'plot', 'plot_fn', or 'name'")
+        return make_sweep_plot_spec(
+            plot,
+            name=plot_spec.get("name"),
+            plot_kwargs=plot_spec.get("plot_kwargs"),
+            filename=plot_spec.get("filename"),
+            figsize=tuple(plot_spec.get("figsize", (12.0, 5.0))),
+            interval=int(plot_spec.get("interval", 1000)),
+            fps=int(plot_spec.get("fps", 2)),
+            title_fn=plot_spec.get("title_fn"),
+        )
+    raise TypeError(f"Unsupported sweep-plot spec type {type(plot_spec)!r}")
+
+
+def _build_sweep_plot_callable(spec: SweepPlotSpec) -> tuple[Any, str]:
+    """Resolve a plot spec into a figure-producing callable and filename stem."""
+    plot_kwargs = dict(spec.plot_kwargs or {})
+    if isinstance(spec.plot, str):
+        plot_fn = _get_builtin_sweep_plot(spec.plot)
+        default_filename = spec.plot
+    else:
+        plot_fn = spec.plot
+        default_filename = spec.name
+
+    def _wrapped(result: dict[str, Any]) -> Any:
+        return _extract_figure_from_plot_result(plot_fn(result, **plot_kwargs))
+
+    return _wrapped, str(spec.filename or default_filename)
+
+
 def _format_sweep_value(value: Any) -> str:
     """Format a sweep value compactly for figure titles."""
     if isinstance(value, float):
@@ -6597,8 +7338,8 @@ def _fig_to_rgb_array(fig: Any) -> np.ndarray:
     from matplotlib.backends.backend_agg import FigureCanvasAgg
     canvas = FigureCanvasAgg(fig)
     canvas.draw()
-    w, h = canvas.get_width_height()
-    return np.frombuffer(canvas.tostring_rgb(), dtype=np.uint8).reshape(h, w, 3)
+    rgba = np.asarray(canvas.buffer_rgba(), dtype=np.uint8)
+    return np.ascontiguousarray(rgba[..., :3])
 
 
 def animate_sweep(
@@ -7021,6 +7762,65 @@ def save_animation(
     writer = animation.PillowWriter(fps=max(1, int(fps)))
     anim.save(str(gif_path), writer=writer)
     return gif_path
+
+
+def animate_sweep_plots(
+    sweep: dict[str, Any],
+    plots: list[SweepPlotSpec | str | Any | dict[str, Any]],
+    *,
+    close_frames: bool = True,
+) -> dict[str, Path]:
+    """Render and save multiple sweep animations from one completed sweep.
+
+    Each entry in ``plots`` may be:
+
+    - a built-in plot name from :func:`get_builtin_sweep_plot_names`
+    - a custom ``plot_fn(result) -> fig`` callable defined in the notebook
+    - a :class:`SweepPlotSpec`
+    - a dict like ``{"plot": "spike_frequency_kde_2d", "plot_kwargs": {...}}``
+    """
+    artifacts: dict[str, Path] = {}
+    for raw_spec in plots:
+        spec = _normalize_sweep_plot_spec(raw_spec)
+        plot_fn, filename = _build_sweep_plot_callable(spec)
+        anim = animate_sweep(
+            sweep,
+            plot_fn,
+            figsize=spec.figsize,
+            interval=spec.interval,
+            title_fn=spec.title_fn,
+            close_frames=close_frames,
+        )
+        artifacts[spec.name] = save_animation(
+            anim,
+            filename,
+            sweep=sweep,
+            fps=spec.fps,
+        )
+    return artifacts
+
+
+def run_sweep_with_animations(
+    base_config: dict[str, Any],
+    sweep_path: str | list[str] | dict[str, list[Any]],
+    values: list[Any] | tuple[Any, ...] | None = None,
+    *,
+    plots: list[SweepPlotSpec | str | Any | dict[str, Any]] | None = None,
+    use_grid: bool = False,
+    close_frames: bool = True,
+) -> tuple[dict[str, Any], dict[str, Path]]:
+    """Run a sweep once, then emit one or more animations over the same results."""
+    if use_grid:
+        if not isinstance(sweep_path, dict):
+            raise TypeError("Grid sweeps require sweep_path to be a dict of {path: values}")
+        sweep = run_grid_sweep(base_config, sweep_path)
+    else:
+        sweep = run_parameter_sweep(base_config, sweep_path, values)
+
+    artifacts: dict[str, Path] = {}
+    if plots:
+        artifacts = animate_sweep_plots(sweep, plots, close_frames=close_frames)
+    return sweep, artifacts
 
 
 def save_figure(
