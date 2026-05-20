@@ -4203,16 +4203,16 @@ def run_simulation(config: dict[str, Any] | None = None) -> RunRecord:
     env["OB_CORENRN_CELL_PERMUTE"] = str(int(config.get("cell_permute", 2)))
 
     command = build_run_command(config, label)
+    result_dir.mkdir(parents=True, exist_ok=True)
     completed = subprocess.run(
         command,
-        cwd=REPO_ROOT,
+        cwd=result_dir,
         env=env,
         capture_output=True,
         text=True,
         check=False,
     )
 
-    result_dir.mkdir(parents=True, exist_ok=True)
     (result_dir / "command.txt").write_text(" ".join(command) + "\n")
     (result_dir / "stdout.txt").write_text(completed.stdout or "")
     (result_dir / "stderr.txt").write_text(completed.stderr or "")

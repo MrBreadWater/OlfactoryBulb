@@ -414,7 +414,8 @@ def main() -> None:
             cell_permute_value = int(cell_permute_override)
         else:
             cell_permute_value = 2 if args.coreneuron_gpu else 0
-        coreneuron.cell_permute = cell_permute_value
+        if any([args.coreneuron, args.coreneuron_gpu, args.coreneuron_file_mode]):
+            coreneuron.cell_permute = cell_permute_value
         params.coreneuron.cell_permute = cell_permute_value
         params.coreneuron.warp_balance = getattr(coreneuron, "warp_balance", None)
 

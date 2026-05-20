@@ -44,11 +44,9 @@ ASSIGNED {
 	rinf
 	stau (ms)
 	rtau (ms)
-    qt
 }
 
 INITIAL {
-    qt=q10^((celsius-35)/10)
 	rates(v)
 	s = sinf
 	r = rinf
@@ -81,15 +79,15 @@ FUNCTION bet(v(mV),i)(/ms) {
 	}
 }
 
-PROCEDURE rates(v(mV)) {LOCAL a, b
-	TABLE sinf, rinf, stau, rtau FROM -100 TO 100 WITH 200
+PROCEDURE rates(v(mV)) {LOCAL a, b, qt_local
+	qt_local = q10^((celsius-35)/10)
 	a = alp(v,0)  b=bet(v,0)
 	stau = 1/(a + b)
-	stau = stau / qt
+	stau = stau / qt_local
 	sinf = a/(a + b)
 	a = alp(v,1)  b=bet(v,1)
 	rtau = 1/(a + b)
-	rtau = rtau / qt
+	rtau = rtau / qt_local
 	rinf = a/(a + b)
 }
 

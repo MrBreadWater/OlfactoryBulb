@@ -32,11 +32,9 @@ ASSIGNED {
 	ik (mA/cm2)
 	xinf
 	xtau (ms)
-	qt
 }
 
 INITIAL {
-	qt=q10^((celsius-35)/10)
 	rates(v)
 	x = xinf
 }
@@ -51,9 +49,9 @@ DERIVATIVE states {
 	x' = (xinf - x)/xtau
 }
 
-PROCEDURE rates(v(mV)) {
-	TABLE xinf, xtau FROM -100 TO 100 WITH 200
+PROCEDURE rates(v(mV)) { LOCAL qt_local
+	qt_local = q10^((celsius-35)/10)
 	xinf = 1/(1 + exp(-(v*1(/mV) + 35)/5))
 	xtau = 1000(ms)/(3.3*exp((v*1(/mV) + 35)/40) + exp(-(v*1(/mV) + 35)/20))
-	xtau = xtau / qt
+	xtau = xtau / qt_local
 }
