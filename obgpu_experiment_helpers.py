@@ -246,6 +246,14 @@ class SweepPlotSpec:
     title_fn: Any = None
 
 
+def _trapezoid_integral(y: Any, x: Any) -> float:
+    """Integrate one sampled curve across NumPy 1.x/2.x."""
+    integrator = getattr(np, "trapezoid", None)
+    if integrator is None:
+        integrator = np.trapz
+    return float(integrator(y, x))
+
+
 def _format_bytes(num_bytes: int | float) -> str:
     """Return a compact human-readable byte count."""
     value = float(num_bytes)
@@ -5975,16 +5983,16 @@ def compute_band_power_summary(
     freqs, psd = welch(y, fs=fs_hz, nperseg=nperseg)
 
     if relative_band is None:
-        denominator = float(np.trapz(psd, freqs))
+        denominator = _trapezoid_integral(psd, freqs)
     else:
         relative_mask = (freqs >= relative_band[0]) & (freqs <= relative_band[1])
-        denominator = float(np.trapz(psd[relative_mask], freqs[relative_mask])) if np.any(relative_mask) else 0.0
+        denominator = _trapezoid_integral(psd[relative_mask], freqs[relative_mask]) if np.any(relative_mask) else 0.0
 
     band_power = {}
     relative_power = {}
     for name, (lo, hi) in bands.items():
         mask = (freqs >= float(lo)) & (freqs <= float(hi))
-        power_value = float(np.trapz(psd[mask], freqs[mask])) if np.any(mask) else 0.0
+        power_value = _trapezoid_integral(psd[mask], freqs[mask]) if np.any(mask) else 0.0
         band_power[name] = power_value
         relative_power[name] = power_value / denominator if denominator > 0 else 0.0
 
