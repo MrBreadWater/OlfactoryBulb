@@ -73,7 +73,7 @@ else:
     )
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
-from scipy.signal import butter, filtfilt, hilbert, lfilter, spectrogram, welch
+from scipy.signal import butter, filtfilt, find_peaks, hilbert, lfilter, spectrogram, welch
 from modify_model import (
     add_synaptic_connection,
     modify_synaptic_connection,
@@ -5380,7 +5380,7 @@ def compute_spike_phase_locking(
     signal: str = "lfp",
     band: tuple[float, float] = (80.0, 130.0),
     cell_types: tuple[str, ...] | list[str] = ("MC", "TC"),
-    threshold: float = 0.0,
+    threshold: float | None = None,
     dt_ms: float = 0.1,
 ) -> dict[str, Any]:
     """Measure soma-spike phase locking to a band-passed LFP-like signal."""
@@ -5599,24 +5599,68 @@ def show_legacy_plots(
     return legacy
 
 
+def _adaptive_spike_peak_floor(v: np.ndarray) -> float:
+    """Estimate a conservative spike-height floor from one voltage trace."""
+    finite_v = np.asarray(v, dtype=float)
+    finite_v = finite_v[np.isfinite(finite_v)]
+    if finite_v.size == 0:
+        return np.inf
+    baseline = float(np.percentile(finite_v, 5.0))
+    upper = float(np.percentile(finite_v, 95.0))
+    dynamic_span = max(0.0, upper - baseline)
+    return baseline + max(20.0, 0.5 * dynamic_span)
+
+
 def detect_spikes(
     t: np.ndarray | list[float],
     v: np.ndarray | list[float],
-    threshold: float = 0.0,
+    threshold: float | None = None,
+    *,
+    min_prominence_mv: float = 3.0,
+    refractory_ms: float = 1.0,
 ) -> np.ndarray:
-    """Detect upward threshold crossings from a soma voltage trace."""
+    """Detect spike peaks from a soma trace using prominence and a refractory window.
+
+    The previous detector only looked for upward crossings of a fixed voltage
+    level, which misses sustained suprathreshold limit cycles and spikes that
+    peak below 0 mV. This version finds local maxima, applies a minimum
+    prominence, and uses either an explicit peak threshold or an adaptive floor
+    derived from the trace itself.
+    """
     t = np.asarray(t, dtype=float)
     v = np.asarray(v, dtype=float)
-    if len(t) < 2:
+    if len(t) < 3:
         return np.array([])
-    crossings = np.where((v[:-1] < threshold) & (v[1:] >= threshold))[0] + 1
-    return t[crossings]
+
+    finite_mask = np.isfinite(t) & np.isfinite(v)
+    if not np.all(finite_mask):
+        t = t[finite_mask]
+        v = v[finite_mask]
+    if len(t) < 3:
+        return np.array([])
+
+    dt_ms = float(np.median(np.diff(t)))
+    if not np.isfinite(dt_ms) or dt_ms <= 0:
+        dt_ms = 0.1
+    min_distance = max(1, int(round(float(refractory_ms) / dt_ms)))
+
+    peaks, _properties = find_peaks(
+        v,
+        prominence=float(min_prominence_mv),
+        distance=min_distance,
+    )
+    if len(peaks) == 0:
+        return np.array([])
+
+    peak_floor = float(threshold) if threshold is not None else _adaptive_spike_peak_floor(v)
+    keep = v[peaks] >= peak_floor
+    return t[peaks[keep]]
 
 
 def calculate_instantaneous_frequency(
     t: np.ndarray | list[float],
     v: np.ndarray | list[float],
-    threshold: float = 0.0,
+    threshold: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Convert spike times from one trace into instantaneous frequency samples."""
     spikes = detect_spikes(t, v, threshold=threshold)
@@ -5641,7 +5685,7 @@ def plot_spiking_frequencies(
     result: dict[str, Any],
     indices: list[int] | range | None = None,
     ax: Any = None,
-    threshold: float = 0.0,
+    threshold: float | None = None,
 ) -> Any:
     """Plot instantaneous firing-rate traces for selected saved soma voltages."""
     ax = ax or plt.subplots(figsize=(10, 6))[1]
@@ -6191,7 +6235,7 @@ def plot_voltage_traces(result: dict[str, Any], max_per_type: int = 4, ax: Any =
 
 def plot_spike_raster(
     result: dict[str, Any],
-    threshold: float = 0.0,
+    threshold: float | None = None,
     max_cells_per_type: int = 24,
     ax: Any = None,
 ) -> Any:
