@@ -21,6 +21,79 @@ if str(REPO_ROOT) not in sys.path:
 from olfactorybulb.output_paths import configure_output_env
 
 
+def first_nonfinite_index(values: Any) -> tuple[int, float] | None:
+    """Return the first non-finite index/value in a numeric sequence."""
+    try:
+        import numpy as np
+
+        arr = np.asarray(values, dtype=float)
+    except (TypeError, ValueError):
+        return None
+
+    bad = np.flatnonzero(~np.isfinite(arr))
+    if len(bad) == 0:
+        return None
+    index = int(bad[0])
+    return index, float(arr.reshape(-1)[index])
+
+
+def validate_numeric_trace(label: str, times: Any, values: Any) -> list[str]:
+    """Return validation errors for one saved time/value trace."""
+    errors = []
+    bad_time = first_nonfinite_index(times)
+    if bad_time is not None:
+        index, value = bad_time
+        errors.append(f"{label}: non-finite time at index {index}: {value!r}")
+
+    bad_value = first_nonfinite_index(values)
+    if bad_value is not None:
+        index, value = bad_value
+        time_hint = ""
+        try:
+            time_hint = f" at t={float(times[index]):.6g} ms"
+        except (TypeError, ValueError, IndexError):
+            pass
+        errors.append(f"{label}: non-finite value at index {index}{time_hint}: {value!r}")
+    return errors
+
+
+def validate_saved_outputs(out_dir: str | Path, *, require_lfp: bool) -> None:
+    """Fail fast when saved benchmark outputs contain NaN or Inf values."""
+    out_path = Path(out_dir)
+    errors: list[str] = []
+
+    soma_path = out_path / "soma_vs.pkl"
+    if soma_path.exists():
+        with open(soma_path, "rb") as f:
+            soma_traces = pickle.load(f)
+        for trace_index, trace in enumerate(soma_traces):
+            try:
+                label, times, values = trace
+            except (TypeError, ValueError):
+                errors.append(f"soma_vs.pkl[{trace_index}]: expected (label, times, values)")
+                continue
+            errors.extend(validate_numeric_trace(f"soma_vs.pkl[{trace_index}] {label}", times, values))
+
+    lfp_path = out_path / "lfp.pkl"
+    if lfp_path.exists():
+        with open(lfp_path, "rb") as f:
+            lfp_times, lfp_values = pickle.load(f)
+        errors.extend(validate_numeric_trace("lfp.pkl", lfp_times, lfp_values))
+    elif require_lfp:
+        errors.append("lfp.pkl: missing even though LFP recording is enabled")
+
+    if errors:
+        preview = "\n".join(f"- {error}" for error in errors[:10])
+        remaining = len(errors) - 10
+        if remaining > 0:
+            preview += f"\n- ... {remaining} additional trace errors"
+        raise RuntimeError(
+            "Simulation produced non-finite saved outputs. "
+            "Treating this run as failed instead of publishing a misleading summary.\n"
+            f"{preview}"
+        )
+
+
 def sha256_file(path: str | Path) -> str:
     """Return the SHA-256 digest for a file on disk."""
     h = hashlib.sha256()
@@ -367,6 +440,8 @@ def main() -> None:
     }
 
     if rank == 0:
+        validate_saved_outputs(out_dir, require_lfp=getattr(ob.params, "enable_lfp", True))
+
         file_summaries = {}
         for filename in ["soma_vs.pkl", "input_times.pkl", "lfp.pkl"]:
             path = out_dir / filename
