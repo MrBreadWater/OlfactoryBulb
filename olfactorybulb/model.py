@@ -46,6 +46,26 @@ CELL_MODEL_FACTORIES = {
 }
 
 
+def should_force_gid_synapses(params, nranks):
+    """Return whether reciprocal synapses should route through segment gids.
+
+    Plain single-rank NEURON runs historically used direct voltage-source
+    NetCons. Forcing gid-based event routing there changes local dynamics and
+    can destabilize the legacy CPU path. Keep gid routing for multi-rank or
+    CoreNEURON execution, and allow an explicit param override either way.
+    """
+
+    explicit = getattr(params, "force_gid_synapses", None)
+    if explicit is not None:
+        return bool(explicit)
+
+    coreneuron_cfg = getattr(params, "coreneuron", None)
+    coreneuron_enabled = bool(
+        coreneuron_cfg is not None and getattr(coreneuron_cfg, "enable", False)
+    )
+    return int(nranks) > 1 or coreneuron_enabled
+
+
 class OBNeuronNode(NeuronNode):
     """Use segment gids for synaptic event sources on every rank.
 
@@ -211,11 +231,6 @@ class OlfactoryBulb:
         self._last_status_percent = None
         self._last_status_ms = None
 
-        # Just use the BlenderNEURON package functions (e.g. no server/client)
-        self.bn_server = OBNeuronNode(server_end='Package')
-        self.bn_server.force_gid_synapses = getattr(params, "force_gid_synapses", True)
-        self.bn_server.cell_source_gids = {}
-
         from neuron import h, load_mechanisms
         self.h = h
         self.pc = h.ParallelContext()
@@ -224,6 +239,11 @@ class OlfactoryBulb:
         self.mpirank = self.pc.id()
         self._next_lfp_report_gid = 1500000000 + (self.mpirank * 1000000)
         self._next_input_source_gid = 2000000000 + (self.mpirank * 1000000)
+
+        # Just use the BlenderNEURON package functions (e.g. no server/client)
+        self.bn_server = OBNeuronNode(server_end='Package')
+        self.bn_server.force_gid_synapses = should_force_gid_synapses(params, self.nranks)
+        self.bn_server.cell_source_gids = {}
 
         # Keep track of rank complexities with a min-heap
         self.rank_complexities = [(0, r) for r in range(self.nranks)]

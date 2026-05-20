@@ -468,6 +468,7 @@ def main() -> None:
                 "recording_period": ob.params.recording_period,
                 "record_from_somas": list(ob.params.record_from_somas),
                 "enable_reciprocal_synapses": getattr(ob.params, "enable_reciprocal_synapses", True),
+                "force_gid_synapses": bool(getattr(ob.bn_server, "force_gid_synapses", False)),
                 "legacy_parallel_dt": getattr(ob.params, "legacy_parallel_dt", True),
                 "runtime_mode": getattr(ob.params, "runtime_mode", "scientific"),
                 "coreneuron": {
