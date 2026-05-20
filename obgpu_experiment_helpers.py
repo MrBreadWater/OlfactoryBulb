@@ -1434,6 +1434,21 @@ def _sweep_uses_remote_batch_engine(config: dict[str, Any]) -> bool:
     return str(config.get("runner_backend", "local")) in {"sol_slurm", "slurm_remote"}
 
 
+def _sweep_base_dir(config: dict[str, Any]) -> Path:
+    """Return the local parent directory that stores grouped sweep outputs."""
+    return Path(config.get("results_base", DEFAULT_RESULTS_BASE)) / "sweeps"
+
+
+def _sweep_dir(config: dict[str, Any], sweep_label: str) -> Path:
+    """Return the local directory for one grouped sweep."""
+    return _sweep_base_dir(config) / str(sweep_label)
+
+
+def _sweep_item_runs_dir(config: dict[str, Any], sweep_label: str) -> Path:
+    """Return the local directory that stores actual per-item result folders."""
+    return _sweep_dir(config, sweep_label) / "item_runs"
+
+
 def _shell_join(command: list[str] | tuple[str, ...]) -> str:
     """Return a POSIX-safe shell rendering of a command list."""
     return shlex.join([str(part) for part in command])
@@ -4396,11 +4411,15 @@ def _write_notebook_run_info(
     return run_info_path
 
 
-def run_simulation(config: dict[str, Any] | None = None) -> RunRecord:
+def run_simulation(
+    config: dict[str, Any] | None = None,
+    *,
+    label: str | None = None,
+) -> RunRecord:
     """Run one timestamped notebook simulation and return its recorded metadata."""
     config = build_run_config(**(config or {}))
     timestamp = make_timestamp()
-    label = make_label(config, timestamp=timestamp)
+    label = str(label or make_label(config, timestamp=timestamp))
     result_dir = Path(config.get("results_base", DEFAULT_RESULTS_BASE)) / label
     runner_backend = str(config.get("runner_backend", "local"))
 
@@ -4729,7 +4748,7 @@ def _build_remote_sweep_driver_command(
 ) -> tuple[list[str], list[dict[str, Any]], int]:
     """Build the one driver command that runs an entire sweep inside one Slurm job."""
     remote_driver = Path(remote_repo_root) / "tools" / "remote" / "remote_sweep_driver.py"
-    remote_runs_root = remote_sweep_root / "runs"
+    remote_runs_root = remote_sweep_root / "item_runs"
     remote_mpi_exec = str(config.get("remote_mpi_exec") or default_remote_mpi_exec())
     tasks_per_item = max(int(config.get("nranks", 1) or 1), 1)
     max_concurrent = _remote_sweep_parallelism(config, tasks_per_item=tasks_per_item)
@@ -4814,14 +4833,14 @@ def _run_remote_sweep(
     effective_config = dict(base_config)
     sweep_label = str(sweep_plan["sweep_label"])
     timestamp = str(sweep_plan["timestamp"])
-    local_sweep_dir = SWEEPS_BASE / sweep_label
-    local_runs_dir = local_sweep_dir / "runs"
+    local_sweep_dir = _sweep_dir(effective_config, sweep_label)
+    local_runs_dir = _sweep_item_runs_dir(effective_config, sweep_label)
     local_sweep_dir.mkdir(parents=True, exist_ok=True)
     local_runs_dir.mkdir(parents=True, exist_ok=True)
 
     remote_repo_root = _remote_repo_root(effective_config)
     remote_git_ref = _resolve_remote_git_ref(effective_config)
-    remote_sweeps_root = _remote_results_root(effective_config) / ".obgpu-sweeps"
+    remote_sweeps_root = _remote_results_root(effective_config) / "sweeps"
     remote_sweep_root = remote_sweeps_root / sweep_label
     remote_driver_command, manifest_items, max_concurrent = _build_remote_sweep_driver_command(
         effective_config,
@@ -5125,17 +5144,22 @@ def run_parameter_sweep(
     if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
         return _run_remote_sweep(sweep_plan)
 
+    local_sweep_dir = _sweep_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
+    local_item_runs_dir = _sweep_item_runs_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
+    local_item_runs_dir.mkdir(parents=True, exist_ok=True)
     items = []
     for item in sweep_plan["items"]:
-        run, result = run_and_load(item["config"])
-        items.append({"value": item["value"], "config": item["config"], "run": run, "result": result})
+        sweep_config = deepcopy(item["config"])
+        sweep_config["results_base"] = str(local_item_runs_dir)
+        run, result = run_and_load(sweep_config, label=str(item["label"]))
+        items.append({"value": item["value"], "config": sweep_config, "run": run, "result": result})
     sweep = {
         "path": sweep_plan["path"],
         "values": list(sweep_plan["values"]),
         "items": items,
         "paramset": sweep_plan["paramset"],
     }
-    save_sweep(sweep, name=sweep_plan["sweep_label"])
+    save_sweep(sweep, name=str(sweep_plan["sweep_label"]), base_dir=local_sweep_dir.parent)
     return sweep
 
 
@@ -5157,10 +5181,15 @@ def run_grid_sweep(
     if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
         return _run_remote_sweep(sweep_plan)
 
+    local_sweep_dir = _sweep_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
+    local_item_runs_dir = _sweep_item_runs_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
+    local_item_runs_dir.mkdir(parents=True, exist_ok=True)
     items = []
     for item in sweep_plan["items"]:
-        run, result = run_and_load(item["config"])
-        items.append({"value": item["value"], "config": item["config"], "run": run, "result": result})
+        sweep_config = deepcopy(item["config"])
+        sweep_config["results_base"] = str(local_item_runs_dir)
+        run, result = run_and_load(sweep_config, label=str(item["label"]))
+        items.append({"value": item["value"], "config": sweep_config, "run": run, "result": result})
 
     sweep = {
         "path": param_grid,
@@ -5169,7 +5198,7 @@ def run_grid_sweep(
         "paramset": sweep_plan["paramset"],
         "grid": sweep_plan["grid"],
     }
-    save_sweep(sweep, name=sweep_plan["sweep_label"])
+    save_sweep(sweep, name=str(sweep_plan["sweep_label"]), base_dir=local_sweep_dir.parent)
     return sweep
 
 
@@ -5302,10 +5331,14 @@ def load_run_pair(
     return run, load_result(run)
 
 
-def run_and_load(config: dict[str, Any] | None = None) -> tuple[RunRecord, dict[str, Any]]:
+def run_and_load(
+    config: dict[str, Any] | None = None,
+    *,
+    label: str | None = None,
+) -> tuple[RunRecord, dict[str, Any]]:
     """Run a simulation and immediately load its outputs from disk."""
     print("[OBGPU load] Starting simulation run...", flush=True)
-    run = run_simulation(config)
+    run = run_simulation(config, label=label)
     print(f"[OBGPU load] Simulation complete. Loading results from {run.result_dir}...", flush=True)
     result = load_result(run)
     print("[OBGPU load] Result load complete.", flush=True)
@@ -8175,7 +8208,7 @@ def animate_sniff_average_sweep(
     return anim
 
 
-SWEEPS_BASE = REPO_ROOT / "results" / "sweeps"
+SWEEPS_BASE = DEFAULT_RESULTS_BASE / "sweeps"
 
 
 def save_sweep(
