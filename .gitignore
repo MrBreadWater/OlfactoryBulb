@@ -110,6 +110,7 @@ Untitled*.ipynb
 *.bak
 
 tmp/
+obgpu_handoff_instructions.md
 
 x86_64/
 
