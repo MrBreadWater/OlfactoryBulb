@@ -1,0 +1,17 @@
+diff --git a/src/nrniv/CMakeLists.txt b/src/nrniv/CMakeLists.txt
+index 0c86b5c..d591b45 100644
+--- a/src/nrniv/CMakeLists.txt
++++ b/src/nrniv/CMakeLists.txt
+@@ -396,6 +396,12 @@ target_link_libraries(nrniv_lib nrngnu)
+ target_link_libraries(nrniv_lib sparse13)
+ target_link_libraries(nrniv_lib fmt::fmt)
+ target_include_directories(nrniv_lib SYSTEM PUBLIC ${PROJECT_SOURCE_DIR}/${NRN_3RDPARTY_DIR}/eigen)
++# GCC 8's std::filesystem implementation lives in libstdc++fs. Without this
++# explicit link, nrniv -python can build but segfault in nrnpython_start while
++# constructing or destroying filesystem paths on RHEL8-era cluster toolchains.
++if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
++  target_link_libraries(nrniv_lib stdc++fs)
++endif()
+ cpp_cc_configure_sanitizers(TARGET nrniv_lib)
+ # Source-directory .cpp needs to find generated .hpp.
+ target_include_directories(nrniv_lib PUBLIC "${NRN_OC_GEN}")

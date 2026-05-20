@@ -51,6 +51,11 @@
       "file": "0010-link-nmodl-stdcxxfs-gcc8.patch",
       "category": "required",
       "description": "Link nmodl against libstdc++fs on GCC 8 so CoreNEURON MOD translation does not crash during setup."
+    },
+    {
+      "file": "0011-link-nrniv-stdcxxfs-gcc8.patch",
+      "category": "required",
+      "description": "Link nrniv_lib against libstdc++fs on GCC 8 so nrniv -python does not crash during Python startup."
     }
   ]
 }
