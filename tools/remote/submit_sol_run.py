@@ -633,6 +633,10 @@ def write_batch_script(
                 "else",
                 "  resolved_mpi_exec=\"$configured_mpi_exec\"",
                 "fi",
+                "if [[ \" $resolved_mpi_exec \" == *\" srun \"* ]]; then",
+                "  export PMIX_MCA_psec=\"${PMIX_MCA_psec:-native}\"",
+                "  export OMPI_MCA_psec=\"${OMPI_MCA_psec:-native}\"",
+                "fi",
                 "read -r -a _obgpu_mpi_parts <<< \"$resolved_mpi_exec\"",
             ]
         )

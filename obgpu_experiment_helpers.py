@@ -637,7 +637,7 @@ def default_local_mpi_exec() -> str:
 
 def default_remote_mpi_exec() -> str:
     """Return the preferred MPI launcher for the Sol Slurm backend."""
-    return "srun"
+    return "srun --mpi=pmix_v4 --cpu-bind=none"
 
 
 def make_timestamp() -> str:
