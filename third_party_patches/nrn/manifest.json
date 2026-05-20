@@ -41,6 +41,11 @@
       "file": "0008-disable-neurondemo-release-all.patch",
       "category": "required",
       "description": "Keep the upstream demo-release mechanism build out of the default target graph so cluster builds do not fail on its separate nrnivmodl environment."
+    },
+    {
+      "file": "0009-link-nocmodl-stdcxxfs-gcc8.patch",
+      "category": "required",
+      "description": "Link nocmodl against libstdc++fs on GCC 8 so std::filesystem path handling does not crash during MOD translation."
     }
   ]
 }

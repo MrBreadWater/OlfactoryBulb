@@ -1,0 +1,17 @@
+diff --git a/src/nrniv/CMakeLists.txt b/src/nrniv/CMakeLists.txt
+index 0c86b5c..3a9b0c1 100644
+--- a/src/nrniv/CMakeLists.txt
++++ b/src/nrniv/CMakeLists.txt
+@@ -101,6 +101,12 @@ target_include_directories(nocmodl PRIVATE "${PROJECT_BINARY_DIR}/share/nrn/lib"
+ cpp_cc_configure_sanitizers(TARGET nocmodl)
+ add_dependencies(nocmodl nocmodl_generated_files)
+ target_compile_definitions(nocmodl PRIVATE COMPILE_DEFINITIONS NMODL=1 CVODE=1)
++# GCC 8's std::filesystem implementation lives in libstdc++fs. Without this
++# explicit link, nocmodl can build but segfault while constructing filesystem
++# paths during MOD translation on RHEL8-era cluster toolchains.
++if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9)
++  target_link_libraries(nocmodl PRIVATE stdc++fs)
++endif()
+ # Otherwise the generated code in the binary directory does not find headers in the modlunit source
+ # directory and the source files in the source directory do not find generated headers in the binary
+ # directory. TODO: (see also coreneuron) fix adding a dependency on CLI11::CLI11 when CLI11 is a
