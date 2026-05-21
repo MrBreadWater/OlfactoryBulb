@@ -19,9 +19,9 @@ if ! obgpu_activate_conda_env "${ENV_NAME}"; then
 fi
 
 export OBGPU_SHARED_REPO_ROOT="${REPO_ROOT}"
-export OBGPU_MECHANISM_ROOT="${REPO_ROOT}"
+export OBGPU_MECHANISM_ROOT="${OBGPU_MECHANISM_ROOT:-${REPO_ROOT}}"
 
-arch_dir="${REPO_ROOT}/$(uname -m)"
+arch_dir="${OBGPU_MECHANISM_ROOT}/$(uname -m)"
 if [[ -f "${arch_dir}/libcorenrnmech.so" ]]; then
   export CORENEURONLIB="${arch_dir}/libcorenrnmech.so"
 fi

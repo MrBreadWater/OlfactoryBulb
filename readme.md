@@ -4,11 +4,39 @@
 ![GitHub repo size](https://img.shields.io/github/repo-size/justasb/olfactorybulb) &nbsp;
 
 
-# Run Network Model & Reproduce Experiments
+# Install & Run Network Model
 
-The easiest way to run the model is to use [Docker](https://www.docker.com) 
+> The maintained install flow no longer uses Docker.
+>
+> Use [INSTALL.md](INSTALL.md) and `./install-obgpu.sh` for the supported `OBGPU` setup.
+>
+> The Docker instructions below are historical context, not the primary workflow.
+
+## Supported Quick Start
+
+GPU/CoreNEURON build:
+
+```bash
+ENABLE_GPU=1 ENV_NAME=OBGPU ./install-obgpu.sh
+source tools/setup/activate_obgpu.sh OBGPU
+jupyter lab
+```
+
+Portable CPU-only build:
+
+```bash
+ENV_NAME=OBGPU-portable ENABLE_GPU=0 OBGPU_CPU_TARGET=portable ./install-obgpu.sh
+source tools/setup/activate_obgpu.sh OBGPU-portable
+jupyter lab
+```
+
+See [INSTALL.md](INSTALL.md) for prerequisites, smoke tests, Sol notes, and the actual patch-stack/NEURON build flow.
+
+## Legacy Docker Instructions
+
+The easiest way to run the model is to use [Docker](https://www.docker.com)
 (a kind of virtualization software). After installing Docker, you will download the model's Docker image
-hosted on DockerHub, and run the image. The image contains everything needed to run the model 
+hosted on DockerHub, and run the image. The image contains everything needed to run the model
 (NEURON, Python, MPI, all required OS and Python packages). The image will open a Jupyter Lab environment
 which you can use to interact with the model.
 
