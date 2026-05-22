@@ -4,9 +4,11 @@ Run with:
     python test_config_helpers.py
 """
 
+import json
 import tempfile
 from copy import deepcopy
 from pathlib import Path
+from pathlib import PurePosixPath
 
 import obgpu_experiment_helpers as hlp
 from obgpu_experiment_helpers import (
@@ -129,5 +131,28 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         hlp._connect_paramiko = original_connect
         hlp.paramiko = original_paramiko
+
+    # --- Remote sweep submit should use an uploaded manifest file ---
+    sweep_cfg = build_run_config(
+        runner_backend="sol_slurm",
+        remote_host="user@host",
+        remote_repo_root="/remote/OlfactoryBulb",
+        remote_results_root="/remote/OlfactoryBulb/results/notebook_runs",
+        sweep_engine="remote_batch",
+    )
+    sweep_plan = hlp._prepare_sweep_plan(sweep_cfg, "gaba_gmax", [0.0, 0.1])
+    driver_command, manifest_items, manifest_json, manifest_path, _parallelism = hlp._build_remote_sweep_driver_command(
+        sweep_cfg,
+        sweep_plan=sweep_plan,
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_sweep_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/sweeps/test_sweep"),
+    )
+    assert "--items-json" in driver_command
+    assert "--items-b64" not in driver_command
+    assert manifest_path.as_posix() in driver_command
+    parsed_manifest = json.loads(manifest_json)
+    assert isinstance(parsed_manifest, list) and len(parsed_manifest) == len(manifest_items)
+    assert parsed_manifest[0]["label"] == manifest_items[0]["label"]
+    print("Remote sweep manifest upload path: OK")
 
 print("\nAll tests passed.")

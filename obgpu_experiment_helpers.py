@@ -2502,6 +2502,34 @@ def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
         pass
 
 
+def _upload_remote_text_file(
+    config: dict[str, Any],
+    *,
+    remote_path: PurePosixPath,
+    text: str,
+) -> None:
+    """Upload one UTF-8 text file to the remote host over the active notebook SSH transport."""
+    if _remote_transport(config) != "paramiko":
+        raise RuntimeError("Remote text upload currently requires ssh_transport='paramiko'.")
+    mkdir_completed = _run_paramiko_shell(
+        config,
+        "mkdir -p {}".format(shlex.quote(remote_path.parent.as_posix())),
+    )
+    if mkdir_completed.returncode != 0:
+        raise RuntimeError(
+            "Could not create the remote directory for an uploaded sweep payload.\n"
+            f"Remote path: {remote_path.as_posix()}\n"
+            f"Stdout:\n{mkdir_completed.stdout}\n\n"
+            f"Stderr:\n{mkdir_completed.stderr}"
+        )
+    sftp = _get_paramiko_sftp(config)
+    try:
+        with sftp.open(remote_path.as_posix(), "wb") as handle:
+            handle.write(text.encode("utf-8"))
+    finally:
+        _close_paramiko_sftp(config)
+
+
 def _extract_local_archive(local_archive_path: Path, local_result_dir: Path) -> subprocess.CompletedProcess[str]:
     """Extract one downloaded result archive into the local result directory."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
@@ -3825,6 +3853,7 @@ def _ensure_remote_git_ref_available(
             sftp.remove(remote_bundle_path)
         except Exception:
             pass
+        _close_paramiko_sftp(config)
 
 
 def _run_remote_simulation(
@@ -4784,10 +4813,11 @@ def _build_remote_sweep_driver_command(
     sweep_plan: dict[str, Any],
     remote_repo_root: PurePosixPath,
     remote_sweep_root: PurePosixPath,
-) -> tuple[list[str], list[dict[str, Any]], int]:
+) -> tuple[list[str], list[dict[str, Any]], str, PurePosixPath, int]:
     """Build the one driver command that runs an entire sweep inside one Slurm job."""
     remote_driver = Path(remote_repo_root) / "tools" / "remote" / "remote_sweep_driver.py"
     remote_runs_root = remote_sweep_root / "item_runs"
+    remote_manifest_path = remote_sweep_root / "sweep_manifest.submit.json"
     remote_mpi_exec = str(config.get("remote_mpi_exec") or default_remote_mpi_exec())
     tasks_per_item = max(int(config.get("nranks", 1) or 1), 1)
     max_concurrent = _remote_sweep_parallelism(config, tasks_per_item=tasks_per_item)
@@ -4813,7 +4843,7 @@ def _build_remote_sweep_driver_command(
             }
         )
 
-    manifest_b64 = b64encode(json.dumps(manifest_items, sort_keys=True).encode("utf-8")).decode("ascii")
+    manifest_json = json.dumps(manifest_items, indent=2, sort_keys=True)
     driver_command = [
         "python3",
         str(remote_driver),
@@ -4821,12 +4851,12 @@ def _build_remote_sweep_driver_command(
         remote_repo_root.as_posix(),
         "--sweep-root",
         remote_sweep_root.as_posix(),
-        "--items-b64",
-        manifest_b64,
+        "--items-json",
+        remote_manifest_path.as_posix(),
         "--max-concurrent",
         str(max_concurrent),
     ]
-    return driver_command, manifest_items, max_concurrent
+    return driver_command, manifest_items, manifest_json, remote_manifest_path, max_concurrent
 
 
 def _finalize_synced_sweep_item(
@@ -4881,7 +4911,13 @@ def _run_remote_sweep(
     remote_git_ref = _resolve_remote_git_ref(effective_config)
     remote_sweeps_root = _remote_results_root(effective_config) / "sweeps"
     remote_sweep_root = remote_sweeps_root / sweep_label
-    remote_driver_command, manifest_items, max_concurrent = _build_remote_sweep_driver_command(
+    (
+        remote_driver_command,
+        manifest_items,
+        manifest_json,
+        remote_manifest_path,
+        max_concurrent,
+    ) = _build_remote_sweep_driver_command(
         effective_config,
         sweep_plan=sweep_plan,
         remote_repo_root=remote_repo_root,
@@ -4935,6 +4971,14 @@ def _run_remote_sweep(
         remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
         remote_metadata["allocation_location"] = allocation_info.get("location", "")
         remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
+
+    _progress_write("[Sol remote] Uploading remote sweep manifest...")
+    _upload_remote_text_file(
+        effective_config,
+        remote_path=remote_manifest_path,
+        text=manifest_json,
+    )
+    remote_metadata["sweep_manifest_path"] = remote_manifest_path.as_posix()
 
     submit_shell = _build_remote_submit_command(
         effective_config,

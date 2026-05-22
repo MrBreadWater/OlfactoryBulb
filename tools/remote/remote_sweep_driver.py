@@ -18,6 +18,18 @@ from typing import Any
 def decode_items(payload_b64: str) -> list[dict[str, Any]]:
     """Decode the serialized sweep-item manifest."""
     items = json.loads(b64decode(payload_b64).decode("utf-8"))
+    return normalize_items(items)
+
+
+def load_items_json(items_json_path: str) -> list[dict[str, Any]]:
+    """Load the serialized sweep-item manifest from a JSON file."""
+    with open(items_json_path) as handle:
+        items = json.load(handle)
+    return normalize_items(items)
+
+
+def normalize_items(items: Any) -> list[dict[str, Any]]:
+    """Validate and normalize one decoded sweep-item manifest."""
     if not isinstance(items, list):
         raise ValueError("Sweep item payload must decode to a list")
     normalized = []
@@ -224,16 +236,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--sweep-root", required=True)
-    parser.add_argument("--items-b64", required=True)
+    parser.add_argument("--items-b64")
+    parser.add_argument("--items-json")
     parser.add_argument("--max-concurrent", type=int, default=1)
     args = parser.parse_args()
+    if bool(args.items_b64) == bool(args.items_json):
+        raise ValueError("Pass exactly one of --items-b64 or --items-json")
 
     repo_root = Path(args.repo_root).expanduser().resolve()
     sweep_root = Path(args.sweep_root).expanduser().resolve()
     sweep_root.mkdir(parents=True, exist_ok=True)
     (sweep_root / "runs").mkdir(parents=True, exist_ok=True)
 
-    items = decode_items(args.items_b64)
+    items = decode_items(args.items_b64) if args.items_b64 else load_items_json(args.items_json)
     sweep_label = sweep_root.name
     shared_repo_root = str(Path(os.environ.get("OBGPU_SHARED_REPO_ROOT", str(repo_root))).resolve())
     dll_path = dll_path_from_env()
