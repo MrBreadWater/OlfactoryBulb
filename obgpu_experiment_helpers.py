@@ -1782,6 +1782,37 @@ def _drop_paramiko_connection(config: dict[str, Any]) -> None:
             pass
 
 
+def _get_paramiko_sftp(config: dict[str, Any]) -> Any:
+    """Return the cached Paramiko SFTP client, opening it only when needed."""
+    connection = _connect_paramiko(config)
+    sftp = connection.get("sftp")
+    if sftp is not None:
+        return sftp
+    _progress_write("[Sol remote] Opening SFTP channel...")
+    try:
+        sftp = paramiko.SFTPClient.from_transport(connection["transport"])
+    except Exception:
+        _drop_paramiko_connection(config)
+        raise
+    connection["sftp"] = sftp
+    return sftp
+
+
+def _close_paramiko_sftp(config: dict[str, Any]) -> None:
+    """Close the cached Paramiko SFTP channel while keeping the SSH transport alive."""
+    cached = _LIVE_PARAMIKO_CONNECTIONS.get(_paramiko_connection_key(config))
+    if cached is None:
+        return
+    sftp = cached.get("sftp")
+    if sftp is None:
+        return
+    cached["sftp"] = None
+    try:
+        sftp.close()
+    except Exception:
+        pass
+
+
 def _connect_paramiko(config: dict[str, Any]) -> Any:
     """Open or reuse one persistent Paramiko transport for the Sol backend."""
     if paramiko is None:
@@ -1872,10 +1903,10 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                 f"Auth methods: {auth_methods}"
             )
 
-        _progress_write(f"[Sol remote] SSH authentication complete; opening SFTP channel...")
+        _progress_write(f"[Sol remote] SSH authentication complete.")
         connection = {
             "transport": transport,
-            "sftp": paramiko.SFTPClient.from_transport(transport),
+            "sftp": None,
             "hostname": hostname,
             "port": port,
             "username": username,
@@ -2736,7 +2767,6 @@ def _sync_remote_result_dir(
         last_exc: Exception | None = None
         for attempt in range(2):
             try:
-                connection = _connect_paramiko(config)
                 if bool(config.get("remote_sync_compress", True)):
                     probe_completed = _run_paramiko_shell(
                         config,
@@ -2770,7 +2800,7 @@ def _sync_remote_result_dir(
                         _progress_write(
                             "[OBGPU load] Streamed archive sync failed; retrying the same result dir over SFTP..."
                         )
-                        _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
+                        _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
                         return subprocess.CompletedProcess(
                             args=["paramiko-stream-extract-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
                             returncode=0,
@@ -2779,7 +2809,7 @@ def _sync_remote_result_dir(
                             + "\n[OBGPU load] Stream archive sync failed, but SFTP fallback completed successfully.\n",
                         )
                 else:
-                    _sftp_copy_tree(connection["sftp"], remote_result_dir.as_posix(), local_result_dir)
+                    _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
             except Exception as exc:
                 last_exc = exc
                 _drop_paramiko_connection(config)
@@ -2791,6 +2821,8 @@ def _sync_remote_result_dir(
                     stdout="",
                     stderr=str(exc),
                 )
+            finally:
+                _close_paramiko_sftp(config)
             return subprocess.CompletedProcess(
                 args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
                 returncode=0,
@@ -3735,8 +3767,7 @@ def _ensure_remote_git_ref_available(
             "Push the branch manually or enable the Paramiko transport."
         )
 
-    connection = _connect_paramiko(config)
-    sftp = connection["sftp"]
+    sftp = _get_paramiko_sftp(config)
     bundle_base = _find_remote_git_bundle_base(
         config,
         remote_repo_root=remote_repo_root,

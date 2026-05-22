@@ -8,6 +8,7 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 
+import obgpu_experiment_helpers as hlp
 from obgpu_experiment_helpers import (
     build_param_overrides,
     build_run_config,
@@ -100,5 +101,33 @@ with tempfile.TemporaryDirectory() as tmp:
     assert overrides["kar_gc_gmax"] == 0.001
     assert overrides["gc_ka_gbar_scale"] == 0.5
     print("KAR / ketamine controls: OK")
+
+    # --- Paramiko SFTP should be lazy and cached ---
+    original_connect = hlp._connect_paramiko
+    original_paramiko = hlp.paramiko
+    try:
+        connection = {"transport": "dummy-transport", "sftp": None}
+        sftp_calls = []
+
+        class _DummySFTPClient:
+            @staticmethod
+            def from_transport(transport):
+                sftp_calls.append(transport)
+                return {"transport": transport}
+
+        class _DummyParamiko:
+            SFTPClient = _DummySFTPClient
+
+        hlp._connect_paramiko = lambda _config: connection
+        hlp.paramiko = _DummyParamiko
+
+        sftp_1 = hlp._get_paramiko_sftp({})
+        sftp_2 = hlp._get_paramiko_sftp({})
+        assert sftp_1 is sftp_2
+        assert sftp_calls == ["dummy-transport"]
+        print("Paramiko SFTP lazy-open: OK")
+    finally:
+        hlp._connect_paramiko = original_connect
+        hlp.paramiko = original_paramiko
 
 print("\nAll tests passed.")
