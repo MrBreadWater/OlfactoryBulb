@@ -40,8 +40,8 @@ def normalize_state(raw_state):
     return raw_state.split()[0].split("+", 1)[0].strip().upper()
 
 
-def query_state(job_id):
-    """Query Slurm for the top-level job state using sacct first, then squeue."""
+def query_state(job_id, *, include_sacct=True):
+    """Query Slurm for the top-level job state using squeue, then sacct when allowed."""
     squeue_reason = ""
     squeue_location = ""
     squeue_completed = run_command(["squeue", "-j", str(job_id), "-h", "-o", "%T|%R"])
@@ -61,34 +61,35 @@ def query_state(job_id):
         if squeue_state == "PENDING":
             return {"state": squeue_state, "reason": squeue_reason, "location": squeue_location}
 
-    sacct_completed = run_command(
-        [
-            "sacct",
-            "-j",
-            str(job_id),
-            "--format=JobIDRaw,State",
-            "--parsable2",
-            "--noheader",
-        ]
-    )
-    sacct_output = (sacct_completed.stdout or "").strip()
-    if sacct_completed.returncode == 0 and sacct_output:
-        for line in sacct_output.splitlines():
-            parts = line.split("|", 1)
-            if len(parts) != 2:
-                continue
-            raw_job_id, raw_state = parts
-            if raw_job_id.strip() == str(job_id):
-                state = normalize_state(raw_state)
+    if include_sacct:
+        sacct_completed = run_command(
+            [
+                "sacct",
+                "-j",
+                str(job_id),
+                "--format=JobIDRaw,State",
+                "--parsable2",
+                "--noheader",
+            ]
+        )
+        sacct_output = (sacct_completed.stdout or "").strip()
+        if sacct_completed.returncode == 0 and sacct_output:
+            for line in sacct_output.splitlines():
+                parts = line.split("|", 1)
+                if len(parts) != 2:
+                    continue
+                raw_job_id, raw_state = parts
+                if raw_job_id.strip() == str(job_id):
+                    state = normalize_state(raw_state)
+                    if state:
+                        return {"state": state, "reason": squeue_reason, "location": squeue_location}
+            for line in sacct_output.splitlines():
+                parts = line.split("|", 1)
+                if len(parts) != 2:
+                    continue
+                state = normalize_state(parts[1])
                 if state:
                     return {"state": state, "reason": squeue_reason, "location": squeue_location}
-        for line in sacct_output.splitlines():
-            parts = line.split("|", 1)
-            if len(parts) != 2:
-                continue
-            state = normalize_state(parts[1])
-            if state:
-                return {"state": state, "reason": squeue_reason, "location": squeue_location}
 
     if squeue_completed.returncode == 0 and squeue_output:
         return {
@@ -161,6 +162,8 @@ def main():
     parser.add_argument("--wrapper-dir", default=None)
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--worktree-path", default=None)
+    parser.add_argument("--skip-sacct", action="store_true")
+    parser.add_argument("--skip-tails", action="store_true")
     args = parser.parse_args()
 
     result_dir = Path(args.result_dir).expanduser().resolve()
@@ -190,7 +193,7 @@ def main():
     slurm_log_exists = bool(slurm_logs)
     progress_payload = read_progress(progress_path)
 
-    state_payload = query_state(args.job_id)
+    state_payload = query_state(args.job_id, include_sacct=not bool(args.skip_sacct))
     state = state_payload["state"]
     done = False
     ok = False
@@ -225,18 +228,18 @@ def main():
         "stdout_exists": stdout_exists,
         "stderr_exists": stderr_exists,
         "bootstrap_exists": bootstrap_exists,
-        "bootstrap_tail": read_tail(bootstrap_path),
+        "bootstrap_tail": "" if args.skip_tails else read_tail(bootstrap_path),
         "command_exists": command_exists,
         "progress_exists": progress_exists,
         "progress_current_ms": progress_payload.get("current_ms"),
         "progress_total_ms": progress_payload.get("total_ms"),
         "progress_percent": progress_payload.get("percent"),
         "progress_payload": progress_payload,
-        "stdout_tail": read_tail(stdout_path),
-        "stderr_tail": read_tail(stderr_path),
+        "stdout_tail": "" if args.skip_tails else read_tail(stdout_path),
+        "stderr_tail": "" if args.skip_tails else read_tail(stderr_path),
         "slurm_log_exists": slurm_log_exists,
         "slurm_logs": [str(path) for path in slurm_logs],
-        "slurm_tail": read_tail(slurm_logs[-1]) if slurm_logs else "",
+        "slurm_tail": "" if args.skip_tails else (read_tail(slurm_logs[-1]) if slurm_logs else ""),
         "wrapper_dir": str(wrapper_dir),
         "cleanup": cleanup_payload,
     }

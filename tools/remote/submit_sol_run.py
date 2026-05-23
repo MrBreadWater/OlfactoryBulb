@@ -156,6 +156,7 @@ def write_batch_script(
     wrapper_dir = result_dir.parent / ".obgpu-wrapper" / label
     batch_path = wrapper_dir / "slurm_job.sh"
     heartbeat_path = wrapper_dir / "notebook-heartbeat.txt"
+    step_id_path = wrapper_dir / "srun-step-id.txt"
     if repo_mode == "snapshot":
         effective_command = relocate_benchmark_command(
             benchmark_command,
@@ -195,6 +196,7 @@ def write_batch_script(
         "mkdir -p {}".format(shlex.quote(str(wrapper_dir))),
         "result_dir={}".format(shlex.quote(str(result_dir))),
         "wrapper_dir={}".format(shlex.quote(str(wrapper_dir))),
+        "step_id_path={}".format(shlex.quote(str(step_id_path))),
         "shared_repo_root={}".format(shlex.quote(str(repo_root))),
         "job_repo_mode={}".format(shlex.quote(str(repo_mode))),
         "job_worktree={}".format(shlex.quote(str(worktree_root))),
@@ -216,6 +218,14 @@ def write_batch_script(
         "benchmark_pid=\"\"",
         "touch \"$bootstrap_log\"",
         "touch \"$notebook_heartbeat_path\"",
+        "step_id_text=\"${SLURM_STEP_ID:-${SLURM_STEPID:-}}\"",
+        "if [[ -n \"$step_id_text\" && \"$step_id_text\" != \"batch\" && \"$step_id_text\" != \"extern\" ]]; then",
+        "  if [[ \"$step_id_text\" == *.* ]]; then",
+        "    printf '%s\\n' \"$step_id_text\" > \"$step_id_path\"",
+        "  else",
+        "    printf '%s.%s\\n' \"$SLURM_JOB_ID\" \"$step_id_text\" > \"$step_id_path\"",
+        "  fi",
+        "fi",
         "run_git_locked() {",
         "  if command -v flock >/dev/null 2>&1; then",
         "    flock \"$git_lock_path\" \"$@\"",
@@ -780,46 +790,14 @@ srun --jobid "$allocation_job_id" --overlap --cpu-bind=none --job-name "$step_na
 launcher_pid=$!
 printf '%s\\n' "$launcher_pid" > "$launcher_pid_path"
 
-squeue_lookup() {{
-  squeue -s -j "$allocation_job_id" -h -o "%i|%j" 2>/dev/null || true
-}}
-
-sacct_lookup() {{
-  sacct -j "$allocation_job_id" --format=JobIDRaw,JobName --parsable2 --noheader 2>/dev/null || true
-}}
-
-capture_step_id() {{
-  local listing raw_id raw_name
-  while IFS='|' read -r raw_id raw_name; do
-    [[ -n "$raw_id" ]] || continue
-    [[ "$raw_name" == "$step_name" ]] || continue
-    printf '%s\\n' "$raw_id" > "$step_id_path"
-    return 0
-  done
-  return 1
-}}
-
-for _ in $(seq 1 150); do
+for _ in $(seq 1 300); do
   if [[ -s "$step_id_path" ]]; then
     break
   fi
-  listing="$(squeue_lookup)"
-  if [[ -n "$listing" ]]; then
-    if capture_step_id <<< "$listing"; then
-      break
-    fi
-  fi
-  listing="$(sacct_lookup)"
-  if [[ -n "$listing" ]]; then
-    if capture_step_id <<< "$listing"; then
-      break
-    fi
-  fi
   if ! kill -0 "$launcher_pid" 2>/dev/null; then
-    sleep 0.2
-  else
-    sleep 0.2
+    break
   fi
+  sleep 0.1
 done
 
 if [[ ! -s "$step_id_path" ]]; then

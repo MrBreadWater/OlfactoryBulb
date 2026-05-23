@@ -28,7 +28,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
 from getpass import getpass
-from hashlib import sha1
+from hashlib import sha1, sha256
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Any
@@ -168,6 +168,7 @@ CONTROL_HELP = {
     "sweep_parallelism": "Maximum concurrent sweep items inside one remote batch job. None/0 uses an automatic best-effort choice.",
     "sweep_sync_live": "When True, sync completed remote sweep items back locally while later items are still running.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
+    "remote_log_poll_interval_s": "How often to do heavier remote log-tail and sacct reconciliation polls while still updating progress every remote_poll_interval_s seconds.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
@@ -631,11 +632,17 @@ _NOTEBOOK_RUNTIME.setdefault("ssh_masters", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_git_refs", {})
+_NOTEBOOK_RUNTIME.setdefault("remote_helper_caches", {})
+_NOTEBOOK_RUNTIME.setdefault("remote_preflight", {})
+_NOTEBOOK_RUNTIME.setdefault("remote_stale_cleanup", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocation_atexit_registered", False)
 _LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 _LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
 _LIVE_REMOTE_GIT_REFS: dict[str, set[str]] = _NOTEBOOK_RUNTIME["remote_git_refs"]
+_LIVE_REMOTE_HELPER_CACHES: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_helper_caches"]
+_LIVE_REMOTE_PREFLIGHTS: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_preflight"]
+_LIVE_REMOTE_STALE_CLEANUPS: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_stale_cleanup"]
 
 
 def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -799,6 +806,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "sweep_parallelism": None,
         "sweep_sync_live": True,
         "remote_poll_interval_s": 1.0,
+        "remote_log_poll_interval_s": 5.0,
         "remote_live_status": True,
         "remote_live_logs": True,
         "remote_heartbeat_timeout_s": 120,
@@ -847,6 +855,7 @@ def build_slurm_remote_config(
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
     remote_poll_interval_s: float = 1.0,
+    remote_log_poll_interval_s: float = 5.0,
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
@@ -889,6 +898,7 @@ def build_slurm_remote_config(
         "remote_fallback_mechanism_profile": str(remote_fallback_mechanism_profile or "portable"),
         "remote_mpi_exec": str(remote_mpi_exec or default_remote_mpi_exec()),
         "remote_poll_interval_s": float(remote_poll_interval_s),
+        "remote_log_poll_interval_s": float(remote_log_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
         "remote_live_logs": bool(remote_live_logs),
         "remote_heartbeat_timeout_s": int(remote_heartbeat_timeout_s),
@@ -937,6 +947,7 @@ def build_sol_remote_config(
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
     remote_poll_interval_s: float = 1.0,
+    remote_log_poll_interval_s: float = 5.0,
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
@@ -975,6 +986,7 @@ def build_sol_remote_config(
         slurm_cpus_per_task=slurm_cpus_per_task,
         slurm_mem=slurm_mem,
         remote_poll_interval_s=remote_poll_interval_s,
+        remote_log_poll_interval_s=remote_log_poll_interval_s,
         remote_live_status=remote_live_status,
         remote_live_logs=remote_live_logs,
         remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
@@ -1476,6 +1488,84 @@ def _remote_results_root(config: dict[str, Any]) -> PurePosixPath:
     if configured:
         return PurePosixPath(str(configured))
     return _remote_repo_root(config) / "results" / "notebook_runs"
+
+
+def _record_timing(timings: dict[str, float], key: str, started_at: float) -> None:
+    """Accumulate one elapsed stage timing in seconds."""
+    timings[key] = round(timings.get(key, 0.0) + (time.perf_counter() - started_at), 3)
+
+
+def _timing_summary_text(timings: dict[str, float], *, limit: int = 6) -> str:
+    """Format the slowest recorded stages into one compact log string."""
+    items = [(key, float(value)) for key, value in timings.items() if float(value) > 0.0]
+    if not items:
+        return ""
+    items.sort(key=lambda item: item[1], reverse=True)
+    return ", ".join(f"{key}={value:.2f}s" for key, value in items[: max(int(limit), 1)])
+
+
+def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
+    """Return sizes for the standard notebook result artifacts that exist locally."""
+    result_dir = Path(result_dir)
+    filenames = (
+        "input_times.pkl",
+        "soma_vs.pkl",
+        "gc_output_events.pkl",
+        "lfp.pkl",
+        "summary.json",
+        "run_info.json",
+    )
+    sizes: dict[str, int] = {}
+    for filename in filenames:
+        path = result_dir / filename
+        if path.exists():
+            sizes[filename] = int(path.stat().st_size)
+    return sizes
+
+
+def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any]) -> None:
+    """Merge extra metadata into an existing run_info.json payload."""
+    result_dir = Path(result_dir)
+    run_info_path = result_dir / "run_info.json"
+    payload = _read_json_if_present(run_info_path) or {}
+    payload.update(_json_ready(extra_payload))
+    run_info_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+
+
+def _remote_helper_sources() -> dict[str, Path]:
+    """Return the helper scripts that should be cached on the remote host."""
+    helper_dir = REPO_ROOT / "tools" / "remote"
+    return {
+        "submit_sol_run.py": helper_dir / "submit_sol_run.py",
+        "submit_slurm_allocation.py": helper_dir / "submit_slurm_allocation.py",
+        "poll_sol_run.py": helper_dir / "poll_sol_run.py",
+        "cleanup_stale_allocations.py": helper_dir / "cleanup_stale_allocations.py",
+    }
+
+
+def _remote_helper_signature() -> str:
+    """Return a content signature for the current remote-helper set."""
+    digest = sha256()
+    for name, path in sorted(_remote_helper_sources().items()):
+        digest.update(name.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(path.read_bytes())
+        digest.update(b"\0")
+    return digest.hexdigest()[:20]
+
+
+def _remote_helper_cache_runtime_key(config: dict[str, Any]) -> str:
+    """Return the runtime cache key for one uploaded remote helper directory."""
+    return (
+        f"{_paramiko_connection_key(config)}::"
+        f"{_remote_results_root(config).as_posix()}::"
+        f"{_remote_helper_signature()}"
+    )
+
+
+def _remote_helper_cache_dir(config: dict[str, Any]) -> PurePosixPath:
+    """Return the remote directory that stores cached notebook helper scripts."""
+    return _remote_results_root(config) / ".obgpu-helper-cache" / _remote_helper_signature()
 
 
 _REMOTE_SLURM_TERMINAL_OK = {"COMPLETED"}
@@ -2502,15 +2592,16 @@ def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
         pass
 
 
-def _upload_remote_text_file(
+def _upload_remote_bytes_file(
     config: dict[str, Any],
     *,
     remote_path: PurePosixPath,
-    text: str,
+    data: bytes,
+    close_sftp: bool = True,
 ) -> None:
-    """Upload one UTF-8 text file to the remote host over the active notebook SSH transport."""
+    """Upload one file to the remote host over the active notebook SSH transport."""
     if _remote_transport(config) != "paramiko":
-        raise RuntimeError("Remote text upload currently requires ssh_transport='paramiko'.")
+        raise RuntimeError("Remote file upload currently requires ssh_transport='paramiko'.")
     mkdir_completed = _run_paramiko_shell(
         config,
         "mkdir -p {}".format(shlex.quote(remote_path.parent.as_posix())),
@@ -2525,9 +2616,95 @@ def _upload_remote_text_file(
     sftp = _get_paramiko_sftp(config)
     try:
         with sftp.open(remote_path.as_posix(), "wb") as handle:
-            handle.write(text.encode("utf-8"))
+            handle.write(data)
+    finally:
+        if close_sftp:
+            _close_paramiko_sftp(config)
+
+
+def _upload_remote_text_file(
+    config: dict[str, Any],
+    *,
+    remote_path: PurePosixPath,
+    text: str,
+    close_sftp: bool = True,
+) -> None:
+    """Upload one UTF-8 text file to the remote host over the active notebook SSH transport."""
+    _upload_remote_bytes_file(
+        config,
+        remote_path=remote_path,
+        data=text.encode("utf-8"),
+        close_sftp=close_sftp,
+    )
+
+
+def _ensure_remote_helper_cache(config: dict[str, Any]) -> PurePosixPath | None:
+    """Upload notebook helper scripts once per session or reuse a remote cache hit."""
+    if _remote_transport(config) != "paramiko":
+        return None
+
+    cache_key = _remote_helper_cache_runtime_key(config)
+    cached = _LIVE_REMOTE_HELPER_CACHES.get(cache_key)
+    if isinstance(cached, dict) and cached.get("remote_dir"):
+        return PurePosixPath(str(cached["remote_dir"]))
+
+    remote_dir = _remote_helper_cache_dir(config)
+    manifest_path = remote_dir / "manifest.json"
+    expected_signature = _remote_helper_signature()
+    probe_started = time.perf_counter()
+    probe_completed = _run_paramiko_shell(
+        config,
+        f"if test -f {shlex.quote(manifest_path.as_posix())}; then cat {shlex.quote(manifest_path.as_posix())}; fi",
+    )
+    if probe_completed.returncode == 0 and (probe_completed.stdout or "").strip():
+        try:
+            manifest_payload = json.loads((probe_completed.stdout or "").strip())
+        except json.JSONDecodeError:
+            manifest_payload = None
+        if isinstance(manifest_payload, dict) and manifest_payload.get("signature") == expected_signature:
+            _LIVE_REMOTE_HELPER_CACHES[cache_key] = {
+                "remote_dir": remote_dir.as_posix(),
+                "signature": expected_signature,
+                "cache_hit": True,
+                "probe_s": round(time.perf_counter() - probe_started, 3),
+            }
+            return remote_dir
+
+    _progress_write("[Sol remote] Uploading remote helper cache...")
+    helper_sources = _remote_helper_sources()
+    upload_started = time.perf_counter()
+    sftp = _get_paramiko_sftp(config)
+    try:
+        mkdir_completed = _run_paramiko_shell(
+            config,
+            "mkdir -p {}".format(shlex.quote(remote_dir.as_posix())),
+        )
+        if mkdir_completed.returncode != 0:
+            raise RuntimeError(
+                "Could not create the remote helper-cache directory.\n"
+                f"Remote dir: {remote_dir.as_posix()}\n"
+                f"Stdout:\n{mkdir_completed.stdout}\n\n"
+                f"Stderr:\n{mkdir_completed.stderr}"
+            )
+        for name, path in helper_sources.items():
+            with sftp.open((remote_dir / name).as_posix(), "wb") as handle:
+                handle.write(path.read_bytes())
+        manifest_payload = {
+            "signature": expected_signature,
+            "files": sorted(helper_sources.keys()),
+        }
+        with sftp.open(manifest_path.as_posix(), "wb") as handle:
+            handle.write(json.dumps(manifest_payload, indent=2, sort_keys=True).encode("utf-8"))
     finally:
         _close_paramiko_sftp(config)
+
+    _LIVE_REMOTE_HELPER_CACHES[cache_key] = {
+        "remote_dir": remote_dir.as_posix(),
+        "signature": expected_signature,
+        "cache_hit": False,
+        "upload_s": round(time.perf_counter() - upload_started, 3),
+    }
+    return remote_dir
 
 
 def _extract_local_archive(local_archive_path: Path, local_result_dir: Path) -> subprocess.CompletedProcess[str]:
@@ -2592,6 +2769,16 @@ def _local_archive_decompress_command(compressor: str) -> list[str]:
     raise ValueError(f"Unsupported archive compressor {compressor!r}")
 
 
+def _paramiko_channel_stream_finished(channel: Any) -> bool:
+    """Return whether one Paramiko exec channel has reached a fully drained EOF."""
+    return bool(
+        channel.exit_status_ready()
+        and getattr(channel, "eof_received", False)
+        and not channel.recv_ready()
+        and not channel.recv_stderr_ready()
+    )
+
+
 def _stream_paramiko_archive_to_local(
     config: dict[str, Any],
     *,
@@ -2631,12 +2818,13 @@ def _stream_paramiko_archive_to_local(
                         handle.write(data)
                         bytes_written += len(data)
                         progress.update_to(bytes_written)
+                        continue
                 if channel.recv_stderr_ready():
                     stderr_chunks.append(channel.recv_stderr(65536))
-                if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                    continue
+                if _paramiko_channel_stream_finished(channel):
                     break
-                if not channel.recv_ready() and not channel.recv_stderr_ready():
-                    time.sleep(0.05)
+                time.sleep(0.05)
         returncode = channel.recv_exit_status()
         if bytes_written:
             progress.update_to(bytes_written)
@@ -2734,7 +2922,8 @@ def _stream_paramiko_archive_to_local_dir(
                     continue
             if channel.recv_stderr_ready():
                 stderr_chunks.append(channel.recv_stderr(65536))
-            if channel.exit_status_ready() and not channel.recv_ready() and not channel.recv_stderr_ready():
+                continue
+            if _paramiko_channel_stream_finished(channel):
                 break
             time.sleep(0.05)
 
@@ -2937,16 +3126,33 @@ def _synthesize_partial_sync_summary(
     }
 
 
-def _build_remote_allocation_submit_command(
-    config: dict[str, Any],
-) -> tuple[str, PurePosixPath, str]:
-    """Build the remote helper invocation that submits one reusable allocation."""
-    remote_helper = REPO_ROOT / "tools" / "remote" / "submit_slurm_allocation.py"
-    helper_b64 = b64encode(remote_helper.read_bytes()).decode("ascii")
-    python_exec = (
+def _remote_helper_script_path(remote_helper_dir: PurePosixPath | None, script_name: str) -> PurePosixPath | None:
+    """Return one uploaded remote-helper path when a cache directory is available."""
+    if remote_helper_dir is None:
+        return None
+    return remote_helper_dir / str(script_name)
+
+
+def _remote_python_exec_prefix() -> str:
+    """Return the remote shell prefix that resolves python3/python and execs it."""
+    return (
         'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
         ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON" -c '
+        ' && exec "$REMOTE_PYTHON"'
+    )
+
+
+def _build_remote_python_file_command(script_path: PurePosixPath, argv: list[str]) -> str:
+    """Build a remote shell command that executes one uploaded helper script."""
+    return _remote_python_exec_prefix() + " " + _shell_join([script_path.as_posix(), *argv])
+
+
+def _build_remote_python_inline_command(script_path: Path, argv: list[str]) -> str:
+    """Build a remote shell command that executes one helper script inline."""
+    helper_b64 = b64encode(script_path.read_bytes()).decode("ascii")
+    python_exec = (
+        _remote_python_exec_prefix()
+        + " -c "
         + shlex.quote(
             'import base64,sys; '
             'script_b64=sys.argv[1]; '
@@ -2956,14 +3162,22 @@ def _build_remote_allocation_submit_command(
             'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
         )
     )
+    return python_exec + " " + _shell_join([helper_b64, str(script_path), *argv])
+
+
+def _build_remote_allocation_submit_command(
+    config: dict[str, Any],
+    *,
+    remote_helper_dir: PurePosixPath | None = None,
+) -> tuple[str, PurePosixPath, str]:
+    """Build the remote helper invocation that submits one reusable allocation."""
+    remote_helper = REPO_ROOT / "tools" / "remote" / "submit_slurm_allocation.py"
     allocation_key = _slurm_allocation_cache_key(config)
     allocation_root = _remote_results_root(config) / ".obgpu-allocations" / allocation_key
     allocation_name_base = str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc")
     allocation_name = f"{allocation_name_base[:100]}_{allocation_key[:8]}"
     allocation_time = config.get("slurm_allocation_time") or config.get("slurm_time")
-    command = [
-        helper_b64,
-        str(remote_helper),
+    argv = [
         "--alloc-root",
         allocation_root.as_posix(),
         "--name",
@@ -2976,20 +3190,26 @@ def _build_remote_allocation_submit_command(
     ):
         value = config.get(key)
         if value not in (None, ""):
-            command.extend([flag, str(value)])
+            argv.extend([flag, str(value)])
     if allocation_time not in (None, ""):
-        command.extend(["--time", str(allocation_time)])
-    command.extend(["--heartbeat-timeout-s", str(_remote_heartbeat_timeout_s(config))])
+        argv.extend(["--time", str(allocation_time)])
+    argv.extend(["--heartbeat-timeout-s", str(_remote_heartbeat_timeout_s(config))])
     for key, flag in (
         ("slurm_gpus", "--gpus"),
         ("slurm_cpus_per_task", "--cpus-per-task"),
     ):
         value = config.get(key)
         if value not in (None, ""):
-            command.extend([flag, str(int(value))])
+            argv.extend([flag, str(int(value))])
     for extra in config.get("slurm_extra_args", []):
-        command.append("--sbatch-arg={}".format(str(extra)))
-    return python_exec + " " + _shell_join(command), allocation_root, allocation_name
+        argv.append("--sbatch-arg={}".format(str(extra)))
+
+    remote_helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
+    if remote_helper_path is not None:
+        command = _build_remote_python_file_command(remote_helper_path, argv)
+    else:
+        command = _build_remote_python_inline_command(remote_helper, argv)
+    return command, allocation_root, allocation_name
 
 
 def _build_remote_touch_command(path_value: str | PurePosixPath) -> str:
@@ -3024,82 +3244,37 @@ def _refresh_remote_heartbeat(
     return True
 
 
-def _build_remote_cleanup_allocations_command(config: dict[str, Any]) -> str:
+def _build_remote_cleanup_allocations_command(
+    config: dict[str, Any],
+    *,
+    remote_helper_dir: PurePosixPath | None = None,
+) -> str:
     """Build a remote command that cancels stale notebook-managed allocations."""
     cleanup_root = _remote_results_root(config) / ".obgpu-allocations"
-    script = r'''
-import json
-import subprocess
-import sys
-import time
-from pathlib import Path
-
-root = Path(sys.argv[1]).expanduser()
-default_timeout_s = int(sys.argv[2])
-now = time.time()
-actions = []
-if root.exists():
-    for allocation_json in sorted(root.glob("*/allocation.json")):
-        try:
-            payload = json.loads(allocation_json.read_text())
-        except Exception as exc:
-            actions.append({"allocation_json": str(allocation_json), "action": "skip", "reason": "invalid_json", "error": str(exc)})
-            continue
-        job_id = str(payload.get("job_id") or "").strip()
-        if not job_id:
-            continue
-        heartbeat_path = str(payload.get("heartbeat_path") or "").strip()
-        try:
-            timeout_s = int(payload.get("heartbeat_timeout_s") or default_timeout_s)
-        except Exception:
-            timeout_s = default_timeout_s
-        reason = ""
-        if not heartbeat_path:
-            reason = "legacy_no_heartbeat"
-        else:
-            heartbeat = Path(heartbeat_path)
-            if not heartbeat.exists():
-                reason = "missing_heartbeat"
-            elif timeout_s > 0 and now - heartbeat.stat().st_mtime > timeout_s:
-                reason = "expired_heartbeat"
-        if not reason:
-            continue
-        completed = subprocess.run(
-            ["scancel", job_id],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            check=False,
-        )
-        actions.append({
-            "job_id": job_id,
-            "action": "cancel_requested",
-            "reason": reason,
-            "returncode": completed.returncode,
-            "stderr": (completed.stderr or "").strip(),
-        })
-print(json.dumps(actions, sort_keys=True))
-'''
-    script_b64 = b64encode(script.encode("utf-8")).decode("ascii")
-    python_exec = (
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
-        ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON" -c '
-        + shlex.quote(
-            'import base64,sys; '
-            'script_b64=sys.argv[1]; '
-            'sys.argv=sys.argv[1:]; '
-            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), "<obgpu-cleanup-allocations>", "exec"))'
-        )
-    )
-    return python_exec + " " + _shell_join(
-        [script_b64, cleanup_root.as_posix(), str(_remote_heartbeat_timeout_s(config))]
-    )
+    remote_helper = REPO_ROOT / "tools" / "remote" / "cleanup_stale_allocations.py"
+    argv = [
+        "--root",
+        cleanup_root.as_posix(),
+        "--default-timeout-s",
+        str(_remote_heartbeat_timeout_s(config)),
+    ]
+    if remote_helper_dir is not None:
+        helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
+        if helper_path is not None:
+            return _build_remote_python_file_command(helper_path, argv)
+    return _build_remote_python_inline_command(remote_helper, argv)
 
 
-def _cleanup_stale_remote_slurm_allocations(config: dict[str, Any]) -> list[dict[str, Any]]:
+def _cleanup_stale_remote_slurm_allocations(
+    config: dict[str, Any],
+    *,
+    remote_helper_dir: PurePosixPath | None = None,
+) -> list[dict[str, Any]]:
     """Cancel stale remote notebook-managed reusable allocations before a new run."""
-    completed = _run_ssh_shell(config, _build_remote_cleanup_allocations_command(config))
+    completed = _run_ssh_shell(
+        config,
+        _build_remote_cleanup_allocations_command(config, remote_helper_dir=remote_helper_dir),
+    )
     if completed.returncode != 0:
         _progress_write(f"[Sol remote] Stale allocation cleanup failed: {(completed.stderr or '').strip()}")
         return []
@@ -3118,11 +3293,40 @@ def _cleanup_stale_remote_slurm_allocations(config: dict[str, Any]) -> list[dict
     return [action for action in actions if isinstance(action, dict)]
 
 
+def _maybe_cleanup_stale_remote_slurm_allocations(
+    config: dict[str, Any],
+    *,
+    remote_helper_dir: PurePosixPath | None = None,
+) -> list[dict[str, Any]]:
+    """Throttle stale-allocation cleanup so warm sessions do not repeat the same scan."""
+    if not bool(config.get("remote_cleanup_stale_allocations", True)):
+        return []
+    if not bool(config.get("slurm_reuse_allocation", False)):
+        return []
+    if config.get("slurm_allocation_job_id") not in (None, ""):
+        return []
+    cache_key = f"{_paramiko_connection_key(config)}::{_remote_results_root(config).as_posix()}"
+    cached = _LIVE_REMOTE_STALE_CLEANUPS.get(cache_key)
+    if cached is not None:
+        return list(cached.get("actions", []))
+    actions = _cleanup_stale_remote_slurm_allocations(config, remote_helper_dir=remote_helper_dir)
+    _LIVE_REMOTE_STALE_CLEANUPS[cache_key] = {
+        "timestamp": time.time(),
+        "actions": list(actions),
+    }
+    return actions
+
+
 def _build_remote_allocation_discovery_command(
     config: dict[str, Any],
+    *,
+    remote_helper_dir: PurePosixPath | None = None,
 ) -> tuple[str, PurePosixPath, str]:
     """Build the remote command that returns allocation metadata for one config, if present."""
-    _submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(config)
+    _submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(
+        config,
+        remote_helper_dir=remote_helper_dir,
+    )
     allocation_json = allocation_root / "allocation.json"
     command = (
         f"if test -f {shlex.quote(allocation_json.as_posix())}; then "
@@ -3141,27 +3345,12 @@ def _build_remote_submit_command(
     benchmark_command: list[str],
     remote_mpi_exec: str,
     remote_git_ref: str | None,
+    remote_helper_dir: PurePosixPath | None = None,
 ) -> str:
     """Build the remote `submit_sol_run.py` invocation shell line."""
     remote_helper = REPO_ROOT / "tools" / "remote" / "submit_sol_run.py"
     benchmark_b64 = b64encode(json.dumps(benchmark_command).encode("utf-8")).decode("ascii")
-    helper_b64 = b64encode(remote_helper.read_bytes()).decode("ascii")
-    python_exec = (
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
-        ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON" -c '
-        + shlex.quote(
-            'import base64,sys; '
-            'script_b64=sys.argv[1]; '
-            'script_path=sys.argv[2]; '
-            'sys.argv=sys.argv[2:]; '
-            'namespace={"__name__":"__main__","__file__":script_path}; '
-            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
-        )
-    )
-    command = [
-        helper_b64,
-        str(remote_helper),
+    argv = [
         "--repo-root",
         remote_repo_root.as_posix(),
         "--results-base",
@@ -3184,27 +3373,27 @@ def _build_remote_submit_command(
     runtime_profiles = config.get("remote_runtime_profiles") or []
     if runtime_profiles:
         profiles_b64 = b64encode(json.dumps(runtime_profiles, sort_keys=True).encode("utf-8")).decode("ascii")
-        command.extend(["--runtime-profiles-b64", profiles_b64])
+        argv.extend(["--runtime-profiles-b64", profiles_b64])
     if fallback_conda_activate_cmd not in (None, ""):
-        command.extend(["--fallback-conda-activate-cmd", str(fallback_conda_activate_cmd)])
+        argv.extend(["--fallback-conda-activate-cmd", str(fallback_conda_activate_cmd)])
     fast_node_feature = config.get("remote_fast_node_feature")
     if fast_node_feature not in (None, ""):
-        command.extend(["--fast-node-feature", str(fast_node_feature)])
+        argv.extend(["--fast-node-feature", str(fast_node_feature)])
     mechanism_profile = config.get("remote_mechanism_profile")
     if mechanism_profile not in (None, ""):
-        command.extend(["--mechanism-profile", str(mechanism_profile)])
+        argv.extend(["--mechanism-profile", str(mechanism_profile)])
     fallback_mechanism_profile = config.get("remote_fallback_mechanism_profile")
     if fallback_mechanism_profile not in (None, ""):
-        command.extend(["--fallback-mechanism-profile", str(fallback_mechanism_profile)])
+        argv.extend(["--fallback-mechanism-profile", str(fallback_mechanism_profile)])
 
     if remote_git_ref:
-        command.extend(["--git-ref", remote_git_ref])
+        argv.extend(["--git-ref", remote_git_ref])
     if bool(config.get("remote_git_fetch", False)):
-        command.append("--git-fetch")
-        command.extend(["--git-remote", str(config.get("remote_git_remote", "origin"))])
+        argv.append("--git-fetch")
+        argv.extend(["--git-remote", str(config.get("remote_git_remote", "origin"))])
     allocation_job_id = config.get("slurm_allocation_job_id")
     if allocation_job_id not in (None, ""):
-        command.extend(["--allocation-job-id", str(allocation_job_id)])
+        argv.extend(["--allocation-job-id", str(allocation_job_id)])
 
     for key, flag in (
         ("slurm_partition", "--partition"),
@@ -3214,7 +3403,7 @@ def _build_remote_submit_command(
     ):
         value = config.get(key)
         if value not in (None, ""):
-            command.extend([flag, str(value)])
+            argv.extend([flag, str(value)])
 
     for key, flag in (
         ("slurm_gpus", "--gpus"),
@@ -3222,12 +3411,15 @@ def _build_remote_submit_command(
     ):
         value = config.get(key)
         if value not in (None, ""):
-            command.extend([flag, str(int(value))])
+            argv.extend([flag, str(int(value))])
 
     for extra in config.get("slurm_extra_args", []):
-        command.append("--sbatch-arg={}".format(str(extra)))
+        argv.append("--sbatch-arg={}".format(str(extra)))
 
-    return python_exec + " " + _shell_join(command)
+    remote_helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
+    if remote_helper_path is not None:
+        return _build_remote_python_file_command(remote_helper_path, argv)
+    return _build_remote_python_inline_command(remote_helper, argv)
 
 
 def _build_remote_poll_command(
@@ -3238,35 +3430,22 @@ def _build_remote_poll_command(
     job_id: str,
     wrapper_dir: str | None = None,
     worktree_path: str | None = None,
+    remote_helper_dir: PurePosixPath | None = None,
+    include_sacct: bool = True,
+    include_tails: bool = True,
 ) -> str:
     """Build the remote `poll_sol_run.py` invocation shell line."""
     remote_helper = REPO_ROOT / "tools" / "remote" / "poll_sol_run.py"
-    helper_b64 = b64encode(remote_helper.read_bytes()).decode("ascii")
-    python_exec = (
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
-        ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON" -c '
-        + shlex.quote(
-            'import base64,sys; '
-            'script_b64=sys.argv[1]; '
-            'script_path=sys.argv[2]; '
-            'sys.argv=sys.argv[2:]; '
-            'namespace={"__name__":"__main__","__file__":script_path}; '
-            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
-        )
-    )
-    command = [
-        helper_b64,
-        str(remote_helper),
+    argv = [
         "--job-id",
         str(job_id),
         "--result-dir",
         remote_result_dir.as_posix(),
     ]
     if wrapper_dir not in (None, ""):
-        command.extend(["--wrapper-dir", str(wrapper_dir)])
+        argv.extend(["--wrapper-dir", str(wrapper_dir)])
     if worktree_path not in (None, ""):
-        command.extend(
+        argv.extend(
             [
                 "--repo-root",
                 remote_repo_root.as_posix(),
@@ -3274,7 +3453,14 @@ def _build_remote_poll_command(
                 str(worktree_path),
             ]
         )
-    return python_exec + " " + _shell_join(command)
+    if not include_sacct:
+        argv.append("--skip-sacct")
+    if not include_tails:
+        argv.append("--skip-tails")
+    remote_helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
+    if remote_helper_path is not None:
+        return _build_remote_python_file_command(remote_helper_path, argv)
+    return _build_remote_python_inline_command(remote_helper, argv)
 
 
 def _build_remote_preflight_command(
@@ -3295,6 +3481,52 @@ def _build_remote_preflight_command(
         'command -v srun >/dev/null',
     ]
     return " && ".join(checks)
+
+
+def _remote_preflight_cache_key(config: dict[str, Any], remote_repo_root: PurePosixPath) -> str:
+    """Return the runtime cache key for one successful remote preflight."""
+    payload = json.dumps(
+        {
+            "endpoint": _paramiko_connection_key(config),
+            "remote_repo_root": remote_repo_root.as_posix(),
+            "remote_conda_activate_cmd": str(config.get("remote_conda_activate_cmd") or ""),
+            "helper_signature": _remote_helper_signature(),
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return sha1(payload.encode("utf-8")).hexdigest()[:16]
+
+
+def _run_remote_preflight_cached(
+    config: dict[str, Any],
+    *,
+    remote_repo_root: PurePosixPath,
+) -> tuple[subprocess.CompletedProcess[str], bool]:
+    """Run one remote preflight only once per notebook session."""
+    cache_key = _remote_preflight_cache_key(config, remote_repo_root)
+    cached = _LIVE_REMOTE_PREFLIGHTS.get(cache_key)
+    if cached is not None:
+        return (
+            subprocess.CompletedProcess(
+                args=["remote-preflight-cache", remote_repo_root.as_posix()],
+                returncode=0,
+                stdout=str(cached.get("stdout") or ""),
+                stderr="",
+            ),
+            True,
+        )
+
+    completed = _run_ssh_shell(
+        config,
+        _build_remote_preflight_command(remote_repo_root=remote_repo_root),
+    )
+    if completed.returncode == 0:
+        _LIVE_REMOTE_PREFLIGHTS[cache_key] = {
+            "timestamp": time.time(),
+            "stdout": completed.stdout or "",
+        }
+    return completed, False
 
 
 def _build_remote_result_listing_command(
@@ -3378,7 +3610,11 @@ def _query_remote_slurm_job_state(config: dict[str, Any], job_id: str) -> dict[s
     return {"state": "UNKNOWN", "reason": "", "location": ""}
 
 
-def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, Any]:
+def _ensure_cached_remote_slurm_allocation(
+    config: dict[str, Any],
+    *,
+    remote_helper_dir: PurePosixPath | None = None,
+) -> dict[str, Any]:
     """Acquire or reuse one notebook-cached remote Slurm allocation."""
     manual_job_id = config.get("slurm_allocation_job_id")
     if manual_job_id not in (None, ""):
@@ -3422,7 +3658,10 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
             print(f"[Sol remote] Reusing cached allocation {allocation['job_id']}.", flush=True)
 
     if allocation is None:
-        discover_command, allocation_root, allocation_name = _build_remote_allocation_discovery_command(config)
+        discover_command, allocation_root, allocation_name = _build_remote_allocation_discovery_command(
+            config,
+            remote_helper_dir=remote_helper_dir,
+        )
         discover_completed = _run_ssh_shell(config, discover_command)
         if discover_completed.returncode != 0:
             raise RuntimeError(
@@ -3467,7 +3706,10 @@ def _ensure_cached_remote_slurm_allocation(config: dict[str, Any]) -> dict[str, 
 
     if allocation is None:
         print("[Sol remote] Requesting reusable Slurm allocation...", flush=True)
-        submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(config)
+        submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(
+            config,
+            remote_helper_dir=remote_helper_dir,
+        )
         submit_completed = _run_ssh_shell(config, submit_command)
         if submit_completed.returncode != 0:
             raise RuntimeError(
@@ -3555,7 +3797,9 @@ def release_remote_slurm_allocation(config: dict[str, Any]) -> bool:
     cache_key = _slurm_allocation_cache_key(config)
     allocation = _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
     if allocation is None:
-        discover_command, _allocation_root, _allocation_name = _build_remote_allocation_discovery_command(config)
+        discover_command, _allocation_root, _allocation_name = _build_remote_allocation_discovery_command(
+            config,
+        )
         discover_completed = _run_ssh_shell(config, discover_command)
         if discover_completed.returncode != 0:
             print(f"[Sol remote] Allocation discovery stderr: {(discover_completed.stderr or '').strip()}", flush=True)
@@ -3585,6 +3829,7 @@ def _remote_submission_payload(
     config: dict[str, Any],
     *,
     label: str,
+    remote_helper_dir: PurePosixPath | None = None,
 ) -> tuple[PurePosixPath, PurePosixPath, list[str], dict[str, Any], str]:
     """Prepare the remote paths and benchmark command for a Sol run."""
     remote_repo_root = _remote_repo_root(config)
@@ -3611,6 +3856,7 @@ def _remote_submission_payload(
         benchmark_command=remote_command,
         remote_mpi_exec=str(remote_mpi_exec),
         remote_git_ref=remote_git_ref,
+        remote_helper_dir=remote_helper_dir,
     )
     return (
         remote_repo_root,
@@ -3867,6 +4113,8 @@ def _run_remote_simulation(
     effective_config = dict(config)
     remote_repo_root = _remote_repo_root(effective_config)
     remote_git_ref = _resolve_remote_git_ref(effective_config)
+    notebook_timings: dict[str, float] = {}
+    remote_helper_dir: PurePosixPath | None = None
     (
         _remote_repo_root_value,
         _remote_results_root_value,
@@ -3874,17 +4122,21 @@ def _run_remote_simulation(
         remote_metadata,
         submit_shell,
     ) = _remote_submission_payload(effective_config, label=label)
+    started = time.perf_counter()
     _ensure_remote_git_ref_available(
         effective_config,
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_git_ref,
     )
+    _record_timing(notebook_timings, "git_publish_s", started)
     _progress_write("[Sol remote] Running remote preflight checks...")
-
-    preflight_completed = _run_ssh_shell(
+    started = time.perf_counter()
+    preflight_completed, preflight_cached = _run_remote_preflight_cached(
         effective_config,
-        _build_remote_preflight_command(remote_repo_root=remote_repo_root),
+        remote_repo_root=remote_repo_root,
     )
+    _record_timing(notebook_timings, "preflight_s", started)
+    remote_metadata["preflight_cached"] = bool(preflight_cached)
     if preflight_completed.returncode != 0:
         local_result_dir.mkdir(parents=True, exist_ok=True)
         completed = SimpleNamespace(
@@ -3909,10 +4161,39 @@ def _run_remote_simulation(
             f"Stderr:\n{preflight_completed.stderr}"
         )
 
-    if bool(effective_config.get("remote_cleanup_stale_allocations", True)):
-        _cleanup_stale_remote_slurm_allocations(effective_config)
+    started = time.perf_counter()
+    remote_helper_dir = _ensure_remote_helper_cache(effective_config)
+    _record_timing(notebook_timings, "helper_cache_s", started)
+    if remote_helper_dir is not None:
+        helper_cache_meta = _LIVE_REMOTE_HELPER_CACHES.get(_remote_helper_cache_runtime_key(effective_config)) or {}
+        (
+            _remote_repo_root_value,
+            _remote_results_root_value,
+            remote_benchmark_command,
+            remote_metadata,
+            submit_shell,
+        ) = _remote_submission_payload(
+            effective_config,
+            label=label,
+            remote_helper_dir=remote_helper_dir,
+        )
+        remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
+        remote_metadata["remote_helper_cache_hit"] = bool(helper_cache_meta.get("cache_hit", False))
 
-    allocation_info = _ensure_cached_remote_slurm_allocation(effective_config)
+    started = time.perf_counter()
+    cleanup_actions = _maybe_cleanup_stale_remote_slurm_allocations(
+        effective_config,
+        remote_helper_dir=remote_helper_dir,
+    )
+    _record_timing(notebook_timings, "allocation_cleanup_s", started)
+    remote_metadata["stale_allocation_cleanup_count"] = len(cleanup_actions)
+
+    started = time.perf_counter()
+    allocation_info = _ensure_cached_remote_slurm_allocation(
+        effective_config,
+        remote_helper_dir=remote_helper_dir,
+    )
+    _record_timing(notebook_timings, "allocation_wait_s", started)
     allocation_heartbeat_path = None
     if allocation_info.get("job_id") not in (None, ""):
         effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
@@ -3923,7 +4204,13 @@ def _run_remote_simulation(
             remote_benchmark_command,
             remote_metadata,
             submit_shell,
-        ) = _remote_submission_payload(effective_config, label=label)
+        ) = _remote_submission_payload(
+            effective_config,
+            label=label,
+            remote_helper_dir=remote_helper_dir,
+        )
+        if remote_helper_dir is not None:
+            remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
         remote_metadata["auto_reused_allocation"] = bool(
             effective_config.get("slurm_reuse_allocation", False)
             and not allocation_info.get("manual", False)
@@ -3934,7 +4221,9 @@ def _run_remote_simulation(
         remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
 
     _progress_write("[Sol remote] Submitting Slurm job...")
+    started = time.perf_counter()
     submit_completed = _run_ssh_shell(effective_config, submit_shell)
+    _record_timing(notebook_timings, "submit_s", started)
     local_result_dir.mkdir(parents=True, exist_ok=True)
     (local_result_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
     (local_result_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
@@ -3978,6 +4267,10 @@ def _run_remote_simulation(
     )
     _progress_write(f"[Sol remote] Submitted job {submission['job_id']}.")
     poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
+    log_poll_interval_s = max(
+        float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
+        poll_interval_s,
+    )
     live_status = bool(effective_config.get("remote_live_status", True))
     live_logs = bool(effective_config.get("remote_live_logs", True))
     poll_transcript: list[dict[str, Any]] = []
@@ -4008,12 +4301,19 @@ def _run_remote_simulation(
     sim_waiting_for_progress_logged = False
     sim_progress_complete = False
     sim_finalizing_logged = False
+    next_full_poll_at = time.monotonic()
+    last_polled_state: tuple[Any, Any, Any] | None = None
 
     def refresh_remote_leases(*, warn: bool = False) -> None:
         _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
         _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
 
-    def poll_remote_status_once(*, refresh_heartbeat: bool = True) -> dict[str, Any]:
+    def poll_remote_status_once(
+        *,
+        refresh_heartbeat: bool = True,
+        include_logs: bool = True,
+        include_sacct: bool = True,
+    ) -> dict[str, Any]:
         if refresh_heartbeat:
             refresh_remote_leases()
         poll_shell = _build_remote_poll_command(
@@ -4023,8 +4323,13 @@ def _run_remote_simulation(
             job_id=str(submission["job_id"]),
             wrapper_dir=str(submission.get("wrapper_dir") or ""),
             worktree_path=str(submission.get("worktree_path") or ""),
+            remote_helper_dir=remote_helper_dir,
+            include_sacct=include_sacct,
+            include_tails=include_logs,
         )
+        poll_started = time.perf_counter()
         poll_completed = _run_ssh_shell(effective_config, poll_shell)
+        _record_timing(notebook_timings, "poll_s", poll_started)
         if poll_completed.returncode != 0:
             raise RuntimeError(
                 "Remote Sol status poll failed.\n"
@@ -4193,7 +4498,11 @@ def _run_remote_simulation(
         cancel_confirmed = False
         while time.time() < cancel_deadline:
             try:
-                status = poll_remote_status_once(refresh_heartbeat=False)
+                status = poll_remote_status_once(
+                    refresh_heartbeat=False,
+                    include_logs=True,
+                    include_sacct=True,
+                )
             except Exception as exc:
                 _progress_write(f"[Sol remote] Remote shutdown poll failed: {exc}")
                 break
@@ -4217,11 +4526,13 @@ def _run_remote_simulation(
         else:
             _progress_write(f"[Sol remote] Syncing partial remote artifacts...")
         try:
+            sync_started = time.perf_counter()
             sync_completed = _sync_remote_result_dir(
                 effective_config,
                 remote_result_dir=remote_result_dir,
                 local_result_dir=local_result_dir,
             )
+            _record_timing(notebook_timings, "partial_sync_s", sync_started)
             (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
             (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
             if sync_completed.returncode == 0:
@@ -4236,7 +4547,41 @@ def _run_remote_simulation(
     try:
         while True:
             refresh_remote_leases(warn=True)
-            status = poll_remote_status_once(refresh_heartbeat=False)
+            include_logs = time.monotonic() >= next_full_poll_at
+            include_sacct = include_logs
+            status = poll_remote_status_once(
+                refresh_heartbeat=False,
+                include_logs=include_logs,
+                include_sacct=include_sacct,
+            )
+            state_signature = (
+                status.get("state"),
+                status.get("reason"),
+                status.get("location"),
+            )
+            if (
+                not include_logs
+                and (
+                    state_signature != last_polled_state
+                    or status.get("done")
+                    or status.get("summary_exists")
+                    or status.get("state") == "UNKNOWN"
+                )
+            ):
+                status = poll_remote_status_once(
+                    refresh_heartbeat=False,
+                    include_logs=live_logs,
+                    include_sacct=True,
+                )
+                include_logs = True
+                state_signature = (
+                    status.get("state"),
+                    status.get("reason"),
+                    status.get("location"),
+                )
+            if include_logs:
+                next_full_poll_at = time.monotonic() + log_poll_interval_s
+            last_polled_state = state_signature
             emit_live_remote_updates(status)
             if status.get("done"):
                 if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
@@ -4255,11 +4600,13 @@ def _run_remote_simulation(
         cancel_remote_job_and_sync("Local notebook error while monitoring remote run")
         raise
 
+    sync_started = time.perf_counter()
     sync_completed = _sync_remote_result_dir(
         effective_config,
         remote_result_dir=remote_result_dir,
         local_result_dir=local_result_dir,
     )
+    _record_timing(notebook_timings, "sync_s", sync_started)
     (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
     (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
     sync_warning = None
@@ -4290,11 +4637,13 @@ def _run_remote_simulation(
     slurm_text = slurm_logs[-1].read_text() if slurm_logs else ""
     if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
         time.sleep(3.0)
+        retry_sync_started = time.perf_counter()
         sync_completed = _sync_remote_result_dir(
             effective_config,
             remote_result_dir=remote_result_dir,
             local_result_dir=local_result_dir,
         )
+        _record_timing(notebook_timings, "retry_sync_s", retry_sync_started)
         (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
         (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
         if sync_completed.returncode == 0:
@@ -4346,6 +4695,9 @@ def _run_remote_simulation(
     if compact_poll_events:
         poll_events_path = local_result_dir / "remote_poll_events.json"
         poll_events_path.write_text(json.dumps(_json_ready(compact_poll_events), indent=2, sort_keys=True))
+    artifact_sizes = _standard_result_artifact_sizes(local_result_dir)
+    remote_metadata["artifact_sizes"] = artifact_sizes
+    remote_metadata["notebook_timing_seconds"] = notebook_timings
 
     _write_notebook_run_info(
         local_result_dir,
@@ -4369,9 +4721,14 @@ def _run_remote_simulation(
                 "poll_events_file": poll_events_path.name if poll_events_path is not None else None,
                 "resolved_git_ref": remote_git_ref,
                 "resolved_git_commit": remote_git_commit,
+                "artifact_sizes": artifact_sizes,
+                "notebook_timing_seconds": notebook_timings,
             }
         },
     )
+    timing_summary = _timing_summary_text(notebook_timings)
+    if timing_summary:
+        _progress_write(f"[OBGPU load] Notebook pipeline timings: {timing_summary}")
 
     if returncode != 0:
         stderr_tail = stderr_text.strip()[-4000:]
@@ -4900,6 +5257,8 @@ def _run_remote_sweep(
     """Run a remote sweep as one Slurm job, with optional concurrent in-job steps."""
     base_config = dict(sweep_plan["base_config"])
     effective_config = dict(base_config)
+    notebook_timings: dict[str, float] = {}
+    remote_helper_dir: PurePosixPath | None = None
     sweep_label = str(sweep_plan["sweep_label"])
     timestamp = str(sweep_plan["timestamp"])
     local_sweep_dir = _sweep_dir(effective_config, sweep_label)
@@ -4938,16 +5297,21 @@ def _run_remote_sweep(
         "sweep_items": len(manifest_items),
     }
 
+    started = time.perf_counter()
     _ensure_remote_git_ref_available(
         effective_config,
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_git_ref,
     )
+    _record_timing(notebook_timings, "git_publish_s", started)
     _progress_write("[Sol remote] Running remote preflight checks for sweep...")
-    preflight_completed = _run_ssh_shell(
+    started = time.perf_counter()
+    preflight_completed, preflight_cached = _run_remote_preflight_cached(
         effective_config,
-        _build_remote_preflight_command(remote_repo_root=remote_repo_root),
+        remote_repo_root=remote_repo_root,
     )
+    _record_timing(notebook_timings, "preflight_s", started)
+    remote_metadata["preflight_cached"] = bool(preflight_cached)
     if preflight_completed.returncode != 0:
         raise RuntimeError(
             "Remote sweep preflight failed.\n"
@@ -4955,10 +5319,28 @@ def _run_remote_sweep(
             f"Stderr:\n{preflight_completed.stderr}"
         )
 
-    if bool(effective_config.get("remote_cleanup_stale_allocations", True)):
-        _cleanup_stale_remote_slurm_allocations(effective_config)
+    started = time.perf_counter()
+    remote_helper_dir = _ensure_remote_helper_cache(effective_config)
+    _record_timing(notebook_timings, "helper_cache_s", started)
+    if remote_helper_dir is not None:
+        remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
+        helper_cache_meta = _LIVE_REMOTE_HELPER_CACHES.get(_remote_helper_cache_runtime_key(effective_config)) or {}
+        remote_metadata["remote_helper_cache_hit"] = bool(helper_cache_meta.get("cache_hit", False))
 
-    allocation_info = _ensure_cached_remote_slurm_allocation(effective_config)
+    started = time.perf_counter()
+    cleanup_actions = _maybe_cleanup_stale_remote_slurm_allocations(
+        effective_config,
+        remote_helper_dir=remote_helper_dir,
+    )
+    _record_timing(notebook_timings, "allocation_cleanup_s", started)
+    remote_metadata["stale_allocation_cleanup_count"] = len(cleanup_actions)
+
+    started = time.perf_counter()
+    allocation_info = _ensure_cached_remote_slurm_allocation(
+        effective_config,
+        remote_helper_dir=remote_helper_dir,
+    )
+    _record_timing(notebook_timings, "allocation_wait_s", started)
     allocation_heartbeat_path = None
     if allocation_info.get("job_id") not in (None, ""):
         effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
@@ -4973,11 +5355,13 @@ def _run_remote_sweep(
         remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
 
     _progress_write("[Sol remote] Uploading remote sweep manifest...")
+    started = time.perf_counter()
     _upload_remote_text_file(
         effective_config,
         remote_path=remote_manifest_path,
         text=manifest_json,
     )
+    _record_timing(notebook_timings, "manifest_upload_s", started)
     remote_metadata["sweep_manifest_path"] = remote_manifest_path.as_posix()
 
     submit_shell = _build_remote_submit_command(
@@ -4988,10 +5372,13 @@ def _run_remote_sweep(
         benchmark_command=remote_driver_command,
         remote_mpi_exec=str(effective_config.get("remote_mpi_exec") or default_remote_mpi_exec()),
         remote_git_ref=remote_git_ref,
+        remote_helper_dir=remote_helper_dir,
     )
 
     _progress_write("[Sol remote] Submitting remote sweep batch job...")
+    started = time.perf_counter()
     submit_completed = _run_ssh_shell(effective_config, submit_shell)
+    _record_timing(notebook_timings, "submit_s", started)
     (local_sweep_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
     (local_sweep_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
     if submit_completed.returncode != 0:
@@ -5021,12 +5408,18 @@ def _run_remote_sweep(
     final_status: dict[str, Any] | None = None
     live_status = bool(effective_config.get("remote_live_status", True))
     last_signature: tuple[Any, ...] | None = None
+    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
+    log_poll_interval_s = max(
+        float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
+        poll_interval_s,
+    )
+    next_sacct_poll_at = time.monotonic()
 
     def refresh_remote_leases(*, warn: bool = False) -> None:
         _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
         _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
 
-    def poll_status_once(*, refresh_heartbeat: bool = True) -> dict[str, Any]:
+    def poll_status_once(*, refresh_heartbeat: bool = True, include_sacct: bool = True) -> dict[str, Any]:
         if refresh_heartbeat:
             refresh_remote_leases()
         poll_shell = _build_remote_poll_command(
@@ -5036,8 +5429,13 @@ def _run_remote_sweep(
             job_id=str(submission["job_id"]),
             wrapper_dir=str(submission.get("wrapper_dir") or ""),
             worktree_path=str(submission.get("worktree_path") or ""),
+            remote_helper_dir=remote_helper_dir,
+            include_sacct=include_sacct,
+            include_tails=False,
         )
+        poll_started = time.perf_counter()
         poll_completed = _run_ssh_shell(effective_config, poll_shell)
+        _record_timing(notebook_timings, "poll_s", poll_started)
         if poll_completed.returncode != 0:
             raise RuntimeError(
                 "Remote sweep status poll failed.\n"
@@ -5075,14 +5473,19 @@ def _run_remote_sweep(
             item_status_by_label[label] = dict(finished)
             synced_labels.add(label)
 
-    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
     _progress_write(
         f"[Sol remote] Submitted sweep job {submission['job_id']} "
         f"for {len(manifest_items)} items (parallelism={max_concurrent})."
     )
     try:
         while True:
-            status = poll_status_once(refresh_heartbeat=True)
+            include_sacct = time.monotonic() >= next_sacct_poll_at
+            status = poll_status_once(refresh_heartbeat=True, include_sacct=include_sacct)
+            if include_sacct:
+                next_sacct_poll_at = time.monotonic() + log_poll_interval_s
+            if not include_sacct and status.get("state") == "UNKNOWN":
+                status = poll_status_once(refresh_heartbeat=False, include_sacct=True)
+                next_sacct_poll_at = time.monotonic() + log_poll_interval_s
             status_signature = (
                 status.get("state"),
                 status.get("progress_current_ms"),
@@ -5120,11 +5523,13 @@ def _run_remote_sweep(
                 f"Interrupted remote sweep and requested cancellation for job {submission['job_id']}."
             )
 
+    started = time.perf_counter()
     final_sync = _sync_remote_result_dir(
         effective_config,
         remote_result_dir=remote_sweep_root,
         local_result_dir=local_sweep_dir,
     )
+    _record_timing(notebook_timings, "sync_s", started)
     (local_sweep_dir / "sync_stdout.txt").write_text(final_sync.stdout or "")
     (local_sweep_dir / "sync_stderr.txt").write_text(final_sync.stderr or "")
     if final_sync.returncode != 0:
@@ -5146,6 +5551,7 @@ def _run_remote_sweep(
         if not local_result_dir.exists():
             continue
         status_payload = item_status_by_label.get(item["label"], {})
+        remote_metadata["notebook_timing_seconds"] = notebook_timings
         run, result = _finalize_synced_sweep_item(
             item=item,
             local_result_dir=local_result_dir,
@@ -5178,6 +5584,20 @@ def _run_remote_sweep(
     if sweep_plan.get("grid") is not None:
         sweep["grid"] = sweep_plan["grid"]
     _write_sweep_info(sweep, sweep_dir=local_sweep_dir, timestamp=timestamp)
+    _merge_run_info_payload(
+        local_sweep_dir,
+        {
+            "remote": {
+                **remote_metadata,
+                "job_id": submission.get("job_id"),
+                "final_status": _summarize_remote_status(final_status),
+                "notebook_timing_seconds": notebook_timings,
+            }
+        },
+    )
+    timing_summary = _timing_summary_text(notebook_timings)
+    if timing_summary:
+        _progress_write(f"[OBGPU load] Sweep notebook pipeline timings: {timing_summary}")
 
     failed_labels = []
     for failed in sweep_summary.get("failed_items", []):
@@ -5331,6 +5751,9 @@ def load_result(
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
     summary = _read_json_if_present(result_dir / "summary.json")
     run_info = _read_json_if_present(result_dir / "run_info.json")
+    artifact_sizes = _standard_result_artifact_sizes(result_dir)
+    load_timings: dict[str, float] = {}
+    load_started = time.perf_counter()
 
     result = LazyResult({
         "result_dir": result_dir,
@@ -5341,6 +5764,7 @@ def load_result(
         "gc_output_events": [],
         "lfp_t": np.array([]),
         "lfp": np.array([]),
+        "artifact_sizes": artifact_sizes,
     })
 
     load_plan: list[tuple[str, Path]] = []
@@ -5373,6 +5797,7 @@ def load_result(
         started = time.perf_counter()
         loaded = load_pickle(path)
         elapsed_s = time.perf_counter() - started
+        load_timings[path.name] = round(elapsed_s, 3)
         if key == "lfp":
             lfp_t, lfp = loaded
             result["lfp_t"] = np.asarray(lfp_t, dtype=float)
@@ -5394,6 +5819,15 @@ def load_result(
         _progress_write(
             f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
         )
+
+    result["load_timing_seconds"] = load_timings
+    result["load_total_seconds"] = round(time.perf_counter() - load_started, 3)
+    if load_timings:
+        timing_summary = ", ".join(
+            f"{name}={seconds:.2f}s"
+            for name, seconds in sorted(load_timings.items(), key=lambda item: item[1], reverse=True)
+        )
+        _progress_write(f"[OBGPU load] Local file timings: {timing_summary}")
 
     return result
 
@@ -5424,6 +5858,14 @@ def run_and_load(
     run = run_simulation(config, label=label)
     print(f"[OBGPU load] Simulation complete. Loading results from {run.result_dir}...", flush=True)
     result = load_result(run)
+    _merge_run_info_payload(
+        run.result_dir,
+        {
+            "artifact_sizes": result.get("artifact_sizes", {}),
+            "load_timing_seconds": result.get("load_timing_seconds", {}),
+            "load_total_seconds": result.get("load_total_seconds"),
+        },
+    )
     print("[OBGPU load] Result load complete.", flush=True)
     return run, result
 

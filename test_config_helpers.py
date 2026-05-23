@@ -5,6 +5,7 @@ Run with:
 """
 
 import json
+import subprocess
 import tempfile
 from copy import deepcopy
 from pathlib import Path
@@ -154,5 +155,113 @@ with tempfile.TemporaryDirectory() as tmp:
     assert isinstance(parsed_manifest, list) and len(parsed_manifest) == len(manifest_items)
     assert parsed_manifest[0]["label"] == manifest_items[0]["label"]
     print("Remote sweep manifest upload path: OK")
+
+    # --- Remote helper cache should shrink submit/poll command payloads ---
+    remote_cfg = build_run_config(
+        runner_backend="sol_slurm",
+        remote_host="user@host",
+        remote_repo_root="/remote/OlfactoryBulb",
+        remote_results_root="/remote/OlfactoryBulb/results/notebook_runs",
+        remote_conda_activate_cmd="source activate OBGPU",
+        remote_git_ref="abcdef1234567890",
+    )
+    remote_submit_inline = hlp._build_remote_submit_command(
+        remote_cfg,
+        label="test_label",
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_results_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
+        benchmark_command=["nrniv", "-mpi", "-python", "bench.py"],
+        remote_mpi_exec="srun --mpi=pmix_v4 --cpu-bind=none",
+        remote_git_ref="abcdef1234567890",
+        remote_helper_dir=None,
+    )
+    remote_submit_cached = hlp._build_remote_submit_command(
+        remote_cfg,
+        label="test_label",
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_results_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
+        benchmark_command=["nrniv", "-mpi", "-python", "bench.py"],
+        remote_mpi_exec="srun --mpi=pmix_v4 --cpu-bind=none",
+        remote_git_ref="abcdef1234567890",
+        remote_helper_dir=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test"),
+    )
+    assert len(remote_submit_cached) < len(remote_submit_inline)
+    assert "/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test/submit_sol_run.py" in remote_submit_cached
+    remote_poll_cached = hlp._build_remote_poll_command(
+        remote_cfg,
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_result_dir=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/test_label"),
+        job_id="12345",
+        remote_helper_dir=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test"),
+        include_sacct=False,
+        include_tails=False,
+    )
+    assert "--skip-sacct" in remote_poll_cached
+    assert "--skip-tails" in remote_poll_cached
+    print("Remote helper cache command shrink: OK")
+
+    # --- Remote preflight should cache successful probes within one notebook runtime ---
+    original_run_ssh_shell = hlp._run_ssh_shell
+    try:
+        hlp._LIVE_REMOTE_PREFLIGHTS.clear()
+        preflight_calls = []
+
+        def _fake_run_ssh_shell(_config, command, check=False):
+            preflight_calls.append((command, check))
+            return subprocess.CompletedProcess(
+                args=["ssh", "bash", "-lc", command],
+                returncode=0,
+                stdout="ok\n",
+                stderr="",
+            )
+
+        hlp._run_ssh_shell = _fake_run_ssh_shell
+        completed_1, cached_1 = hlp._run_remote_preflight_cached(
+            remote_cfg,
+            remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        )
+        completed_2, cached_2 = hlp._run_remote_preflight_cached(
+            remote_cfg,
+            remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        )
+        assert completed_1.returncode == 0 and completed_2.returncode == 0
+        assert cached_1 is False and cached_2 is True
+        assert len(preflight_calls) == 1
+        print("Remote preflight cache: OK")
+    finally:
+        hlp._run_ssh_shell = original_run_ssh_shell
+        hlp._LIVE_REMOTE_PREFLIGHTS.clear()
+
+    # --- Stale allocation cleanup should skip manual allocations and reuse its session cache ---
+    original_cleanup = hlp._cleanup_stale_remote_slurm_allocations
+    try:
+        hlp._LIVE_REMOTE_STALE_CLEANUPS.clear()
+        cleanup_calls = []
+
+        def _fake_cleanup(_config, *, remote_helper_dir=None):
+            cleanup_calls.append(remote_helper_dir)
+            return [{"job_id": "1", "action": "cancel_requested"}]
+
+        hlp._cleanup_stale_remote_slurm_allocations = _fake_cleanup
+        cleanup_cfg = build_run_config(
+            runner_backend="sol_slurm",
+            remote_host="user@host",
+            remote_repo_root="/remote/OlfactoryBulb",
+            remote_results_root="/remote/OlfactoryBulb/results/notebook_runs_cleanup_test",
+            slurm_reuse_allocation=True,
+            slurm_allocation_job_id="999",
+        )
+        assert hlp._maybe_cleanup_stale_remote_slurm_allocations(cleanup_cfg) == []
+        assert cleanup_calls == []
+        cleanup_cfg["slurm_allocation_job_id"] = None
+        cleanup_cfg["remote_cleanup_stale_allocations"] = True
+        cleanup_1 = hlp._maybe_cleanup_stale_remote_slurm_allocations(cleanup_cfg)
+        cleanup_2 = hlp._maybe_cleanup_stale_remote_slurm_allocations(cleanup_cfg)
+        assert cleanup_1 == cleanup_2 == [{"job_id": "1", "action": "cancel_requested"}]
+        assert len(cleanup_calls) == 1
+        print("Stale allocation cleanup throttle: OK")
+    finally:
+        hlp._cleanup_stale_remote_slurm_allocations = original_cleanup
+        hlp._LIVE_REMOTE_STALE_CLEANUPS.clear()
 
 print("\nAll tests passed.")
