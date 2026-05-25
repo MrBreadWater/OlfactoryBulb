@@ -273,6 +273,7 @@ with tempfile.TemporaryDirectory() as tmp:
     original_close_paramiko_sftp = hlp._close_paramiko_sftp
     try:
         fallback_calls = []
+        fake_remote_cfg = {"remote_host": "user@host", "ssh_options": [], "ssh_transport": "paramiko"}
 
         hlp._remote_transport = lambda _config: "paramiko"
         hlp._run_paramiko_shell = lambda _config, _command: subprocess.CompletedProcess(
@@ -299,7 +300,7 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._sftp_copy_tree = _fake_sftp_copy_tree
         sync_dir = tmp / "paramiko-sync-fallback"
         completed = hlp._sync_remote_result_dir(
-            {},
+            fake_remote_cfg,
             remote_result_dir=PurePosixPath("/remote/result"),
             local_result_dir=sync_dir,
             expected_files=("summary.json",),
@@ -316,5 +317,92 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._sftp_copy_tree = original_sftp_copy_tree
         hlp._get_paramiko_sftp = original_get_paramiko_sftp
         hlp._close_paramiko_sftp = original_close_paramiko_sftp
+
+    # --- Selected-file Paramiko sync should bypass the archive stream path ---
+    original_remote_transport = hlp._remote_transport
+    original_stream_to_dir = hlp._stream_paramiko_archive_to_local_dir
+    original_sftp_copy_files = hlp._sftp_copy_files
+    original_get_paramiko_sftp = hlp._get_paramiko_sftp
+    original_close_paramiko_sftp = hlp._close_paramiko_sftp
+    try:
+        selected_calls = []
+        fake_remote_cfg = {"remote_host": "user@host", "ssh_options": [], "ssh_transport": "paramiko"}
+
+        hlp._remote_transport = lambda _config: "paramiko"
+        hlp._stream_paramiko_archive_to_local_dir = lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("selected-file sync should not call the archive stream path")
+        )
+        hlp._get_paramiko_sftp = lambda _config: object()
+        hlp._close_paramiko_sftp = lambda _config: None
+
+        def _fake_sftp_copy_files(_sftp, _remote_dir, local_dir, file_names):
+            selected_calls.append(tuple(file_names))
+            local_dir = Path(local_dir)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "summary.json").write_text("{}")
+
+        hlp._sftp_copy_files = _fake_sftp_copy_files
+        sync_dir = tmp / "paramiko-selected-sync"
+        completed = hlp._sync_remote_result_dir(
+            fake_remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=sync_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json",),
+        )
+        assert completed.returncode == 0
+        assert selected_calls == [("summary.json",)]
+        assert (sync_dir / "summary.json").exists()
+        print("Paramiko selected-file sync path: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._stream_paramiko_archive_to_local_dir = original_stream_to_dir
+        hlp._sftp_copy_files = original_sftp_copy_files
+        hlp._get_paramiko_sftp = original_get_paramiko_sftp
+        hlp._close_paramiko_sftp = original_close_paramiko_sftp
+
+    # --- Deferred remote soma traces should sync on first access ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    try:
+        deferred_result_dir = tmp / "deferred-remote-result"
+        deferred_result_dir.mkdir(parents=True, exist_ok=True)
+        (deferred_result_dir / "summary.json").write_text("{}")
+        (deferred_result_dir / "run_info.json").write_text(
+            json.dumps(
+                {
+                    "config": {
+                        "runner_backend": "sol_slurm",
+                        "remote_host": "user@host",
+                        "remote_repo_root": "/remote/OlfactoryBulb",
+                        "remote_results_root": "/remote/OlfactoryBulb/results/notebook_runs",
+                        "ssh_transport": "paramiko",
+                    },
+                    "remote": {
+                        "remote_result_dir": "/remote/OlfactoryBulb/results/notebook_runs/test_label",
+                        "deferred_remote_artifacts": ["soma_vs.pkl"],
+                    },
+                }
+            )
+        )
+
+        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
+            assert remote_result_dir == PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/test_label")
+            assert include_files == ("soma_vs.pkl",)
+            assert expected_files == ("soma_vs.pkl",)
+            local_result_dir = Path(local_result_dir)
+            local_result_dir.mkdir(parents=True, exist_ok=True)
+            with open(local_result_dir / "soma_vs.pkl", "wb") as handle:
+                import pickle
+                pickle.dump([("MC0", [0.0, 0.1], [-65.0, -64.0])], handle)
+            return subprocess.CompletedProcess(args=["sync"], returncode=0, stdout="", stderr="")
+
+        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        result = hlp.load_result(deferred_result_dir)
+        assert "soma_vs" in result
+        assert result["soma_vs"][0][0] == "MC0"
+        assert (deferred_result_dir / "soma_vs.pkl").exists()
+        print("Deferred remote soma lazy sync: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
 
 print("\nAll tests passed.")

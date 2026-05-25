@@ -174,6 +174,7 @@ CONTROL_HELP = {
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
+    "remote_defer_soma_vs_sync": "When True, remote run_and_load syncs small result artifacts first and leaves soma_vs.pkl on the cluster until result['soma_vs'] is accessed.",
     "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
@@ -811,6 +812,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_live_logs": True,
         "remote_heartbeat_timeout_s": 120,
         "remote_cleanup_stale_allocations": True,
+        "remote_defer_soma_vs_sync": True,
         "slurm_partition": None,
         "slurm_account": None,
         "slurm_time": None,
@@ -860,6 +862,7 @@ def build_slurm_remote_config(
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
+    remote_defer_soma_vs_sync: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -904,6 +907,7 @@ def build_slurm_remote_config(
         "remote_heartbeat_timeout_s": int(remote_heartbeat_timeout_s),
         "remote_cleanup_stale_allocations": bool(remote_cleanup_stale_allocations),
         "remote_sync_compress": True,
+        "remote_defer_soma_vs_sync": bool(remote_defer_soma_vs_sync),
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
         "remote_git_ref": remote_git_ref,
@@ -952,6 +956,7 @@ def build_sol_remote_config(
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
+    remote_defer_soma_vs_sync: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -991,6 +996,7 @@ def build_sol_remote_config(
         remote_live_logs=remote_live_logs,
         remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
         remote_cleanup_stale_allocations=remote_cleanup_stale_allocations,
+        remote_defer_soma_vs_sync=remote_defer_soma_vs_sync,
         remote_repo_mode=remote_repo_mode,
         remote_git_ref=remote_git_ref,
         remote_git_fetch=remote_git_fetch,
@@ -1521,6 +1527,24 @@ def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
         if path.exists():
             sizes[filename] = int(path.stat().st_size)
     return sizes
+
+
+def _remote_fast_sync_files() -> tuple[str, ...]:
+    """Return the small top-level result artifacts needed for a fast remote run_and_load."""
+    return (
+        "summary.json",
+        "input_times.pkl",
+        "lfp.pkl",
+        "gc_output_events.pkl",
+        "stdout.txt",
+        "stderr.txt",
+        "bootstrap.log",
+        "command.txt",
+        "git_commit.txt",
+        "git_ref.txt",
+        "remote_submit.json",
+        "sim_progress.json",
+    )
 
 
 def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any]) -> None:
@@ -2075,6 +2099,54 @@ def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:
     if total_files:
         _progress_write(
             f"[OBGPU load] Syncing {total_files} files from Sol ({_format_bytes(total_bytes)})...",
+        )
+
+    for index, (remote_path, local_path, file_size) in enumerate(transfer_plan, start=1):
+        local_path.parent.mkdir(parents=True, exist_ok=True)
+        _progress_write(
+            f"[OBGPU load] Syncing {index}/{total_files}: {local_path.name} ({_format_bytes(file_size)})",
+        )
+        base_bytes = transferred_bytes
+
+        def callback(current_file_bytes: int, _current_file_total: int) -> None:
+            overall_bytes = base_bytes + current_file_bytes
+            progress.update_to(overall_bytes)
+
+        sftp.get(remote_path, str(local_path), callback=callback)
+        transferred_bytes += file_size
+        progress.update_to(transferred_bytes)
+
+    if total_files:
+        _progress_write(
+            f"[OBGPU load] Sync complete {_render_progress_bar(total_bytes, total_bytes)} "
+            f"{_format_bytes(total_bytes)} / {_format_bytes(total_bytes)}",
+        )
+    progress.close()
+
+
+def _sftp_copy_files(sftp: Any, remote_dir: str, local_dir: Path, file_names: list[str] | tuple[str, ...]) -> None:
+    """Copy a selected set of remote files through SFTP with progress output."""
+    local_dir.mkdir(parents=True, exist_ok=True)
+    transfer_plan: list[tuple[str, Path, int]] = []
+    for name in file_names:
+        remote_path = f"{remote_dir.rstrip('/')}/{name}"
+        local_path = local_dir / name
+        try:
+            entry = sftp.stat(remote_path)
+        except Exception:
+            continue
+        if stat.S_ISDIR(entry.st_mode):
+            continue
+        transfer_plan.append((remote_path, local_path, int(getattr(entry, "st_size", 0))))
+
+    total_files = len(transfer_plan)
+    total_bytes = sum(size for _remote_path, _local_path, size in transfer_plan)
+    transferred_bytes = 0
+    progress = _ProgressBar(total=total_bytes, desc="[OBGPU load] Sync from Sol", unit="B", unit_scale=True)
+
+    if total_files:
+        _progress_write(
+            f"[OBGPU load] Syncing {total_files} selected files from Sol ({_format_bytes(total_bytes)})...",
         )
 
     for index, (remote_path, local_path, file_size) in enumerate(transfer_plan, start=1):
@@ -2978,6 +3050,7 @@ def _sync_remote_result_dir(
     remote_result_dir: PurePosixPath,
     local_result_dir: Path,
     expected_files: tuple[str, ...] | None = None,
+    include_files: tuple[str, ...] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Sync one remote result directory back into the local notebook results tree."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
@@ -2985,7 +3058,17 @@ def _sync_remote_result_dir(
         last_exc: Exception | None = None
         for attempt in range(2):
             try:
-                if bool(config.get("remote_sync_compress", True)):
+                if include_files:
+                    _close_paramiko_sftp(config)
+                    if attempt > 0:
+                        _drop_paramiko_connection(config)
+                    _sftp_copy_files(
+                        _get_paramiko_sftp(config),
+                        remote_result_dir.as_posix(),
+                        local_result_dir,
+                        include_files,
+                    )
+                elif bool(config.get("remote_sync_compress", True)):
                     probe_completed = _run_paramiko_shell(
                         config,
                         _build_remote_archive_probe_command(remote_result_dir),
@@ -3034,6 +3117,8 @@ def _sync_remote_result_dir(
                         _progress_write(
                             "[OBGPU load] Streamed archive sync failed; retrying the same result dir over SFTP..."
                         )
+                        _close_paramiko_sftp(config)
+                        _drop_paramiko_connection(config)
                         _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
                         missing_fallback_files = _missing_local_sync_artifacts(
                             local_result_dir,
@@ -4710,18 +4795,39 @@ def _run_remote_simulation(
         cancel_remote_job_and_sync("Local notebook error while monitoring remote run")
         raise
 
+    deferred_remote_artifacts: list[str] = []
+    final_sync_include_files: tuple[str, ...] | None = None
+    if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", True)):
+        final_sync_include_files = _remote_fast_sync_files()
+        deferred_remote_artifacts.append("soma_vs.pkl")
+
     sync_started = time.perf_counter()
     sync_completed = _sync_remote_result_dir(
         effective_config,
         remote_result_dir=remote_result_dir,
         local_result_dir=local_result_dir,
         expected_files=("summary.json",),
+        include_files=final_sync_include_files,
     )
     _record_timing(notebook_timings, "sync_s", sync_started)
     (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
     (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
     sync_warning = None
     if sync_completed.returncode != 0:
+        if final_status and final_status.get("ok") and final_sync_include_files is not None:
+            _progress_write("[OBGPU load] Fast remote artifact sync was incomplete; retrying once...")
+            time.sleep(2.0)
+            retry_fast_sync_started = time.perf_counter()
+            sync_completed = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_result_dir,
+                local_result_dir=local_result_dir,
+                expected_files=("summary.json",),
+                include_files=final_sync_include_files,
+            )
+            _record_timing(notebook_timings, "retry_fast_sync_s", retry_fast_sync_started)
+            (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
+            (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
         if _local_result_dir_has_loadable_payload(local_result_dir):
             sync_warning = (
                 "Remote Sol result sync reported an error, but standard payload files were already present locally. "
@@ -4807,6 +4913,7 @@ def _run_remote_simulation(
         poll_events_path = local_result_dir / "remote_poll_events.json"
         poll_events_path.write_text(json.dumps(_json_ready(compact_poll_events), indent=2, sort_keys=True))
     artifact_sizes = _standard_result_artifact_sizes(local_result_dir)
+    remote_metadata["deferred_remote_artifacts"] = list(deferred_remote_artifacts)
     remote_metadata["artifact_sizes"] = artifact_sizes
     remote_metadata["notebook_timing_seconds"] = notebook_timings
 
@@ -5824,6 +5931,49 @@ def load_pickle(path: str | Path) -> Any:
         return pickle.load(f)
 
 
+def _sync_deferred_remote_artifact(
+    result_dir: str | Path,
+    *,
+    run_info: dict[str, Any] | None,
+    filename: str,
+) -> Path:
+    """Fetch one deferred remote artifact into the local result directory and return its path."""
+    result_dir = Path(result_dir)
+    local_path = result_dir / filename
+    if local_path.exists():
+        return local_path
+    if not isinstance(run_info, dict):
+        raise FileNotFoundError(f"Deferred remote artifact {filename} is not available locally.")
+    remote_payload = run_info.get("remote") or {}
+    remote_result_dir_value = remote_payload.get("remote_result_dir")
+    config = deepcopy(run_info.get("config") or {})
+    if not remote_result_dir_value or not isinstance(config, dict):
+        raise FileNotFoundError(f"Deferred remote artifact {filename} is not available locally.")
+
+    _progress_write(f"[OBGPU load] Fetching deferred remote artifact {filename}...")
+    started = time.perf_counter()
+    completed = _sync_remote_result_dir(
+        config,
+        remote_result_dir=PurePosixPath(str(remote_result_dir_value)),
+        local_result_dir=result_dir,
+        expected_files=(filename,),
+        include_files=(filename,),
+    )
+    if completed.returncode != 0 or not local_path.exists():
+        raise RuntimeError(
+            "Deferred remote artifact sync failed.\n"
+            f"Result dir: {result_dir}\n"
+            f"Artifact: {filename}\n"
+            f"Stderr:\n{completed.stderr}"
+        )
+    elapsed_s = time.perf_counter() - started
+    _progress_write(
+        f"[OBGPU load] Deferred remote artifact {filename} synced in {elapsed_s:.1f}s "
+        f"({_format_bytes(local_path.stat().st_size)})."
+    )
+    return local_path
+
+
 class LazyResult(dict):
     """Result dict that loads selected heavy payloads on first access."""
 
@@ -5839,6 +5989,11 @@ class LazyResult(dict):
         started = time.perf_counter()
         value = loader()
         dict.__setitem__(self, key, value)
+        if key == "soma_vs":
+            soma_path = dict.get(self, "soma_vs_file")
+            artifact_sizes = dict.get(self, "artifact_sizes")
+            if isinstance(soma_path, Path) and soma_path.exists() and isinstance(artifact_sizes, dict):
+                artifact_sizes["soma_vs.pkl"] = int(soma_path.stat().st_size)
         elapsed_s = time.perf_counter() - started
         _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
 
@@ -5864,6 +6019,8 @@ def load_result(
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
     summary = _read_json_if_present(result_dir / "summary.json")
     run_info = _read_json_if_present(result_dir / "run_info.json")
+    remote_payload = (run_info or {}).get("remote") if isinstance(run_info, dict) else {}
+    deferred_remote_artifacts = set(remote_payload.get("deferred_remote_artifacts") or [])
     artifact_sizes = _standard_result_artifact_sizes(result_dir)
     load_timings: dict[str, float] = {}
     load_started = time.perf_counter()
@@ -5885,6 +6042,13 @@ def load_result(
     if input_path.exists():
         load_plan.append(("input_times", input_path))
     soma_path = result_dir / "soma_vs.pkl"
+    if not soma_path.exists() and "soma_vs.pkl" in deferred_remote_artifacts and not lazy_soma_vs:
+        soma_path = _sync_deferred_remote_artifact(
+            result_dir,
+            run_info=run_info,
+            filename="soma_vs.pkl",
+        )
+        artifact_sizes["soma_vs.pkl"] = int(soma_path.stat().st_size)
     if soma_path.exists() and not lazy_soma_vs:
         load_plan.append(("soma_vs", soma_path))
     gc_output_path = result_dir / "gc_output_events.pkl"
@@ -5931,6 +6095,16 @@ def load_result(
         result._lazy_loaders["soma_vs"] = lambda path=soma_path: load_pickle(path)
         _progress_write(
             f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
+        )
+    elif "soma_vs.pkl" in deferred_remote_artifacts and lazy_soma_vs:
+        result["soma_vs_file"] = soma_path
+        result._lazy_loaders["soma_vs"] = (
+            lambda path=soma_path, info=run_info, directory=result_dir: load_pickle(
+                _sync_deferred_remote_artifact(directory, run_info=info, filename=path.name)
+            )
+        )
+        _progress_write(
+            "[OBGPU load] Deferred soma traces remain remote until result['soma_vs'] is accessed."
         )
 
     result["load_timing_seconds"] = load_timings
