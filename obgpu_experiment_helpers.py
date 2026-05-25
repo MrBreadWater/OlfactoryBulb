@@ -3161,10 +3161,7 @@ def _sync_remote_result_dir(
                     if stream_selected:
                         probe_completed = _run_paramiko_shell(
                             config,
-                            _build_remote_selected_archive_probe_command(
-                                remote_result_dir,
-                                include_files=tuple(include_files),
-                            ),
+                            _build_remote_archive_probe_command(remote_result_dir),
                         )
                         if probe_completed.returncode != 0:
                             return subprocess.CompletedProcess(
@@ -6147,6 +6144,17 @@ def _sync_deferred_remote_artifact(
         expected_files=(filename,),
         include_files=(filename,),
     )
+    if (completed.returncode != 0 or not local_path.exists()) and filename == "soma_vs.pkl":
+        _progress_write(
+            "[OBGPU load] Deferred soma trace sync fell back from selected-file mode; "
+            "retrying by syncing the full remote result directory..."
+        )
+        completed = _sync_remote_result_dir(
+            config,
+            remote_result_dir=PurePosixPath(str(remote_result_dir_value)),
+            local_result_dir=result_dir,
+            expected_files=(filename,),
+        )
     if completed.returncode != 0 or not local_path.exists():
         raise RuntimeError(
             "Deferred remote artifact sync failed.\n"

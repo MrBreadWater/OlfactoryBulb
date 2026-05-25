@@ -481,6 +481,52 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
 
+    # --- Deferred soma traces should fall back to full-dir sync if selected-file sync fails ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    try:
+        deferred_fallback_dir = tmp / "deferred-fallback-result"
+        deferred_fallback_dir.mkdir(parents=True, exist_ok=True)
+        (deferred_fallback_dir / "summary.json").write_text("{}")
+        (deferred_fallback_dir / "run_info.json").write_text(
+            json.dumps(
+                {
+                    "config": {
+                        "runner_backend": "sol_slurm",
+                        "remote_host": "user@host",
+                        "remote_repo_root": "/remote/OlfactoryBulb",
+                        "remote_results_root": "/remote/OlfactoryBulb/results/notebook_runs",
+                        "ssh_transport": "paramiko",
+                    },
+                    "remote": {
+                        "remote_result_dir": "/remote/OlfactoryBulb/results/notebook_runs/test_label",
+                        "deferred_remote_artifacts": ["soma_vs.pkl"],
+                    },
+                }
+            )
+        )
+
+        sync_calls = []
+
+        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
+            sync_calls.append((remote_result_dir, expected_files, include_files))
+            local_result_dir = Path(local_result_dir)
+            local_result_dir.mkdir(parents=True, exist_ok=True)
+            if include_files == ("soma_vs.pkl",):
+                return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="selected sync failed")
+            with open(local_result_dir / "soma_vs.pkl", "wb") as handle:
+                import pickle
+                pickle.dump([("MC0", [0.0, 0.1], [-65.0, -64.0])], handle)
+            return subprocess.CompletedProcess(args=["sync"], returncode=0, stdout="", stderr="")
+
+        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        result = hlp.load_result(deferred_fallback_dir)
+        assert result["soma_vs"][0][0] == "MC0"
+        assert sync_calls[0][2] == ("soma_vs.pkl",)
+        assert sync_calls[1][2] is None
+        print("Deferred soma fallback to full-dir sync: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+
     # --- Result overview should not trigger deferred soma trace downloads ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
     try:
