@@ -309,6 +309,15 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "--skip-tails" in remote_poll_cached
     print("Remote helper cache command shrink: OK")
 
+    # --- Successful fast remote sync should only request essential result artifacts ---
+    fast_files_default = hlp._remote_fast_sync_files()
+    assert fast_files_default == ("summary.json", "input_times.pkl", "lfp.pkl", "gc_output_events.pkl")
+    fast_files_minimal = hlp._remote_fast_sync_files(
+        {"enable_lfp": False, "record_gc_output_events": False}
+    )
+    assert fast_files_minimal == ("summary.json", "input_times.pkl")
+    print("Remote fast sync file set: OK")
+
     # --- Remote preflight should cache successful probes within one notebook runtime ---
     original_run_ssh_shell = hlp._run_ssh_shell
     try:
@@ -567,7 +576,7 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._run_paramiko_shell = lambda _config, _command: subprocess.CompletedProcess(
             args=["ssh", "bash", "-lc", _command],
             returncode=0,
-            stdout="gzip\n67\n.tar.gz\n",
+            stdout="gzip\n67\n.tar.gz\nsummary.json\n",
             stderr="",
         )
 
@@ -608,6 +617,69 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._get_paramiko_sftp = original_get_paramiko_sftp
         hlp._close_paramiko_sftp = original_close_paramiko_sftp
 
+    # --- Selected-file Paramiko sync should ignore missing optional remote files instead of failing the stream ---
+    original_remote_transport = hlp._remote_transport
+    original_run_paramiko_shell = hlp._run_paramiko_shell
+    original_stream_to_dir = hlp._stream_paramiko_archive_to_local_dir
+    original_sftp_copy_files = hlp._sftp_copy_files
+    original_get_paramiko_sftp = hlp._get_paramiko_sftp
+    original_close_paramiko_sftp = hlp._close_paramiko_sftp
+    try:
+        stream_calls = []
+        fake_remote_cfg = {
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "ssh_transport": "paramiko",
+            "remote_sync_compress": True,
+        }
+
+        hlp._remote_transport = lambda _config: "paramiko"
+
+        def _fake_run_paramiko_shell(_config, _command):
+            return subprocess.CompletedProcess(
+                args=["ssh", "bash", "-lc", _command],
+                returncode=0,
+                stdout="gzip\n67\n.tar.gz\nsummary.json\n",
+                stderr="",
+            )
+
+        def _fake_stream_to_dir(_config, *, remote_result_dir, local_result_dir, compressor, raw_bytes, stream_command=None):
+            stream_calls.append((remote_result_dir, compressor, raw_bytes, stream_command))
+            local_result_dir = Path(local_result_dir)
+            local_result_dir.mkdir(parents=True, exist_ok=True)
+            (local_result_dir / "summary.json").write_text("{}")
+            return subprocess.CompletedProcess(args=["paramiko-stream-extract"], returncode=0, stdout="", stderr="")
+
+        hlp._run_paramiko_shell = _fake_run_paramiko_shell
+        hlp._stream_paramiko_archive_to_local_dir = _fake_stream_to_dir
+        hlp._sftp_copy_files = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("missing optional selected files should not force SFTP fallback")
+        )
+        hlp._get_paramiko_sftp = lambda _config: object()
+        hlp._close_paramiko_sftp = lambda _config: None
+
+        sync_dir = tmp / "paramiko-selected-optional-filter"
+        completed = hlp._sync_remote_result_dir(
+            fake_remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=sync_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json", "stderr.txt"),
+        )
+        assert completed.returncode == 0
+        assert len(stream_calls) == 1
+        assert "summary.json" in (stream_calls[0][3] or "")
+        assert "stderr.txt" not in (stream_calls[0][3] or "")
+        assert (sync_dir / "summary.json").exists()
+        print("Paramiko selected-file probe filters missing optionals: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._run_paramiko_shell = original_run_paramiko_shell
+        hlp._stream_paramiko_archive_to_local_dir = original_stream_to_dir
+        hlp._sftp_copy_files = original_sftp_copy_files
+        hlp._get_paramiko_sftp = original_get_paramiko_sftp
+        hlp._close_paramiko_sftp = original_close_paramiko_sftp
+
     # --- Deferred soma selected-file sync should use the compressed stream path ---
     original_remote_transport = hlp._remote_transport
     original_run_paramiko_shell = hlp._run_paramiko_shell
@@ -628,7 +700,7 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._run_paramiko_shell = lambda _config, _command: subprocess.CompletedProcess(
             args=["ssh", "bash", "-lc", _command],
             returncode=0,
-            stdout="gzip\n67\n.tar.gz\n",
+            stdout="gzip\n67\n.tar.gz\nsoma_vs.pkl\n",
             stderr="",
         )
 

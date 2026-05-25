@@ -1573,22 +1573,14 @@ def _replace_file_via_temp_copy(copy_fn: Any, local_path: Path) -> None:
         raise
 
 
-def _remote_fast_sync_files() -> tuple[str, ...]:
-    """Return the small top-level result artifacts needed for a fast remote run_and_load."""
-    return (
-        "summary.json",
-        "input_times.pkl",
-        "lfp.pkl",
-        "gc_output_events.pkl",
-        "stdout.txt",
-        "stderr.txt",
-        "bootstrap.log",
-        "command.txt",
-        "git_commit.txt",
-        "git_ref.txt",
-        "remote_submit.json",
-        "sim_progress.json",
-    )
+def _remote_fast_sync_files(config: dict[str, Any] | None = None) -> tuple[str, ...]:
+    """Return the top-level result artifacts needed for a fast successful remote run_and_load."""
+    files = ["summary.json", "input_times.pkl"]
+    if config is None or bool(config.get("enable_lfp", True)):
+        files.append("lfp.pkl")
+    if config is None or bool(config.get("record_gc_output_events", False)):
+        files.append("gc_output_events.pkl")
+    return tuple(files)
 
 
 def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any]) -> None:
@@ -2753,11 +2745,14 @@ def _build_remote_selected_archive_probe_command(
         "set -euo pipefail && "
         f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
         f"files=( {quoted_files} ) && "
+        "existing_files=() && "
         "raw_bytes=0 && "
         "for rel in \"${files[@]}\"; do "
         "  path=\"$result_dir/$rel\"; "
-        "  test -f \"$path\"; "
-        "  raw_bytes=$((raw_bytes + $(wc -c < \"$path\"))); "
+        "  if [ -f \"$path\" ]; then "
+        "    existing_files+=(\"$rel\"); "
+        "    raw_bytes=$((raw_bytes + $(wc -c < \"$path\"))); "
+        "  fi; "
         "done && "
         "if command -v zstd >/dev/null 2>&1; then "
         "  printf '%s\\n%s\\n%s\\n' 'zstd' \"${raw_bytes:-0}\" '.tar.zst'; "
@@ -2770,7 +2765,10 @@ def _build_remote_selected_archive_probe_command(
         "else "
         "  printf '%s\\n' 'No supported compressor found on remote host' >&2; "
         "  exit 1; "
-        "fi"
+        "fi && "
+        "for rel in \"${existing_files[@]}\"; do "
+        "  printf '%s\\n' \"$rel\"; "
+        "done"
     )
 
 
@@ -2821,6 +2819,42 @@ def _build_remote_selected_stream_archive_command(
         f"files=( {quoted_files} ) && "
         + compressor_commands[compressor]
     )
+
+
+def _probe_remote_selected_sync_files(
+    config: dict[str, Any],
+    *,
+    remote_result_dir: PurePosixPath,
+    include_files: tuple[str, ...],
+) -> tuple[str, int, tuple[str, ...]] | subprocess.CompletedProcess[str]:
+    """Return one selected-file sync plan using only remote files that actually exist."""
+    probe_completed = _run_paramiko_shell(
+        config,
+        _build_remote_selected_archive_probe_command(
+            remote_result_dir,
+            include_files=tuple(include_files),
+        ),
+    )
+    if probe_completed.returncode != 0:
+        return subprocess.CompletedProcess(
+            args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(include_files)],
+            returncode=1,
+            stdout=probe_completed.stdout or "",
+            stderr=probe_completed.stderr or "",
+        )
+    probe_lines = [line.strip() for line in (probe_completed.stdout or "").splitlines() if line.strip()]
+    if len(probe_lines) < 3:
+        return subprocess.CompletedProcess(
+            args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(include_files)],
+            returncode=1,
+            stdout=probe_completed.stdout or "",
+            stderr="Remote selected-file archive probe did not return the expected metadata",
+        )
+    compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
+    raw_bytes = int(raw_bytes_text or "0")
+    available_set = set(probe_lines[3:])
+    available_files = tuple(name for name in include_files if name in available_set)
+    return compressor, raw_bytes, available_files
 
 
 def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
@@ -3243,27 +3277,29 @@ def _sync_remote_result_dir(
                 if include_files:
                     stream_selected = bool(config.get("remote_sync_compress", True)) and bool(include_files)
                     if stream_selected:
-                        probe_completed = _run_paramiko_shell(
+                        selected_probe = _probe_remote_selected_sync_files(
                             config,
-                            _build_remote_archive_probe_command(remote_result_dir),
+                            remote_result_dir=remote_result_dir,
+                            include_files=tuple(include_files),
                         )
-                        if probe_completed.returncode != 0:
+                        if isinstance(selected_probe, subprocess.CompletedProcess):
+                            return selected_probe
+                        compressor, raw_bytes, available_files = selected_probe
+                        if not available_files:
+                            missing_selected_files = _missing_local_sync_artifacts(
+                                local_result_dir,
+                                expected_files=expected_files,
+                            )
+                            expected_text = ", ".join(missing_selected_files or include_files)
                             return subprocess.CompletedProcess(
                                 args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(local_result_dir)],
                                 returncode=1,
-                                stdout=probe_completed.stdout or "",
-                                stderr=probe_completed.stderr or "",
+                                stdout="",
+                                stderr=(
+                                    "[OBGPU load] None of the requested fast-sync files currently exist on the remote result dir. "
+                                    f"Missing: {expected_text}"
+                                ),
                             )
-                        probe_lines = [line.strip() for line in (probe_completed.stdout or "").splitlines() if line.strip()]
-                        if len(probe_lines) < 3:
-                            return subprocess.CompletedProcess(
-                                args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(local_result_dir)],
-                                returncode=1,
-                                stdout=probe_completed.stdout or "",
-                                stderr="Remote selected-file archive probe did not return the expected metadata",
-                            )
-                        compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
-                        raw_bytes = int(raw_bytes_text or "0")
                         selected_stage_dir = Path(
                             tempfile.mkdtemp(prefix="obgpu-selected-sync-", dir=str(local_result_dir.parent))
                         )
@@ -3276,12 +3312,12 @@ def _sync_remote_result_dir(
                                 raw_bytes=raw_bytes,
                                 stream_command=_build_remote_selected_stream_archive_command(
                                     remote_result_dir,
-                                    include_files=tuple(include_files),
+                                    include_files=available_files,
                                     compressor=compressor,
                                 ),
                             )
                             if stream_completed.returncode == 0:
-                                for selected_name in include_files:
+                                for selected_name in available_files:
                                     staged_path = selected_stage_dir / selected_name
                                     if _local_sync_artifact_is_usable(staged_path):
                                         target_path = local_result_dir / selected_name
@@ -3314,7 +3350,7 @@ def _sync_remote_result_dir(
                                 _get_paramiko_sftp(config),
                                 remote_result_dir.as_posix(),
                                 local_result_dir,
-                                include_files,
+                                available_files,
                             )
                             missing_fallback_files = _missing_local_sync_artifacts(
                                 local_result_dir,
@@ -5248,7 +5284,7 @@ def _run_remote_simulation(
     deferred_remote_artifacts: list[str] = []
     final_sync_include_files: tuple[str, ...] | None = None
     if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", True)):
-        final_sync_include_files = _remote_fast_sync_files()
+        final_sync_include_files = _remote_fast_sync_files(effective_config)
         deferred_remote_artifacts.append("soma_vs.pkl")
 
     sync_started = time.perf_counter()
