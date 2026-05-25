@@ -2661,6 +2661,38 @@ def _build_remote_archive_probe_command(remote_result_dir: PurePosixPath) -> str
     )
 
 
+def _build_remote_selected_archive_probe_command(
+    remote_result_dir: PurePosixPath,
+    *,
+    include_files: tuple[str, ...],
+) -> str:
+    """Build one remote shell command that reports stream metadata for selected files."""
+    quoted_files = " ".join(shlex.quote(str(name)) for name in include_files)
+    return (
+        "set -euo pipefail && "
+        f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
+        f"files=( {quoted_files} ) && "
+        "raw_bytes=0 && "
+        "for rel in \"${files[@]}\"; do "
+        "  path=\"$result_dir/$rel\"; "
+        "  test -f \"$path\"; "
+        "  raw_bytes=$((raw_bytes + $(wc -c < \"$path\"))); "
+        "done && "
+        "if command -v zstd >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'zstd' \"${raw_bytes:-0}\" '.tar.zst'; "
+        "elif command -v pigz >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'pigz' \"${raw_bytes:-0}\" '.tar.gz'; "
+        "elif command -v gzip >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'gzip' \"${raw_bytes:-0}\" '.tar.gz'; "
+        "elif command -v xz >/dev/null 2>&1; then "
+        "  printf '%s\\n%s\\n%s\\n' 'xz' \"${raw_bytes:-0}\" '.tar.xz'; "
+        "else "
+        "  printf '%s\\n' 'No supported compressor found on remote host' >&2; "
+        "  exit 1; "
+        "fi"
+    )
+
+
 def _build_remote_stream_archive_command(
     remote_result_dir: PurePosixPath,
     *,
@@ -2679,6 +2711,33 @@ def _build_remote_stream_archive_command(
     return (
         "set -euo pipefail && "
         f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
+        + compressor_commands[compressor]
+    )
+
+
+def _build_remote_selected_stream_archive_command(
+    remote_result_dir: PurePosixPath,
+    *,
+    include_files: tuple[str, ...],
+    compressor: str,
+) -> str:
+    """Build one remote shell command that streams selected files as a compressed tar archive."""
+    compressor = str(compressor)
+    if not include_files:
+        raise ValueError("Selected stream archive requires at least one file")
+    quoted_files = " ".join(shlex.quote(str(name)) for name in include_files)
+    compressor_commands = {
+        "zstd": 'tar -C "$result_dir" -cf - -- "${files[@]}" | zstd -T0 -15 -q -c',
+        "pigz": 'tar -C "$result_dir" -cf - -- "${files[@]}" | pigz -6',
+        "gzip": 'tar -C "$result_dir" -cf - -- "${files[@]}" | gzip -6',
+        "xz": 'tar -C "$result_dir" -cf - -- "${files[@]}" | xz -6 -T0',
+    }
+    if compressor not in compressor_commands:
+        raise ValueError(f"Unsupported archive compressor {compressor!r}")
+    return (
+        "set -euo pipefail && "
+        f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
+        f"files=( {quoted_files} ) && "
         + compressor_commands[compressor]
     )
 
@@ -2968,6 +3027,7 @@ def _stream_paramiko_archive_to_local_dir(
     local_result_dir: Path,
     compressor: str,
     raw_bytes: int,
+    stream_command: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Stream one remote compressed tar archive over Paramiko directly into local extraction."""
     connection = _connect_paramiko(config)
@@ -2983,10 +3043,11 @@ def _stream_paramiko_archive_to_local_dir(
         display_step=10 * 1024 * 1024,
     )
     local_result_dir.mkdir(parents=True, exist_ok=True)
-    stream_command = _build_remote_stream_archive_command(
-        remote_result_dir,
-        compressor=compressor,
-    )
+    if stream_command is None:
+        stream_command = _build_remote_stream_archive_command(
+            remote_result_dir,
+            compressor=compressor,
+        )
     decompress_cmd = _local_archive_decompress_command(compressor)
     decompress_stderr = tempfile.NamedTemporaryFile(prefix="obgpu-decompress-", suffix=".log", delete=False)
     tar_stderr = tempfile.NamedTemporaryFile(prefix="obgpu-tar-", suffix=".log", delete=False)
@@ -3093,15 +3154,108 @@ def _sync_remote_result_dir(
         for attempt in range(2):
             try:
                 if include_files:
-                    _close_paramiko_sftp(config)
-                    if attempt > 0:
-                        _drop_paramiko_connection(config)
-                    _sftp_copy_files(
-                        _get_paramiko_sftp(config),
-                        remote_result_dir.as_posix(),
-                        local_result_dir,
-                        include_files,
+                    stream_selected = (
+                        bool(config.get("remote_sync_compress", True))
+                        and tuple(include_files) == ("soma_vs.pkl",)
                     )
+                    if stream_selected:
+                        probe_completed = _run_paramiko_shell(
+                            config,
+                            _build_remote_selected_archive_probe_command(
+                                remote_result_dir,
+                                include_files=tuple(include_files),
+                            ),
+                        )
+                        if probe_completed.returncode != 0:
+                            return subprocess.CompletedProcess(
+                                args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(local_result_dir)],
+                                returncode=1,
+                                stdout=probe_completed.stdout or "",
+                                stderr=probe_completed.stderr or "",
+                            )
+                        probe_lines = [line.strip() for line in (probe_completed.stdout or "").splitlines() if line.strip()]
+                        if len(probe_lines) < 3:
+                            return subprocess.CompletedProcess(
+                                args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(local_result_dir)],
+                                returncode=1,
+                                stdout=probe_completed.stdout or "",
+                                stderr="Remote selected-file archive probe did not return the expected metadata",
+                            )
+                        compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
+                        raw_bytes = int(raw_bytes_text or "0")
+                        stream_completed = _stream_paramiko_archive_to_local_dir(
+                            config,
+                            remote_result_dir=remote_result_dir,
+                            local_result_dir=local_result_dir,
+                            compressor=compressor,
+                            raw_bytes=raw_bytes,
+                            stream_command=_build_remote_selected_stream_archive_command(
+                                remote_result_dir,
+                                include_files=tuple(include_files),
+                                compressor=compressor,
+                            ),
+                        )
+                        missing_stream_files = _missing_local_sync_artifacts(
+                            local_result_dir,
+                            expected_files=expected_files,
+                        )
+                        if stream_completed.returncode == 0 and missing_stream_files:
+                            expected_text = ", ".join(missing_stream_files)
+                            stream_completed = subprocess.CompletedProcess(
+                                args=stream_completed.args,
+                                returncode=1,
+                                stdout=stream_completed.stdout or "",
+                                stderr=(stream_completed.stderr or "")
+                                + (
+                                    "\n[OBGPU load] Streamed selected-file sync produced no usable local artifacts. "
+                                    f"Missing: {expected_text}\n"
+                                ),
+                            )
+                        if stream_completed.returncode != 0:
+                            _progress_write(
+                                "[OBGPU load] Streamed selected-file sync failed; retrying the same files over SFTP..."
+                            )
+                            _close_paramiko_sftp(config)
+                            _drop_paramiko_connection(config)
+                            _sftp_copy_files(
+                                _get_paramiko_sftp(config),
+                                remote_result_dir.as_posix(),
+                                local_result_dir,
+                                include_files,
+                            )
+                            missing_fallback_files = _missing_local_sync_artifacts(
+                                local_result_dir,
+                                expected_files=expected_files,
+                            )
+                            if missing_fallback_files:
+                                expected_text = ", ".join(missing_fallback_files)
+                                return subprocess.CompletedProcess(
+                                    args=["paramiko-stream-selected-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
+                                    returncode=1,
+                                    stdout=stream_completed.stdout or "",
+                                    stderr=(stream_completed.stderr or "")
+                                    + (
+                                        "\n[OBGPU load] Streamed selected-file sync failed, SFTP fallback ran, "
+                                        f"but required local artifacts are still missing: {expected_text}\n"
+                                    ),
+                                )
+                            return subprocess.CompletedProcess(
+                                args=["paramiko-stream-selected-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
+                                returncode=0,
+                                stdout=stream_completed.stdout or "",
+                                stderr=(stream_completed.stderr or "")
+                                + "\n[OBGPU load] Streamed selected-file sync failed, but SFTP fallback completed successfully.\n",
+                            )
+                    else:
+                        _close_paramiko_sftp(config)
+                        if attempt > 0:
+                            _drop_paramiko_connection(config)
+                        _sftp_copy_files(
+                            _get_paramiko_sftp(config),
+                            remote_result_dir.as_posix(),
+                            local_result_dir,
+                            include_files,
+                        )
                 elif bool(config.get("remote_sync_compress", True)):
                     probe_completed = _run_paramiko_shell(
                         config,

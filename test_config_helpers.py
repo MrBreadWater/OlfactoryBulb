@@ -375,6 +375,68 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._get_paramiko_sftp = original_get_paramiko_sftp
         hlp._close_paramiko_sftp = original_close_paramiko_sftp
 
+    # --- Deferred soma selected-file sync should use the compressed stream path ---
+    original_remote_transport = hlp._remote_transport
+    original_run_paramiko_shell = hlp._run_paramiko_shell
+    original_stream_to_dir = hlp._stream_paramiko_archive_to_local_dir
+    original_sftp_copy_files = hlp._sftp_copy_files
+    original_get_paramiko_sftp = hlp._get_paramiko_sftp
+    original_close_paramiko_sftp = hlp._close_paramiko_sftp
+    try:
+        stream_calls = []
+        fake_remote_cfg = {
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "ssh_transport": "paramiko",
+            "remote_sync_compress": True,
+        }
+
+        hlp._remote_transport = lambda _config: "paramiko"
+        hlp._run_paramiko_shell = lambda _config, _command: subprocess.CompletedProcess(
+            args=["ssh", "bash", "-lc", _command],
+            returncode=0,
+            stdout="gzip\n67\n.tar.gz\n",
+            stderr="",
+        )
+
+        def _fake_stream_to_dir(_config, *, remote_result_dir, local_result_dir, compressor, raw_bytes, stream_command=None):
+            stream_calls.append((remote_result_dir, compressor, raw_bytes, stream_command))
+            local_result_dir = Path(local_result_dir)
+            local_result_dir.mkdir(parents=True, exist_ok=True)
+            with open(local_result_dir / "soma_vs.pkl", "wb") as handle:
+                handle.write(b"abc")
+            return subprocess.CompletedProcess(args=["paramiko-stream-extract"], returncode=0, stdout="", stderr="")
+
+        hlp._stream_paramiko_archive_to_local_dir = _fake_stream_to_dir
+        hlp._sftp_copy_files = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("deferred soma selected sync should not use plain SFTP on the happy path")
+        )
+        hlp._get_paramiko_sftp = lambda _config: object()
+        hlp._close_paramiko_sftp = lambda _config: None
+
+        sync_dir = tmp / "paramiko-selected-soma-stream"
+        completed = hlp._sync_remote_result_dir(
+            fake_remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=sync_dir,
+            expected_files=("soma_vs.pkl",),
+            include_files=("soma_vs.pkl",),
+        )
+        assert completed.returncode == 0
+        assert len(stream_calls) == 1
+        assert stream_calls[0][1] == "gzip"
+        assert stream_calls[0][2] == 67
+        assert "soma_vs.pkl" in (stream_calls[0][3] or "")
+        assert (sync_dir / "soma_vs.pkl").exists()
+        print("Deferred soma selected sync uses compressed stream: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._run_paramiko_shell = original_run_paramiko_shell
+        hlp._stream_paramiko_archive_to_local_dir = original_stream_to_dir
+        hlp._sftp_copy_files = original_sftp_copy_files
+        hlp._get_paramiko_sftp = original_get_paramiko_sftp
+        hlp._close_paramiko_sftp = original_close_paramiko_sftp
+
     # --- Deferred remote soma traces should sync on first access ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
     try:
