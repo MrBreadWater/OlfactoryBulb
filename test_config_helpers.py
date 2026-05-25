@@ -188,6 +188,58 @@ with tempfile.TemporaryDirectory() as tmp:
         assert hlp._git_ref_is_ancestor(probe_sha, head_sha)
     print("git sync base candidates: OK")
 
+    # --- Notebook-published branch refs should have one stable remote tracking ref ---
+    tracking_ref = hlp._remote_notebook_tracking_ref_for_source("refs/heads/Speedups")
+    assert tracking_ref == "refs/obgpu-notebook-sync/heads/Speedups"
+    assert hlp._remote_notebook_tracking_ref_for_source("refs/obgpu-notebook-sync/tmp") is None
+    fetch_command = hlp._build_remote_git_bundle_fetch_command(
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_bundle_path="/tmp/example.bundle",
+        source_ref="refs/heads/Speedups",
+        remote_git_ref="abcdef1234567890",
+    )
+    assert "refs/obgpu-notebook-sync/abcdef1234567890" in fetch_command
+    assert "refs/obgpu-notebook-sync/heads/Speedups" in fetch_command
+    print("Remote git bundle tracking refs: OK")
+
+    # --- Remote bundle base lookup should prefer the stable published branch tip when valid ---
+    original_run_ssh_shell = hlp._run_ssh_shell
+    original_git_ref_is_ancestor = hlp._git_ref_is_ancestor
+    try:
+        head_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD"],
+            cwd=hlp.REPO_ROOT,
+            text=True,
+        ).strip()
+        parent_sha = subprocess.check_output(
+            ["git", "rev-parse", "HEAD^"],
+            cwd=hlp.REPO_ROOT,
+            text=True,
+        ).strip()
+
+        def _fake_run_ssh_shell(_config, command, check=False):
+            assert "refs/obgpu-notebook-sync/heads/Speedups" in command
+            return subprocess.CompletedProcess(
+                args=["ssh", "bash", "-lc", command],
+                returncode=0,
+                stdout=parent_sha + "\n",
+                stderr="",
+            )
+
+        hlp._run_ssh_shell = _fake_run_ssh_shell
+        hlp._git_ref_is_ancestor = original_git_ref_is_ancestor
+        resolved_base = hlp._resolve_remote_tracking_bundle_base(
+            {"remote_host": "user@host", "ssh_options": []},
+            remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+            commit_sha=head_sha,
+            source_ref="refs/heads/Speedups",
+        )
+        assert resolved_base == parent_sha
+        print("Remote tracked bundle base lookup: OK")
+    finally:
+        hlp._run_ssh_shell = original_run_ssh_shell
+        hlp._git_ref_is_ancestor = original_git_ref_is_ancestor
+
     # --- Remote sweep submit should use an uploaded manifest file ---
     sweep_cfg = build_run_config(
         runner_backend="sol_slurm",

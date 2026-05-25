@@ -4394,6 +4394,78 @@ def _create_git_bundle_for_commit(commit_sha: str, *, exclude_ref: str | None = 
             )
 
 
+def _remote_notebook_tracking_ref_for_source(source_ref: str) -> str | None:
+    """Return the stable remote notebook ref for one published local branch tip."""
+    branch_prefix = "refs/heads/"
+    if not source_ref.startswith(branch_prefix):
+        return None
+    branch_name = source_ref[len(branch_prefix):].strip("/")
+    if not branch_name:
+        return None
+    return f"refs/obgpu-notebook-sync/heads/{branch_name}"
+
+
+def _resolve_remote_tracking_bundle_base(
+    config: dict[str, Any],
+    *,
+    remote_repo_root: PurePosixPath,
+    commit_sha: str,
+    source_ref: str | None,
+) -> str | None:
+    """Return the last notebook-published branch tip on the remote when it is a valid local ancestor."""
+    if not source_ref:
+        return None
+    tracking_ref = _remote_notebook_tracking_ref_for_source(source_ref)
+    if not tracking_ref:
+        return None
+    command = (
+        f"git -C {shlex.quote(remote_repo_root.as_posix())} "
+        f"rev-parse --verify {shlex.quote(tracking_ref + '^{commit}')}"
+    )
+    completed = _run_ssh_shell(config, command)
+    if completed.returncode != 0:
+        return None
+    base_sha = (completed.stdout or "").strip().splitlines()
+    if not base_sha:
+        return None
+    resolved_base = base_sha[-1].strip()
+    if not resolved_base or resolved_base == commit_sha:
+        return None
+    if not _git_ref_is_ancestor(resolved_base, commit_sha):
+        return None
+    return resolved_base
+
+
+def _build_remote_git_bundle_fetch_command(
+    *,
+    remote_repo_root: PurePosixPath,
+    remote_bundle_path: str,
+    source_ref: str,
+    remote_git_ref: str,
+) -> str:
+    """Build the remote git fetch command used to publish one local bundle."""
+    remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
+    fetch_refspecs = [f"{source_ref}:{remote_private_ref}"]
+    tracking_ref = _remote_notebook_tracking_ref_for_source(source_ref)
+    if tracking_ref and tracking_ref != remote_private_ref:
+        fetch_refspecs.append(f"{source_ref}:{tracking_ref}")
+    fetch_refspec_args = " ".join(shlex.quote(refspec) for refspec in fetch_refspecs)
+    remote_git_lock = shlex.quote((remote_repo_root / ".obgpu-git.lock").as_posix())
+    fetch_body = (
+        f"git -C {shlex.quote(remote_repo_root.as_posix())} fetch --force --no-tags "
+        f"{shlex.quote(remote_bundle_path)} "
+        f"{fetch_refspec_args}"
+        f" && git -C {shlex.quote(remote_repo_root.as_posix())} "
+        f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
+        f" && rm -f {shlex.quote(remote_bundle_path)}"
+    )
+    return (
+        f"if command -v flock >/dev/null 2>&1; then "
+        f"touch {remote_git_lock} && flock {remote_git_lock} bash -lc {shlex.quote(fetch_body)}; "
+        f"else {fetch_body}; fi"
+    )
+
+
 def _find_remote_git_bundle_base(
     config: dict[str, Any],
     *,
@@ -4421,6 +4493,76 @@ def _find_remote_git_bundle_base(
         return None
     base_sha = selected[-1].strip()
     return base_sha if base_sha in candidates else None
+
+
+def _upload_paramiko_file_via_shell(
+    config: dict[str, Any],
+    *,
+    local_path: Path,
+    remote_path: str,
+    progress_desc: str,
+) -> subprocess.CompletedProcess[str]:
+    """Upload one local file over the active Paramiko shell transport without opening SFTP."""
+    connection = _connect_paramiko(config)
+    transport = connection["transport"]
+    channel = None
+    stderr_chunks: list[bytes] = []
+    bytes_written = 0
+    progress = _ProgressBar(
+        total=max(int(local_path.stat().st_size), 0),
+        desc=progress_desc,
+        unit="B",
+        unit_scale=True,
+        display_step=10 * 1024 * 1024,
+    )
+    try:
+        channel = transport.open_session()
+        remote_shell_command = f"cat > {shlex.quote(remote_path)}"
+        channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
+        with local_path.open("rb") as handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                view = memoryview(chunk)
+                while len(view):
+                    sent = channel.send(view)
+                    view = view[sent:]
+                    bytes_written += sent
+                    progress.update_to(bytes_written)
+                while channel.recv_stderr_ready():
+                    stderr_chunks.append(channel.recv_stderr(65536))
+        channel.shutdown_write()
+        while not channel.exit_status_ready():
+            while channel.recv_stderr_ready():
+                stderr_chunks.append(channel.recv_stderr(65536))
+            time.sleep(0.05)
+        while channel.recv_stderr_ready():
+            stderr_chunks.append(channel.recv_stderr(65536))
+        progress.update_to(bytes_written)
+        progress.close()
+        return subprocess.CompletedProcess(
+            args=["paramiko-upload", str(local_path), remote_path],
+            returncode=channel.recv_exit_status(),
+            stdout="",
+            stderr=b"".join(stderr_chunks).decode("utf-8", errors="replace"),
+        )
+    except Exception as exc:
+        progress.close()
+        if not _paramiko_transport_is_usable(transport):
+            if (
+                bool(config.get("remote_preserve_paramiko_session", True))
+                and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS
+            ):
+                raise RuntimeError(
+                    _paramiko_midrun_reauth_error(config) + f"\nOriginal error: {exc}"
+                ) from exc
+            _drop_paramiko_connection(config)
+        raise
+    finally:
+        progress.close()
+        if channel is not None:
+            channel.close()
 
 
 def _ensure_remote_git_ref_available(
@@ -4472,12 +4614,23 @@ def _ensure_remote_git_ref_available(
             "Push the branch manually or enable the Paramiko transport."
         )
 
-    sftp = _get_paramiko_sftp(config)
+    branch_name = _resolve_local_git_branch()
+    source_branch_ref = (
+        f"refs/heads/{branch_name}"
+        if branch_name and _git_ref_points_to_commit(branch_name, remote_git_ref)
+        else None
+    )
+    bundle_base = _resolve_remote_tracking_bundle_base(
+        config,
+        remote_repo_root=remote_repo_root,
+        commit_sha=remote_git_ref,
+        source_ref=source_branch_ref,
+    )
     bundle_base = _find_remote_git_bundle_base(
         config,
         remote_repo_root=remote_repo_root,
         candidate_shas=_local_git_sync_base_candidates(remote_git_ref),
-    )
+    ) if bundle_base is None else bundle_base
     if bundle_base:
         _progress_write(
             f"[Sol remote] Building incremental git bundle for commit "
@@ -4490,25 +4643,28 @@ def _ensure_remote_git_ref_available(
         )
     bundle_path, source_ref = _create_git_bundle_for_commit(remote_git_ref, exclude_ref=bundle_base)
     remote_bundle_path = f"/tmp/obgpu-sync-{remote_git_ref[:12]}-{os.getpid()}.bundle"
-    remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
-    remote_git_lock = shlex.quote((remote_repo_root / ".obgpu-git.lock").as_posix())
-    fetch_body = (
-        f"git -C {shlex.quote(remote_repo_root.as_posix())} fetch --force --no-tags "
-        f"{shlex.quote(remote_bundle_path)} "
-        f"{shlex.quote(source_ref)}:{shlex.quote(remote_private_ref)}"
-        f" && git -C {shlex.quote(remote_repo_root.as_posix())} "
-        f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
-        f" && rm -f {shlex.quote(remote_bundle_path)}"
-    )
-    fetch_command = (
-        f"if command -v flock >/dev/null 2>&1; then "
-        f"touch {remote_git_lock} && flock {remote_git_lock} bash -lc {shlex.quote(fetch_body)}; "
-        f"else {fetch_body}; fi"
+    fetch_command = _build_remote_git_bundle_fetch_command(
+        remote_repo_root=remote_repo_root,
+        remote_bundle_path=remote_bundle_path,
+        source_ref=source_ref,
+        remote_git_ref=remote_git_ref,
     )
 
     try:
         _progress_write(f"[Sol remote] Uploading git bundle for commit {remote_git_ref[:12]}...")
-        sftp.put(str(bundle_path), remote_bundle_path)
+        upload_completed = _upload_paramiko_file_via_shell(
+            config,
+            local_path=bundle_path,
+            remote_path=remote_bundle_path,
+            progress_desc="[Sol remote] Upload git bundle",
+        )
+        if upload_completed.returncode != 0:
+            raise RuntimeError(
+                "Could not upload the local git bundle to the Sol backend over the notebook SSH transport.\n"
+                f"Remote bundle: {remote_bundle_path}\n"
+                f"Commit: {remote_git_ref}\n"
+                f"Stderr:\n{upload_completed.stderr}"
+            )
         _progress_write(f"[Sol remote] Publishing local commit {remote_git_ref[:12]} to remote repo...")
         fetch_completed = _run_paramiko_shell(config, fetch_command)
         if fetch_completed.returncode != 0:
@@ -4527,10 +4683,9 @@ def _ensure_remote_git_ref_available(
         except Exception:
             pass
         try:
-            sftp.remove(remote_bundle_path)
+            _run_paramiko_shell(config, f"rm -f {shlex.quote(remote_bundle_path)}")
         except Exception:
             pass
-        _close_paramiko_sftp(config)
 
 
 def _run_remote_simulation(
