@@ -2977,6 +2977,7 @@ def _sync_remote_result_dir(
     *,
     remote_result_dir: PurePosixPath,
     local_result_dir: Path,
+    expected_files: tuple[str, ...] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Sync one remote result directory back into the local notebook results tree."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
@@ -3013,11 +3014,43 @@ def _sync_remote_result_dir(
                         compressor=compressor,
                         raw_bytes=raw_bytes,
                     )
+                    missing_stream_files = _missing_local_sync_artifacts(
+                        local_result_dir,
+                        expected_files=expected_files,
+                    )
+                    if stream_completed.returncode == 0 and missing_stream_files:
+                        expected_text = ", ".join(missing_stream_files)
+                        stream_completed = subprocess.CompletedProcess(
+                            args=stream_completed.args,
+                            returncode=1,
+                            stdout=stream_completed.stdout or "",
+                            stderr=(stream_completed.stderr or "")
+                            + (
+                                "\n[OBGPU load] Streamed archive sync produced no usable local artifacts. "
+                                f"Missing: {expected_text}\n"
+                            ),
+                        )
                     if stream_completed.returncode != 0:
                         _progress_write(
                             "[OBGPU load] Streamed archive sync failed; retrying the same result dir over SFTP..."
                         )
                         _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
+                        missing_fallback_files = _missing_local_sync_artifacts(
+                            local_result_dir,
+                            expected_files=expected_files,
+                        )
+                        if missing_fallback_files:
+                            expected_text = ", ".join(missing_fallback_files)
+                            return subprocess.CompletedProcess(
+                                args=["paramiko-stream-extract-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
+                                returncode=1,
+                                stdout=stream_completed.stdout or "",
+                                stderr=(stream_completed.stderr or "")
+                                + (
+                                    "\n[OBGPU load] Stream archive sync failed, SFTP fallback ran, "
+                                    f"but required local artifacts are still missing: {expected_text}\n"
+                                ),
+                            )
                         return subprocess.CompletedProcess(
                             args=["paramiko-stream-extract-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
                             returncode=0,
@@ -3040,6 +3073,21 @@ def _sync_remote_result_dir(
                 )
             finally:
                 _close_paramiko_sftp(config)
+            missing_direct_files = _missing_local_sync_artifacts(
+                local_result_dir,
+                expected_files=expected_files,
+            )
+            if missing_direct_files:
+                expected_text = ", ".join(missing_direct_files)
+                return subprocess.CompletedProcess(
+                    args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
+                    returncode=1,
+                    stdout="",
+                    stderr=(
+                        "[OBGPU load] Paramiko sync completed without producing the expected local artifacts: "
+                        f"{expected_text}"
+                    ),
+                )
             return subprocess.CompletedProcess(
                 args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
                 returncode=0,
@@ -3089,6 +3137,23 @@ def _sync_remote_result_dir(
             check=False,
             env=_ssh_command_env(),
         )
+    if completed.returncode == 0:
+        missing_rsync_files = _missing_local_sync_artifacts(
+            local_result_dir,
+            expected_files=expected_files,
+        )
+        if missing_rsync_files:
+            expected_text = ", ".join(missing_rsync_files)
+            return subprocess.CompletedProcess(
+                args=completed.args,
+                returncode=1,
+                stdout=completed.stdout,
+                stderr=(completed.stderr or "")
+                + (
+                    "\n[OBGPU load] Sync reported success, but expected local artifacts are missing: "
+                    f"{expected_text}\n"
+                ),
+            )
     return completed
 
 
@@ -3099,6 +3164,51 @@ def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
         if (result_dir / filename).exists():
             return True
     return False
+
+
+def _local_result_dir_has_remote_sync_artifacts(result_dir: str | Path) -> bool:
+    """Return True when one local result directory has any remote-generated sync artifacts."""
+    result_dir = Path(result_dir)
+    if _local_result_dir_has_loadable_payload(result_dir):
+        return True
+    for filename in (
+        "summary.json",
+        "stdout.txt",
+        "stderr.txt",
+        "bootstrap.log",
+        "command.txt",
+        "git_commit.txt",
+        "git_ref.txt",
+        "remote_submit.json",
+        "sweep_manifest.json",
+        "sweep_info.json",
+        "sweep_status.json",
+    ):
+        if (result_dir / filename).exists():
+            return True
+    if any(result_dir.glob("slurm-*.out")):
+        return True
+    for dirname in ("item_runs", "runs", "figures", "animations"):
+        if (result_dir / dirname).exists():
+            return True
+    return False
+
+
+def _missing_local_sync_artifacts(
+    result_dir: str | Path,
+    *,
+    expected_files: tuple[str, ...] | None = None,
+) -> list[str]:
+    """Return missing required local sync artifacts, or an empty list when the sync looks usable."""
+    result_dir = Path(result_dir)
+    if expected_files:
+        missing = [name for name in expected_files if not (result_dir / name).exists()]
+        if missing:
+            return missing
+        return []
+    if _local_result_dir_has_remote_sync_artifacts(result_dir):
+        return []
+    return ["remote result artifacts"]
 
 
 def _synthesize_partial_sync_summary(
@@ -4605,6 +4715,7 @@ def _run_remote_simulation(
         effective_config,
         remote_result_dir=remote_result_dir,
         local_result_dir=local_result_dir,
+        expected_files=("summary.json",),
     )
     _record_timing(notebook_timings, "sync_s", sync_started)
     (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
@@ -5467,6 +5578,7 @@ def _run_remote_sweep(
                 effective_config,
                 remote_result_dir=remote_result_dir,
                 local_result_dir=local_result_dir,
+                expected_files=("summary.json",),
             )
             if sync_completed.returncode != 0:
                 continue
@@ -5528,6 +5640,7 @@ def _run_remote_sweep(
         effective_config,
         remote_result_dir=remote_sweep_root,
         local_result_dir=local_sweep_dir,
+        expected_files=("summary.json",),
     )
     _record_timing(notebook_timings, "sync_s", started)
     (local_sweep_dir / "sync_stdout.txt").write_text(final_sync.stdout or "")

@@ -264,4 +264,57 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._cleanup_stale_remote_slurm_allocations = original_cleanup
         hlp._LIVE_REMOTE_STALE_CLEANUPS.clear()
 
+    # --- Streamed Paramiko sync should fall back when expected artifacts are still missing ---
+    original_remote_transport = hlp._remote_transport
+    original_run_paramiko_shell = hlp._run_paramiko_shell
+    original_stream_to_dir = hlp._stream_paramiko_archive_to_local_dir
+    original_sftp_copy_tree = hlp._sftp_copy_tree
+    original_get_paramiko_sftp = hlp._get_paramiko_sftp
+    original_close_paramiko_sftp = hlp._close_paramiko_sftp
+    try:
+        fallback_calls = []
+
+        hlp._remote_transport = lambda _config: "paramiko"
+        hlp._run_paramiko_shell = lambda _config, _command: subprocess.CompletedProcess(
+            args=["ssh", "bash", "-lc", _command],
+            returncode=0,
+            stdout="gzip\n0\n.tar.gz\n",
+            stderr="",
+        )
+        hlp._stream_paramiko_archive_to_local_dir = lambda *args, **kwargs: subprocess.CompletedProcess(
+            args=["paramiko-stream"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+        hlp._get_paramiko_sftp = lambda _config: object()
+        hlp._close_paramiko_sftp = lambda _config: None
+
+        def _fake_sftp_copy_tree(_sftp, remote_dir, local_dir):
+            fallback_calls.append(remote_dir)
+            local_dir = Path(local_dir)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "summary.json").write_text("{}")
+
+        hlp._sftp_copy_tree = _fake_sftp_copy_tree
+        sync_dir = tmp / "paramiko-sync-fallback"
+        completed = hlp._sync_remote_result_dir(
+            {},
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=sync_dir,
+            expected_files=("summary.json",),
+        )
+        assert completed.returncode == 0
+        assert fallback_calls == ["/remote/result"]
+        assert (sync_dir / "summary.json").exists()
+        assert "fallback completed successfully" in (completed.stderr or "")
+        print("Paramiko stream sync artifact validation: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._run_paramiko_shell = original_run_paramiko_shell
+        hlp._stream_paramiko_archive_to_local_dir = original_stream_to_dir
+        hlp._sftp_copy_tree = original_sftp_copy_tree
+        hlp._get_paramiko_sftp = original_get_paramiko_sftp
+        hlp._close_paramiko_sftp = original_close_paramiko_sftp
+
 print("\nAll tests passed.")
