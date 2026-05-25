@@ -182,6 +182,38 @@ def write_json(path: Path, payload: dict[str, Any]) -> None:
     tmp.replace(path)
 
 
+def resolve_completed_result_dir(requested_result_dir: Path, requested_label: str) -> Path:
+    """Resolve the actual benchmark payload directory for one completed sweep item."""
+    if (requested_result_dir / "summary.json").exists():
+        return requested_result_dir
+
+    candidates: list[tuple[str, float, Path]] = []
+    for candidate in requested_result_dir.parent.glob(f"{requested_label}_*"):
+        if not candidate.is_dir():
+            continue
+        summary_path = candidate / "summary.json"
+        if not summary_path.exists():
+            continue
+        try:
+            summary = json.loads(summary_path.read_text())
+        except Exception:
+            continue
+        if str(summary.get("requested_label") or "") != requested_label:
+            continue
+        candidates.append(
+            (
+                str(summary.get("timestamp") or ""),
+                float(candidate.stat().st_mtime),
+                candidate,
+            )
+        )
+
+    if candidates:
+        candidates.sort(key=lambda item: (item[0], item[1], item[2].name))
+        return candidates[-1][2]
+    return requested_result_dir
+
+
 def progress_payload(
     *,
     sweep_label: str,
@@ -390,12 +422,14 @@ def main() -> None:
                 payload["stdout_handle"].close()
                 payload["stderr_handle"].close()
                 item = payload["item"]
-                result_dir = Path(item["result_dir"]).expanduser().resolve()
+                requested_result_dir = Path(item["result_dir"]).expanduser().resolve()
+                result_dir = resolve_completed_result_dir(requested_result_dir, str(item["label"]))
                 status = {
                     "index": int(item["index"]),
                     "label": str(item["label"]),
                     "value": item.get("value"),
                     "result_dir": str(result_dir),
+                    "requested_result_dir": str(requested_result_dir),
                     "returncode": int(returncode),
                     "ok": int(returncode) == 0 and (result_dir / "summary.json").exists(),
                     "started_at": float(payload["started_at"]),

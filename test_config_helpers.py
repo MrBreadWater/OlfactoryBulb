@@ -5,6 +5,7 @@ Run with:
 """
 
 import json
+import importlib.util
 import pickle
 import subprocess
 import tempfile
@@ -264,6 +265,61 @@ with tempfile.TemporaryDirectory() as tmp:
     assert isinstance(parsed_manifest, list) and len(parsed_manifest) == len(manifest_items)
     assert parsed_manifest[0]["label"] == manifest_items[0]["label"]
     print("Remote sweep manifest upload path: OK")
+
+    # --- Remote sweep should resolve the real timestamped payload dir after completion ---
+    sweep_driver_spec = importlib.util.spec_from_file_location(
+        "remote_sweep_driver_test",
+        hlp.REPO_ROOT / "tools" / "remote" / "remote_sweep_driver.py",
+    )
+    assert sweep_driver_spec is not None and sweep_driver_spec.loader is not None
+    remote_sweep_driver = importlib.util.module_from_spec(sweep_driver_spec)
+    sweep_driver_spec.loader.exec_module(remote_sweep_driver)
+
+    requested_dir = tmp / "remote-sweep-requested"
+    requested_dir.mkdir(parents=True, exist_ok=True)
+    payload_dir = tmp / "remote-sweep-requested_20260525_120000"
+    payload_dir.mkdir(parents=True, exist_ok=True)
+    (payload_dir / "summary.json").write_text(
+        json.dumps(
+            {
+                "label": payload_dir.name,
+                "requested_label": requested_dir.name,
+                "timestamp": "20260525_120000",
+            }
+        )
+    )
+    resolved_dir = remote_sweep_driver.resolve_completed_result_dir(requested_dir, requested_dir.name)
+    assert resolved_dir == payload_dir
+    print("Remote sweep actual payload dir resolution: OK")
+
+    # --- Incremental sweep final sync should only run when most item payloads already exist locally ---
+    assert hlp._remote_sweep_metadata_files() == (
+        "summary.json",
+        "sim_progress.json",
+        "sweep_manifest.json",
+        "mpi_preflight.log",
+    )
+    sweep_local_runs = tmp / "sweep-local-runs"
+    manifest_stub = [
+        {"label": "item_000"},
+        {"label": "item_001"},
+        {"label": "item_002"},
+        {"label": "item_003"},
+    ]
+    for label in ("item_000", "item_001"):
+        item_dir = sweep_local_runs / label
+        item_dir.mkdir(parents=True, exist_ok=True)
+        (item_dir / "summary.json").write_text("{}")
+        (item_dir / "lfp.pkl").write_bytes(b"payload")
+    assert hlp._should_use_incremental_sweep_final_sync(
+        manifest_stub,
+        local_runs_dir=sweep_local_runs,
+    ) is True
+    assert hlp._should_use_incremental_sweep_final_sync(
+        manifest_stub,
+        local_runs_dir=tmp / "no-sweep-payloads",
+    ) is False
+    print("Incremental sweep final sync selection: OK")
 
     # --- Remote helper cache should shrink submit/poll command payloads ---
     remote_cfg = build_run_config(

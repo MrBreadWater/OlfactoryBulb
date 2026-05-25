@@ -1537,6 +1537,11 @@ def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
     return sizes
 
 
+def _remote_sweep_metadata_files() -> tuple[str, ...]:
+    """Return the small top-level sweep metadata files needed after remote completion."""
+    return ("summary.json", "sim_progress.json", "sweep_manifest.json", "mpi_preflight.log")
+
+
 _NONEMPTY_LOCAL_SYNC_ARTIFACTS = {
     "summary.json",
     "run_info.json",
@@ -3578,6 +3583,12 @@ def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     return False
 
 
+def _local_sweep_item_sync_complete(result_dir: str | Path) -> bool:
+    """Return True when one local sweep item already has a loadable payload and summary."""
+    result_dir = Path(result_dir)
+    return _local_sync_artifact_is_usable(result_dir / "summary.json") and _local_result_dir_has_loadable_payload(result_dir)
+
+
 def _local_result_dir_has_remote_sync_artifacts(result_dir: str | Path) -> bool:
     """Return True when one local result directory has any remote-generated sync artifacts."""
     result_dir = Path(result_dir)
@@ -3625,6 +3636,22 @@ def _missing_local_sync_artifacts(
     if _local_result_dir_has_remote_sync_artifacts(result_dir):
         return []
     return ["remote result artifacts"]
+
+
+def _should_use_incremental_sweep_final_sync(
+    manifest_items: list[dict[str, Any]],
+    *,
+    local_runs_dir: str | Path,
+) -> bool:
+    """Return True when most sweep payloads already exist locally and a bulk root sync is wasteful."""
+    total = len(manifest_items)
+    if total <= 0:
+        return True
+    local_runs_dir = Path(local_runs_dir)
+    ready = sum(
+        1 for item in manifest_items if _local_sweep_item_sync_complete(local_runs_dir / str(item["label"]))
+    )
+    return ready > 0 and ready * 2 >= total
 
 
 def _synthesize_partial_sync_summary(
@@ -6178,6 +6205,125 @@ def _run_remote_sweep(
             item_status_by_label[label] = dict(finished)
             synced_labels.add(label)
 
+    def sync_final_sweep_results() -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
+        if not bool(effective_config.get("sweep_sync_live", True)):
+            completed = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_sweep_root,
+                local_result_dir=local_sweep_dir,
+                expected_files=("summary.json",),
+            )
+            return completed, _read_json_if_present(local_sweep_dir / "summary.json") or {}
+
+        if not _should_use_incremental_sweep_final_sync(manifest_items, local_runs_dir=local_runs_dir):
+            completed = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_sweep_root,
+                local_result_dir=local_sweep_dir,
+                expected_files=("summary.json",),
+            )
+            return completed, _read_json_if_present(local_sweep_dir / "summary.json") or {}
+
+        stdout_parts: list[str] = []
+        stderr_parts: list[str] = []
+
+        def record_completed(prefix: str, completed: subprocess.CompletedProcess[str]) -> None:
+            if completed.stdout:
+                stdout_parts.append(f"[{prefix}]\n{completed.stdout}")
+            if completed.stderr:
+                stderr_parts.append(f"[{prefix}]\n{completed.stderr}")
+
+        metadata_sync = _sync_remote_result_dir(
+            effective_config,
+            remote_result_dir=remote_sweep_root,
+            local_result_dir=local_sweep_dir,
+            expected_files=("summary.json",),
+            include_files=_remote_sweep_metadata_files(),
+        )
+        record_completed("sweep-metadata", metadata_sync)
+        sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or {}
+        if metadata_sync.returncode != 0 or not sweep_summary:
+            stderr_parts.append(
+                "[OBGPU load] Incremental sweep final sync could not fetch summary metadata; "
+                "falling back to a bulk sweep-root sync.\n"
+            )
+            bulk_sync = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_sweep_root,
+                local_result_dir=local_sweep_dir,
+                expected_files=("summary.json",),
+            )
+            record_completed("sweep-bulk-fallback", bulk_sync)
+            return (
+                subprocess.CompletedProcess(
+                    args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                    returncode=bulk_sync.returncode,
+                    stdout="".join(stdout_parts),
+                    stderr="".join(stderr_parts),
+                ),
+                _read_json_if_present(local_sweep_dir / "summary.json") or {},
+            )
+
+        summary_by_label: dict[str, dict[str, Any]] = {}
+        for bucket in ("completed_items", "failed_items", "items"):
+            for payload in sweep_summary.get(bucket, []) or []:
+                if isinstance(payload, dict) and payload.get("label"):
+                    summary_by_label[str(payload["label"])] = dict(payload)
+
+        for item in manifest_items:
+            label = str(item["label"])
+            payload = summary_by_label.get(label)
+            if payload is None:
+                continue
+            local_result_dir = local_runs_dir / label
+            ok = bool(payload.get("ok", False))
+            if ok and _local_sweep_item_sync_complete(local_result_dir):
+                continue
+            remote_result_dir = PurePosixPath(str(payload.get("result_dir") or item["result_dir"]))
+            include_files = None
+            expected_files = ("summary.json",) if ok else None
+            if not ok:
+                include_files = ("command.txt", "stdout.txt", "stderr.txt")
+            item_sync = _sync_remote_result_dir(
+                effective_config,
+                remote_result_dir=remote_result_dir,
+                local_result_dir=local_result_dir,
+                expected_files=expected_files,
+                include_files=include_files,
+            )
+            record_completed(f"sweep-item:{label}", item_sync)
+            if item_sync.returncode != 0:
+                stderr_parts.append(
+                    "[OBGPU load] Incremental sweep final sync could not materialize every item; "
+                    "falling back to a bulk sweep-root sync.\n"
+                )
+                bulk_sync = _sync_remote_result_dir(
+                    effective_config,
+                    remote_result_dir=remote_sweep_root,
+                    local_result_dir=local_sweep_dir,
+                    expected_files=("summary.json",),
+                )
+                record_completed("sweep-bulk-fallback", bulk_sync)
+                return (
+                    subprocess.CompletedProcess(
+                        args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                        returncode=bulk_sync.returncode,
+                        stdout="".join(stdout_parts),
+                        stderr="".join(stderr_parts),
+                    ),
+                    _read_json_if_present(local_sweep_dir / "summary.json") or sweep_summary,
+                )
+
+        return (
+            subprocess.CompletedProcess(
+                args=["remote-sweep-incremental-sync", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                returncode=0,
+                stdout="".join(stdout_parts),
+                stderr="".join(stderr_parts),
+            ),
+            sweep_summary,
+        )
+
     _progress_write(
         f"[Sol remote] Submitted sweep job {submission['job_id']} "
         f"for {len(manifest_items)} items (parallelism={max_concurrent})."
@@ -6229,12 +6375,7 @@ def _run_remote_sweep(
             )
 
     started = time.perf_counter()
-    final_sync = _sync_remote_result_dir(
-        effective_config,
-        remote_result_dir=remote_sweep_root,
-        local_result_dir=local_sweep_dir,
-        expected_files=("summary.json",),
-    )
+    final_sync, sweep_summary = sync_final_sweep_results()
     _record_timing(notebook_timings, "sync_s", started)
     (local_sweep_dir / "sync_stdout.txt").write_text(final_sync.stdout or "")
     (local_sweep_dir / "sync_stderr.txt").write_text(final_sync.stderr or "")
@@ -6245,7 +6386,6 @@ def _run_remote_sweep(
             f"Stderr:\n{final_sync.stderr}"
         )
 
-    sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or {}
     for bucket in ("completed_items", "failed_items", "items"):
         for payload in sweep_summary.get(bucket, []) or []:
             if isinstance(payload, dict) and payload.get("label"):
