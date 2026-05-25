@@ -419,4 +419,63 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
 
+    # --- Result overview should not trigger deferred soma trace downloads ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    try:
+        overview_result_dir = tmp / "overview-result"
+        overview_result_dir.mkdir(parents=True, exist_ok=True)
+        (overview_result_dir / "summary.json").write_text(
+            json.dumps(
+                {
+                    "label": "test_label",
+                    "paramset": "GammaSignature",
+                    "nranks": 16,
+                    "params": {
+                        "tstop": 3600.0,
+                        "sim_dt": 0.1,
+                        "actual_dt": 0.1,
+                        "recording_period": 0.1,
+                    },
+                    "timing_seconds": {
+                        "run_max_rank": 30.0,
+                        "total_max_rank": 31.0,
+                    },
+                    "files": {
+                        "input_times.pkl": {"items": 612},
+                        "lfp.pkl": {"len_1": 36000},
+                        "soma_vs.pkl": {"items": 193},
+                    },
+                }
+            )
+        )
+        (overview_result_dir / "run_info.json").write_text(
+            json.dumps(
+                {
+                    "config": {
+                        "runner_backend": "sol_slurm",
+                        "remote_host": "user@host",
+                        "remote_repo_root": "/remote/OlfactoryBulb",
+                        "remote_results_root": "/remote/OlfactoryBulb/results/notebook_runs",
+                    },
+                    "remote": {
+                        "remote_result_dir": "/remote/OlfactoryBulb/results/notebook_runs/test_label",
+                        "deferred_remote_artifacts": ["soma_vs.pkl"],
+                    },
+                }
+            )
+        )
+
+        def _fail_sync_remote_result_dir(*args, **kwargs):
+            raise AssertionError("result_overview should not trigger deferred soma trace sync")
+
+        hlp._sync_remote_result_dir = _fail_sync_remote_result_dir
+        result = hlp.load_result(overview_result_dir)
+        info = hlp.result_overview(result)
+        assert info["n_inputs"] == 612
+        assert info["n_soma_traces"] == 193
+        assert info["n_lfp_samples"] == 36000
+        print("Result overview avoids deferred soma sync: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+
 print("\nAll tests passed.")

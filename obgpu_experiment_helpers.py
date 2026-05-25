@@ -6643,6 +6643,20 @@ def result_overview(result: dict[str, Any]) -> dict[str, Any]:
     summary = result.get("summary") or {}
     params = summary.get("params", {})
     timings = summary.get("timing_seconds", {})
+    files = summary.get("files") or {}
+    soma_meta = files.get("soma_vs.pkl") if isinstance(files.get("soma_vs.pkl"), dict) else {}
+    input_meta = files.get("input_times.pkl") if isinstance(files.get("input_times.pkl"), dict) else {}
+    lfp_meta = files.get("lfp.pkl") if isinstance(files.get("lfp.pkl"), dict) else {}
+    n_inputs = input_meta.get("items")
+    if not isinstance(n_inputs, int):
+        n_inputs = len(dict.get(result, "input_times", []))
+    n_soma_traces = soma_meta.get("items")
+    if not isinstance(n_soma_traces, int):
+        # Bypass LazyResult.get() so summaries do not trigger deferred remote sync.
+        n_soma_traces = len(dict.get(result, "soma_vs", []))
+    n_lfp_samples = lfp_meta.get("len_1")
+    if not isinstance(n_lfp_samples, int):
+        n_lfp_samples = int(len(dict.get(result, "lfp", [])))
     return {
         "result_dir": str(result["result_dir"]),
         "label": summary.get("label"),
@@ -6654,10 +6668,10 @@ def result_overview(result: dict[str, Any]) -> dict[str, Any]:
         "recording_period_ms": params.get("recording_period"),
         "run_seconds": timings.get("run_max_rank"),
         "total_seconds": timings.get("total_max_rank"),
-        "n_inputs": len(result.get("input_times", [])),
-        "n_soma_traces": len(result.get("soma_vs", [])),
+        "n_inputs": n_inputs,
+        "n_soma_traces": n_soma_traces,
         "n_gc_output_connections": len(result.get("gc_output_events", [])),
-        "n_lfp_samples": int(len(result.get("lfp", []))),
+        "n_lfp_samples": n_lfp_samples,
     }
 
 
