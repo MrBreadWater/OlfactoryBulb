@@ -1684,6 +1684,37 @@ def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
     return completed.returncode == 0
 
 
+def _git_merged_ref_shas(commit_sha: str, *, max_count: int = 128) -> list[str]:
+    """Return ancestor ref tips already merged into one commit."""
+    completed = subprocess.run(
+        [
+            "git",
+            "for-each-ref",
+            f"--merged={commit_sha}",
+            "--format=%(objectname)",
+            "refs/heads",
+            "refs/remotes",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return []
+    shas: list[str] = []
+    seen: set[str] = set()
+    for line in (completed.stdout or "").splitlines():
+        sha = line.strip()
+        if not sha or sha == commit_sha or sha in seen:
+            continue
+        seen.add(sha)
+        shas.append(sha)
+        if len(shas) >= int(max_count):
+            break
+    return shas
+
+
 def _local_git_sync_base_candidates(commit_sha: str, *, max_count: int = 500) -> list[str]:
     """Return local ancestor SHAs to test as possible remote bundle bases."""
     candidates: list[str] = []
@@ -1699,6 +1730,9 @@ def _local_git_sync_base_candidates(commit_sha: str, *, max_count: int = 500) ->
             return
         seen.add(sha)
         candidates.append(sha)
+
+    for sha in _git_merged_ref_shas(commit_sha, max_count=min(int(max_count), 128)):
+        add_candidate(sha)
 
     completed = subprocess.run(
         ["git", "rev-list", "--first-parent", f"--max-count={int(max_count)}", f"{commit_sha}^"],

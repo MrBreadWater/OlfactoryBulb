@@ -133,6 +133,20 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._connect_paramiko = original_connect
         hlp.paramiko = original_paramiko
 
+    # --- Git sync base candidates should be unique ancestor SHAs ---
+    head_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=hlp.REPO_ROOT,
+        text=True,
+    ).strip()
+    git_candidates = hlp._local_git_sync_base_candidates(head_sha, max_count=32)
+    assert len(git_candidates) == len(set(git_candidates))
+    assert head_sha not in git_candidates
+    if git_candidates:
+        probe_sha = git_candidates[0]
+        assert hlp._git_ref_is_ancestor(probe_sha, head_sha)
+    print("git sync base candidates: OK")
+
     # --- Remote sweep submit should use an uploaded manifest file ---
     sweep_cfg = build_run_config(
         runner_backend="sol_slurm",
