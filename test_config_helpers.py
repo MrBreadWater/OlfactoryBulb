@@ -133,6 +133,47 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._connect_paramiko = original_connect
         hlp.paramiko = original_paramiko
 
+    # --- Paramiko should fail closed instead of reauthing mid-run ---
+    original_paramiko = hlp.paramiko
+    try:
+        fake_remote_cfg = {
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "remote_preserve_paramiko_session": True,
+        }
+        cache_key = hlp._paramiko_connection_key(fake_remote_cfg)
+        original_cached = hlp._LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
+        original_authenticated = cache_key in hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS
+
+        class _DeadTransport:
+            def is_active(self):
+                return False
+
+            def is_authenticated(self):
+                return False
+
+        hlp.paramiko = object()
+        hlp._LIVE_PARAMIKO_CONNECTIONS[cache_key] = {"transport": _DeadTransport(), "sftp": None}
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
+
+        try:
+            hlp._connect_paramiko(fake_remote_cfg)
+            raise AssertionError("Expected mid-run Paramiko reauth to be refused")
+        except RuntimeError as exc:
+            assert "remote_preserve_paramiko_session=True" in str(exc)
+            assert cache_key in str(exc)
+        print("Paramiko mid-run reauth refusal: OK")
+    finally:
+        hlp.paramiko = original_paramiko
+        if original_cached is None:
+            hlp._LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
+        else:
+            hlp._LIVE_PARAMIKO_CONNECTIONS[cache_key] = original_cached
+        if original_authenticated:
+            hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
+        else:
+            hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.discard(cache_key)
+
     # --- Git sync base candidates should be unique ancestor SHAs ---
     head_sha = subprocess.check_output(
         ["git", "rev-parse", "HEAD"],
@@ -332,7 +373,79 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._get_paramiko_sftp = original_get_paramiko_sftp
         hlp._close_paramiko_sftp = original_close_paramiko_sftp
 
-    # --- Selected-file Paramiko sync should bypass the archive stream path ---
+    # --- Selected-file Paramiko sync should retry on the same session without dropping auth ---
+    original_remote_transport = hlp._remote_transport
+    original_sftp_copy_files = hlp._sftp_copy_files
+    original_get_paramiko_sftp = hlp._get_paramiko_sftp
+    original_close_paramiko_sftp = hlp._close_paramiko_sftp
+    original_drop_paramiko_connection = hlp._drop_paramiko_connection
+    try:
+        sync_attempts = []
+        close_calls = []
+        drop_calls = []
+        fake_remote_cfg = {
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "ssh_transport": "paramiko",
+            "remote_sync_compress": False,
+            "remote_preserve_paramiko_session": True,
+        }
+        cache_key = hlp._paramiko_connection_key(fake_remote_cfg)
+        original_cached = hlp._LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
+        original_authenticated = cache_key in hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS
+
+        class _LiveTransport:
+            def is_active(self):
+                return True
+
+            def is_authenticated(self):
+                return True
+
+        hlp._LIVE_PARAMIKO_CONNECTIONS[cache_key] = {"transport": _LiveTransport(), "sftp": object()}
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
+        hlp._remote_transport = lambda _config: "paramiko"
+        hlp._get_paramiko_sftp = lambda _config: object()
+        hlp._close_paramiko_sftp = lambda _config: close_calls.append("close")
+        hlp._drop_paramiko_connection = lambda _config: drop_calls.append("drop")
+
+        def _fake_sftp_copy_files(_sftp, _remote_dir, local_dir, file_names):
+            sync_attempts.append(tuple(file_names))
+            if len(sync_attempts) == 1:
+                raise OSError("transient sftp failure")
+            local_dir = Path(local_dir)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "summary.json").write_text("{}")
+
+        hlp._sftp_copy_files = _fake_sftp_copy_files
+        sync_dir = tmp / "paramiko-selected-retry"
+        completed = hlp._sync_remote_result_dir(
+            fake_remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=sync_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json",),
+        )
+        assert completed.returncode == 0
+        assert sync_attempts == [("summary.json",), ("summary.json",)]
+        assert drop_calls == []
+        assert (sync_dir / "summary.json").exists()
+        print("Paramiko selected-file retry preserves session: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._sftp_copy_files = original_sftp_copy_files
+        hlp._get_paramiko_sftp = original_get_paramiko_sftp
+        hlp._close_paramiko_sftp = original_close_paramiko_sftp
+        hlp._drop_paramiko_connection = original_drop_paramiko_connection
+        if original_cached is None:
+            hlp._LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
+        else:
+            hlp._LIVE_PARAMIKO_CONNECTIONS[cache_key] = original_cached
+        if original_authenticated:
+            hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
+        else:
+            hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.discard(cache_key)
+
+    # --- Selected-file Paramiko sync should use plain SFTP when compression is disabled ---
     original_remote_transport = hlp._remote_transport
     original_stream_to_dir = hlp._stream_paramiko_archive_to_local_dir
     original_sftp_copy_files = hlp._sftp_copy_files
@@ -340,7 +453,12 @@ with tempfile.TemporaryDirectory() as tmp:
     original_close_paramiko_sftp = hlp._close_paramiko_sftp
     try:
         selected_calls = []
-        fake_remote_cfg = {"remote_host": "user@host", "ssh_options": [], "ssh_transport": "paramiko"}
+        fake_remote_cfg = {
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "ssh_transport": "paramiko",
+            "remote_sync_compress": False,
+        }
 
         hlp._remote_transport = lambda _config: "paramiko"
         hlp._stream_paramiko_archive_to_local_dir = lambda *args, **kwargs: (_ for _ in ()).throw(
@@ -367,9 +485,70 @@ with tempfile.TemporaryDirectory() as tmp:
         assert completed.returncode == 0
         assert selected_calls == [("summary.json",)]
         assert (sync_dir / "summary.json").exists()
-        print("Paramiko selected-file sync path: OK")
+        print("Paramiko selected-file SFTP path: OK")
     finally:
         hlp._remote_transport = original_remote_transport
+        hlp._stream_paramiko_archive_to_local_dir = original_stream_to_dir
+        hlp._sftp_copy_files = original_sftp_copy_files
+        hlp._get_paramiko_sftp = original_get_paramiko_sftp
+        hlp._close_paramiko_sftp = original_close_paramiko_sftp
+
+    # --- Selected-file Paramiko sync should use the compressed stream path when enabled ---
+    original_remote_transport = hlp._remote_transport
+    original_run_paramiko_shell = hlp._run_paramiko_shell
+    original_stream_to_dir = hlp._stream_paramiko_archive_to_local_dir
+    original_sftp_copy_files = hlp._sftp_copy_files
+    original_get_paramiko_sftp = hlp._get_paramiko_sftp
+    original_close_paramiko_sftp = hlp._close_paramiko_sftp
+    try:
+        stream_calls = []
+        fake_remote_cfg = {
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "ssh_transport": "paramiko",
+            "remote_sync_compress": True,
+        }
+
+        hlp._remote_transport = lambda _config: "paramiko"
+        hlp._run_paramiko_shell = lambda _config, _command: subprocess.CompletedProcess(
+            args=["ssh", "bash", "-lc", _command],
+            returncode=0,
+            stdout="gzip\n67\n.tar.gz\n",
+            stderr="",
+        )
+
+        def _fake_stream_to_dir(_config, *, remote_result_dir, local_result_dir, compressor, raw_bytes, stream_command=None):
+            stream_calls.append((remote_result_dir, compressor, raw_bytes, stream_command))
+            local_result_dir = Path(local_result_dir)
+            local_result_dir.mkdir(parents=True, exist_ok=True)
+            (local_result_dir / "summary.json").write_text("{}")
+            return subprocess.CompletedProcess(args=["paramiko-stream-extract"], returncode=0, stdout="", stderr="")
+
+        hlp._stream_paramiko_archive_to_local_dir = _fake_stream_to_dir
+        hlp._sftp_copy_files = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("compressed selected-file sync should not use plain SFTP on the happy path")
+        )
+        hlp._get_paramiko_sftp = lambda _config: object()
+        hlp._close_paramiko_sftp = lambda _config: None
+
+        sync_dir = tmp / "paramiko-selected-summary-stream"
+        completed = hlp._sync_remote_result_dir(
+            fake_remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=sync_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json",),
+        )
+        assert completed.returncode == 0
+        assert len(stream_calls) == 1
+        assert stream_calls[0][1] == "gzip"
+        assert stream_calls[0][2] == 67
+        assert "summary.json" in (stream_calls[0][3] or "")
+        assert (sync_dir / "summary.json").exists()
+        print("Paramiko selected-file compressed stream path: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._run_paramiko_shell = original_run_paramiko_shell
         hlp._stream_paramiko_archive_to_local_dir = original_stream_to_dir
         hlp._sftp_copy_files = original_sftp_copy_files
         hlp._get_paramiko_sftp = original_get_paramiko_sftp

@@ -175,6 +175,7 @@ CONTROL_HELP = {
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
     "remote_defer_soma_vs_sync": "When True, remote run_and_load syncs small result artifacts first and leaves soma_vs.pkl on the cluster until result['soma_vs'] is accessed.",
+    "remote_preserve_paramiko_session": "When True, never silently open a fresh Paramiko login after one notebook session has already authenticated; fail closed instead of re-prompting mid-run.",
     "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
@@ -631,6 +632,7 @@ if not hasattr(builtins, "_OBGPU_NOTEBOOK_RUNTIME"):
 _NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
 _NOTEBOOK_RUNTIME.setdefault("ssh_masters", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
+_NOTEBOOK_RUNTIME.setdefault("paramiko_authenticated_keys", set())
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_git_refs", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_helper_caches", {})
@@ -639,6 +641,7 @@ _NOTEBOOK_RUNTIME.setdefault("remote_stale_cleanup", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocation_atexit_registered", False)
 _LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
+_LIVE_PARAMIKO_AUTHENTICATED_KEYS: set[str] = _NOTEBOOK_RUNTIME["paramiko_authenticated_keys"]
 _LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
 _LIVE_REMOTE_GIT_REFS: dict[str, set[str]] = _NOTEBOOK_RUNTIME["remote_git_refs"]
 _LIVE_REMOTE_HELPER_CACHES: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_helper_caches"]
@@ -813,6 +816,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_heartbeat_timeout_s": 120,
         "remote_cleanup_stale_allocations": True,
         "remote_defer_soma_vs_sync": True,
+        "remote_preserve_paramiko_session": True,
         "slurm_partition": None,
         "slurm_account": None,
         "slurm_time": None,
@@ -863,6 +867,7 @@ def build_slurm_remote_config(
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = True,
+    remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -908,6 +913,7 @@ def build_slurm_remote_config(
         "remote_cleanup_stale_allocations": bool(remote_cleanup_stale_allocations),
         "remote_sync_compress": True,
         "remote_defer_soma_vs_sync": bool(remote_defer_soma_vs_sync),
+        "remote_preserve_paramiko_session": bool(remote_preserve_paramiko_session),
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
         "remote_git_ref": remote_git_ref,
@@ -957,6 +963,7 @@ def build_sol_remote_config(
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = True,
+    remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -997,6 +1004,7 @@ def build_sol_remote_config(
         remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
         remote_cleanup_stale_allocations=remote_cleanup_stale_allocations,
         remote_defer_soma_vs_sync=remote_defer_soma_vs_sync,
+        remote_preserve_paramiko_session=remote_preserve_paramiko_session,
         remote_repo_mode=remote_repo_mode,
         remote_git_ref=remote_git_ref,
         remote_git_fetch=remote_git_fetch,
@@ -1841,6 +1849,26 @@ def _paramiko_connection_key(config: dict[str, Any]) -> str:
     return f"{username}@{hostname}:{port}"
 
 
+def _paramiko_transport_is_usable(transport: Any) -> bool:
+    """Return whether one cached Paramiko transport still looks authenticated and alive."""
+    if transport is None:
+        return False
+    try:
+        return bool(transport.is_active() and transport.is_authenticated())
+    except Exception:
+        return False
+
+
+def _paramiko_midrun_reauth_error(config: dict[str, Any]) -> str:
+    """Explain why a fresh Paramiko login is being refused mid-run."""
+    return (
+        "The cached Paramiko SSH session is no longer usable, and "
+        "remote_preserve_paramiko_session=True is preventing an automatic re-login.\n"
+        f"Endpoint: {_paramiko_connection_key(config)}\n"
+        "This is intentional so notebook runs fail closed instead of prompting for password/2FA mid-run."
+    )
+
+
 def _remote_git_ref_cache_key(config: dict[str, Any], remote_repo_root: PurePosixPath) -> str:
     """Build the runtime cache key for remote git-object presence checks."""
     return f"{_paramiko_connection_key(config)}::{remote_repo_root.as_posix()}"
@@ -1940,7 +1968,9 @@ def _get_paramiko_sftp(config: dict[str, Any]) -> Any:
     try:
         sftp = paramiko.SFTPClient.from_transport(connection["transport"])
     except Exception:
-        _drop_paramiko_connection(config)
+        connection["sftp"] = None
+        if not _paramiko_transport_is_usable(connection.get("transport")):
+            _drop_paramiko_connection(config)
         raise
     connection["sftp"] = sftp
     return sftp
@@ -1970,9 +2000,11 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
     cached = _LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
     if cached is not None:
         transport = cached.get("transport")
-        if transport is not None and transport.is_active() and transport.is_authenticated():
+        if _paramiko_transport_is_usable(transport):
             return cached
         _LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
+        if bool(config.get("remote_preserve_paramiko_session", True)) and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+            raise RuntimeError(_paramiko_midrun_reauth_error(config))
 
     hostname, port, username = _remote_endpoint(config)
     raw_sock = None
@@ -2060,6 +2092,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
             "username": username,
         }
         _LIVE_PARAMIKO_CONNECTIONS[cache_key] = connection
+        _LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
         _progress_write(f"[Sol remote] SSH session ready for {username}@{hostname}:{port}.")
         return connection
     except Exception:
@@ -2099,7 +2132,13 @@ def _run_paramiko_shell(
             )
         except Exception as exc:
             last_exc = exc
-            _drop_paramiko_connection(config)
+            _close_paramiko_sftp(config)
+            if not _paramiko_transport_is_usable(transport):
+                if bool(config.get("remote_preserve_paramiko_session", True)) and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+                    raise RuntimeError(
+                        _paramiko_midrun_reauth_error(config) + f"\nOriginal error: {exc}"
+                    ) from exc
+                _drop_paramiko_connection(config)
             if attempt == 0:
                 continue
             raise
@@ -3150,14 +3189,17 @@ def _sync_remote_result_dir(
     """Sync one remote result directory back into the local notebook results tree."""
     local_result_dir.mkdir(parents=True, exist_ok=True)
     if _remote_transport(config) == "paramiko":
+        def _cached_transport() -> Any:
+            cached = _LIVE_PARAMIKO_CONNECTIONS.get(_paramiko_connection_key(config))
+            if not isinstance(cached, dict):
+                return None
+            return cached.get("transport")
+
         last_exc: Exception | None = None
         for attempt in range(2):
             try:
                 if include_files:
-                    stream_selected = (
-                        bool(config.get("remote_sync_compress", True))
-                        and tuple(include_files) == ("soma_vs.pkl",)
-                    )
+                    stream_selected = bool(config.get("remote_sync_compress", True)) and bool(include_files)
                     if stream_selected:
                         probe_completed = _run_paramiko_shell(
                             config,
@@ -3213,7 +3255,6 @@ def _sync_remote_result_dir(
                                 "[OBGPU load] Streamed selected-file sync failed; retrying the same files over SFTP..."
                             )
                             _close_paramiko_sftp(config)
-                            _drop_paramiko_connection(config)
                             _sftp_copy_files(
                                 _get_paramiko_sftp(config),
                                 remote_result_dir.as_posix(),
@@ -3245,8 +3286,6 @@ def _sync_remote_result_dir(
                             )
                     else:
                         _close_paramiko_sftp(config)
-                        if attempt > 0:
-                            _drop_paramiko_connection(config)
                         _sftp_copy_files(
                             _get_paramiko_sftp(config),
                             remote_result_dir.as_posix(),
@@ -3303,7 +3342,6 @@ def _sync_remote_result_dir(
                             "[OBGPU load] Streamed archive sync failed; retrying the same result dir over SFTP..."
                         )
                         _close_paramiko_sftp(config)
-                        _drop_paramiko_connection(config)
                         _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
                         missing_fallback_files = _missing_local_sync_artifacts(
                             local_result_dir,
@@ -3332,8 +3370,21 @@ def _sync_remote_result_dir(
                     _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
             except Exception as exc:
                 last_exc = exc
-                _drop_paramiko_connection(config)
-                if attempt == 0:
+                _close_paramiko_sftp(config)
+                transport_usable = _paramiko_transport_is_usable(_cached_transport())
+                if not transport_usable:
+                    if (
+                        bool(config.get("remote_preserve_paramiko_session", True))
+                        and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS
+                    ):
+                        return subprocess.CompletedProcess(
+                            args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
+                            returncode=1,
+                            stdout="",
+                            stderr=_paramiko_midrun_reauth_error(config) + f"\nOriginal error: {exc}",
+                        )
+                    _drop_paramiko_connection(config)
+                if attempt == 0 and transport_usable:
                     continue
                 return subprocess.CompletedProcess(
                     args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
