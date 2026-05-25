@@ -81,6 +81,16 @@ from modify_model import (
     perform_cell_type_swaps,
     build_synapse_map
 )
+from olfactorybulb.result_artifacts import (
+    DEFAULT_SOMA_TRACE_DTYPE,
+    DEFAULT_SOMA_TRACE_FORMAT,
+    SOMA_TRACE_FILENAME_NPZ,
+    SOMA_TRACE_FILENAME_PKL,
+    find_soma_trace_artifact,
+    load_saved_result_artifact,
+    preferred_soma_trace_artifact_name,
+    soma_trace_artifact_candidates,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -92,6 +102,8 @@ CONTROL_HELP = {
     "tstop_ms": "Simulation duration in ms. Use None to keep the paramset default.",
     "sim_dt_ms": "Requested simulation dt in ms.",
     "recording_period_ms": "Saved sample period for LFP and soma traces.",
+    "soma_trace_format": "Saved soma-trace artifact format. 'npz' stores compressed array-native traces; 'pkl' keeps the legacy Python-object format.",
+    "soma_trace_dtype": "Saved soma-trace numeric dtype, usually 'float32' or 'float64'.",
     "legacy_parallel_dt": "When True, preserve the older parallel dt behavior. When False, let sim_dt_ms control dt more directly.",
     "lfp_electrode_location": "Probe location as [x, y, z] in microns.",
     "rnd_seed": "Random seed for odor input generation.",
@@ -174,7 +186,7 @@ CONTROL_HELP = {
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
-    "remote_defer_soma_vs_sync": "When True, remote run_and_load syncs small result artifacts first and leaves soma_vs.pkl on the cluster until result['soma_vs'] is accessed.",
+    "remote_defer_soma_vs_sync": "When True, remote run_and_load syncs small result artifacts first and leaves the soma trace artifact on the cluster until result['soma_vs'] is accessed.",
     "remote_preserve_paramiko_session": "When True, never silently open a fresh Paramiko login after one notebook session has already authenticated; fail closed instead of re-prompting mid-run.",
     "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
@@ -730,6 +742,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "tstop_ms": None,
         "sim_dt_ms": 0.1,
         "recording_period_ms": 0.1,
+        "soma_trace_format": DEFAULT_SOMA_TRACE_FORMAT,
+        "soma_trace_dtype": DEFAULT_SOMA_TRACE_DTYPE,
         "legacy_parallel_dt": False if mode == "fast" else True,
         "enable_lfp": True,
         "disable_status_report": True,
@@ -1146,6 +1160,8 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
     overrides = {
         "sim_dt": float(config["sim_dt_ms"]),
         "recording_period": float(config.get("recording_period_ms", config["sim_dt_ms"])),
+        "soma_trace_format": str(config.get("soma_trace_format", DEFAULT_SOMA_TRACE_FORMAT)),
+        "soma_trace_dtype": str(config.get("soma_trace_dtype", DEFAULT_SOMA_TRACE_DTYPE)),
         "legacy_parallel_dt": bool(config.get("legacy_parallel_dt", True)),
         "enable_reciprocal_synapses": bool(config.get("enable_reciprocal_synapses", True)),
         "record_from_somas": list(config.get("record_from_somas", ["MC", "TC", "GC"])),
@@ -1523,13 +1539,15 @@ def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
     result_dir = Path(result_dir)
     filenames = (
         "input_times.pkl",
-        "soma_vs.pkl",
         "gc_output_events.pkl",
         "lfp.pkl",
         "summary.json",
         "run_info.json",
     )
     sizes: dict[str, int] = {}
+    soma_path = find_soma_trace_artifact(result_dir)
+    if soma_path is not None and soma_path.exists():
+        sizes[soma_path.name] = int(soma_path.stat().st_size)
     for filename in filenames:
         path = result_dir / filename
         if path.exists():
@@ -1546,7 +1564,8 @@ _NONEMPTY_LOCAL_SYNC_ARTIFACTS = {
     "summary.json",
     "run_info.json",
     "input_times.pkl",
-    "soma_vs.pkl",
+    SOMA_TRACE_FILENAME_PKL,
+    SOMA_TRACE_FILENAME_NPZ,
     "gc_output_events.pkl",
     "lfp.pkl",
     "sim_progress.json",
@@ -3577,9 +3596,11 @@ def _sync_remote_result_dir(
 def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     """Return True when the local result directory already has standard notebook payloads."""
     result_dir = Path(result_dir)
-    for filename in ("input_times.pkl", "soma_vs.pkl", "gc_output_events.pkl", "lfp.pkl"):
+    for filename in ("input_times.pkl", "gc_output_events.pkl", "lfp.pkl"):
         if _local_sync_artifact_is_usable(result_dir / filename):
             return True
+    if find_soma_trace_artifact(result_dir) is not None:
+        return True
     return False
 
 
@@ -3654,6 +3675,30 @@ def _should_use_incremental_sweep_final_sync(
     return ready > 0 and ready * 2 >= total
 
 
+def _recover_local_sweep_summary(
+    sweep_dir: str | Path,
+    *,
+    sweep_label: str,
+    total_items: int,
+) -> dict[str, Any]:
+    """Recover one top-level sweep summary from local progress metadata when possible."""
+    sweep_dir = Path(sweep_dir)
+    progress = _read_json_if_present(sweep_dir / "sim_progress.json") or {}
+    finished_items = progress.get("finished_items") or []
+    if not isinstance(finished_items, list) or len(finished_items) < int(total_items):
+        return {}
+    summary = {
+        "kind": "remote_sweep",
+        "sweep_label": sweep_label,
+        "total_items": int(total_items),
+        "completed_items": [item for item in finished_items if bool(item.get("ok", False))],
+        "failed_items": [item for item in finished_items if not bool(item.get("ok", False))],
+        "items": finished_items,
+    }
+    (sweep_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
+    return summary
+
+
 def _synthesize_partial_sync_summary(
     result_dir: str | Path,
     *,
@@ -3664,7 +3709,10 @@ def _synthesize_partial_sync_summary(
     """Create a minimal summary when the payload files arrived but metadata did not."""
     result_dir = Path(result_dir)
     files = {}
-    for filename in ("input_times.pkl", "soma_vs.pkl", "gc_output_events.pkl", "lfp.pkl"):
+    soma_path = find_soma_trace_artifact(result_dir)
+    if soma_path is not None and soma_path.exists():
+        files[soma_path.name] = {"size_bytes": int(soma_path.stat().st_size)}
+    for filename in ("input_times.pkl", "gc_output_events.pkl", "lfp.pkl"):
         path = result_dir / filename
         if path.exists():
             files[filename] = {"size_bytes": int(path.stat().st_size)}
@@ -5312,7 +5360,7 @@ def _run_remote_simulation(
     final_sync_include_files: tuple[str, ...] | None = None
     if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", True)):
         final_sync_include_files = _remote_fast_sync_files(effective_config)
-        deferred_remote_artifacts.append("soma_vs.pkl")
+        deferred_remote_artifacts.append(preferred_soma_trace_artifact_name())
 
     sync_started = time.perf_counter()
     sync_completed = _sync_remote_result_dir(
@@ -6241,7 +6289,11 @@ def _run_remote_sweep(
             include_files=_remote_sweep_metadata_files(),
         )
         record_completed("sweep-metadata", metadata_sync)
-        sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or {}
+        sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
+            local_sweep_dir,
+            sweep_label=sweep_label,
+            total_items=len(manifest_items),
+        )
         if metadata_sync.returncode != 0 or not sweep_summary:
             stderr_parts.append(
                 "[OBGPU load] Incremental sweep final sync could not fetch summary metadata; "
@@ -6261,7 +6313,13 @@ def _run_remote_sweep(
                     stdout="".join(stdout_parts),
                     stderr="".join(stderr_parts),
                 ),
-                _read_json_if_present(local_sweep_dir / "summary.json") or {},
+                _read_json_if_present(local_sweep_dir / "summary.json")
+                or _recover_local_sweep_summary(
+                    local_sweep_dir,
+                    sweep_label=sweep_label,
+                    total_items=len(manifest_items),
+                )
+                or {},
             )
 
         summary_by_label: dict[str, dict[str, Any]] = {}
@@ -6311,7 +6369,13 @@ def _run_remote_sweep(
                         stdout="".join(stdout_parts),
                         stderr="".join(stderr_parts),
                     ),
-                    _read_json_if_present(local_sweep_dir / "summary.json") or sweep_summary,
+                    _read_json_if_present(local_sweep_dir / "summary.json")
+                    or _recover_local_sweep_summary(
+                        local_sweep_dir,
+                        sweep_label=sweep_label,
+                        total_items=len(manifest_items),
+                    )
+                    or sweep_summary,
                 )
 
         return (
@@ -6552,9 +6616,8 @@ def run_grid_sweep(
 
 
 def load_pickle(path: str | Path) -> Any:
-    """Load a pickle file from disk."""
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    """Load one saved result artifact from disk."""
+    return load_saved_result_artifact(path)
 
 
 def _sync_deferred_remote_artifact(
@@ -6585,7 +6648,9 @@ def _sync_deferred_remote_artifact(
         expected_files=(filename,),
         include_files=(filename,),
     )
-    if (completed.returncode != 0 or not _local_sync_artifact_is_usable(local_path)) and filename == "soma_vs.pkl":
+    if (
+        completed.returncode != 0 or not _local_sync_artifact_is_usable(local_path)
+    ) and filename in soma_trace_artifact_candidates():
         _progress_write(
             "[OBGPU load] Deferred soma trace sync fell back from selected-file mode; "
             "retrying by syncing the full remote result directory..."
@@ -6630,7 +6695,7 @@ class LazyResult(dict):
             soma_path = dict.get(self, "soma_vs_file")
             artifact_sizes = dict.get(self, "artifact_sizes")
             if isinstance(soma_path, Path) and soma_path.exists() and isinstance(artifact_sizes, dict):
-                artifact_sizes["soma_vs.pkl"] = int(soma_path.stat().st_size)
+                artifact_sizes[soma_path.name] = int(soma_path.stat().st_size)
         elapsed_s = time.perf_counter() - started
         _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
 
@@ -6678,15 +6743,20 @@ def load_result(
     input_path = result_dir / "input_times.pkl"
     if _local_sync_artifact_is_usable(input_path):
         load_plan.append(("input_times", input_path))
-    soma_path = result_dir / "soma_vs.pkl"
-    if not _local_sync_artifact_is_usable(soma_path) and "soma_vs.pkl" in deferred_remote_artifacts and not lazy_soma_vs:
+    soma_path = find_soma_trace_artifact(result_dir)
+    deferred_soma_name = next(
+        (name for name in soma_trace_artifact_candidates() if name in deferred_remote_artifacts),
+        None,
+    )
+    if soma_path is None and deferred_soma_name is not None and not lazy_soma_vs:
+        soma_path = result_dir / deferred_soma_name
         soma_path = _sync_deferred_remote_artifact(
             result_dir,
             run_info=run_info,
-            filename="soma_vs.pkl",
+            filename=deferred_soma_name,
         )
-        artifact_sizes["soma_vs.pkl"] = int(soma_path.stat().st_size)
-    if _local_sync_artifact_is_usable(soma_path) and not lazy_soma_vs:
+        artifact_sizes[soma_path.name] = int(soma_path.stat().st_size)
+    if isinstance(soma_path, Path) and _local_sync_artifact_is_usable(soma_path) and not lazy_soma_vs:
         load_plan.append(("soma_vs", soma_path))
     gc_output_path = result_dir / "gc_output_events.pkl"
     if _local_sync_artifact_is_usable(gc_output_path):
@@ -6727,13 +6797,14 @@ def load_result(
         )
     progress.close()
 
-    if _local_sync_artifact_is_usable(soma_path) and lazy_soma_vs:
+    if isinstance(soma_path, Path) and _local_sync_artifact_is_usable(soma_path) and lazy_soma_vs:
         result["soma_vs_file"] = soma_path
         result._lazy_loaders["soma_vs"] = lambda path=soma_path: load_pickle(path)
         _progress_write(
             f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
         )
-    elif "soma_vs.pkl" in deferred_remote_artifacts and lazy_soma_vs:
+    elif deferred_soma_name is not None and lazy_soma_vs:
+        soma_path = result_dir / deferred_soma_name
         result["soma_vs_file"] = soma_path
         result._lazy_loaders["soma_vs"] = (
             lambda path=soma_path, info=run_info, directory=result_dir: load_pickle(
@@ -7247,7 +7318,12 @@ def result_overview(result: dict[str, Any]) -> dict[str, Any]:
     params = summary.get("params", {})
     timings = summary.get("timing_seconds", {})
     files = summary.get("files") or {}
-    soma_meta = files.get("soma_vs.pkl") if isinstance(files.get("soma_vs.pkl"), dict) else {}
+    soma_meta = {}
+    for filename in soma_trace_artifact_candidates():
+        payload = files.get(filename)
+        if isinstance(payload, dict):
+            soma_meta = payload
+            break
     input_meta = files.get("input_times.pkl") if isinstance(files.get("input_times.pkl"), dict) else {}
     lfp_meta = files.get("lfp.pkl") if isinstance(files.get("lfp.pkl"), dict) else {}
     n_inputs = input_meta.get("items")

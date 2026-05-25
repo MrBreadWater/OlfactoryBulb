@@ -19,6 +19,11 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from olfactorybulb.output_paths import configure_output_env
+from olfactorybulb.result_artifacts import (
+    find_soma_trace_artifact,
+    load_saved_result_artifact,
+    soma_trace_artifact_candidates,
+)
 
 
 def first_nonfinite_index(values: Any) -> tuple[int, float] | None:
@@ -62,17 +67,16 @@ def validate_saved_outputs(out_dir: str | Path, *, require_lfp: bool) -> None:
     out_path = Path(out_dir)
     errors: list[str] = []
 
-    soma_path = out_path / "soma_vs.pkl"
-    if soma_path.exists():
-        with open(soma_path, "rb") as f:
-            soma_traces = pickle.load(f)
+    soma_path = find_soma_trace_artifact(out_path)
+    if soma_path is not None and soma_path.exists():
+        soma_traces = load_saved_result_artifact(soma_path)
         for trace_index, trace in enumerate(soma_traces):
             try:
                 label, times, values = trace
             except (TypeError, ValueError):
-                errors.append(f"soma_vs.pkl[{trace_index}]: expected (label, times, values)")
+                errors.append(f"{soma_path.name}[{trace_index}]: expected (label, times, values)")
                 continue
-            errors.extend(validate_numeric_trace(f"soma_vs.pkl[{trace_index}] {label}", times, values))
+            errors.extend(validate_numeric_trace(f"{soma_path.name}[{trace_index}] {label}", times, values))
 
     lfp_path = out_path / "lfp.pkl"
     if lfp_path.exists():
@@ -126,8 +130,8 @@ def canonicalize(obj: Any) -> Any:
 
 def summarize_pickle(path: str | Path) -> dict[str, Any]:
     """Summarize a saved pickle with stable hashes for regression comparisons."""
-    with open(path, "rb") as f:
-        obj = pickle.load(f)
+    path = Path(path)
+    obj = load_saved_result_artifact(path)
 
     if isinstance(obj, tuple) and len(obj) == 2:
         t, values = obj
@@ -444,7 +448,10 @@ def main() -> None:
         validate_saved_outputs(out_dir, require_lfp=getattr(ob.params, "enable_lfp", True))
 
         file_summaries = {}
-        for filename in ["soma_vs.pkl", "input_times.pkl", "lfp.pkl"]:
+        soma_path = find_soma_trace_artifact(out_dir)
+        if soma_path is not None and soma_path.exists():
+            file_summaries[soma_path.name] = summarize_pickle(soma_path)
+        for filename in ["input_times.pkl", "lfp.pkl"]:
             path = out_dir / filename
             if path.exists():
                 file_summaries[filename] = summarize_pickle(path)

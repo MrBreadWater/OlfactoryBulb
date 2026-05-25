@@ -38,6 +38,13 @@ from olfactorybulb.paramsets.base import *
 from olfactorybulb.paramsets.case_studies import *
 from olfactorybulb.paramsets.sensitivity import *
 from olfactorybulb.inputs import InputSpec
+from olfactorybulb.result_artifacts import (
+    DEFAULT_SOMA_TRACE_DTYPE,
+    DEFAULT_SOMA_TRACE_FORMAT,
+    SOMA_TRACE_FILENAME_NPZ,
+    SOMA_TRACE_FILENAME_PKL,
+    save_soma_trace_artifact,
+)
 
 CELL_MODEL_FACTORIES = {
     name: value
@@ -1386,7 +1393,7 @@ class OlfactoryBulb:
         """
         Saves soma voltage traces and odor input spike times to Pickle files for later processing
 
-        Saves to the results directory as 'soma_vs.pkl' and 'input_times.pkl'
+        Saves soma traces as a compressed artifact plus input_times.pkl.
         """
 
         # Gather cell voltage vectors
@@ -1418,8 +1425,19 @@ class OlfactoryBulb:
                     else:
                         result.append((cell, sampled_t, values))
 
-            with open(os.path.join(self.results_dir, 'soma_vs.pkl'), 'wb') as f:
-                cPickle.dump(result, f)
+            trace_format = getattr(self.params, "soma_trace_format", DEFAULT_SOMA_TRACE_FORMAT)
+            trace_dtype = getattr(self.params, "soma_trace_dtype", DEFAULT_SOMA_TRACE_DTYPE)
+            save_path = save_soma_trace_artifact(
+                result,
+                self.results_dir,
+                trace_format=trace_format,
+                trace_dtype=trace_dtype,
+            )
+            legacy_path = os.path.join(self.results_dir, SOMA_TRACE_FILENAME_PKL)
+            compressed_path = os.path.join(self.results_dir, SOMA_TRACE_FILENAME_NPZ)
+            stale_path = legacy_path if os.path.basename(str(save_path)) == SOMA_TRACE_FILENAME_NPZ else compressed_path
+            if os.path.exists(stale_path):
+                os.unlink(stale_path)
 
         # Gather input event time vectors
         all_input_vecs = self.pc.py_gather(self.input_vectors, 0)

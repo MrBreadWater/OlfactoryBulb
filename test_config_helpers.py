@@ -15,6 +15,14 @@ from pathlib import PurePosixPath
 
 import numpy as np
 import obgpu_experiment_helpers as hlp
+from olfactorybulb.result_artifacts import (
+    DEFAULT_SOMA_TRACE_DTYPE,
+    DEFAULT_SOMA_TRACE_FORMAT,
+    SOMA_TRACE_FILENAME_NPZ,
+    find_soma_trace_artifact,
+    load_soma_trace_artifact,
+    save_soma_trace_artifact,
+)
 from obgpu_experiment_helpers import (
     build_param_overrides,
     build_run_config,
@@ -107,6 +115,27 @@ with tempfile.TemporaryDirectory() as tmp:
     assert overrides["kar_gc_gmax"] == 0.001
     assert overrides["gc_ka_gbar_scale"] == 0.5
     print("KAR / ketamine controls: OK")
+
+    # --- Compressed soma trace artifacts should default to float32 NPZ and round-trip cleanly ---
+    assert cfg["soma_trace_format"] == DEFAULT_SOMA_TRACE_FORMAT
+    assert cfg["soma_trace_dtype"] == DEFAULT_SOMA_TRACE_DTYPE
+    traces = [
+        ("MC0", [0.0, 0.1, 0.2], [-65.0, -64.5, -64.0]),
+        ("TC0", [0.0, 0.1, 0.2], [-63.0, -62.5, -62.0]),
+    ]
+    npz_path = save_soma_trace_artifact(
+        traces,
+        tmp,
+        trace_format="npz",
+        trace_dtype="float32",
+    )
+    assert npz_path.name == SOMA_TRACE_FILENAME_NPZ
+    loaded_traces = load_soma_trace_artifact(npz_path)
+    assert [row[0] for row in loaded_traces] == ["MC0", "TC0"]
+    assert loaded_traces[0][1].dtype == np.float32
+    assert loaded_traces[0][2].dtype == np.float32
+    assert find_soma_trace_artifact(tmp) == npz_path
+    print("Compressed soma trace artifact round-trip: OK")
 
     # --- Paramiko SFTP should be lazy and cached ---
     original_connect = hlp._connect_paramiko
@@ -972,5 +1001,24 @@ with tempfile.TemporaryDirectory() as tmp:
     assert zero_loaded["gc_output_events"] == []
     assert zero_loaded["lfp"].shape == (2,)
     print("Zero-byte payload placeholders are skipped during load: OK")
+
+    # --- load_result should read compressed NPZ soma traces through the normal notebook path ---
+    npz_result_dir = tmp / "npz-result-load"
+    npz_result_dir.mkdir(parents=True, exist_ok=True)
+    (npz_result_dir / "summary.json").write_text(json.dumps({"files": {"soma_vs.npz": {"items": 2}}}))
+    save_soma_trace_artifact(
+        [
+            ("MC0", [0.0, 0.1], [-65.0, -64.5]),
+            ("TC0", [0.0, 0.1], [-63.0, -62.5]),
+        ],
+        npz_result_dir,
+        trace_format="npz",
+        trace_dtype="float32",
+    )
+    npz_loaded = hlp.load_result(npz_result_dir, lazy_soma_vs=False)
+    assert len(npz_loaded["soma_vs"]) == 2
+    assert npz_loaded["soma_vs"][0][1].dtype == np.float32
+    assert npz_loaded["soma_vs"][0][2].dtype == np.float32
+    print("load_result NPZ soma trace path: OK")
 
 print("\nAll tests passed.")

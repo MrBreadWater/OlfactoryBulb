@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import pickle
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -12,6 +13,12 @@ import numpy as np
 import pywt
 from scipy.interpolate import interp1d
 from scipy.signal import butter, lfilter
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from olfactorybulb.result_artifacts import find_soma_trace_artifact, load_saved_result_artifact
 
 
 DT_MS = 0.1
@@ -28,8 +35,7 @@ NUM_SNIFFS = 8
 
 def load_pickle(path: str | Path):
     """Load a pickle artifact from disk."""
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    return load_saved_result_artifact(path)
 
 
 def interpolate(x, y, dt):
@@ -112,8 +118,12 @@ def build_raw_report(old_dir, new_dir):
     new_lfp = np.asarray(new_lfp, dtype=float)
     n_lfp = min(len(old_t), len(new_t), len(old_lfp), len(new_lfp))
 
-    old_vs = load_pickle(old_dir / "soma_vs.pkl")
-    new_vs = load_pickle(new_dir / "soma_vs.pkl")
+    old_soma_path = find_soma_trace_artifact(old_dir)
+    new_soma_path = find_soma_trace_artifact(new_dir)
+    if old_soma_path is None or new_soma_path is None:
+        raise FileNotFoundError("Could not locate soma trace artifacts in one or both benchmark directories")
+    old_vs = load_pickle(old_soma_path)
+    new_vs = load_pickle(new_soma_path)
     old_labels = [row[0] for row in old_vs]
     new_labels = [row[0] for row in new_vs]
     old_dup = Counter(old_labels)

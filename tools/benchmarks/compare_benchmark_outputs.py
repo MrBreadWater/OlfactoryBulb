@@ -5,15 +5,21 @@ from __future__ import annotations
 import argparse
 import json
 import pickle
+import sys
 from pathlib import Path
 
 import numpy as np
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from olfactorybulb.result_artifacts import find_soma_trace_artifact, load_saved_result_artifact
+
 
 def load_pickle(path: str | Path):
     """Load a pickle artifact from disk."""
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    return load_saved_result_artifact(path)
 
 
 def max_abs_diff(a, b) -> float | None:
@@ -106,11 +112,11 @@ def main() -> None:
     after_dir = Path(args.after_dir)
 
     report = {}
-    for filename, fn in [
-        ("soma_vs.pkl", compare_soma_vs),
-        ("input_times.pkl", compare_input_times),
-        ("lfp.pkl", compare_lfp),
-    ]:
+    before_soma = find_soma_trace_artifact(before_dir)
+    after_soma = find_soma_trace_artifact(after_dir)
+    if before_soma is not None and after_soma is not None:
+        report["soma_vs"] = compare_soma_vs(before_soma, after_soma)
+    for filename, fn in [("input_times.pkl", compare_input_times), ("lfp.pkl", compare_lfp)]:
         before_path = before_dir / filename
         after_path = after_dir / filename
         if before_path.exists() and after_path.exists():

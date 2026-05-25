@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from benchmark_ob import summarize_pickle
+from olfactorybulb.result_artifacts import find_soma_trace_artifact
 
 
 def main() -> None:
@@ -21,7 +22,10 @@ def main() -> None:
         summary = json.load(f)
 
     file_summaries = {}
-    for filename in ["soma_vs.pkl", "input_times.pkl", "lfp.pkl"]:
+    soma_path = find_soma_trace_artifact(benchmark_dir)
+    if soma_path is not None and soma_path.exists():
+        file_summaries[soma_path.name] = summarize_pickle(soma_path)
+    for filename in ["input_times.pkl", "lfp.pkl"]:
         path = benchmark_dir / filename
         if path.exists():
             file_summaries[filename] = summarize_pickle(path)
