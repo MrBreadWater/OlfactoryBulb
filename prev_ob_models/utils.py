@@ -84,8 +84,11 @@ def load_mechanisms_from_candidates(load_mechanisms,
     if cached is not None:
         return cached
 
+    h = None
     if sentinel_mechanisms:
-        from neuron import h
+        from neuron import h as neuron_h
+
+        h = neuron_h
 
         if all(hasattr(h, mech_name) for mech_name in sentinel_mechanisms):
             loaded = "already-loaded"
@@ -128,11 +131,15 @@ def load_mechanisms_from_candidates(load_mechanisms,
             if any(path.exists() for path in lib_candidates):
                 try:
                     if _call_load_mechanisms(load_mechanisms, candidate_str):
+                        if sentinel_mechanisms and not all(hasattr(h, mech_name) for mech_name in sentinel_mechanisms):
+                            continue
                         _LOADED_MECH_BASES.add(candidate_str)
                         _MECH_LOAD_CACHE[key] = candidate_str
                         return candidate_str
                 except RuntimeError as exc:
                     if "already exists" in str(exc):
+                        if sentinel_mechanisms and not all(hasattr(h, mech_name) for mech_name in sentinel_mechanisms):
+                            continue
                         _LOADED_MECH_BASES.add(candidate_str)
                         _MECH_LOAD_CACHE[key] = candidate_str
                         return candidate_str
@@ -141,6 +148,11 @@ def load_mechanisms_from_candidates(load_mechanisms,
     # Final fallback preserves the old behavior for environments that can
     # discover the mechanisms through the working directory.
     if _call_load_mechanisms(load_mechanisms, mechanism_dir_name):
+        if sentinel_mechanisms and not all(hasattr(h, mech_name) for mech_name in sentinel_mechanisms):
+            raise FileNotFoundError(
+                f"Loaded mechanisms from '{mechanism_dir_name}' but did not find the required "
+                f"mechanisms {sentinel_mechanisms!r} near {anchor}."
+            )
         _LOADED_MECH_BASES.add(mechanism_dir_name)
         _MECH_LOAD_CACHE[key] = mechanism_dir_name
         return mechanism_dir_name

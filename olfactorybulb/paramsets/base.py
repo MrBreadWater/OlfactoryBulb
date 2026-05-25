@@ -98,6 +98,13 @@ class SilentNetwork:
     # 0.0 removes GC I_A for sensitivity tests.
     gc_ka_gbar_scale = 1.0
 
+    # Future published-cell hook for an added EPL / PV-like interneuron
+    # population. These do not alter the current slice-driven MC/TC/GC network
+    # by themselves; they establish a stable parameter convention for candidate
+    # model selection when that population is wired in.
+    epl_interneuron_model = None
+    epl_interneuron_family = None
+
     # MC input disabled
     mc_input_delay = 50
     mc_input_weight = 0

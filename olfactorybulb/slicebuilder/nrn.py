@@ -1,4 +1,5 @@
 from prev_ob_models.Birgiolas2020.isolated_cells import *
+from prev_ob_models.cell_registry import describe_cell_models, load_cell_class, list_cell_models
 from olfactorybulb.database import CellModel, Odor, OdorGlom
 
 
@@ -21,15 +22,12 @@ class SliceBuilderNRN:
 
         # Add methods that can be called from Blender
         addon.server.register_function(self.get_base_model_info)
+        addon.server.register_function(self.get_published_model_catalog)
         addon.server.register_function(self.create_cell)
         addon.server.register_function(self.get_odor_gloms)
 
         # Keep track of cells
-        self.cells = {
-            "MC": [],
-            "TC": [],
-            "GC": [],
-        }
+        self.cells = {}
 
     def get_base_model_info(self):
         """
@@ -70,6 +68,21 @@ class SliceBuilderNRN:
             .dicts() \
             }
 
+    def get_published_model_catalog(self, role=None):
+        """
+        Return registry metadata for published candidate cells available locally.
+
+        This is intentionally separate from the Birgiolas database-backed base
+        model metadata because these candidates are not yet encoded in the
+        current slice-builder database.
+
+        :param role: Optional role filter such as 'PGC', 'ETC', 'MC', or 'GC'
+        :return: List of metadata dicts keyed by stable model strings such as
+                 'Short2016.PGC' or 'LiCleland2013.PGC'
+        """
+
+        return describe_cell_models(list_cell_models(role=role, network_ready=False))
+
     def create_cell(self, type, class_name):
         """
         Creates an instance of a base cell model in NEURON.
@@ -79,9 +92,13 @@ class SliceBuilderNRN:
         :return: The name that NEURON gives to the cell soma segment e.g. 'MC5[0].soma'
         """
 
-        exec ("cell = " + class_name + "()")
+        if "." in class_name:
+            cell_class = load_cell_class(class_name)
+            cell = cell_class()
+        else:
+            exec("cell = " + class_name + "()")
 
-        self.cells[type].append(cell)
+        self.cells.setdefault(type, []).append(cell)
 
         return str(cell.soma.name())
 
