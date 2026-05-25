@@ -5,12 +5,14 @@ Run with:
 """
 
 import json
+import pickle
 import subprocess
 import tempfile
 from copy import deepcopy
 from pathlib import Path
 from pathlib import PurePosixPath
 
+import numpy as np
 import obgpu_experiment_helpers as hlp
 from obgpu_experiment_helpers import (
     build_param_overrides,
@@ -816,5 +818,31 @@ with tempfile.TemporaryDirectory() as tmp:
         print("Result overview avoids deferred soma sync: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
+
+    # --- Zero-byte sync placeholders should never count as valid artifacts or loadable payload ---
+    poisoned_dir = tmp / "poisoned-sync-dir"
+    poisoned_dir.mkdir(parents=True, exist_ok=True)
+    (poisoned_dir / "summary.json").write_bytes(b"")
+    (poisoned_dir / "gc_output_events.pkl").write_bytes(b"")
+    assert hlp._missing_local_sync_artifacts(
+        poisoned_dir,
+        expected_files=("summary.json",),
+    ) == ["summary.json"]
+    assert not hlp._local_result_dir_has_loadable_payload(poisoned_dir)
+    print("Zero-byte sync placeholders are rejected: OK")
+
+    # --- load_result should skip zero-byte payload placeholders instead of trying to unpickle them ---
+    zero_payload_dir = tmp / "zero-payload-load"
+    zero_payload_dir.mkdir(parents=True, exist_ok=True)
+    with (zero_payload_dir / "input_times.pkl").open("wb") as handle:
+        pickle.dump([1, 2, 3], handle)
+    with (zero_payload_dir / "lfp.pkl").open("wb") as handle:
+        pickle.dump((np.array([0.0, 0.1]), np.array([1.0, 2.0])), handle)
+    (zero_payload_dir / "gc_output_events.pkl").write_bytes(b"")
+    zero_loaded = hlp.load_result(zero_payload_dir)
+    assert zero_loaded["input_times"] == [1, 2, 3]
+    assert zero_loaded["gc_output_events"] == []
+    assert zero_loaded["lfp"].shape == (2,)
+    print("Zero-byte payload placeholders are skipped during load: OK")
 
 print("\nAll tests passed.")

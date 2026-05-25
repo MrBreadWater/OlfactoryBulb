@@ -1537,6 +1537,42 @@ def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
     return sizes
 
 
+_NONEMPTY_LOCAL_SYNC_ARTIFACTS = {
+    "summary.json",
+    "run_info.json",
+    "input_times.pkl",
+    "soma_vs.pkl",
+    "gc_output_events.pkl",
+    "lfp.pkl",
+    "sim_progress.json",
+}
+
+
+def _local_sync_artifact_is_usable(path: str | Path) -> bool:
+    """Return True when one synced local artifact exists and is not a known empty placeholder."""
+    path = Path(path)
+    if not path.exists():
+        return False
+    if not path.is_file():
+        return True
+    if path.name in _NONEMPTY_LOCAL_SYNC_ARTIFACTS:
+        return path.stat().st_size > 0
+    return True
+
+
+def _replace_file_via_temp_copy(copy_fn: Any, local_path: Path) -> None:
+    """Write one synced file through a temporary sibling, then atomically replace the target."""
+    local_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = local_path.with_name(f".{local_path.name}.obgpu-partial-{os.getpid()}")
+    try:
+        temp_path.unlink(missing_ok=True)
+        copy_fn(temp_path)
+        os.replace(temp_path, local_path)
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise
+
+
 def _remote_fast_sync_files() -> tuple[str, ...]:
     """Return the small top-level result artifacts needed for a fast remote run_and_load."""
     return (
@@ -2185,7 +2221,10 @@ def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:
             overall_bytes = base_bytes + current_file_bytes
             progress.update_to(overall_bytes)
 
-        sftp.get(remote_path, str(local_path), callback=callback)
+        _replace_file_via_temp_copy(
+            lambda temp_path: sftp.get(remote_path, str(temp_path), callback=callback),
+            local_path,
+        )
         transferred_bytes += file_size
         progress.update_to(transferred_bytes)
 
@@ -2233,7 +2272,10 @@ def _sftp_copy_files(sftp: Any, remote_dir: str, local_dir: Path, file_names: li
             overall_bytes = base_bytes + current_file_bytes
             progress.update_to(overall_bytes)
 
-        sftp.get(remote_path, str(local_path), callback=callback)
+        _replace_file_via_temp_copy(
+            lambda temp_path: sftp.get(remote_path, str(temp_path), callback=callback),
+            local_path,
+        )
         transferred_bytes += file_size
         progress.update_to(transferred_bytes)
 
@@ -3222,18 +3264,31 @@ def _sync_remote_result_dir(
                             )
                         compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
                         raw_bytes = int(raw_bytes_text or "0")
-                        stream_completed = _stream_paramiko_archive_to_local_dir(
-                            config,
-                            remote_result_dir=remote_result_dir,
-                            local_result_dir=local_result_dir,
-                            compressor=compressor,
-                            raw_bytes=raw_bytes,
-                            stream_command=_build_remote_selected_stream_archive_command(
-                                remote_result_dir,
-                                include_files=tuple(include_files),
-                                compressor=compressor,
-                            ),
+                        selected_stage_dir = Path(
+                            tempfile.mkdtemp(prefix="obgpu-selected-sync-", dir=str(local_result_dir.parent))
                         )
+                        try:
+                            stream_completed = _stream_paramiko_archive_to_local_dir(
+                                config,
+                                remote_result_dir=remote_result_dir,
+                                local_result_dir=selected_stage_dir,
+                                compressor=compressor,
+                                raw_bytes=raw_bytes,
+                                stream_command=_build_remote_selected_stream_archive_command(
+                                    remote_result_dir,
+                                    include_files=tuple(include_files),
+                                    compressor=compressor,
+                                ),
+                            )
+                            if stream_completed.returncode == 0:
+                                for selected_name in include_files:
+                                    staged_path = selected_stage_dir / selected_name
+                                    if _local_sync_artifact_is_usable(staged_path):
+                                        target_path = local_result_dir / selected_name
+                                        target_path.parent.mkdir(parents=True, exist_ok=True)
+                                        os.replace(staged_path, target_path)
+                        finally:
+                            shutil.rmtree(selected_stage_dir, ignore_errors=True)
                         missing_stream_files = _missing_local_sync_artifacts(
                             local_result_dir,
                             expected_files=expected_files,
@@ -3482,7 +3537,7 @@ def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     """Return True when the local result directory already has standard notebook payloads."""
     result_dir = Path(result_dir)
     for filename in ("input_times.pkl", "soma_vs.pkl", "gc_output_events.pkl", "lfp.pkl"):
-        if (result_dir / filename).exists():
+        if _local_sync_artifact_is_usable(result_dir / filename):
             return True
     return False
 
@@ -3505,7 +3560,7 @@ def _local_result_dir_has_remote_sync_artifacts(result_dir: str | Path) -> bool:
         "sweep_info.json",
         "sweep_status.json",
     ):
-        if (result_dir / filename).exists():
+        if _local_sync_artifact_is_usable(result_dir / filename):
             return True
     if any(result_dir.glob("slurm-*.out")):
         return True
@@ -3523,7 +3578,11 @@ def _missing_local_sync_artifacts(
     """Return missing required local sync artifacts, or an empty list when the sync looks usable."""
     result_dir = Path(result_dir)
     if expected_files:
-        missing = [name for name in expected_files if not (result_dir / name).exists()]
+        missing = [
+            name
+            for name in expected_files
+            if not _local_sync_artifact_is_usable(result_dir / name)
+        ]
         if missing:
             return missing
         return []
@@ -6331,7 +6390,7 @@ def _sync_deferred_remote_artifact(
     """Fetch one deferred remote artifact into the local result directory and return its path."""
     result_dir = Path(result_dir)
     local_path = result_dir / filename
-    if local_path.exists():
+    if _local_sync_artifact_is_usable(local_path):
         return local_path
     if not isinstance(run_info, dict):
         raise FileNotFoundError(f"Deferred remote artifact {filename} is not available locally.")
@@ -6350,7 +6409,7 @@ def _sync_deferred_remote_artifact(
         expected_files=(filename,),
         include_files=(filename,),
     )
-    if (completed.returncode != 0 or not local_path.exists()) and filename == "soma_vs.pkl":
+    if (completed.returncode != 0 or not _local_sync_artifact_is_usable(local_path)) and filename == "soma_vs.pkl":
         _progress_write(
             "[OBGPU load] Deferred soma trace sync fell back from selected-file mode; "
             "retrying by syncing the full remote result directory..."
@@ -6361,7 +6420,7 @@ def _sync_deferred_remote_artifact(
             local_result_dir=result_dir,
             expected_files=(filename,),
         )
-    if completed.returncode != 0 or not local_path.exists():
+    if completed.returncode != 0 or not _local_sync_artifact_is_usable(local_path):
         raise RuntimeError(
             "Deferred remote artifact sync failed.\n"
             f"Result dir: {result_dir}\n"
@@ -6441,23 +6500,23 @@ def load_result(
 
     load_plan: list[tuple[str, Path]] = []
     input_path = result_dir / "input_times.pkl"
-    if input_path.exists():
+    if _local_sync_artifact_is_usable(input_path):
         load_plan.append(("input_times", input_path))
     soma_path = result_dir / "soma_vs.pkl"
-    if not soma_path.exists() and "soma_vs.pkl" in deferred_remote_artifacts and not lazy_soma_vs:
+    if not _local_sync_artifact_is_usable(soma_path) and "soma_vs.pkl" in deferred_remote_artifacts and not lazy_soma_vs:
         soma_path = _sync_deferred_remote_artifact(
             result_dir,
             run_info=run_info,
             filename="soma_vs.pkl",
         )
         artifact_sizes["soma_vs.pkl"] = int(soma_path.stat().st_size)
-    if soma_path.exists() and not lazy_soma_vs:
+    if _local_sync_artifact_is_usable(soma_path) and not lazy_soma_vs:
         load_plan.append(("soma_vs", soma_path))
     gc_output_path = result_dir / "gc_output_events.pkl"
-    if gc_output_path.exists():
+    if _local_sync_artifact_is_usable(gc_output_path):
         load_plan.append(("gc_output_events", gc_output_path))
     lfp_path = result_dir / "lfp.pkl"
-    if lfp_path.exists():
+    if _local_sync_artifact_is_usable(lfp_path):
         load_plan.append(("lfp", lfp_path))
 
     total_bytes = sum(path.stat().st_size for _key, path in load_plan)
@@ -6492,7 +6551,7 @@ def load_result(
         )
     progress.close()
 
-    if soma_path.exists() and lazy_soma_vs:
+    if _local_sync_artifact_is_usable(soma_path) and lazy_soma_vs:
         result["soma_vs_file"] = soma_path
         result._lazy_loaders["soma_vs"] = lambda path=soma_path: load_pickle(path)
         _progress_write(
