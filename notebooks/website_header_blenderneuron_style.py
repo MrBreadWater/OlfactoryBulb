@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v11"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v12"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -26,6 +26,7 @@ ACTIVITY_PROFILE_BINS = 400
 ACTIVITY_SKIP_MS = 400.0
 ACTIVITY_PROPAGATION_DELAY_MS = 52.0
 ACTIVITY_PACKET_SIGMA_MS = 2.85
+BRANCH_EVENT_PROFILE_BINS = 400
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -72,6 +73,16 @@ class ActivityProfile:
     event_strengths: tuple[float, ...]
     peak_phase_ms: float
     score: float
+
+
+@dataclass(frozen=True)
+class BranchInputProfile:
+    target_cell: str
+    section_type: str
+    section_index: int
+    source_type: str
+    profile: ActivityProfile
+    event_count: int
 
 
 @dataclass(frozen=True)
@@ -222,6 +233,18 @@ def cell_type_from_label(label: str) -> str:
     return match.group(1) if match else "UNK"
 
 
+def cell_key_from_label(label: str) -> str | None:
+    match = re.search(r"([A-Z]+\d+\[\d+\])", label)
+    return match.group(1) if match else None
+
+
+def parse_section_ref(text: str) -> tuple[str, str, int] | None:
+    match = re.search(r"([A-Z]+\d+\[\d+\])\.(\w+)\[(\d+)\]", text)
+    if not match:
+        return None
+    return match.group(1), match.group(2), int(match.group(3))
+
+
 def circular_phase_distance(a_ms: float, b_ms: float, period_ms: float = ACTIVITY_PERIOD_MS) -> float:
     return abs(((a_ms - b_ms + 0.5 * period_ms) % period_ms) - 0.5 * period_ms)
 
@@ -248,6 +271,99 @@ def profile_events(values: np.ndarray, period_ms: float, max_events: int = 3) ->
     phases = tuple(phase for phase, _ in chosen)
     strengths = tuple(max(0.34, min(1.0, strength)) for _, strength in chosen)
     return phases, strengths
+
+
+def event_times_to_profile(
+    label: str,
+    cell_type: str,
+    event_times_ms: Iterable[float],
+    *,
+    period_ms: float,
+    bins: int,
+    max_events: int = 4,
+) -> ActivityProfile | None:
+    times = np.asarray(list(event_times_ms), dtype=np.float32)
+    times = times[np.isfinite(times)]
+    times = times[times >= ACTIVITY_SKIP_MS]
+    if times.size < 2:
+        return None
+
+    phases = np.mod(times, period_ms)
+    bin_idx = np.floor(phases / period_ms * bins).astype(np.int32) % bins
+    hist = np.bincount(bin_idx, minlength=bins).astype(float)
+    hist = circular_gaussian(hist, sigma_bins=bins * 1.2 / period_ms)
+    activity, spread = normalized_profile(hist, low_pct=8.0, high_pct=99.7)
+    activity = np.clip(activity, 0.0, 1.0) ** 0.74
+    event_phases_ms, event_strengths = profile_events(activity, period_ms, max_events=max_events)
+    if not event_phases_ms:
+        return None
+    score = float(spread + min(times.size / 90.0, 1.4))
+    return ActivityProfile(label, cell_type, activity, event_phases_ms, event_strengths, float(np.argmax(activity)) / bins * period_ms, score)
+
+
+@lru_cache(maxsize=4)
+def load_branch_input_profiles(
+    run_dir: str = str(DEFAULT_ACTIVITY_RUN),
+    period_ms: float = ACTIVITY_PERIOD_MS,
+    bins: int = BRANCH_EVENT_PROFILE_BINS,
+) -> tuple[BranchInputProfile, ...]:
+    run_path = Path(run_dir)
+    grouped: dict[tuple[str, str, int, str], list[float]] = {}
+
+    gc_path = run_path / "gc_output_events.pkl"
+    if gc_path.exists():
+        with gc_path.open("rb") as handle:
+            events = pickle.load(handle)
+        for event in events:
+            if not isinstance(event, dict) or not event.get("times"):
+                continue
+            dest = parse_section_ref(str(event.get("dest_section", "")))
+            if dest is None:
+                continue
+            target_cell, section_type, section_index = dest
+            delay = float(event.get("delay") or 0.0)
+            key = (target_cell, section_type, section_index, "GC")
+            grouped.setdefault(key, []).extend(float(t) + delay for t in event["times"])
+
+    input_path = run_path / "input_times.pkl"
+    if input_path.exists():
+        with input_path.open("rb") as handle:
+            input_events = pickle.load(handle)
+        for label, times in input_events:
+            if not times:
+                continue
+            dest = parse_section_ref(str(label))
+            if dest is None:
+                continue
+            target_cell, section_type, section_index = dest
+            key = (target_cell, section_type, section_index, "INPUT")
+            grouped.setdefault(key, []).extend(float(t) for t in times)
+
+    profiles: list[BranchInputProfile] = []
+    for (target_cell, section_type, section_index, source_type), times in grouped.items():
+        cell_type = cell_type_from_label(target_cell)
+        source_label = "GC output" if source_type == "GC" else "input"
+        label = f"{source_label} -> {target_cell}.{section_type}[{section_index}]"
+        max_events = 5 if source_type == "GC" else 4
+        profile = event_times_to_profile(label, cell_type, times, period_ms=period_ms, bins=bins, max_events=max_events)
+        if profile is None:
+            continue
+        profiles.append(
+            BranchInputProfile(
+                target_cell=target_cell,
+                section_type=section_type,
+                section_index=section_index,
+                source_type=source_type,
+                profile=profile,
+                event_count=len(times),
+            )
+        )
+    profiles.sort(key=lambda item: (item.target_cell, item.section_type, item.section_index, -item.event_count))
+    return tuple(profiles)
+
+
+def branch_input_cells() -> set[str]:
+    return {profile.target_cell for profile in load_branch_input_profiles()}
 
 
 def fold_trace_activity(
@@ -343,6 +459,7 @@ def load_activity_profiles(
 
 def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityProfile]]:
     profiles = load_activity_profiles()
+    input_cells = branch_input_cells()
     selected: dict[str, list[ActivityProfile]] = {}
     for cell_type, count in counts.items():
         candidates = sorted(
@@ -358,11 +475,13 @@ def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityP
         while len(chosen) < count and pool:
             def rank(profile: ActivityProfile) -> float:
                 value = profile.score
+                if cell_key_from_label(profile.label) in input_cells:
+                    value *= 1.16
                 if chosen:
                     nearest_phase = min(circular_phase_distance(profile.peak_phase_ms, other.peak_phase_ms) for other in chosen)
                     phase_bonus = 0.52 + 0.48 * min(1.0, nearest_phase / 42.0)
                     base_label = profile.label.split(" #", 1)[0]
-                    label_bonus = 0.88 if any(other.label.split(" #", 1)[0] == base_label for other in chosen) else 1.0
+                    label_bonus = 0.74 if any(other.label.split(" #", 1)[0] == base_label for other in chosen) else 1.0
                     value *= phase_bonus * label_bonus
                 return value
 
@@ -407,7 +526,11 @@ def packet_activity(
         return 0.0
     best = 0.0
     for event_ms, strength in zip(profile.event_phases_ms, profile.event_strengths):
-        expected_ms = event_ms + flow_direction * ACTIVITY_PROPAGATION_DELAY_MS * distance + branch_phase_ms
+        if flow_direction >= 0.0:
+            propagation_ms = ACTIVITY_PROPAGATION_DELAY_MS * distance
+        else:
+            propagation_ms = ACTIVITY_PROPAGATION_DELAY_MS * (1.0 - distance)
+        expected_ms = event_ms + propagation_ms + branch_phase_ms
         delta_ms = circular_time_delta_ms(loop_ms, expected_ms)
         core = math.exp(-(delta_ms * delta_ms) / (2.0 * ACTIVITY_PACKET_SIGMA_MS * ACTIVITY_PACKET_SIGMA_MS))
         skirt = math.exp(-(delta_ms * delta_ms) / (2.0 * (ACTIVITY_PACKET_SIGMA_MS * 1.75) ** 2))
@@ -482,10 +605,127 @@ def branch_timing(morph: Morphology, branch_id: int, distance_offset: float) -> 
     return phase_ms, gain
 
 
+def branch_screen_order(
+    morph: Morphology,
+    branch_for: dict[int, int],
+    projected: dict[int, np.ndarray],
+) -> dict[int, int]:
+    root = projected.get(morph.root_id)
+    if root is None:
+        return {}
+    entries: list[tuple[float, float, int]] = []
+    for branch_id in sorted(set(branch_for.values())):
+        if branch_id == morph.root_id or branch_id not in projected:
+            continue
+        point = projected[branch_id]
+        angle = math.atan2(float(point[1] - root[1]), float(point[0] - root[0]))
+        radius = math.hypot(float(point[0] - root[0]), float(point[1] - root[1]))
+        entries.append((angle, radius, branch_id))
+    return {branch_id: idx for idx, (_, _, branch_id) in enumerate(sorted(entries))}
+
+
+def input_profiles_for_cell(target_cell: str, section_type: str) -> list[BranchInputProfile]:
+    profiles = [
+        profile
+        for profile in load_branch_input_profiles()
+        if profile.target_cell == target_cell and profile.section_type == section_type
+    ]
+    profiles.sort(key=lambda item: (-item.event_count, item.section_index, item.source_type))
+    return profiles
+
+
+def choose_actual_branch_input(
+    item: PlacedMorph,
+    branch_id: int,
+    branch_rank: int,
+    neurite_kind: int,
+) -> ActivityProfile | None:
+    target_cell = cell_key_from_label(item.activity_profile.label) if item.activity_profile else None
+    if target_cell is None or item.morphology.cell_type not in ("MC", "TC"):
+        return None
+
+    preferred_sections = ("apic", "dend") if neurite_kind == 4 else ("dend", "apic")
+    for section_type in preferred_sections:
+        candidates = input_profiles_for_cell(target_cell, section_type)
+        if not candidates:
+            continue
+        section_offset = int(stable_unit(target_cell, item.morphology.name, branch_id, round(item.distance_offset, 3), section_type) * len(candidates))
+        chosen = candidates[(branch_rank + section_offset) % len(candidates)]
+        return chosen.profile
+    return None
+
+
+def compatible_source_profiles(item: PlacedMorph, placed: list[PlacedMorph]) -> list[PlacedMorph]:
+    target_type = item.morphology.cell_type
+    if target_type == "GC":
+        allowed = {"MC", "TC"}
+    elif target_type in ("MC", "TC"):
+        allowed = {"GC"}
+    else:
+        allowed = {"MC", "TC", "GC"}
+    candidates = [
+        other
+        for other in placed
+        if other is not item and other.activity_profile is not None and other.morphology.cell_type in allowed
+    ]
+    if candidates:
+        return candidates
+    return [other for other in placed if other is not item and other.activity_profile is not None]
+
+
+def choose_compatible_source_profile(
+    item: PlacedMorph,
+    placed: list[PlacedMorph],
+    branch_id: int,
+) -> tuple[ActivityProfile | None, float, float]:
+    candidates = compatible_source_profiles(item, placed)
+    if not candidates:
+        return item.activity_profile, 0.0, 1.0
+
+    def rank(other: PlacedMorph) -> tuple[float, float]:
+        dist = math.hypot(other.center[0] - item.center[0], other.center[1] - item.center[1])
+        phase_gap = 0.0
+        if item.activity_profile is not None and other.activity_profile is not None:
+            phase_gap = circular_phase_distance(item.activity_profile.peak_phase_ms, other.activity_profile.peak_phase_ms)
+        return dist, -phase_gap
+
+    ranked = sorted(candidates, key=rank)
+    window = ranked[: min(4, len(ranked))]
+    index = int(stable_unit(item.morphology.name, branch_id, round(item.distance_offset, 3), "source") * len(window))
+    source = window[index % len(window)]
+    delay_ms = 4.0 + 16.0 * stable_unit(
+        item.morphology.name,
+        source.morphology.name,
+        branch_id,
+        round(item.distance_offset, 3),
+        "source-delay",
+    )
+    gain = 0.78 + 0.34 * stable_unit(source.morphology.name, branch_id, "source-gain")
+    return source.activity_profile, delay_ms, gain
+
+
+def choose_branch_activity(
+    item: PlacedMorph,
+    placed: list[PlacedMorph],
+    branch_id: int,
+    branch_rank: int,
+    neurite_kind: int,
+) -> tuple[ActivityProfile | None, float, float]:
+    if neurite_kind == 2:
+        return item.activity_profile, 0.0, 1.0
+    actual_input = choose_actual_branch_input(item, branch_id, branch_rank, neurite_kind)
+    if actual_input is not None:
+        phase_ms = -6.0 + 12.0 * stable_unit(actual_input.label, branch_id, round(item.distance_offset, 3), "site-phase")
+        gain = 0.86 + 0.34 * stable_unit(actual_input.label, branch_id, "site-gain")
+        return actual_input, phase_ms, gain
+    return choose_compatible_source_profile(item, placed, branch_id)
+
+
 def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tuple[list[RenderSegment], list[RenderNode]]:
     segments: list[RenderSegment] = []
     nodes_out: list[RenderNode] = []
-    for item in placed:
+    placed_list = list(placed)
+    for item in placed_list:
         morph = item.morphology
         coords = normalized_coords(morph)
         branch_for = primary_branch_ids(morph)
@@ -507,6 +747,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 sx += dx * local_pull
                 sy += dy * local_pull
             projected[node_id] = np.array([sx, sy, pos[2] + item.z_bias], dtype=float)
+        branch_order = branch_screen_order(morph, branch_for, projected)
 
         for node_id, node in morph.nodes.items():
             parent_id = node.parent_id
@@ -518,7 +759,15 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
             radius = 0.5 * (node.radius + parent_node.radius)
             dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / morph.max_distance
             kind = segment_kind(node, parent_node)
-            branch_phase_ms, branch_gain = branch_timing(morph, branch_for.get(node_id, node_id), item.distance_offset)
+            branch_id = branch_for.get(node_id, node_id)
+            base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
+            activity_profile, route_phase_ms, route_gain = choose_branch_activity(
+                item,
+                placed_list,
+                branch_id,
+                branch_order.get(branch_id, 0),
+                kind,
+            )
             width_px = SUPERSAMPLE * max(1.5, item.width_scale * (0.72 + 0.36 * math.sqrt(radius)) + 1.25)
             segments.append(
                 RenderSegment(
@@ -534,9 +783,9 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     cell_type=morph.cell_type,
                     neurite_kind=kind,
                     flow_direction=neurite_flow_direction(kind),
-                    activity_profile=item.activity_profile,
-                    branch_phase_ms=branch_phase_ms,
-                    branch_gain=branch_gain,
+                    activity_profile=activity_profile,
+                    branch_phase_ms=base_phase_ms + route_phase_ms,
+                    branch_gain=base_gain * route_gain,
                 )
             )
 
@@ -550,7 +799,20 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 node_kind = segment_kind(child, node)
             else:
                 node_kind = node.kind
-            branch_phase_ms, branch_gain = branch_timing(morph, branch_for.get(node_id, node_id), item.distance_offset)
+            branch_id = branch_for.get(node_id, node_id)
+            base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
+            if node_id == morph.root_id or node.kind == 1:
+                activity_profile = item.activity_profile
+                route_phase_ms = 0.0
+                route_gain = 1.0
+            else:
+                activity_profile, route_phase_ms, route_gain = choose_branch_activity(
+                    item,
+                    placed_list,
+                    branch_id,
+                    branch_order.get(branch_id, 0),
+                    node_kind,
+                )
             nodes_out.append(
                 RenderNode(
                     x=float(p[0]),
@@ -562,11 +824,11 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     cell_type=morph.cell_type,
                     terminal=degree <= 1,
                     soma=node_id == morph.root_id or node.kind == 1,
-                    activity_profile=item.activity_profile,
+                    activity_profile=activity_profile,
                     neurite_kind=node_kind,
                     flow_direction=neurite_flow_direction(node_kind),
-                    branch_phase_ms=branch_phase_ms,
-                    branch_gain=branch_gain,
+                    branch_phase_ms=base_phase_ms + route_phase_ms,
+                    branch_gain=base_gain * route_gain,
                 )
             )
     segments.sort(key=lambda seg: seg.z)
