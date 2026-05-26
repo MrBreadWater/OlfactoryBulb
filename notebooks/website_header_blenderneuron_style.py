@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v22"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v23"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -52,8 +52,8 @@ SOMA_DISPLAY_EMPHASIS = {
     "GC": 0.95,
 }
 DOF_FOCUS_Z = 0.02
-DOF_SHARP_ZONE = 0.07
-DOF_FULL_ZONE = 0.34
+DOF_SHARP_ZONE = 0.10
+DOF_FULL_ZONE = 0.48
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -108,6 +108,15 @@ class BranchInputProfile:
     section_type: str
     section_index: int
     source_type: str
+    profile: ActivityProfile
+    event_count: int
+
+
+@dataclass(frozen=True)
+class BranchOutputProfile:
+    source_cell: str
+    section_type: str
+    section_index: int
     profile: ActivityProfile
     event_count: int
 
@@ -390,8 +399,65 @@ def load_branch_input_profiles(
     return tuple(profiles)
 
 
+@lru_cache(maxsize=4)
+def load_gc_output_profiles(
+    run_dir: str = str(DEFAULT_ACTIVITY_RUN),
+    period_ms: float = ACTIVITY_PERIOD_MS,
+    bins: int = BRANCH_EVENT_PROFILE_BINS,
+) -> tuple[BranchOutputProfile, ...]:
+    run_path = Path(run_dir)
+    gc_path = run_path / "gc_output_events.pkl"
+    if not gc_path.exists():
+        return ()
+
+    grouped: dict[tuple[str, str, int], list[float]] = {}
+    with gc_path.open("rb") as handle:
+        events = pickle.load(handle)
+    for event in events:
+        if not isinstance(event, dict) or not event.get("times"):
+            continue
+        source = parse_section_ref(str(event.get("source_section", "")))
+        if source is None:
+            continue
+        source_cell, section_type, section_index = source
+        key = (source_cell, section_type, section_index)
+        grouped.setdefault(key, []).extend(float(t) for t in event["times"])
+
+    profiles: list[BranchOutputProfile] = []
+    for (source_cell, section_type, section_index), times in grouped.items():
+        label = f"{source_cell}.{section_type}[{section_index}] output"
+        profile = event_times_to_profile(label, cell_type_from_label(source_cell), times, period_ms=period_ms, bins=bins, max_events=5)
+        if profile is None:
+            continue
+        profiles.append(
+            BranchOutputProfile(
+                source_cell=source_cell,
+                section_type=section_type,
+                section_index=section_index,
+                profile=profile,
+                event_count=len(times),
+            )
+        )
+    profiles.sort(key=lambda item: (item.source_cell, item.section_type, item.section_index, -item.event_count))
+    return tuple(profiles)
+
+
 def branch_input_cells() -> set[str]:
     return {profile.target_cell for profile in load_branch_input_profiles()}
+
+
+def gc_output_profiles_for_cell(source_cell: str, section_type: str = "apic") -> list[BranchOutputProfile]:
+    profiles = [
+        profile
+        for profile in load_gc_output_profiles()
+        if profile.source_cell == source_cell and profile.section_type == section_type
+    ]
+    profiles.sort(key=lambda item: (-item.event_count, item.section_index))
+    return profiles
+
+
+def gc_output_cells() -> set[str]:
+    return {profile.source_cell for profile in load_gc_output_profiles()}
 
 
 def fold_trace_activity(
@@ -488,6 +554,7 @@ def load_activity_profiles(
 def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityProfile]]:
     profiles = load_activity_profiles()
     input_cells = branch_input_cells()
+    output_cells = gc_output_cells()
     selected: dict[str, list[ActivityProfile]] = {}
     for cell_type, count in counts.items():
         candidates = sorted(
@@ -495,6 +562,10 @@ def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityP
             key=lambda profile: profile.score,
             reverse=True,
         )
+        if cell_type == "GC":
+            matched_outputs = [profile for profile in candidates if cell_key_from_label(profile.label) in output_cells]
+            if len(matched_outputs) >= count:
+                candidates = matched_outputs
         if not candidates:
             selected[cell_type] = []
             continue
@@ -503,14 +574,20 @@ def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityP
         while len(chosen) < count and pool:
             def rank(profile: ActivityProfile) -> float:
                 value = profile.score
-                if cell_key_from_label(profile.label) in input_cells:
+                cell_key = cell_key_from_label(profile.label)
+                if cell_key in input_cells:
                     value *= 1.16
+                if profile.cell_type == "GC" and cell_key in output_cells:
+                    value *= 1.36
                 if chosen:
                     nearest_phase = min(circular_phase_distance(profile.peak_phase_ms, other.peak_phase_ms) for other in chosen)
                     phase_bonus = 0.52 + 0.48 * min(1.0, nearest_phase / 42.0)
                     base_label = profile.label.split(" #", 1)[0]
                     label_bonus = 0.74 if any(other.label.split(" #", 1)[0] == base_label for other in chosen) else 1.0
-                    value *= phase_bonus * label_bonus
+                    cell_bonus = 1.0
+                    if profile.cell_type == "GC" and cell_key is not None:
+                        cell_bonus = 0.52 if any(cell_key_from_label(other.label) == cell_key for other in chosen) else 1.0
+                    value *= phase_bonus * label_bonus * cell_bonus
                 return value
 
             best = max(pool, key=rank)
@@ -623,8 +700,10 @@ def trace_activity(
     return min(1.0, best)
 
 
-def neurite_flow_direction(kind: int) -> float:
-    return 1.0 if kind == 2 else -1.0
+def neurite_flow_direction(kind: int, cell_type: str) -> float:
+    if kind == 2 or cell_type == "GC":
+        return 1.0
+    return -1.0
 
 
 def segment_kind(child: SwcNode, parent: SwcNode) -> int:
@@ -824,6 +903,35 @@ def choose_compatible_source_profile(
     return source.activity_profile, delay_ms, gain
 
 
+def choose_gc_branch_activity(
+    item: PlacedMorph,
+    branch_id: int,
+    branch_rank: int,
+    neurite_kind: int,
+) -> tuple[ActivityProfile | None, float, float] | None:
+    if item.morphology.cell_type != "GC" or neurite_kind == 2 or item.activity_profile is None:
+        return None
+
+    source_cell = cell_key_from_label(item.activity_profile.label)
+    if source_cell is None:
+        return item.activity_profile, 0.0, 1.0
+
+    candidates = gc_output_profiles_for_cell(source_cell, "apic")
+    if not candidates:
+        return item.activity_profile, 0.0, 1.0
+
+    section_offset = int(
+        stable_unit(source_cell, item.morphology.name, branch_id, round(item.distance_offset, 3), "gc-output") * len(candidates)
+    )
+    chosen = candidates[(branch_rank + section_offset) % len(candidates)]
+    peak_delta_ms = circular_time_delta_ms(chosen.profile.peak_phase_ms, item.activity_profile.peak_phase_ms)
+    phase_ms = float(np.clip(0.34 * peak_delta_ms, -10.0, 14.0))
+    max_events = max(candidate.event_count for candidate in candidates)
+    event_weight = chosen.event_count / max(1, max_events)
+    gain = (0.82 + 0.28 * event_weight) * (0.94 + 0.10 * stable_unit(source_cell, chosen.section_index, branch_id, "gc-gain"))
+    return item.activity_profile, phase_ms, gain
+
+
 def choose_branch_activity(
     item: PlacedMorph,
     placed: list[PlacedMorph],
@@ -833,6 +941,9 @@ def choose_branch_activity(
 ) -> tuple[ActivityProfile | None, float, float]:
     if neurite_kind == 2:
         return item.activity_profile, 0.0, 1.0
+    gc_branch = choose_gc_branch_activity(item, branch_id, branch_rank, neurite_kind)
+    if gc_branch is not None:
+        return gc_branch
     actual_input = choose_actual_branch_input(item, branch_id, branch_rank, neurite_kind)
     if actual_input is not None:
         phase_ms = -6.0 + 12.0 * stable_unit(actual_input.label, branch_id, round(item.distance_offset, 3), "site-phase")
@@ -890,7 +1001,10 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
             distance_scale = axon_distance_scale if kind == 2 else morph.max_distance
             dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / distance_scale
             branch_id = branch_for.get(node_id, node_id)
-            base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
+            if morph.cell_type == "GC" and kind != 2:
+                base_phase_ms, base_gain = 0.0, 1.0
+            else:
+                base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
             activity_profile, route_phase_ms, route_gain = choose_branch_activity(
                 item,
                 placed_list,
@@ -912,7 +1026,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     alpha=item.alpha,
                     cell_type=morph.cell_type,
                     neurite_kind=kind,
-                    flow_direction=neurite_flow_direction(kind),
+                    flow_direction=neurite_flow_direction(kind, morph.cell_type),
                     activity_profile=activity_profile,
                     branch_phase_ms=base_phase_ms + route_phase_ms,
                     branch_gain=base_gain * route_gain,
@@ -997,7 +1111,10 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 node_kind = node.kind
             distance_scale = axon_distance_scale if node_kind == 2 else morph.max_distance
             branch_id = branch_for.get(node_id, node_id)
-            base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
+            if morph.cell_type == "GC" and node_kind != 2:
+                base_phase_ms, base_gain = 0.0, 1.0
+            else:
+                base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
             if node_id == morph.root_id or node.kind == 1:
                 activity_profile = item.activity_profile
                 route_phase_ms = 0.0
@@ -1024,7 +1141,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     soma=node_id == morph.root_id or node.kind == 1,
                     activity_profile=activity_profile,
                     neurite_kind=node_kind,
-                    flow_direction=neurite_flow_direction(node_kind),
+                    flow_direction=neurite_flow_direction(node_kind, morph.cell_type),
                     branch_phase_ms=base_phase_ms + route_phase_ms,
                     branch_gain=base_gain * route_gain,
                 )
@@ -1282,8 +1399,8 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
                 depth_soft_draw,
                 seg,
                 tint,
-                112 * seg.alpha * defocus,
-                seg.width * (1.22 + 0.70 * defocus),
+                78 * seg.alpha * defocus,
+                seg.width * (1.16 + 0.54 * defocus),
             )
     for node in scene.nodes:
         if not node.soma:
@@ -1294,11 +1411,11 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
         draw_soma_shape(soma_shadow_draw, node, rx, ry, fill=rgba(node.color, 54), scale=1.34)
         draw_soma_shape(soma_draw, node, rx, ry, fill=rgba(body, 255))
         if defocus > 0.02:
-            draw_soma_shape(soma_soft_draw, node, rx, ry, fill=rgba(body, 108 * defocus), scale=1.08 + 0.14 * defocus)
+            draw_soma_shape(soma_soft_draw, node, rx, ry, fill=rgba(body, 76 * defocus), scale=1.06 + 0.10 * defocus)
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
-    depth_soft = depth_soft.filter(ImageFilter.GaussianBlur(radius=1.85 * SUPERSAMPLE))
+    depth_soft = depth_soft.filter(ImageFilter.GaussianBlur(radius=1.25 * SUPERSAMPLE))
     soma_shadow = soma_shadow.filter(ImageFilter.GaussianBlur(radius=5.5 * SUPERSAMPLE))
-    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=2.45 * SUPERSAMPLE))
+    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=1.9 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
     image = Image.alpha_composite(image, base)
     image = Image.alpha_composite(image, depth_soft)
@@ -1378,7 +1495,7 @@ def render_frame(
                 trace_draw,
                 seg,
                 trace_tint,
-                (68 if is_axon else 54) * seg.alpha * memory * (1.0 - 0.20 * defocus),
+                (68 if is_axon else 54) * seg.alpha * memory * (1.0 - 0.14 * defocus),
                 seg.width * ((1.62 if is_axon else 1.20) + (1.04 if is_axon else 0.86) * memory),
             )
             if defocus > 0.02:
@@ -1386,8 +1503,8 @@ def render_frame(
                     trace_soft_draw,
                     seg,
                     trace_tint,
-                    (42 if is_axon else 34) * seg.alpha * memory * defocus,
-                    seg.width * ((2.00 if is_axon else 1.58) + (1.20 if is_axon else 1.02) * memory + 0.24 * defocus),
+                    (26 if is_axon else 20) * seg.alpha * memory * defocus,
+                    seg.width * ((1.84 if is_axon else 1.42) + (1.10 if is_axon else 0.94) * memory + 0.16 * defocus),
                 )
         active = packet_activity(
             seg.activity_profile,
@@ -1407,8 +1524,8 @@ def render_frame(
                 bloom_draw,
                 seg,
                 bloom_tint,
-                (96 if is_axon else 76) * active * (1.0 - 0.12 * defocus),
-                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active) * (1.0 + 0.16 * defocus),
+                (96 if is_axon else 76) * active * (1.0 - 0.08 * defocus),
+                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active) * (1.0 + 0.10 * defocus),
                 active,
                 0.32 if is_axon else 0.22,
             )
@@ -1416,8 +1533,8 @@ def render_frame(
             glow_draw,
             seg,
             brighten(pulse_tint, 1.18, 3.0),
-            (148 if is_axon else 116) * active * (1.0 - 0.22 * defocus),
-            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active) * (1.0 + 0.22 * defocus),
+            (148 if is_axon else 116) * active * (1.0 - 0.14 * defocus),
+            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active) * (1.0 + 0.14 * defocus),
             active,
             0.22 if is_axon else 0.14,
         )
@@ -1426,8 +1543,8 @@ def render_frame(
                 active_soft_draw,
                 seg,
                 core_tint,
-                (70 if is_axon else 56) * active * defocus,
-                seg.width * ((5.2 if is_axon else 4.2) + (2.0 if is_axon else 1.6) * active + 0.28 * defocus),
+                (44 if is_axon else 34) * active * defocus,
+                seg.width * ((4.6 if is_axon else 3.7) + (1.8 if is_axon else 1.4) * active + 0.18 * defocus),
                 active,
                 0.18 if is_axon else 0.10,
             )
@@ -1435,7 +1552,7 @@ def render_frame(
             core_draw,
             seg,
             core_tint,
-            (246 if is_axon else 238) * active * (1.0 - 0.34 * defocus),
+            (246 if is_axon else 238) * active * (1.0 - 0.24 * defocus),
             seg.width * ((2.55 if is_axon else 1.88) + (1.20 if is_axon else 0.95) * active),
             active,
             0.14 if is_axon else 0.04,
@@ -1446,7 +1563,7 @@ def render_frame(
                 core_draw,
                 seg,
                 WHITE,
-                (214 if is_axon else 192) * highlight * (1.0 - 0.28 * defocus),
+                (214 if is_axon else 192) * highlight * (1.0 - 0.18 * defocus),
                 max(1.0, seg.width * ((0.68 if is_axon else 0.48) + (0.28 if is_axon else 0.24) * highlight)),
                 active,
                 0.10 if is_axon else 0.0,
@@ -1458,7 +1575,7 @@ def render_frame(
                 spark_draw,
                 seg,
                 WHITE,
-                (230 if is_axon else 212) * hot * (1.0 - 0.24 * defocus),
+                (230 if is_axon else 212) * hot * (1.0 - 0.16 * defocus),
                 max(1.0, seg.width * ((0.56 if is_axon else 0.34) + (0.28 if is_axon else 0.18) * hot)),
                 active,
                 0.12 if is_axon else 0.0,
@@ -1468,14 +1585,14 @@ def render_frame(
                 0.5 * (seg.x0 + seg.x1),
                 0.5 * (seg.y0 + seg.y1),
                 seg.width * ((0.82 if is_axon else 0.58) + (0.68 if is_axon else 0.54) * hot),
-                rgba(WHITE, (170 if is_axon else 150) * hot * (1.0 - 0.22 * defocus)),
+                rgba(WHITE, (170 if is_axon else 150) * hot * (1.0 - 0.14 * defocus)),
             )
 
     image = Image.alpha_composite(image, trace)
-    trace_soft = trace_soft.filter(ImageFilter.GaussianBlur(radius=1.65 * SUPERSAMPLE))
+    trace_soft = trace_soft.filter(ImageFilter.GaussianBlur(radius=1.10 * SUPERSAMPLE))
     bloom = bloom.filter(ImageFilter.GaussianBlur(radius=8.3 * SUPERSAMPLE))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=4.2 * SUPERSAMPLE))
-    active_soft = active_soft.filter(ImageFilter.GaussianBlur(radius=2.20 * SUPERSAMPLE))
+    active_soft = active_soft.filter(ImageFilter.GaussianBlur(radius=1.50 * SUPERSAMPLE))
     image = Image.alpha_composite(image, trace_soft)
     image = Image.alpha_composite(image, bloom)
     image = Image.alpha_composite(image, glow)
@@ -1503,7 +1620,7 @@ def render_frame(
                 node.x,
                 node.y,
                 r,
-                rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash * (1.0 - 0.20 * defocus)),
+                rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash * (1.0 - 0.12 * defocus)),
             )
         if node.soma:
             delayed_voltage = min(1.0, delayed_profile_value(node.activity_profile, loop_ms, SOMA_RESPONSE_DELAY_MS) ** 0.92)
@@ -1527,7 +1644,7 @@ def render_frame(
                 node,
                 rx,
                 ry,
-                fill=rgba(voltage_tint, (18 + 110 * soma_spike) * (1.0 - 0.20 * defocus)),
+                fill=rgba(voltage_tint, (18 + 110 * soma_spike) * (1.0 - 0.14 * defocus)),
                 scale=1.18 + 0.34 * soma_spike,
             )
             if defocus > 0.02 and soma_level > 0.02:
@@ -1536,22 +1653,22 @@ def render_frame(
                     node,
                     rx,
                     ry,
-                    fill=rgba(voltage_tint, (36 + 76 * soma_level) * defocus),
-                    scale=1.08 + 0.16 * defocus + 0.10 * soma_spike,
+                    fill=rgba(voltage_tint, (26 + 48 * soma_level) * defocus),
+                    scale=1.04 + 0.10 * defocus + 0.08 * soma_spike,
                 )
             draw_soma_shape(
                 soma_core_draw,
                 node,
                 rx,
                 ry,
-                fill=rgba(disc_tint, 252 - 40 * defocus),
+                fill=rgba(disc_tint, 252 - 26 * defocus),
                 scale=0.98 + 0.06 * soma_spike,
             )
             if soma_spike > 0.46:
                 hot = (soma_spike - 0.46) / 0.54
-                draw_soma_shape(spark_draw, node, rx, ry, fill=rgba(WHITE, 72 * hot * (1.0 - 0.22 * defocus)), scale=0.52)
+                draw_soma_shape(spark_draw, node, rx, ry, fill=rgba(WHITE, 72 * hot * (1.0 - 0.14 * defocus)), scale=0.52)
     soma_glow = soma_glow.filter(ImageFilter.GaussianBlur(radius=4.0 * SUPERSAMPLE))
-    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=2.35 * SUPERSAMPLE))
+    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=1.75 * SUPERSAMPLE))
     image = Image.alpha_composite(image, soma_glow)
     image = Image.alpha_composite(image, soma_soft)
     image = Image.alpha_composite(image, soma_core)
