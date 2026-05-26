@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v13"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v14"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -893,9 +893,9 @@ def ellipse_xy(
 def soma_body_axes(node: RenderNode) -> tuple[float, float]:
     if node.cell_type == "GC":
         radius = max(SUPERSAMPLE * 7.2, node.radius * 7.0)
-        return radius * 0.92, radius * 1.10
+        return radius, radius
     radius = max(SUPERSAMPLE * 10.5, node.radius * 8.4)
-    return radius * 1.14, radius * 0.88
+    return radius, radius
 
 
 def draw_soft_line(
@@ -1021,13 +1021,9 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
         if not node.soma:
             continue
         rx, ry = soma_body_axes(node)
-        body = mix(np.array([14, 19, 22], dtype=float), node.color, 0.52)
-        rim = mix(node.color, WHITE, 0.18)
-        core = mix(np.array([28, 35, 39], dtype=float), node.color, 0.35)
-        ellipse_xy(soma_shadow_draw, node.x, node.y, rx * 1.38, ry * 1.34, fill=rgba(node.color, 56))
-        ellipse_xy(soma_draw, node.x, node.y, rx, ry, fill=rgba(body, 232), outline=rgba(rim, 142), width=max(1, int(0.42 * SUPERSAMPLE)))
-        ellipse_xy(soma_draw, node.x - rx * 0.18, node.y - ry * 0.16, rx * 0.42, ry * 0.34, fill=rgba(core, 72))
-        ellipse_xy(soma_draw, node.x - rx * 0.22, node.y - ry * 0.24, rx * 0.22, ry * 0.12, fill=rgba(WHITE, 34))
+        body = mix(np.array([13, 18, 21], dtype=float), node.color, 0.62)
+        ellipse_xy(soma_shadow_draw, node.x, node.y, rx * 1.34, ry * 1.34, fill=rgba(node.color, 54))
+        ellipse_xy(soma_draw, node.x, node.y, rx, ry, fill=rgba(body, 236))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
     soma_shadow = soma_shadow.filter(ImageFilter.GaussianBlur(radius=5.5 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
@@ -1158,35 +1154,26 @@ def render_frame(
             rx, ry = soma_body_axes(node)
             voltage_tint = mix(node.color, WHITE, 0.18 + 0.46 * soma_level)
             body_tint = mix(np.array([19, 25, 29], dtype=float), node.color, 0.48 + 0.24 * soma_level)
+            disc_tint = mix(body_tint, voltage_tint, 0.22 + 0.46 * soma_level)
             ellipse_xy(
                 soma_glow_draw,
                 node.x,
                 node.y,
-                rx * (1.34 + 0.34 * soma_level),
+                rx * (1.30 + 0.30 * soma_level),
                 ry * (1.30 + 0.30 * soma_level),
-                fill=rgba(voltage_tint, 32 + 80 * soma_level),
+                fill=rgba(voltage_tint, 28 + 70 * soma_level),
             )
             ellipse_xy(
                 soma_core_draw,
                 node.x,
                 node.y,
-                rx * (0.94 + 0.06 * soma_level),
-                ry * (0.94 + 0.06 * soma_level),
-                fill=rgba(body_tint, 58 + 74 * soma_level),
-                outline=rgba(voltage_tint, 92 + 138 * soma_level),
-                width=max(1, int((0.70 + 1.45 * soma_level) * SUPERSAMPLE)),
-            )
-            ellipse_xy(
-                soma_core_draw,
-                node.x - rx * 0.16,
-                node.y - ry * 0.10,
-                rx * (0.23 + 0.12 * soma_level),
-                ry * (0.18 + 0.10 * soma_level),
-                fill=rgba(WHITE, 34 + 116 * soma_level),
+                rx * (0.98 + 0.04 * soma_level),
+                ry * (0.98 + 0.04 * soma_level),
+                fill=rgba(disc_tint, 86 + 118 * soma_level),
             )
             if soma_level > 0.58:
                 hot = (soma_level - 0.58) / 0.42
-                ellipse_xy(spark_draw, node.x, node.y, rx * 0.54, ry * 0.42, fill=rgba(WHITE, 72 * hot))
+                ellipse_xy(spark_draw, node.x, node.y, rx * 0.56, ry * 0.56, fill=rgba(WHITE, 58 * hot))
     soma_glow = soma_glow.filter(ImageFilter.GaussianBlur(radius=4.0 * SUPERSAMPLE))
     image = Image.alpha_composite(image, soma_glow)
     image = Image.alpha_composite(image, soma_core)
