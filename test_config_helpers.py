@@ -8,6 +8,7 @@ import json
 import importlib.util
 import pickle
 import subprocess
+import sys
 import tempfile
 from copy import deepcopy
 from pathlib import Path
@@ -16,6 +17,13 @@ from types import SimpleNamespace
 
 import numpy as np
 import obgpu_experiment_helpers as hlp
+
+REMOTE_TOOLS_DIR = Path(__file__).resolve().parent / "tools" / "remote"
+if str(REMOTE_TOOLS_DIR) not in sys.path:
+    sys.path.insert(0, str(REMOTE_TOOLS_DIR))
+
+import slurm_common
+
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
     DEFAULT_SOMA_TRACE_FORMAT,
@@ -205,6 +213,25 @@ with tempfile.TemporaryDirectory() as tmp:
     q_loaded = load_soma_trace_artifact(q_path)
     for (_label, _t, expected_v), (_loaded_label, _loaded_t, observed_v) in zip(compact_traces, q_loaded):
         np.testing.assert_allclose(observed_v, expected_v, atol=0.01)
+    ragged_quantized_dir = tmp / "ragged_quantized_soma"
+    ragged_quantized_dir.mkdir()
+    ragged_quantized_traces = [
+        ("MC_empty", [], []),
+        ("TC_short", [0.0, 0.1], [-64.0, -63.0]),
+        ("GC_single", [0.0], [-70.0]),
+    ]
+    ragged_q_path = save_soma_trace_artifact(
+        ragged_quantized_traces,
+        ragged_quantized_dir,
+        trace_format="npz",
+        trace_dtype="int16",
+    )
+    ragged_q_loaded = load_soma_trace_artifact(ragged_q_path)
+    assert [label for label, _t, _v in ragged_q_loaded] == ["MC_empty", "TC_short", "GC_single"]
+    assert len(ragged_q_loaded[0][1]) == 0
+    assert len(ragged_q_loaded[0][2]) == 0
+    np.testing.assert_allclose(ragged_q_loaded[1][2], [-64.0, -63.0], atol=0.01)
+    np.testing.assert_allclose(ragged_q_loaded[2][2], [-70.0], atol=0.01)
     print("Quantized int16 soma trace artifact: OK")
 
     # --- Paramiko SFTP should be lazy and cached ---
@@ -597,6 +624,34 @@ with tempfile.TemporaryDirectory() as tmp:
         except ValueError:
             pass
     print("Remote transport is Paramiko-only: OK")
+
+    assert slurm_common.shell_join(["python", "a b.py"]) == "python 'a b.py'"
+    assert slurm_common.path_is_within("/repo/results/run", "/repo/results")
+    assert not slurm_common.path_is_within("/repo/results-old/run", "/repo/results")
+    assert slurm_common.normalize_sbatch_args(
+        ["--qos", "general", "--constraint=cascadelake", "--exclusive"]
+    ) == ["--qos general", "--constraint=cascadelake", "--exclusive"]
+    directives = slurm_common.slurm_directives(
+        SimpleNamespace(
+            partition=None,
+            account="grp_scrook",
+            time="00:10:00",
+            gpus=1,
+            cpus_per_task=None,
+            mem="24G",
+            sbatch_arg=["--qos", "general", "--ntasks=64"],
+        ),
+        "remote_test",
+    )
+    assert "#SBATCH --partition=" not in "\n".join(directives)
+    assert "#SBATCH --account=grp_scrook" in directives
+    assert "#SBATCH --qos general" in directives
+    assert "#SBATCH --ntasks=64" in directives
+    assert slurm_common.requested_mpi_rank_count(["srun", "--mpi=pmix", "-n", "16"]) == 16
+    assert slurm_common.requested_mpi_rank_count(["mpiexec", "-np8"]) == 8
+    assert slurm_common.requested_mpi_rank_count(["srun", "--ntasks=32"]) == 32
+    assert slurm_common.requested_mpi_rank_count(["python", "script.py"]) is None
+    print("Remote Slurm shared helpers: OK")
 
     # --- Successful fast remote sync should only request essential result artifacts ---
     fast_files_default = hlp._remote_fast_sync_files()

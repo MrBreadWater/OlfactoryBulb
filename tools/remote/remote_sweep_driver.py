@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shlex
 import signal
 import subprocess
 import sys
@@ -13,6 +12,8 @@ import time
 from base64 import b64decode
 from pathlib import Path
 from typing import Any
+
+from slurm_common import path_is_within, shell_join
 
 
 def decode_items(payload_b64: str) -> list[dict[str, Any]]:
@@ -53,20 +54,6 @@ def normalize_items(items: Any) -> list[dict[str, Any]]:
     return normalized
 
 
-def shell_join(parts: list[str]) -> str:
-    """Portable equivalent of shlex.join."""
-    return " ".join(shlex.quote(str(part)) for part in parts)
-
-
-def path_is_within(path_value: str, root_value: str) -> bool:
-    """Return whether one string path is equal to or nested under another."""
-    root_text = str(root_value).rstrip("/")
-    path_text = str(path_value)
-    if not root_text:
-        return False
-    return path_text == root_text or path_text.startswith(root_text + "/")
-
-
 def relocate_repo_paths(command: list[str], *, shared_repo_root: str, repo_root: str) -> list[str]:
     """Rewrite shared-repo paths to the active job repo root."""
     relocated = []
@@ -76,31 +63,6 @@ def relocate_repo_paths(command: list[str], *, shared_repo_root: str, repo_root:
         else:
             relocated.append(part)
     return relocated
-
-
-def requested_mpi_rank_count(command: list[str]) -> int | None:
-    """Return the requested MPI rank count from one command list, if present."""
-    options_with_values = {"-n", "-np", "--np", "--ntasks", "--ntasks-per-job"}
-    for index, part in enumerate(command):
-        if part in options_with_values and index + 1 < len(command):
-            try:
-                return int(command[index + 1])
-            except ValueError:
-                continue
-        for prefix in ("-n", "-np"):
-            suffix = part[len(prefix) :]
-            if part.startswith(prefix) and suffix:
-                try:
-                    return int(suffix)
-                except ValueError:
-                    pass
-        for prefix in ("--ntasks=", "--ntasks-per-job="):
-            if part.startswith(prefix):
-                try:
-                    return int(part.split("=", 1)[1])
-                except ValueError:
-                    pass
-    return None
 
 
 def add_srun_exclusive(command: list[str]) -> list[str]:

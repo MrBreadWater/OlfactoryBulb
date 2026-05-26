@@ -6,43 +6,7 @@ import shlex
 import subprocess
 from pathlib import Path
 
-
-def normalize_sbatch_args(values):
-    """Normalize raw sbatch args so split flag/value pairs become one directive."""
-    normalized = []
-    index = 0
-    values = [str(value) for value in values]
-    while index < len(values):
-        current = values[index]
-        if current.startswith("-") and "=" not in current and index + 1 < len(values):
-            next_value = values[index + 1]
-            if not next_value.startswith("-"):
-                normalized.append("{} {}".format(current, next_value))
-                index += 2
-                continue
-        normalized.append(current)
-        index += 1
-    return normalized
-
-
-def slurm_directives(args, name):
-    """Return ``#SBATCH`` header lines for one generated allocation holder script."""
-    directives = ["#SBATCH --job-name={}".format(name[:120])]
-    if args.partition:
-        directives.append("#SBATCH --partition={}".format(args.partition))
-    if args.account:
-        directives.append("#SBATCH --account={}".format(args.account))
-    if args.time:
-        directives.append("#SBATCH --time={}".format(args.time))
-    if args.gpus is not None:
-        directives.append("#SBATCH --gpus={}".format(args.gpus))
-    if args.cpus_per_task is not None:
-        directives.append("#SBATCH --cpus-per-task={}".format(args.cpus_per_task))
-    if args.mem:
-        directives.append("#SBATCH --mem={}".format(args.mem))
-    for extra in normalize_sbatch_args(args.sbatch_arg):
-        directives.append("#SBATCH {}".format(extra))
-    return directives
+from slurm_common import slurm_directives
 
 
 def write_holder_script(args, alloc_root):

@@ -276,8 +276,9 @@ def save_soma_trace_artifact(
     for row, (time_array, value_array) in enumerate(zip(time_arrays, value_arrays)):
         count = min(len(time_array), len(value_array))
         if count <= 0:
-            offsets.append(0.0)
-            scales.append(1.0)
+            if dtype_name == "int16":
+                offsets.append(0.0)
+                scales.append(1.0)
             continue
         time_payload[row, :count] = time_array[:count]
         if dtype_name == "int16":
