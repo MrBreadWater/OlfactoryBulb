@@ -396,6 +396,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "summary.json",
         "sim_progress.json",
         "sweep_manifest.json",
+        "sweep_manifest.submit.json",
         "mpi_preflight.log",
     )
     sweep_local_runs = tmp / "sweep-local-runs"
@@ -418,6 +419,16 @@ with tempfile.TemporaryDirectory() as tmp:
         manifest_stub,
         local_runs_dir=tmp / "no-sweep-payloads",
     ) is False
+    raw_only_sweep_item = tmp / "raw-only-sweep-item"
+    raw_only_sweep_item.mkdir()
+    (raw_only_sweep_item / "summary.json").write_text("{}")
+    (raw_only_sweep_item / "soma_vs.pkl").write_bytes(b"payload")
+    assert not hlp._local_sweep_item_sync_complete(raw_only_sweep_item)
+    compact_sweep_item = tmp / "compact-sweep-item"
+    compact_sweep_item.mkdir()
+    (compact_sweep_item / "summary.json").write_text("{}")
+    (compact_sweep_item / SOMA_SPIKES_FILENAME_NPZ).write_bytes(b"payload")
+    assert hlp._local_sweep_item_sync_complete(compact_sweep_item)
     partial_sweep_dir = tmp / "partial-sweep"
     partial_sweep_dir.mkdir(parents=True, exist_ok=True)
     (partial_sweep_dir / "sim_progress.json").write_text(
@@ -559,6 +570,62 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     assert fast_files_minimal == ("summary.json", "input_times.pkl")
     print("Remote fast sync file set: OK")
+
+    # --- Remote sweep sync should stay compact unless raw soma traces are explicitly requested ---
+    sweep_files_default = hlp._remote_sweep_item_sync_files()
+    assert SOMA_SPIKES_FILENAME_NPZ in sweep_files_default
+    assert VOLTAGE_SUMMARY_FILENAME_NPZ in sweep_files_default
+    assert "soma_vs.pkl" not in sweep_files_default
+    assert SOMA_TRACE_FILENAME_NPZ not in sweep_files_default
+    sweep_files_raw = hlp._remote_sweep_item_sync_files({"sweep_sync_soma_vs": True})
+    assert "soma_vs.pkl" in sweep_files_raw
+    assert SOMA_TRACE_FILENAME_NPZ in sweep_files_raw
+    print("Remote sweep sync file set stays compact by default: OK")
+
+    # --- OpenSSH/rsync selected sync should honor include_files instead of copying whole dirs ---
+    original_remote_transport = hlp._remote_transport
+    original_ensure_ssh_master = hlp._ensure_ssh_master
+    original_subprocess_run = subprocess.run
+    try:
+        selected_rsync_dir = tmp / "selected-rsync"
+        selected_rsync_dir.mkdir()
+        rsync_commands = []
+
+        def _fake_run(command, **_kwargs):
+            rsync_commands.append(list(command))
+            (selected_rsync_dir / "summary.json").write_text("{}")
+            return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
+
+        hlp._remote_transport = lambda _config: "openssh"
+        hlp._ensure_ssh_master = lambda _config: None
+        subprocess.run = _fake_run
+        selected_cfg = {
+            **remote_cfg,
+            "remote_host": "user@host",
+            "ssh_options": [],
+            "ssh_binary": "ssh",
+            "ssh_multiplex": False,
+            "rsync_options": ["-az"],
+        }
+        completed = hlp._sync_remote_result_dir(
+            selected_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=selected_rsync_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json", SOMA_SPIKES_FILENAME_NPZ),
+        )
+        assert completed.returncode == 0
+        assert rsync_commands
+        rsync_command = rsync_commands[0]
+        assert "--ignore-missing-args" in rsync_command
+        assert "user@host:/remote/result/summary.json" in rsync_command
+        assert f"user@host:/remote/result/{SOMA_SPIKES_FILENAME_NPZ}" in rsync_command
+        assert "user@host:/remote/result/" not in rsync_command
+        print("OpenSSH selected sync honors compact file allowlist: OK")
+    finally:
+        hlp._remote_transport = original_remote_transport
+        hlp._ensure_ssh_master = original_ensure_ssh_master
+        subprocess.run = original_subprocess_run
 
     # --- Fast result sync should fall back to full sync when selected files are not visible ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir

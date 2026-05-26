@@ -189,6 +189,7 @@ CONTROL_HELP = {
     "sweep_engine": "Sweep execution engine: 'auto', 'legacy', or 'remote_batch'.",
     "sweep_parallelism": "Maximum concurrent sweep items inside one remote batch job. None/0 uses an automatic best-effort choice.",
     "sweep_sync_live": "When True, sync completed remote sweep items back locally while later items are still running.",
+    "sweep_sync_soma_vs": "When True, remote sweep sync includes raw soma voltage traces. Defaults to False so sweeps sync compact spike/voltage-summary artifacts only.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_log_poll_interval_s": "How often to do heavier remote log-tail and sacct reconciliation polls while still updating progress every remote_poll_interval_s seconds.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
@@ -836,6 +837,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "sweep_engine": "auto",
         "sweep_parallelism": None,
         "sweep_sync_live": True,
+        "sweep_sync_soma_vs": False,
         "remote_poll_interval_s": 1.0,
         "remote_log_poll_interval_s": 5.0,
         "remote_live_status": True,
@@ -894,6 +896,7 @@ def build_slurm_remote_config(
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = False,
+    sweep_sync_soma_vs: bool = False,
     remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
@@ -940,6 +943,7 @@ def build_slurm_remote_config(
         "remote_cleanup_stale_allocations": bool(remote_cleanup_stale_allocations),
         "remote_sync_compress": True,
         "remote_defer_soma_vs_sync": bool(remote_defer_soma_vs_sync),
+        "sweep_sync_soma_vs": bool(sweep_sync_soma_vs),
         "remote_preserve_paramiko_session": bool(remote_preserve_paramiko_session),
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
@@ -990,6 +994,7 @@ def build_sol_remote_config(
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = False,
+    sweep_sync_soma_vs: bool = False,
     remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
@@ -1031,6 +1036,7 @@ def build_sol_remote_config(
         remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
         remote_cleanup_stale_allocations=remote_cleanup_stale_allocations,
         remote_defer_soma_vs_sync=remote_defer_soma_vs_sync,
+        sweep_sync_soma_vs=sweep_sync_soma_vs,
         remote_preserve_paramiko_session=remote_preserve_paramiko_session,
         remote_repo_mode=remote_repo_mode,
         remote_git_ref=remote_git_ref,
@@ -1610,7 +1616,13 @@ def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
 
 def _remote_sweep_metadata_files() -> tuple[str, ...]:
     """Return the small top-level sweep metadata files needed after remote completion."""
-    return ("summary.json", "sim_progress.json", "sweep_manifest.json", "mpi_preflight.log")
+    return (
+        "summary.json",
+        "sim_progress.json",
+        "sweep_manifest.json",
+        "sweep_manifest.submit.json",
+        "mpi_preflight.log",
+    )
 
 
 _NONEMPTY_LOCAL_SYNC_ARTIFACTS = {
@@ -1662,6 +1674,25 @@ def _remote_fast_sync_files(config: dict[str, Any] | None = None) -> tuple[str, 
     if config is None or bool(config.get("record_from_somas", [])):
         files.extend([SOMA_SPIKES_FILENAME_NPZ, VOLTAGE_SUMMARY_FILENAME_NPZ])
     return tuple(files)
+
+
+def _remote_sweep_item_sync_files(config: dict[str, Any] | None = None) -> tuple[str, ...]:
+    """Return compact per-item artifacts synced by remote sweeps by default."""
+    files = [
+        *_remote_fast_sync_files(config),
+        "run_info.json",
+        "command.txt",
+        "stdout.txt",
+        "stderr.txt",
+    ]
+    if bool((config or {}).get("sweep_sync_soma_vs", False)):
+        files.extend([SOMA_TRACE_FILENAME_NPZ, SOMA_TRACE_FILENAME_PKL])
+    return tuple(dict.fromkeys(files))
+
+
+def _remote_sweep_item_diagnostic_files() -> tuple[str, ...]:
+    """Return small per-item diagnostics for failed remote sweep items."""
+    return ("summary.json", "run_info.json", "command.txt", "stdout.txt", "stderr.txt", "bootstrap.log")
 
 
 def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any]) -> None:
@@ -3704,16 +3735,26 @@ def _sync_remote_result_dir(
     _ensure_ssh_master(config)
     command = [str(config.get("rsync_binary", "rsync"))]
     command.extend(str(option) for option in config.get("rsync_options", ["-az"]))
+    if include_files and "--ignore-missing-args" not in command:
+        command.append("--ignore-missing-args")
     ssh_command = [str(config.get("ssh_binary", "ssh"))]
     ssh_command.extend(_ssh_common_options(config))
     if len(ssh_command) > 1:
         command.extend(["-e", _shell_join(ssh_command)])
-    command.extend(
-        [
-            f"{_require_remote_host(config)}:{remote_result_dir.as_posix().rstrip('/')}/",
-            str(local_result_dir) + "/",
-        ]
-    )
+    remote_base = remote_result_dir.as_posix().rstrip("/")
+    if include_files:
+        remote_host = _require_remote_host(config)
+        for rel_name in include_files:
+            rel_path = str(rel_name).lstrip("/")
+            command.append(f"{remote_host}:{remote_base}/{rel_path}")
+        command.append(str(local_result_dir) + "/")
+    else:
+        command.extend(
+            [
+                f"{_require_remote_host(config)}:{remote_base}/",
+                str(local_result_dir) + "/",
+            ]
+        )
     completed = subprocess.run(
         command,
         cwd=REPO_ROOT,
@@ -3857,6 +3898,21 @@ def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     return False
 
 
+def _local_result_dir_has_compact_payload(result_dir: str | Path) -> bool:
+    """Return True when a result dir has compact artifacts expected from sweep sync."""
+    result_dir = Path(result_dir)
+    for filename in (
+        "input_times.pkl",
+        "gc_output_events.pkl",
+        "lfp.pkl",
+        SOMA_SPIKES_FILENAME_NPZ,
+        VOLTAGE_SUMMARY_FILENAME_NPZ,
+    ):
+        if _local_sync_artifact_is_usable(result_dir / filename):
+            return True
+    return False
+
+
 def _local_result_dir_has_diagnostics(result_dir: str | Path) -> bool:
     """Return True when a failed remote run has useful local logs to report."""
     result_dir = Path(result_dir)
@@ -3869,7 +3925,7 @@ def _local_result_dir_has_diagnostics(result_dir: str | Path) -> bool:
 def _local_sweep_item_sync_complete(result_dir: str | Path) -> bool:
     """Return True when one local sweep item already has a loadable payload and summary."""
     result_dir = Path(result_dir)
-    return _local_sync_artifact_is_usable(result_dir / "summary.json") and _local_result_dir_has_loadable_payload(result_dir)
+    return _local_sync_artifact_is_usable(result_dir / "summary.json") and _local_result_dir_has_compact_payload(result_dir)
 
 
 def _local_sweep_item_dirs(local_runs_dir: str | Path, label: str) -> list[Path]:
@@ -6672,6 +6728,7 @@ def _run_remote_sweep(
                 remote_result_dir=remote_result_dir,
                 local_result_dir=local_result_dir,
                 expected_files=("summary.json",),
+                include_files=_remote_sweep_item_sync_files(effective_config),
             )
             if sync_completed.returncode != 0:
                 continue
@@ -6679,52 +6736,6 @@ def _run_remote_sweep(
             synced_labels.add(label)
 
     def sync_final_sweep_results() -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
-        if not bool(effective_config.get("sweep_sync_live", True)):
-            completed = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_sweep_root,
-                local_result_dir=local_sweep_dir,
-                expected_files=("summary.json",),
-            )
-            summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
-                local_sweep_dir,
-                sweep_label=sweep_label,
-                total_items=len(manifest_items),
-            )
-            if completed.returncode != 0 and summary:
-                completed = subprocess.CompletedProcess(
-                    args=completed.args,
-                    returncode=0,
-                    stdout=completed.stdout or "",
-                    stderr=(completed.stderr or "")
-                    + "\n[OBGPU load] Final sweep sync reported an error, "
-                    "but local progress metadata was sufficient to recover a sweep summary.\n",
-                )
-            return completed, summary or {}
-
-        if not _should_use_incremental_sweep_final_sync(manifest_items, local_runs_dir=local_runs_dir):
-            completed = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_sweep_root,
-                local_result_dir=local_sweep_dir,
-                expected_files=("summary.json",),
-            )
-            summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
-                local_sweep_dir,
-                sweep_label=sweep_label,
-                total_items=len(manifest_items),
-            )
-            if completed.returncode != 0 and summary:
-                completed = subprocess.CompletedProcess(
-                    args=completed.args,
-                    returncode=0,
-                    stdout=completed.stdout or "",
-                    stderr=(completed.stderr or "")
-                    + "\n[OBGPU load] Final sweep sync reported an error, "
-                    "but local progress metadata was sufficient to recover a sweep summary.\n",
-                )
-            return completed, summary or {}
-
         stdout_parts: list[str] = []
         stderr_parts: list[str] = []
 
@@ -6733,6 +6744,10 @@ def _run_remote_sweep(
                 stdout_parts.append(f"[{prefix}]\n{completed.stdout}")
             if completed.stderr:
                 stderr_parts.append(f"[{prefix}]\n{completed.stderr}")
+
+        final_progress_payload = (final_status or {}).get("progress_payload") if final_status else None
+        if isinstance(final_progress_payload, dict) and not (local_sweep_dir / "sim_progress.json").exists():
+            (local_sweep_dir / "sim_progress.json").write_text(json.dumps(final_progress_payload, indent=2, sort_keys=True))
 
         metadata_sync = _sync_remote_result_dir(
             effective_config,
@@ -6755,32 +6770,16 @@ def _run_remote_sweep(
         if not sweep_summary:
             stderr_parts.append(
                 "[OBGPU load] Incremental sweep final sync could not fetch summary metadata; "
-                "falling back to a bulk sweep-root sync.\n"
-            )
-            bulk_sync = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_sweep_root,
-                local_result_dir=local_sweep_dir,
-                expected_files=("summary.json",),
-            )
-            record_completed("sweep-bulk-fallback", bulk_sync)
-            fallback_summary = (
-                _read_json_if_present(local_sweep_dir / "summary.json")
-                or _recover_local_sweep_summary(
-                    local_sweep_dir,
-                    sweep_label=sweep_label,
-                    total_items=len(manifest_items),
-                )
-                or {}
+                "not attempting a bulk sweep-root sync because that would pull raw soma traces.\n"
             )
             return (
                 subprocess.CompletedProcess(
-                    args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
-                    returncode=0 if fallback_summary else bulk_sync.returncode,
+                    args=["remote-sweep-compact-sync", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                    returncode=metadata_sync.returncode or 1,
                     stdout="".join(stdout_parts),
                     stderr="".join(stderr_parts),
                 ),
-                fallback_summary,
+                {},
             )
 
         summary_by_label: dict[str, dict[str, Any]] = {}
@@ -6799,10 +6798,12 @@ def _run_remote_sweep(
             if ok and _local_sweep_item_sync_complete(local_result_dir):
                 continue
             remote_result_dir = PurePosixPath(str(payload.get("result_dir") or item["result_dir"]))
-            include_files = None
+            include_files = (
+                _remote_sweep_item_sync_files(effective_config)
+                if ok
+                else _remote_sweep_item_diagnostic_files()
+            )
             expected_files = ("summary.json",) if ok else None
-            if not ok:
-                include_files = ("command.txt", "stdout.txt", "stderr.txt")
             item_sync = _sync_remote_result_dir(
                 effective_config,
                 remote_result_dir=remote_result_dir,
@@ -6812,39 +6813,26 @@ def _run_remote_sweep(
             )
             record_completed(f"sweep-item:{label}", item_sync)
             if item_sync.returncode != 0:
-                stderr_parts.append(
-                    "[OBGPU load] Incremental sweep final sync could not materialize every item; "
-                    "falling back to a bulk sweep-root sync.\n"
-                )
-                bulk_sync = _sync_remote_result_dir(
-                    effective_config,
-                    remote_result_dir=remote_sweep_root,
-                    local_result_dir=local_sweep_dir,
-                    expected_files=("summary.json",),
-                )
-                record_completed("sweep-bulk-fallback", bulk_sync)
-                fallback_summary = (
-                    _read_json_if_present(local_sweep_dir / "summary.json")
-                    or _recover_local_sweep_summary(
-                        local_sweep_dir,
-                        sweep_label=sweep_label,
-                        total_items=len(manifest_items),
+                if ok and _local_sweep_item_sync_complete(local_result_dir):
+                    stderr_parts.append(
+                        f"[OBGPU load] Compact sweep item sync for {label} reported an error, "
+                        "but required compact artifacts are present locally.\n"
                     )
-                    or sweep_summary
-                )
-                return (
-                    subprocess.CompletedProcess(
-                        args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
-                        returncode=0 if fallback_summary else bulk_sync.returncode,
-                        stdout="".join(stdout_parts),
-                        stderr="".join(stderr_parts),
-                    ),
-                    fallback_summary,
+                    continue
+                if not ok and _local_result_dir_has_diagnostics(local_result_dir):
+                    stderr_parts.append(
+                        f"[OBGPU load] Failed sweep item diagnostic sync for {label} reported an error, "
+                        "but diagnostics are present locally.\n"
+                    )
+                    continue
+                stderr_parts.append(
+                    f"[OBGPU load] Compact sweep item sync for {label} failed; "
+                    "continuing with any local artifacts already available.\n"
                 )
 
         return (
             subprocess.CompletedProcess(
-                args=["remote-sweep-incremental-sync", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                args=["remote-sweep-compact-sync", remote_sweep_root.as_posix(), str(local_sweep_dir)],
                 returncode=0,
                 stdout="".join(stdout_parts),
                 stderr="".join(stderr_parts),
