@@ -1746,6 +1746,7 @@ def _remote_helper_sources() -> dict[str, Path]:
     """Return the helper scripts that should be cached on the remote host."""
     helper_dir = REPO_ROOT / "tools" / "remote"
     return {
+        "slurm_common.py": helper_dir / "slurm_common.py",
         "submit_sol_run.py": helper_dir / "submit_sol_run.py",
         "submit_slurm_allocation.py": helper_dir / "submit_slurm_allocation.py",
         "poll_sol_run.py": helper_dir / "poll_sol_run.py",

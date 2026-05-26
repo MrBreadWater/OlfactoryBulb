@@ -23,6 +23,7 @@ if str(REMOTE_TOOLS_DIR) not in sys.path:
     sys.path.insert(0, str(REMOTE_TOOLS_DIR))
 
 import slurm_common
+import submit_sol_run
 
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
@@ -541,6 +542,8 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     assert len(remote_submit_cached) < len(remote_submit_inline)
     assert "/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test/submit_sol_run.py" in remote_submit_cached
+    helper_sources = hlp._remote_helper_sources()
+    assert helper_sources["slurm_common.py"] == hlp.REPO_ROOT / "tools" / "remote" / "slurm_common.py"
     remote_poll_cached = hlp._build_remote_poll_command(
         remote_cfg,
         remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
@@ -553,6 +556,10 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "--skip-sacct" in remote_poll_cached
     assert "--skip-tails" in remote_poll_cached
     print("Remote helper cache command shrink: OK")
+
+    submit_sol_run_source = Path(submit_sol_run.__file__).read_text()
+    assert "--nodes=1 --ntasks=1" in submit_sol_run_source
+    print("Reusable allocation wrapper step launch: OK")
 
     # --- Bulky run overrides should stay out of process argv ---
     verbose_cfg = deepcopy(remote_cfg)
