@@ -11,11 +11,11 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v5"
-WIDTH = 1280
-HEIGHT = 360
-SUPERSAMPLE = 3
-BG = (255, 255, 255)
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v6"
+WIDTH = 2280
+HEIGHT = 720
+SUPERSAMPLE = 2
+GIF_COLORS = 144
 # ICON site cues: #01040f carousel black, #f1a143 nav accent, Bootstrap blue,
 # mintcream panels, plus cyan/green activity in the existing header.gif.
 INK = np.array([1, 4, 15], dtype=float)
@@ -25,6 +25,7 @@ TEAL = np.array([21, 168, 152], dtype=float)
 CYAN = np.array([8, 232, 232], dtype=float)
 GREEN = np.array([104, 200, 8], dtype=float)
 PANEL_MINT = np.array([245, 255, 250], dtype=float)
+BG = tuple(int(channel) for channel in INK)
 TYPE_COLORS = {
     "MC": MAROON,
     "TC": GOLD,
@@ -299,24 +300,25 @@ def background(width: int, height: int, style: str) -> Image.Image:
     y = yy / max(1, height - 1)
     if style == "luminous":
         glows = [
-            (0.18, 0.56, 0.35, PANEL_MINT, 0.28),
-            (0.75, 0.40, 0.30, np.array([252, 236, 196]), 0.22),
+            (0.18, 0.56, 0.38, np.array([15, 54, 58], dtype=float), 0.46),
+            (0.75, 0.40, 0.34, np.array([82, 52, 34], dtype=float), 0.36),
         ]
     elif style == "graphite":
         glows = [
-            (0.42, 0.40, 0.40, np.array([238, 248, 248]), 0.26),
-            (0.88, 0.58, 0.28, np.array([249, 232, 201]), 0.20),
+            (0.32, 0.50, 0.42, np.array([17, 72, 78], dtype=float), 0.48),
+            (0.58, 0.60, 0.44, np.array([40, 74, 54], dtype=float), 0.32),
+            (0.86, 0.45, 0.34, np.array([88, 42, 56], dtype=float), 0.42),
         ]
     else:
         glows = [
-            (0.28, 0.48, 0.40, PANEL_MINT, 0.25),
-            (0.72, 0.42, 0.34, np.array([232, 248, 248]), 0.20),
+            (0.28, 0.48, 0.42, np.array([16, 58, 52], dtype=float), 0.42),
+            (0.72, 0.42, 0.36, np.array([24, 62, 82], dtype=float), 0.36),
         ]
     for cx, cy, radius, color, strength in glows:
         field = np.exp(-(((x - cx) / radius) ** 2 + ((y - cy) / radius) ** 2))
         arr = arr * (1.0 - strength * field[..., None]) + color * (strength * field[..., None])
     image = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
-    layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer, "RGBA")
     for idx, y_frac in enumerate((0.18, 0.32, 0.52, 0.74)):
         y0 = int(height * y_frac)
@@ -325,15 +327,15 @@ def background(width: int, height: int, style: str) -> Image.Image:
             (int(width * t / 160.0), int(y0 + amp * math.sin((t / 160.0) * math.tau * (1.15 + idx * 0.16))))
             for t in range(161)
         ]
-        draw.line(points, fill=(170, 188, 196, 18), width=max(1, int(1.3 * SUPERSAMPLE)))
+        draw.line(points, fill=(96, 142, 154, 22), width=max(1, int(1.3 * SUPERSAMPLE)))
     return Image.alpha_composite(image.convert("RGBA"), layer)
 
 
 def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     image = scene.base.copy()
-    shadow = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     shadow_draw = ImageDraw.Draw(shadow, "RGBA")
-    base = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     base_draw = ImageDraw.Draw(base, "RGBA")
     for seg in scene.segments:
         depth = np.clip((seg.z + 0.7) / 1.4, 0.0, 1.0)
@@ -368,9 +370,9 @@ def render_frame(
     mode: str,
 ) -> Image.Image:
     image = scene.base.copy()
-    glow = Image.new("RGBA", (width, height), (255, 255, 255, 0))
-    core = Image.new("RGBA", (width, height), (255, 255, 255, 0))
-    spark = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    spark = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     glow_draw = ImageDraw.Draw(glow, "RGBA")
     core_draw = ImageDraw.Draw(core, "RGBA")
     spark_draw = ImageDraw.Draw(spark, "RGBA")
@@ -592,6 +594,25 @@ def build_scene(variant: str, width: int, height: int) -> SceneCache:
     return scene
 
 
+def build_global_gif_palette(frames: list[Image.Image], colors: int) -> Image.Image:
+    colors = max(2, min(256, colors))
+    step = max(1, len(frames) // 18)
+    sample_frames = frames[::step]
+    scale = max(1, math.ceil(sample_frames[0].width / 760))
+    sample_width = max(1, sample_frames[0].width // scale)
+    sample_height = max(1, sample_frames[0].height // scale)
+    palette_source = Image.new("RGB", (sample_width, sample_height * len(sample_frames)), BG)
+    for idx, frame in enumerate(sample_frames):
+        sample = frame.resize((sample_width, sample_height), Image.Resampling.LANCZOS)
+        palette_source.paste(sample, (0, idx * sample_height))
+    return palette_source.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+
+
+def quantize_for_gif(frames: list[Image.Image], colors: int) -> list[Image.Image]:
+    palette = build_global_gif_palette(frames, colors)
+    return [frame.quantize(palette=palette, dither=Image.Dither.NONE) for frame in frames]
+
+
 def render_variant(
     variant: str,
     output_dir: Path,
@@ -600,6 +621,7 @@ def render_variant(
     height: int,
     frames: int,
     duration_ms: int,
+    gif_colors: int,
 ) -> tuple[Path, Path]:
     work_width = width * SUPERSAMPLE
     work_height = height * SUPERSAMPLE
@@ -611,21 +633,22 @@ def render_variant(
         frame = frame.resize((width, height), Image.Resampling.LANCZOS).convert("RGB")
         edge = 2
         pixels = np.asarray(frame).copy()
-        pixels[:edge, :, :] = 255
-        pixels[-edge:, :, :] = 255
-        pixels[:, :edge, :] = 255
-        pixels[:, -edge:, :] = 255
+        pixels[:edge, :, :] = BG
+        pixels[-edge:, :, :] = BG
+        pixels[:, :edge, :] = BG
+        pixels[:, -edge:, :] = BG
         frame = Image.fromarray(pixels)
         rendered.append(frame)
     output_dir.mkdir(parents=True, exist_ok=True)
     gif_path = output_dir / f"{variant}.gif"
-    rendered[0].save(
+    gif_frames = quantize_for_gif(rendered, gif_colors)
+    gif_frames[0].save(
         gif_path,
         save_all=True,
-        append_images=rendered[1:],
+        append_images=gif_frames[1:],
         duration=duration_ms,
         loop=0,
-        optimize=False,
+        optimize=True,
         disposal=2,
     )
     poster_path = output_dir / f"{variant}_poster.png"
@@ -633,13 +656,13 @@ def render_variant(
     return gif_path, poster_path
 
 
-def save_contact_sheet(posters: dict[str, Path], output_path: Path) -> Path:
+def save_contact_sheet(posters: dict[str, Path], output_path: Path, *, width: int, height: int) -> Path:
     rows = []
     for _, poster in posters.items():
         rows.append(Image.open(poster).convert("RGB"))
-    sheet = Image.new("RGB", (WIDTH, HEIGHT * len(rows)), BG)
+    sheet = Image.new("RGB", (width, height * len(rows)), BG)
     for idx, row in enumerate(rows):
-        sheet.paste(row, (0, idx * HEIGHT))
+        sheet.paste(row, (0, idx * height))
     output_path.parent.mkdir(parents=True, exist_ok=True)
     sheet.save(output_path)
     return output_path
@@ -653,6 +676,7 @@ def export_all(
     height: int,
     frames: int,
     duration_ms: int,
+    gif_colors: int,
 ) -> dict[str, Path]:
     selected = variants or ["layered_exchange"]
     artifacts: dict[str, Path] = {}
@@ -665,11 +689,12 @@ def export_all(
             height=height,
             frames=frames,
             duration_ms=duration_ms,
+            gif_colors=gif_colors,
         )
         artifacts[variant] = gif_path
         posters[variant] = poster_path
     if posters:
-        artifacts["contact_sheet"] = save_contact_sheet(posters, output_dir / "contact_sheet.png")
+        artifacts["contact_sheet"] = save_contact_sheet(posters, output_dir / "contact_sheet.png", width=width, height=height)
     return artifacts
 
 
@@ -679,8 +704,9 @@ def main() -> None:
     parser.add_argument("--variant", action="append", dest="variants")
     parser.add_argument("--width", type=int, default=WIDTH)
     parser.add_argument("--height", type=int, default=HEIGHT)
-    parser.add_argument("--frames", type=int, default=84)
-    parser.add_argument("--duration-ms", type=int, default=55)
+    parser.add_argument("--frames", type=int, default=72)
+    parser.add_argument("--duration-ms", type=int, default=60)
+    parser.add_argument("--gif-colors", type=int, default=GIF_COLORS)
     args = parser.parse_args()
 
     artifacts = export_all(
@@ -690,6 +716,7 @@ def main() -> None:
         height=args.height,
         frames=args.frames,
         duration_ms=args.duration_ms,
+        gif_colors=args.gif_colors,
     )
     for name, path in artifacts.items():
         print(f"{name}: {path}")
