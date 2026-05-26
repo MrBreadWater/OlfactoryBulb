@@ -11001,40 +11001,34 @@ def save_sweep_animation_stream(
         return _fig_to_rgb_array(display_fig)
 
     try:
-        try:
-            import imageio.v2 as imageio
-        except Exception:
-            imageio = None
+        from PIL import GifImagePlugin, Image
 
-        if imageio is not None:
-            with imageio.get_writer(
-                str(gif_path),
-                mode="I",
-                duration=max(float(interval) / 1000.0, 0.001),
-                loop=0,
-            ) as writer:
-                for frame_rgb, title in _iter_sweep_animation_frames(
-                    sweep,
-                    plot_fn,
-                    figsize=figsize,
-                    title_fn=title_fn,
-                    close_frames=close_frames,
-                ):
-                    writer.append_data(render_display_frame(frame_rgb, title))
-                    frame_count += 1
-        else:
-            writer = animation.PillowWriter(fps=max(1, int(fps)))
-            with writer.saving(display_fig, str(gif_path), dpi=display_fig.dpi):
-                for frame_rgb, title in _iter_sweep_animation_frames(
-                    sweep,
-                    plot_fn,
-                    figsize=figsize,
-                    title_fn=title_fn,
-                    close_frames=close_frames,
-                ):
-                    render_display_frame(frame_rgb, title)
-                    writer.grab_frame()
-                    frame_count += 1
+        def to_gif_frame(frame_rgb: np.ndarray) -> Any:
+            image = Image.fromarray(frame_rgb)
+            palette_mode = getattr(getattr(Image, "Palette", Image), "ADAPTIVE", Image.ADAPTIVE)
+            return image.convert("P", palette=palette_mode)
+
+        duration_ms = max(int(interval), 1)
+        with open(gif_path, "wb") as handle:
+            for frame_rgb, title in _iter_sweep_animation_frames(
+                sweep,
+                plot_fn,
+                figsize=figsize,
+                title_fn=title_fn,
+                close_frames=close_frames,
+            ):
+                gif_frame = to_gif_frame(render_display_frame(frame_rgb, title))
+                if frame_count == 0:
+                    header, _palette = GifImagePlugin.getheader(
+                        gif_frame,
+                        info={"loop": 0, "duration": duration_ms},
+                    )
+                    for chunk in header:
+                        handle.write(chunk)
+                for chunk in GifImagePlugin.getdata(gif_frame, duration=duration_ms):
+                    handle.write(chunk)
+                frame_count += 1
+            handle.write(b";")
     finally:
         plt.close(display_fig)
 
