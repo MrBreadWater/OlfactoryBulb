@@ -252,7 +252,7 @@ class FrequencyPlotConfig:
     dot_size: float = 5.0
     dot_alpha: float = 0.2
     strip_plot: bool = True
-    guide_line_spacing_ms: float = 2000.0
+    guide_line_spacing_ms: float = 0.0
 
 
 @dataclass
@@ -8559,9 +8559,6 @@ def _plot_frequency_kde_2d_from_samples(
         cmap=config.kde_cmap,
         interpolation="bilinear",
     )
-    if float(config.guide_line_spacing_ms) > 0:
-        for x in np.arange(0.0, tstop, float(config.guide_line_spacing_ms)):
-            ax.axvline(x, color="white", alpha=0.35)
     plt.colorbar(im, ax=ax, label="Density (KDE)")
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
@@ -8596,9 +8593,6 @@ def _plot_frequency_time_binned_from_samples(
     if len(t_bins) < 2:
         t_bins = np.array([0.0, max(tstop, 1.0)], dtype=float)
     bin_width = float(t_bins[1] - t_bins[0])
-
-    for tb in t_bins:
-        ax.axvline(tb, color="gray", alpha=0.1, linestyle="--")
 
     for i in range(len(t_bins) - 1):
         t_start, t_end = float(t_bins[i]), float(t_bins[i + 1])
