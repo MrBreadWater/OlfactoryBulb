@@ -392,6 +392,49 @@ def periodic_profile(values: np.ndarray, positions: np.ndarray | float) -> np.nd
     return np.interp(np.mod(pos, 1.0), xp_ext, fp_ext)
 
 
+def periodic_bump_banks(
+    x: np.ndarray,
+    phase: float,
+    *,
+    count: int,
+    speed: float,
+    width: float,
+) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    if count <= 0 or x.size == 0:
+        return np.zeros_like(x)
+    centers = (np.arange(count, dtype=float) / count + speed * cycle_phase(phase)) % 1.0
+    profile = np.zeros_like(x)
+    spread = max(width, 1e-6)
+    for center in centers:
+        delta = np.abs(((x - center + 0.5) % 1.0) - 0.5)
+        profile += np.exp(-(delta ** 2) / (2.0 * spread**2))
+    return profile / float(count)
+
+
+def periodic_gaussian_banks(
+    x: np.ndarray,
+    phase: float,
+    *,
+    count: int,
+    speed: float,
+    width: float,
+) -> np.ndarray:
+    x = np.asarray(x, dtype=float)
+    if count <= 0:
+        return np.zeros_like(x)
+    centers = (np.arange(count, dtype=float) / count + speed * cycle_phase(phase)) % 1.0
+    field = np.zeros_like(x)
+    for center in centers:
+        dist = np.abs(((x - center + 0.5) % 1.0) - 0.5)
+        field += np.exp(-(dist / max(width, 1e-6)) ** 2 / 2.0)
+    return field / float(count)
+
+
+def clamp_unit(values: np.ndarray) -> np.ndarray:
+    return np.clip(values, 0.0, 1.0)
+
+
 def enforce_periodic_loop(values: np.ndarray, size: int) -> np.ndarray:
     arr = np.asarray(values, dtype=float)
     if arr.size == 0:
@@ -500,35 +543,48 @@ def add_density_ribbons(
     colors: dict[str, str],
     fill_alpha: float = 0.18,
 ) -> None:
-    x = np.linspace(x_left, x_right, summary.x_norm.size * 2)
-    rhythm_params = {
-        "MC": {"drift": 0.02, "wave_cycles": 3.2, "wave_strength": 0.26, "beat_phase": 0.2},
-        "TC": {"drift": 0.03, "wave_cycles": 3.8, "wave_strength": 0.30, "beat_phase": 1.1},
-        "GC": {"drift": 0.04, "wave_cycles": 4.1, "wave_strength": 0.28, "beat_phase": 2.2},
-    }
+    x = np.linspace(x_left, x_right, summary.x_norm.size * 3)
     base_x = np.linspace(0.0, 1.0, x.size)
     envelope = enforce_periodic_loop(summary.lfp_energy, x.size)
-    tide = 0.10 * envelope * np.sin((2.0 * math.pi * (1.0 + summary.active_score)) * phase + (2.0 * math.pi * base_x * 0.8))
-    ripple = 0.10 * np.sin((2.0 * math.pi * 2.5 * base_x) - (2.0 * math.pi * phase * 0.8))
+    tide = 0.10 * envelope * np.sin(2.0 * math.pi * (base_x * 0.8 + phase * 0.28))
+    ripple = 0.09 * np.sin(2.0 * math.pi * (2.2 * base_x + phase * 0.65))
     for cell_type in ("MC", "TC", "GC"):
-        density = rhythmic_trace(
-            summary.densities[cell_type],
-            summary.x_norm,
-            phase,
-            envelope=summary.lfp_energy,
-            envelope_mix=0.08,
-            **rhythm_params[cell_type],
+        density = enforce_periodic_loop(summary.densities[cell_type], x.size)
+        density = gaussian_smooth(density, sigma_bins=1.3)
+        density = clamp_unit(density)
+        density_curve = 0.66 * density + 0.34 * envelope
+        lane_shift = 0.024 * np.sin(
+            2.0
+            * math.pi
+            * (
+                base_x * 1.9
+                + phase * 0.9
+                + 0.31 * int(cell_type == "TC")
+                + 0.27 * int(cell_type == "GC")
+            )
         )
-        density_curve = enforce_periodic_loop(density, x.size)
-        density_curve = 0.65 * density_curve + 0.35 * np.interp(base_x, np.linspace(0.0, 1.0, summary.x_norm.size), summary.lfp_energy[: summary.x_norm.size])
         y = baselines[cell_type] + amplitudes[cell_type] * density_curve
-        y = y + 0.028 * density_curve + 0.018 * ripple + 0.008 * np.sin(2.0 * math.pi * (0.5 + density.size / max(20, x.size)) * base_x + (0.7 * phase))
-        y = np.clip(y + (0.003 * tide), 0.0, 1.0)
+        y = y + (0.030 * density_curve) + lane_shift + (0.018 * ripple) + (0.003 * tide)
+        y += 0.014 * periodic_bump_banks(
+            base_x,
+            phase + 0.24 * int(cell_type == "MC") - 0.11 * int(cell_type == "GC"),
+            count=2,
+            speed=0.12 + 0.03 * int(cell_type == "GC"),
+            width=0.09,
+        )
+        y = np.clip(y, 0.02, 0.98)
         color = colors[cell_type]
         width = 0.024 + (0.010 * (2 - summary.type_strengths[cell_type]))
-        ax.plot(x, y + width * 0.72, color="#f7fbfd", lw=6.4, alpha=0.20, zorder=2)
-        ax.fill_between(x, np.clip(y - width, 0.0, 1.0), np.clip(y + width, 0.0, 1.0), color=color, alpha=fill_alpha * 0.58, zorder=3)
-        ax.plot(x, y, color=color, lw=2.4, alpha=0.95, zorder=4)
+        ax.plot(x, y, color="#ffffff", lw=2.7, alpha=0.16, zorder=2)
+        ax.fill_between(
+            x,
+            np.clip(y - width, 0.0, 1.0),
+            np.clip(y + width, 0.0, 1.0),
+            color=color,
+            alpha=fill_alpha * 0.8,
+            zorder=3,
+        )
+        ax.plot(x, y, color=color, lw=1.6, alpha=0.95, zorder=4)
 
 
 def render_aurora_currents(
@@ -554,38 +610,14 @@ def render_aurora_currents(
         ],
     )
     ax.imshow(bg, extent=(0, 1, 0, 1), origin="lower", aspect="auto", zorder=0)
-    for lane in range(10):
-        x = np.linspace(0.0, 1.0, 900)
-        lane_cycle = periodic_sample(summary.lfp_energy, phase * (0.16 + 0.02 * lane))[:x.size]
-        drift = 0.022 * np.sin((2.0 * math.pi * 0.14 * (x + lane * 0.01)) + (4.0 * math.pi * phase) + lane + (0.6 * lane_cycle.mean()))
-        amp = 0.58 + 0.42 * np.sin(
-            (2.0 * math.pi * (lane * 0.32 + 1.1) * x)
-            - (2.0 * math.pi * phase * (0.32 + 0.04 * lane))
-            + (2.0 * math.pi * (0.08 * lane))
-        )
-        y = 0.10 + (lane * 0.075) + (0.058 * amp) + (0.024 * drift) + (0.010 * np.interp(x, np.linspace(0.0, 1.0, lane_cycle.size), lane_cycle))
-        color = [MINT, SEA, SAND][lane % 3]
-        glow_width = 2.3 + (0.06 * lane)
-        ax.plot(x, np.clip(y, 0.04, 0.95), color=color, lw=glow_width, alpha=0.08, zorder=1)
-        ax.plot(x, np.clip(y + (0.0019 * np.sin(2.0 * math.pi * x * (6.2 + lane * 0.25))), 0.0, 1.0), color="#ffffff", lw=0.2, alpha=0.22, zorder=2)
 
-    energy_x = resample_curve(summary.lfp_energy, summary.x_norm.size)
-    add_density_ribbons(
-        ax,
-        summary,
-        phase,
-        x_left=0.03,
-        x_right=0.98,
-        baselines={"MC": 0.69, "TC": 0.48, "GC": 0.22},
-        amplitudes={"MC": 0.22, "TC": 0.26, "GC": 0.23},
-        colors={"MC": SAND, "TC": SEA, "GC": MINT},
-        fill_alpha=0.20,
-    )
-
-    lfp_x = np.linspace(0.0, 1.0, summary.lfp.size)
+    x = np.linspace(0.0, 1.0, 2000)
+    energy_x = enforce_periodic_loop(summary.lfp_energy, x.size)
+    lfp_pos = np.linspace(0.0, 1.0, summary.lfp.size if summary.lfp.size else x.size)
+    lfp_x = np.linspace(0.0, 1.0, summary.lfp.size if summary.lfp.size else x.size)
     lfp_wave = rhythmic_trace(
-        np.abs(summary.lfp),
-        np.linspace(0.0, 1.0, summary.lfp.size),
+        np.abs(summary.lfp) if summary.lfp.size else np.zeros_like(x),
+        lfp_pos,
         phase,
         drift=0.05,
         wave_cycles=4.5,
@@ -594,21 +626,93 @@ def render_aurora_currents(
         envelope=summary.lfp_energy,
         envelope_mix=0.05,
     )
-    lfp_y = 0.08 + 0.024 * normalize_signed(summary.lfp) + 0.024 * lfp_wave
-    ax.plot(lfp_x, lfp_y, color=INK, lw=1.2, alpha=0.50, zorder=5)
+    lfp_wave = resample_curve(lfp_wave, x.size)
 
-    highlight = 0.5 + 0.5 * np.sin((2.0 * math.pi * (np.linspace(0.0, 1.0, summary.x_norm.size) * 4.4)) - (2.0 * math.pi * phase * 2.0))
-    ax.fill_between(
-        np.linspace(0.0, 1.0, summary.x_norm.size),
-        0.15,
-        0.15 + 0.045 * highlight * energy_x,
+    for lane in range(13):
+        layer = lane / 13.0
+        lane_phase = phase + layer * 0.19
+        base = 0.06 + (layer * 0.065)
+        mode_a = 0.060 * np.sin(2.0 * math.pi * (2.0 + (lane % 5) * 0.38) * x + 2.0 * math.pi * lane_phase)
+        mode_b = 0.032 * np.sin(2.0 * math.pi * (0.7 + layer * 0.14) * x - 2.0 * math.pi * lane_phase * 0.8)
+        envelope = np.clip(0.25 + 0.75 * periodic_profile(energy_x, x + 0.013 * lane), 0.0, 1.0)
+        flow = 0.020 * (
+            0.65 * np.sin(2.0 * math.pi * (x * (1.8 + 0.12 * lane) + phase * (0.22 + 0.03 * layer)))
+            + 0.35 * mode_a
+            + 0.20 * periodic_bump_banks(x, lane_phase, count=3, speed=0.14, width=0.10)
+        )
+        lane_wave = 0.005 * (2.0 * summary.active_score - 1.0) * np.sin(2.0 * math.pi * (x * 1.4 + phase + layer))
+        y = base + 0.035 * envelope + lane_wave + mode_a + mode_b + 0.018 * flow + 0.010 * (2.0 * lfp_wave - 1.0)
+        y = np.clip(y, 0.02, 0.98)
+
+        tone = [MINT, SEA, SAND][lane % 3]
+        flow_level = 0.4 + 0.6 * np.interp(x, x, energy_x)
+        flow_lw = float(1.4 + (0.6 * np.clip(np.mean(flow_level), 0.1, 1.0)))
+        ax.plot(x, y, color=tone, lw=flow_lw, alpha=0.10, zorder=1)
+        ax.plot(x, y, color="#ffffff", lw=0.2, alpha=0.12, zorder=2)
+        crest = 0.010 * periodic_bump_banks(x, lane_phase * 1.2, count=5 + lane % 4, speed=0.08 + 0.01 * layer, width=0.06)
+        ax.fill_between(x, np.clip(y - 0.012, 0.0, 1.0), np.clip(y + 0.012 + crest, 0.0, 1.0), color=tone, alpha=0.05 + 0.02 * layer, zorder=1)
+
+        packet_count = 26 + (lane % 4) * 5
+        emit = np.mod(np.linspace(0.0, 1.0, packet_count, endpoint=False) + 0.11 * lane + 0.08 * phase, 1.0)
+        packet_x = np.sort(emit)
+        packet_y = np.interp(packet_x, x, y)
+        packet_amp = np.interp(packet_x, x, 0.2 + 0.8 * envelope) * (0.2 + 0.8 * packet_count / 50.0)
+        packet_glow = 0.4 + 0.6 * np.cos(2.0 * math.pi * (packet_x * 1.5 + lane_phase))
+        sizes = np.clip(2.0 + (10.0 * packet_amp * packet_glow), 1.0, 12.0)
+        ax.scatter(
+            packet_x,
+            np.clip(packet_y + 0.0015 * np.sin(2.0 * math.pi * (packet_x * 3.0 + lane_phase)), 0.02, 0.98),
+            s=sizes,
+            c=tone,
+            alpha=0.20 + 0.13 * envelope[np.searchsorted(x, packet_x, side="right") - 1],
+            linewidths=0,
+            zorder=3,
+        )
+
+    add_density_ribbons(
+        ax,
+        summary,
+        phase,
+        x_left=0.0,
+        x_right=1.0,
+        baselines={"MC": 0.70, "TC": 0.49, "GC": 0.24},
+        amplitudes={"MC": 0.23, "TC": 0.26, "GC": 0.22},
+        colors={"MC": SAND, "TC": SEA, "GC": MINT},
+        fill_alpha=0.20,
+    )
+
+    pulse_bus = resample_curve(np.abs(summary.lfp), x.size)
+    ripple = np.interp(x, x, np.sin(2.0 * math.pi * (x * 2.8 - phase * 1.4)))
+    ax.plot(
+        x,
+        0.15 + 0.05 * (pulse_bus * np.abs(ripple)),
         color=SEA,
-        alpha=0.08,
+        lw=0.8,
+        alpha=0.16,
+        zorder=4,
+    )
+    lfp_y = 0.08 + 0.022 * np.interp(x, lfp_x, normalize_signed(summary.lfp)) + 0.022 * lfp_wave
+    ax.plot(
+        x,
+        lfp_y,
+        color=INK,
+        lw=1.1,
+        alpha=0.44,
+        zorder=5,
+    )
+
+    glow = 0.85 + 0.15 * periodic_bump_banks(x, phase * 1.2, count=3, speed=0.03, width=0.08)
+    ax.fill_between(
+        x,
+        0.16,
+        0.16 + 0.035 * glow * energy_x,
+        color=SEA,
+        alpha=0.06,
         zorder=1,
     )
 
-    flare_x = 0.06 + (0.88 * ((phase * 0.88) % 1.0))
-    for radius, alpha in ((0.09, 0.03), (0.05, 0.08)):
+    flare_x = 0.05 + (0.90 * cycle_phase(phase * 0.88))
+    for radius, alpha in ((0.085, 0.028), (0.048, 0.065)):
         circle = plt.Circle((flare_x, 0.55), radius=radius, color=SEA, alpha=alpha, ec="none", zorder=2)
         ax.add_patch(circle)
 
@@ -641,148 +745,228 @@ def render_dendritic_pulse(
     )
     ax.imshow(bg, extent=(0, 1, 0, 1), origin="lower", aspect="auto", zorder=0)
 
-    pulse_phase = np.asarray(summary.lfp_energy, dtype=float)
-    if pulse_phase.size > 1:
-        pulse_phase = pulse_phase / max(float(np.max(pulse_phase)), 1e-6)
-    else:
-        pulse_phase = np.zeros(1, dtype=float)
+    x = np.linspace(0.0, 1.0, 2000)
+    pulse_field = enforce_periodic_loop(summary.lfp_energy if summary.lfp_energy.size else np.array([0.0]), x.size)
     node_profiles = {
-        "MC": {"base_y": 0.60, "hue": SAND, "glow": "#d7edf2", "phase": 0.0, "wave": 3.2},
-        "TC": {"base_y": 0.46, "hue": SEA, "glow": "#c8eaf5", "phase": 1.15, "wave": 4.0},
-        "GC": {"base_y": 0.30, "hue": MINT, "glow": "#d6f3ec", "phase": 2.2, "wave": 2.6},
+        "MC": {
+            "base_y": 0.68,
+            "root_y": 0.10,
+            "root_x": 0.28,
+            "hue": SAND,
+            "glow": "#d7edf2",
+            "phase": 0.0,
+            "wave": 3.2,
+        },
+        "TC": {
+            "base_y": 0.46,
+            "root_y": 0.08,
+            "root_x": 0.56,
+            "hue": SEA,
+            "glow": "#c8eaf5",
+            "phase": 1.15,
+            "wave": 4.0,
+        },
+        "GC": {
+            "base_y": 0.28,
+            "root_y": 0.06,
+            "root_x": 0.40,
+            "hue": MINT,
+            "glow": "#d6f3ec",
+            "phase": 2.2,
+            "wave": 2.6,
+        },
     }
     anchors: list[tuple[float, float]] = []
+    pulse_mask = periodic_bump_banks(x, phase * 0.45, count=6, speed=0.12, width=0.14)
+    root_band = 0.05 + (0.03 * pulse_mask)
 
     for shape_idx, shape in enumerate(shapes):
         cfg = node_profiles[shape.cell_type]
         hue = cfg["hue"]
         glow = cfg["glow"]
         projected = project_shape(shape)
-        shape_wave = enforce_periodic_loop(summary.lfp_energy, max(1, len(projected) if projected else 1))
-        if len(projected) > 180:
-            keep = np.linspace(0, len(projected) - 1, 180).astype(int)
+        if not projected:
+            continue
+        shape_wave = enforce_periodic_loop(summary.lfp_energy, max(1, len(projected)))
+        seg_np = np.asarray(projected, dtype=float)
+        cx0 = float(np.mean(seg_np[:, [0, 2]]))
+        cy0 = float(np.mean(seg_np[:, [1, 3]]))
+        if len(projected) > 220:
+            keep = np.linspace(0, len(projected) - 1, 220).astype(int)
             projected = [projected[idx] for idx in keep]
-        projected_np = np.asarray(projected, dtype=float)
-        if projected_np.size:
-            anchors.append((float(np.mean(projected_np[:, 0])), float(np.mean(projected_np[:, 1]))))
-            anchors.append((float(np.mean(projected_np[:, 2])), float(np.mean(projected_np[:, 3]))))
+        anchors.append((np.clip(cx0, 0.0, 1.0), np.clip(cy0, 0.0, 1.0)))
+
+        root_x = np.clip(cfg["root_x"] + 0.015 * np.sin(2.0 * math.pi * (phase * 0.4 + cfg["phase"])), 0.02, 0.98)
+        root_y = np.clip(cfg["root_y"] + 0.006 * np.cos(2.0 * math.pi * (phase * 0.33 + cfg["phase"])), 0.02, 0.98)
+        soma_x = np.clip(cx0 + 0.008 * np.sin(2.0 * math.pi * (phase * 0.3 + cfg["phase"] + shape_idx * 0.2)), 0.03, 0.97)
+        soma_y = np.clip(cy0 + 0.008 * np.cos(2.0 * math.pi * (phase * 0.27 + cfg["phase"] + shape_idx * 0.2)), 0.03, 0.97)
+        stem_y = np.linspace(root_y, soma_y, 26)
+        stem_t = np.linspace(0.0, 1.0, 26)
+        stem_x = np.linspace(root_x, soma_x, 26) + 0.004 * np.sin(2.0 * math.pi * (stem_t * 0.9 + cfg["phase"] + phase))
+        stem_profile = 0.5 + 0.5 * pulse_mask[: stem_x.size]
+        ax.plot(
+            np.clip(stem_x, 0.0, 1.0),
+            np.clip(stem_y + 0.003 * stem_profile, 0.0, 1.0),
+            color=glow,
+            lw=2.2,
+            alpha=0.12,
+            zorder=2,
+        )
+        ax.plot(
+            np.clip(stem_x, 0.0, 1.0),
+            np.clip(stem_y + 0.003 * stem_profile, 0.0, 1.0),
+            color=hue,
+            lw=1.0,
+            alpha=0.32,
+            zorder=3,
+        )
+
+        ax.scatter(
+            soma_x,
+            soma_y,
+            s=20.0 + (8.0 * np.clip(cfg["base_y"] * 2.0, 0.0, 1.0)),
+            c=hue,
+            alpha=0.60,
+            linewidths=0,
+            zorder=4,
+        )
+
+        body_swell = 0.5 + 0.5 * np.sin(2.0 * math.pi * (phase * 0.22 + cfg["phase"]))
+        ax.plot(
+            [cfg["root_x"], cfg["root_x"]],
+            [0.0, cfg["root_y"]],
+            color=cfg["glow"],
+            lw=1.8,
+            alpha=0.08,
+            zorder=1,
+        )
 
         for seg_idx, (x0, y0, x1, y1) in enumerate(projected):
-            sx0 = 0.03 + 0.94 * float(np.clip(x0, -0.2, 1.2))
-            sx1 = 0.03 + 0.94 * float(np.clip(x1, -0.2, 1.2))
-            sy0 = 0.05 + 0.9 * float(np.clip(y0, -0.2, 1.2))
-            sy1 = 0.05 + 0.9 * float(np.clip(y1, -0.2, 1.2))
-
             seg_mix = seg_idx / max(1, len(projected))
-            edge_wave = 0.022 * np.sin((2.0 * math.pi * (seg_mix * cfg["wave"])) + (2.0 * math.pi * (phase + cfg["phase"])))
-            pulse_wave = shape_wave[min(seg_idx, len(shape_wave) - 1)] if shape_wave.size else 0.0
-            phase_wave = 0.006 * np.sin(2.0 * math.pi * (phase * 1.2 + seg_mix * 1.4) + (1.1 * pulse_wave))
-            drift = 0.0098 * np.sin((2.0 * math.pi * (phase * 0.7 + seg_mix * 1.1)) + (1.1 * pulse_wave))
-            branch_flow = 0.008 * np.sin((2.0 * math.pi * (phase * 0.15 + seg_mix * 4.0)) + pulse_wave)
-            sx0 += 0.0040 * np.sin(2.0 * math.pi * (shape_idx * 0.73 + cfg["wave"] * 0.11 + phase * 0.8))
-            sx1 += 0.0040 * np.sin(2.0 * math.pi * (shape_idx * 0.73 + 0.33 + cfg["wave"] * 0.11) + phase * 1.1)
-            sy0 += branch_flow
-            sy1 += branch_flow
-            sy0 += 0.006 * pulse_wave
-            sy1 += 0.006 * pulse_wave
-            sy0 += phase_wave * 1.4
-            sy1 += phase_wave * 1.4
+            wave = 2.0 * math.pi * (seg_mix * cfg["wave"] + phase * 0.75 + cfg["phase"]) + 0.3 * summary.active_score
+            pulse_wave = float(shape_wave[seg_idx % len(shape_wave)]) if shape_wave.size else 0.0
+            density = 0.35 + 0.65 * pulse_wave
+            wave_shift = 0.006 * np.sin(wave)
+            kink = 0.004 * np.cos(2.0 * math.pi * (seg_mix * 2.2 + phase + cfg["phase"]))
 
-            amp_wave = 0.35 + 0.20 * summary.active_score
-            alpha_base = 0.08 + (0.14 * amp_wave)
-            width_base = 0.20 * shape.width
-
+            sx0 = np.clip(
+                0.02 + 0.96 * x0 + 0.006 * np.sin(2.0 * math.pi * (phase * 0.16 + shape_idx * 0.2 + seg_mix * 1.8)) + wave_shift,
+                0.0,
+                1.0,
+            )
+            sx1 = np.clip(
+                0.02 + 0.96 * x1 + 0.006 * np.sin(2.0 * math.pi * (phase * 0.16 + shape_idx * 0.2 + 1.3 + seg_mix * 1.8)) + wave_shift,
+                0.0,
+                1.0,
+            )
+            sy0 = np.clip(
+                0.02 + 0.96 * y0 + 0.006 * np.cos(2.0 * math.pi * (phase * 0.14 + cfg["phase"] + seg_mix * 0.9)) + kink,
+                0.0,
+                1.0,
+            )
+            sy1 = np.clip(
+                0.02 + 0.96 * y1 + 0.006 * np.cos(2.0 * math.pi * (phase * 0.14 + cfg["phase"] + seg_mix * 0.9)) + kink,
+                0.0,
+                1.0,
+            )
+            density_lift = 0.25 + 0.75 * np.interp((sx0 + sx1) * 0.5, x, pulse_field)
+            branch_alpha = 0.14 + (0.30 * density_lift * density)
             ax.plot(
                 [sx0, sx1],
-                [sy0 + drift, sy1 + drift],
+                [sy0, sy1],
                 color=glow,
-                alpha=alpha_base * 0.75,
-                lw=width_base * 1.6,
+                alpha=branch_alpha * 0.35,
+                lw=shape.width * 0.95 * body_swell,
                 zorder=2,
                 solid_capstyle="round",
             )
             ax.plot(
                 [sx0, sx1],
-                [sy0 + edge_wave + (0.004 * pulse_wave), sy1 + edge_wave + (0.004 * pulse_wave)],
+                [sy0, sy1],
                 color=hue,
-                alpha=0.42 + (0.32 * summary.active_score),
-                lw=width_base * 0.85,
+                alpha=0.75 + (0.15 * summary.active_score),
+                lw=shape.width * 0.58,
                 zorder=3,
                 solid_capstyle="round",
             )
-            if seg_idx % 5 == 0:
-                sample_t = np.linspace(0.0, 1.0, 16)
-                pulse_t = (sample_t + 0.12 * shape_idx + phase * 0.45 + (seg_idx % 7) * 0.11) % 1.0
-                center_t = 0.5 + 0.48 * np.sin(phase * 1.2 + seg_mix * 2.4 + shape_idx * 0.9)
-                pulse_profile = 0.30 + 0.70 * np.exp(-((pulse_t - center_t) ** 2) / 0.016)
-                xs = sx0 + (sx1 - sx0) * sample_t
-                ys = sy0 + (sy1 - sy0) * sample_t + edge_wave + 0.006 * np.sin(2.0 * math.pi * (sample_t * 2.2 + phase))
+
+            if seg_idx % 14 == 0:
+                junction_x = 0.5 * (sx0 + sx1)
+                junction_y = 0.5 * (sy0 + sy1)
                 ax.scatter(
-                    xs,
-                    ys,
-                    s=(4.2 + 13.0 * pulse_profile),
+                    junction_x,
+                    junction_y,
+                    s=0.9 + (1.8 * density),
                     c=hue,
-                    alpha=0.08 + (0.38 * pulse_profile * (0.35 + 0.45 * summary.active_score)),
-                    edgecolors="none",
-                    zorder=5,
+                    alpha=0.30,
+                    linewidths=0,
+                    zorder=4,
                 )
 
-        # light dots on selected branch nodes to keep structure visible
-        for node_idx, (sx, sy, ex, ey) in enumerate(projected[::18]):
-            cx = 0.03 + 0.94 * np.clip(0.5 * (sx + ex), 0.0, 1.0)
-            cy = 0.05 + 0.9 * np.clip(0.5 * (sy + ey), 0.0, 1.0)
-            hub = np.clip(1.3 + (2.1 * np.sin(2.0 * math.pi * (phase + 0.09 * node_idx))), 0.2, None)
-            ax.scatter(cx, cy, s=hub, c=hue, alpha=0.32, edgecolors="none", zorder=6)
+        for packet_idx in range(18):
+            packet_phase = np.mod((packet_idx / 18.0) + (phase * 0.35) + (0.11 * shape_idx), 1.0)
+            seg_cursor = int(packet_phase * max(1, len(projected) - 1))
+            local_t = packet_phase * max(1, len(projected) - 1) - seg_cursor
+            seg_cursor = min(seg_cursor, len(projected) - 1)
+            next_seg = min(seg_cursor + 1, len(projected) - 1)
+            x0, y0, x1, y1 = projected[seg_cursor]
+            nx0 = np.clip(0.02 + 0.96 * ((x0 if seg_cursor < len(projected) else x1) + local_t * ((x1 if seg_cursor < len(projected) else x0) - x0)), 0.0, 1.0)
+            ny0 = np.clip(0.02 + 0.96 * ((y0 if seg_cursor < len(projected) else y1) + local_t * ((y1 if seg_cursor < len(projected) else y0) - y0)), 0.0, 1.0)
+            amp = 0.2 + 0.8 * np.interp(nx0, x, pulse_field)
+            glow_wave = 0.5 + 0.5 * np.cos(2.0 * math.pi * (packet_phase * 3.2 + phase + cfg["phase"]))
+            ax.scatter(
+                nx0,
+                ny0,
+                s=1.8 + (8.0 * amp * glow_wave),
+                c=hue,
+                alpha=0.20 + (0.45 * amp),
+                linewidths=0,
+                zorder=5,
+            )
 
     if len(anchors) >= 2:
         for idx in range(len(anchors) - 1):
             x0, y0 = anchors[idx]
             x1, y1 = anchors[idx + 1]
-            x_curve = np.linspace(0.0, 1.0, 110)
-            base_x = 0.03 + 0.94 * np.linspace(x0, x1, 110)
-            base_y = 0.05 + 0.9 * np.linspace(y0, y1, 110)
-            bridge = 0.018 * np.sin(2.0 * math.pi * (x_curve * 2.6 + phase * 1.4) + idx)
+            x_curve = np.linspace(0.0, 1.0, 130)
+            base_x = 0.01 + 0.98 * np.clip(np.linspace(x0, x1, 130), 0.0, 1.0)
+            base_y = 0.03 + 0.94 * np.clip(np.linspace(y0, y1, 130), 0.0, 1.0)
+            bridge = 0.016 * np.sin(2.0 * math.pi * (x_curve * 2.6 + phase * 1.4) + idx)
             y_curve = np.clip(base_y + bridge, 0.0, 1.0)
-            ax.plot(base_x, y_curve, color=SEA, lw=1.0, alpha=0.06 + 0.10 * (1.0 - idx / max(1, len(anchors) - 1)), zorder=2)
+            alpha = 0.07 + 0.06 * (1.0 - idx / max(1, len(anchors) - 1))
+            ax.plot(base_x, y_curve, color=SEA, lw=0.85, alpha=alpha, zorder=2)
 
     for cell_type, cfg in node_profiles.items():
-        base = cfg["base_y"]
-        density = rhythmic_trace(
-            summary.densities[cell_type],
-            summary.x_norm,
-            phase,
-            drift=0.025,
-            wave_cycles=4.0 + (0.4 * (1 if cell_type == "MC" else 0.0)),
-            wave_strength=0.40,
-            beat_phase=cfg["phase"] / 1.8,
-            envelope=summary.lfp_energy,
-            envelope_mix=0.1,
+        density = enforce_periodic_loop(summary.densities[cell_type], 360)
+        x_axis = np.linspace(0.0, 1.0, 360)
+        lane = cfg["base_y"] + (0.020 * (2.0 * density - 1.0))
+        lane = np.clip(
+            lane + 0.005 * np.sin(2.0 * math.pi * (x_axis * 4.2 + phase + cfg["phase"])),
+            0.0,
+            1.0,
         )
-        x = np.linspace(0.0, 1.0, density.size)
-        y = base + 0.032 * (2.0 * density - 1.0) + 0.012 * np.sin(2.0 * math.pi * (x * 5.4 + phase * 0.85))
-        y = np.clip(y, 0.0, 1.0)
+        lane = np.clip(cfg["base_y"] + (0.004 * (2.0 * density - 1.0)), 0.06, 0.94)
         ax.fill_between(
-            x,
-            y - 0.011,
-            y + 0.011,
+            x_axis,
+            np.clip(lane - 0.008, 0.0, 1.0),
+            np.clip(lane + 0.008, 0.0, 1.0),
             color=cfg["glow"],
-            alpha=0.07 + 0.03 * (1.0 - summary.active_score),
+            alpha=0.09,
             zorder=1,
         )
-        ax.plot(x, y, color=cfg["hue"], lw=1.0 + 0.4 * summary.active_score, alpha=0.18, zorder=2)
+        ax.plot(x_axis, lane, color=cfg["hue"], lw=1.1, alpha=0.30, zorder=2)
 
-    flow = 0.04 * (0.5 + 0.5 * np.sin(2.0 * math.pi * (np.linspace(0.0, 1.0, 360) * (2 + 0.6 * summary.active_score) - phase * 2.0)))
-    flow = flow * periodic_profile(pulse_phase, np.linspace(0.0, 1.0, 360))
-    flow_y = 0.10 + 0.018 * flow
-    ax.fill_between(
-        np.linspace(0.0, 1.0, flow_y.size),
-        np.clip(flow_y - 0.006 - 0.012 * summary.active_score, 0.0, 1.0),
-        np.clip(flow_y + 0.006 + 0.012 * summary.active_score, 0.0, 1.0),
+    flow = 0.042 * (0.5 + 0.5 * np.sin(2.0 * math.pi * (x * (1.9 + (0.6 * summary.active_score)) - phase * 1.9)))
+    flow = flow * pulse_field
+    flow_y = 0.08 + 0.011 * flow + 0.008 * (2.0 * summary.active_score - 1.0)
+    ax.plot(
+        x,
+        np.clip(flow_y, 0.01, 0.99),
         color=SEA,
-        alpha=0.14,
-        zorder=1,
+        lw=0.65,
+        alpha=0.34,
+        zorder=2,
     )
-    ax.plot(np.linspace(0.0, 1.0, flow_y.size), flow_y, color=INK, lw=0.65, alpha=0.25, zorder=2)
 
     return fig_to_rgb(fig)
 
@@ -833,88 +1017,135 @@ def render_spike_bloom(
     }
 
     x_norm = np.linspace(0.0, 1.0, summary.x_norm.size)
-    x_dense = np.linspace(0.02, 0.98, 1900)
+    x_dense = np.linspace(0.0, 1.0, 1900)
     global_flow = enforce_periodic_loop(summary.lfp_energy, x_dense.size)
-    field = enforce_periodic_loop(summary.lfp, summary.x_norm.size)
+    field = enforce_periodic_loop(np.abs(summary.lfp), x_dense.size)
+    drive = periodic_bump_banks(x_dense, phase * 0.4, count=4, speed=0.08, width=0.16)
+    drift = 0.018 * (0.5 + 0.5 * np.sin(2.0 * math.pi * (x_dense * 1.6 + phase)))
 
     for lane_idx, (cell_type, cfg) in enumerate(lane_cfg.items()):
         density = np.interp(x_dense, x_norm, density_profiles[cell_type])
-        bus = 0.022 * np.sin(2.0 * math.pi * (cfg["wave"] * x_dense + phase * 1.1 + cfg["phase"]))
-        lane = cfg["y"] + (0.036 * (2.0 * density - 1.0)) + bus + (0.012 * np.interp(x_dense, x_norm, field))
-        lane = np.clip(lane, 0.035, 0.96)
+        lane_wave = 0.036 * np.sin(2.0 * math.pi * (cfg["wave"] * x_dense + cfg["phase"] + phase * 1.2))
+        pulse_wave = 0.012 * np.sin(2.0 * math.pi * (x_dense * 3.1 + phase * 0.8 + cfg["phase"]))
+        lane = cfg["y"] + (0.030 * (2.0 * density - 1.0)) + lane_wave + pulse_wave + (0.010 * global_flow)
+        lane = np.clip(lane, 0.03, 0.97)
+        lane = lane + 0.008 * (2.0 * density - 1.0) * (0.45 + 0.55 * density)
+        lane = np.clip(lane, 0.03, 0.97)
 
-        for glow in (0.34, 0.17, 0.09):
+        base_glow = float(np.mean(1.0 + 0.4 * density))
+        for glow_alpha, glow_width in ((0.28, 1.2), (0.12, 2.6)):
             ax.plot(
                 x_dense,
                 lane,
                 color=cfg["color"],
-                lw=7.4 - (2.8 * glow),
-                alpha=glow,
+                lw=glow_width * base_glow,
+                alpha=glow_alpha,
                 zorder=1,
             )
-        ax.plot(x_dense, lane + 0.004 * np.cos(2.0 * math.pi * (x_dense * 4.8 + phase + cfg["phase"])), color="#ffffff", lw=0.22, alpha=0.20, zorder=2)
+        ax.plot(
+            x_dense,
+            lane + 0.004 * np.cos(2.0 * math.pi * (x_dense * 3.8 + phase + cfg["phase"])),
+            color="#ffffff",
+            lw=0.22,
+            alpha=0.20,
+            zorder=2,
+        )
 
         emit = np.linspace(0.0, 1.0, cfg["count"], endpoint=False)
-        head = (emit + (0.13 * (lane_idx + 1) * phase)) % 1.0
-        pulse = np.exp(-((head - 0.25) ** 2) / 0.025) + 0.45 * np.exp(-((head - 0.75) ** 2) / 0.030)
-        x_pts = 0.02 + 0.96 * (head + (0.007 * np.sin(2.0 * math.pi * (head * 1.8 + phase + cfg["phase"]))))
-        x_pts = np.mod(x_pts, 1.0)
-        x_pts = 0.02 + 0.96 * x_pts
-        lane_amp = np.interp(x_pts, x_dense, lane)
-        density_amp = np.interp(x_pts, x_dense, density)
-        core_wave = np.interp(x_pts, x_dense, global_flow)
-        shimmer = 0.5 + 0.5 * np.sin(2.0 * math.pi * (x_pts * 1.4 + phase + lane_idx * 0.7))
-        core = 2.4 + 14.0 * (0.26 + (0.74 * density_amp)) * shimmer * (0.35 + core_wave)
+        head = np.mod(emit + 0.13 * (lane_idx + 1) * phase + 0.08 * phase**2 + cfg["phase"] * 0.12, 1.0)
+        lane_amp = np.interp(head, x_dense, lane)
+        density_amp = np.interp(head, x_dense, density)
+        core_wave = np.interp(head, x_dense, global_flow)
+        shimmer = 0.6 + 0.4 * np.sin(2.0 * math.pi * (head * 1.4 + phase + cfg["phase"]))
+        burst_mask = periodic_gaussian_banks(head, phase + lane_idx * 0.3, count=3, speed=0.20 + 0.03 * lane_idx, width=0.38)
+        core = 1.8 + 9.0 * (0.30 + 0.70 * density_amp) * shimmer * (0.35 + 0.65 * core_wave)
         ax.scatter(
-            x_pts,
-            lane_amp + (0.003 * np.sin(2.0 * math.pi * (x_pts * 2.2 + cfg["phase"] + phase))),
-            s=core,
+            head,
+            lane_amp + (0.003 * np.sin(2.0 * math.pi * (head * 2.2 + cfg["phase"] + phase))),
+            s=np.clip(core * (0.35 + 0.65 * burst_mask), 0.6, 16.0),
             c=cfg["color"],
-            alpha=0.18 + (0.32 * density_amp * (0.25 + 0.75 * pulse)),
+            alpha=0.18 + (0.34 * density_amp),
             linewidths=0,
             zorder=3,
         )
         ax.scatter(
-            x_pts[::2],
-            lane_amp[::2] + 0.002 * np.cos(2.0 * math.pi * (x_pts[::2] * 3.1 + phase)),
+            head[::2],
+            lane_amp[::2] + 0.002 * np.cos(2.0 * math.pi * (head[::2] * 3.1 + phase)),
             s=np.clip(core[::2] * (0.18 + 0.20 * shimmer[::2]), 0.5, None),
             c="#ffffff",
-            alpha=0.08 + (0.15 * summary.active_score),
+            alpha=0.10 + (0.12 * summary.active_score),
             linewidths=0,
             zorder=4,
         )
 
-        for idx in range(0, x_pts.size, 10):
-            head_x = x_pts[idx]
-            head_y = lane_amp[idx]
-            tail_len = 0.012 + (0.026 * density_amp[idx])
-            tail_x = np.linspace(head_x - tail_len, head_x - 0.002, 6)
-            tail_y = head_y + 0.004 * np.sin(2.0 * math.pi * (np.linspace(0.0, 1.0, 6) * (cfg["wave"] + 0.7) + phase + 0.1 * idx / x_pts.size))
+        for idx in range(0, emit.size, 16):
+            head_x = head[idx]
+            head_y = np.interp(head_x, x_dense, lane)
+            tail_len = 0.022 + (0.020 * density_amp[idx])
+            tail_x = np.linspace(head_x - tail_len, head_x - 0.001, 8)
             tail_x = np.mod(tail_x, 1.0)
-            tail_x = 0.02 + 0.96 * tail_x
+            tail_x = np.sort(tail_x)
+            tail_y = head_y + 0.004 * np.sin(
+                2.0
+                * math.pi
+                * (np.linspace(0.0, 1.0, 8) * (cfg["wave"] + 0.7) + phase + 0.1 * idx / max(1, emit.size))
+            ) + (0.003 * np.interp(tail_x, x_dense, field))
             ax.plot(
                 tail_x,
-                np.interp(tail_x, x_dense, lane) + 0.002 * shimmer[idx],
+                np.clip(np.interp(tail_x, x_dense, lane), 0.0, 1.0) + 0.002 * shimmer[idx],
                 color=cfg["color"],
-                lw=0.45 + (1.2 * density_amp[idx]),
-                alpha=0.22 + (0.30 * density_amp[idx]),
+                lw=0.4 + (1.0 * density_amp[idx]),
+                alpha=0.16 + (0.25 * density_amp[idx]),
                 zorder=2,
             )
 
-    pulse_bus = np.linspace(0.0, 1.0, summary.x_norm.size)
-    pulse_wave = 0.16 + 0.10 * np.sin(2.0 * math.pi * (3.0 * pulse_bus + phase * 1.4))
-    pulse_wave = np.interp(pulse_bus, np.linspace(0.0, 1.0, summary.x_norm.size), pulse_wave * summary.active_score)
+    pulse_bus = np.linspace(0.0, 1.0, x_dense.size)
+    pulse_wave = 0.20 + 0.06 * np.sin(2.0 * math.pi * (3.0 * pulse_bus + phase * 1.4))
+    pulse_wave *= summary.active_score
     for burst in range(5):
-        bx = (pulse_bus * 0.94 + 0.03 + 0.14 * np.sin(phase * 2.2 + burst * 0.8)) % 1.0
-        by = 0.19 + 0.17 * (burst / 4.0)
-        crest = 0.012 * np.sin(2.0 * math.pi * (bx * (3.6 + burst * 0.5) + phase + burst * 0.3)) + 0.005 * pulse_wave
+        bx = np.mod(
+            pulse_bus * 0.94 + 0.03 + (0.14 * np.sin(phase * 2.2 + burst * 0.8) * burst / 5.0),
+            1.0,
+        )
+        by = 0.18 + 0.17 * (burst / 4.0)
+        crest = 0.008 * np.sin(
+            2.0 * math.pi * (bx * (3.6 + burst * 0.5) + phase + burst * 0.3)
+        ) + (0.010 * np.interp(bx, pulse_bus, pulse_wave))
         ax.plot(
-            0.02 + 0.96 * bx,
+            bx,
             np.clip(by + crest, 0.04, 0.95),
             color=["#f6ad8b", "#7fc7d8", "#4cc6a2", "#63b6ef", "#55d0bb"][burst % 5],
             lw=1.1,
-            alpha=0.09 + (0.04 * float(np.mean(summary.lfp_energy))),
+            alpha=0.12 + (0.06 * float(np.mean(summary.lfp_energy))),
             zorder=1,
+        )
+        ax.fill_between(
+            bx,
+            np.clip(by + crest - 0.008, 0.02, 1.0),
+            np.clip(by + crest + 0.008 + (0.004 * drift), 0.02, 1.0),
+            color=["#f6ad8b", "#7fc7d8", "#4cc6a2", "#63b6ef", "#55d0bb"][burst % 5],
+            alpha=0.05 + 0.03 * summary.active_score,
+            zorder=1,
+        )
+
+    sweep = 0.07 * np.sin(2.0 * math.pi * (x_dense * (1.6 + 0.3 * summary.active_score) + phase * 1.1))
+    ax.plot(
+        x_dense,
+        0.02 + 0.12 * (0.5 + 0.5 * (global_flow * (0.5 + 0.5 * np.sin(2.0 * math.pi * phase))) + sweep + drive * drift),
+        color=INK,
+        lw=0.95,
+        alpha=0.20,
+        zorder=5,
+    )
+    for burst in (0.16, 0.48, 0.86):
+        center = np.mod(phase * 0.4 + burst, 1.0)
+        ax.plot(
+            [center, center],
+            [0.03, 0.97],
+            color=SEA,
+            lw=0.4,
+            alpha=0.12,
+            zorder=0,
         )
 
     return fig_to_rgb(fig)
@@ -988,13 +1219,13 @@ def render_spectral_veil(
     shimmer = 0.65 + 0.25 * np.cos((2.0 * math.pi * 5.4 * col_grid) - (2.0 * math.pi * phase * 1.7))
     field_alpha = np.clip(field ** 0.85 * shimmer, 0.0, 0.84)
     rgba = np.concatenate([np.clip(rgb, 0.0, 1.0), field_alpha[..., None]], axis=2)
-    ax.imshow(rgba, extent=(0.0, 1.0, 0.08, 0.94), origin="lower", aspect="auto", zorder=1)
+    ax.imshow(rgba, extent=(0.0, 1.0, 0.0, 1.0), origin="lower", aspect="auto", zorder=1)
 
     for row_idx in np.linspace(2, field.shape[0] - 2, 42).astype(int):
         profile = field[row_idx]
-        base_y = 0.08 + (row_idx / max(1, field.shape[0] - 1)) * 0.86
-        y = base_y + 0.016 * np.sin(2.0 * math.pi * (3.2 * col_pos + phase * 1.3 + row_idx * 0.014))
-        y += 0.018 * (profile - 0.5)
+        base_y = (row_idx / max(1, field.shape[0] - 1))
+        y = 0.03 + (0.94 * base_y) + 0.012 * np.sin(2.0 * math.pi * (3.2 * col_pos + phase * 1.3 + row_idx * 0.014))
+        y = np.clip(y + 0.018 * (profile - 0.5), 0.0, 1.0)
         y += 0.007 * np.sin(2.0 * math.pi * (col_pos * 2.6 + phase * 0.9 + (row_idx / 236.0)))
         color = [MINT, SEA, SAND][row_idx % 3]
         ax.plot(
@@ -1009,15 +1240,15 @@ def render_spectral_veil(
     for band in range(7):
         row_a = int((band / 7.0) * (field.shape[0] - 1))
         row_b = int(((band + 1.8) / 7.0) * (field.shape[0] - 1))
-        path = np.linspace(0.02, 0.98, field.shape[1])
-        upper = 0.08 + (row_a / max(1, field.shape[0] - 1)) * 0.86
-        lower = 0.08 + (row_b / max(1, field.shape[0] - 1)) * 0.86
+        path = np.linspace(0.0, 1.0, field.shape[1])
+        upper = row_a / max(1, field.shape[0] - 1)
+        lower = row_b / max(1, field.shape[0] - 1)
         warp = 0.018 * np.sin(2.0 * math.pi * (path * (1.8 + band * 0.38) + phase * (0.8 + 0.1 * band)))
-        fill_amp = 0.011 * np.interp(path, col_pos, field[min(row_a, field.shape[0] - 1)] )
+        fill_amp = 0.011 * np.interp(path, col_pos, field[min(row_a, field.shape[0] - 1)])
         ax.fill_between(
             path,
-            np.clip(lower + warp - fill_amp, 0.0, 1.0),
-            np.clip(lower + warp + fill_amp + 0.002, 0.0, 1.0),
+            0.02 + (0.96 * np.clip(upper + warp - fill_amp, 0.0, 1.0)),
+            0.02 + (0.96 * np.clip(lower + warp + fill_amp + 0.002, 0.0, 1.0)),
             color=[MINT, SEA, SAND][band % 3],
             alpha=0.035 + 0.01 * band,
             zorder=3,
@@ -1026,16 +1257,16 @@ def render_spectral_veil(
     # scanning lattice strokes to create directional movement
     scan = np.linspace(0.0, 1.0, summary.lfp.size)
     scan_amp = 0.06 * normalize_positive(summary.lfp_energy)
-    scan_profile = enforce_periodic_loop(scan_amp, scan.size)
+    scan_profile = enforce_periodic_loop(scan_amp if scan_amp.size else np.array([0.0]), scan.size)
     for beam in range(8):
         offset = (phase + beam / 8.0) % 1.0
-        pulse = (scan + 0.17 * np.sin(2.0 * math.pi * phase + beam * 0.4) + offset) % 1.0
-        x = 0.02 + (0.96 * pulse)
-        y = 0.35 + 0.30 * np.sin(2.0 * math.pi * (scan * (beam + 1) * 0.6 + phase + 0.12 * beam))
+        pulse = (scan + (0.17 * np.sin(2.0 * math.pi * phase + beam * 0.4) + offset)) % 1.0
+        x = np.mod(pulse, 1.0)
+        y = 0.03 + 0.94 * (0.35 + 0.30 * np.sin(2.0 * math.pi * (scan * (beam + 1) * 0.6 + phase + 0.12 * beam)))
         y += 0.04 * (scan_profile * np.sin(2.0 * math.pi * (scan * 2.2 + beam * 0.5 + phase)))
         ax.plot(
             x,
-            np.clip(y, 0.06, 0.94),
+            np.clip(y, 0.02, 0.98),
             color=SEA,
             alpha=0.05 + 0.04 * summary.active_score,
             lw=0.95,
@@ -1044,6 +1275,16 @@ def render_spectral_veil(
 
     lfp_line = 0.08 + 0.030 * gaussian_smooth(summary.lfp, sigma_bins=2.0)
     ax.plot(0.02 + (0.96 * np.linspace(0.0, 1.0, summary.lfp.size)), lfp_line, color=INK, lw=0.95, alpha=0.24, zorder=10)
+    for pulse in range(3):
+        cx = np.mod(phase * 0.28 + 0.31 * pulse + np.linspace(0.0, 1.0, summary.lfp.size), 1.0)
+        ax.plot(
+            cx,
+            0.02 + 0.96 * (0.16 + 0.30 * np.sin(2.0 * math.pi * (cx * 1.2 + pulse * 0.4 + phase))),
+            color=[MINT, SEA, SAND][pulse % 3],
+            lw=0.75,
+            alpha=0.10 + (0.04 * pulse),
+            zorder=7,
+        )
 
     return fig_to_rgb(fig)
 
@@ -1072,36 +1313,37 @@ def render_population_tides(
     ax.imshow(bg, extent=(0, 1, 0, 1), origin="lower", aspect="auto", zorder=0)
 
     x = np.linspace(0.0, 1.0, 2400)
-    tide_drive = np.interp(x, np.linspace(0.0, 1.0, summary.lfp.size), enforce_periodic_loop(summary.lfp_energy, summary.lfp.size))
-    tide_base = 0.05 * np.sin(2.0 * math.pi * (0.9 * x + phase * 0.8))
-    wave = 0.045 * np.sin(2.0 * math.pi * (3.6 * x + phase) + 2.0 * np.cos(2.0 * math.pi * x))
+    energy = enforce_periodic_loop(summary.lfp_energy if summary.lfp_energy.size else np.array([0.0]), x.size)
+    tide_drive = np.array(energy)
+    tide_base = 0.045 * np.sin(2.0 * math.pi * (0.95 * x + phase * 0.8))
+    wave = 0.028 + 0.032 * np.sin(2.0 * math.pi * (3.8 * x + phase))
 
     lanes = {
-        "MC": {"base": 0.72, "color": SAND, "amp": 0.10, "phase": 0.1},
-        "TC": {"base": 0.48, "color": SEA, "amp": 0.11, "phase": 0.8},
-        "GC": {"base": 0.24, "color": MINT, "amp": 0.09, "phase": 1.6},
+        "MC": {"base": 0.72, "color": SAND, "amp": 0.10, "phase": 0.1, "harmonic": 2.3},
+        "TC": {"base": 0.48, "color": SEA, "amp": 0.11, "phase": 0.8, "harmonic": 2.9},
+        "GC": {"base": 0.24, "color": MINT, "amp": 0.09, "phase": 1.6, "harmonic": 2.1},
     }
 
     for lane_idx, (cell_type, cfg) in enumerate(lanes.items()):
         density = enforce_periodic_loop(summary.densities[cell_type], x.size)
         ridge = cfg["amp"] * (2.0 * density - 1.0)
-        pulse = 0.017 * np.sin(2.0 * math.pi * (x * (2.3 + 0.6 * lane_idx) + cfg["phase"] + phase))
-        y = cfg["base"] + ridge + tide_base + wave + pulse + (0.025 * tide_drive)
-        y = np.clip(y, 0.07, 0.93)
-        band = 0.010 + 0.003 * np.sin(2.0 * math.pi * (x * 0.9 + phase * 0.5 + cfg["phase"]))
-        shade = 0.05 + (0.40 * np.maximum(0.0, density))
-        ax.fill_between(x, y - band, y + band, color=cfg["color"], alpha=0.08 + (0.04 * shade), zorder=2)
-        ax.plot(x, y, color=cfg["color"], lw=1.5 + 0.2 * lane_idx, alpha=0.82, zorder=3)
+        pulse = 0.019 * np.sin(2.0 * math.pi * (x * cfg["harmonic"] + cfg["phase"] + phase))
+        breath = 0.026 * np.sin(2.0 * math.pi * (x * (1.6 + lane_idx * 0.2) - phase * 0.6))
+        y = cfg["base"] + ridge + tide_base + wave + pulse + breath + (0.022 * tide_drive) + (0.010 * np.cos(2.0 * math.pi * (x * 0.8 + phase + cfg["phase"])))
+        y = np.clip(y, 0.03, 0.97)
+        width = 0.011 + 0.003 * (np.sin(2.0 * math.pi * (x * 0.9 + cfg["phase"])) ** 2)
+        shade = 0.08 + (0.33 * np.maximum(0.0, density))
+        ax.fill_between(x, y - width, y + width, color=cfg["color"], alpha=0.06 + (0.05 * shade), zorder=2)
+        ax.plot(x, y, color=cfg["color"], lw=1.3 + 0.2 * lane_idx, alpha=0.82, zorder=3)
 
-        emit = np.linspace(0.0, 1.0, 160 + (lane_idx * 35), endpoint=False)
-        emit = (emit + lane_idx * 0.13 + phase * 0.08) % 1.0
-        emit_x = 0.02 + 0.96 * emit
-        emit_y = np.interp(emit_x, x, y) + 0.004 * np.sin(2.0 * math.pi * (emit_x * 2.8 + phase))
+        emit = np.mod(np.linspace(0.0, 1.0, 160 + (lane_idx * 35), endpoint=False) + lane_idx * 0.13 + phase * 0.22, 1.0)
+        emit = np.sort(emit)
+        emit_y = np.interp(emit, x, y) + 0.004 * np.sin(2.0 * math.pi * (emit * 2.8 + phase + cfg["phase"]))
         glow = 0.6 + 0.4 * np.sin(2.0 * math.pi * (emit + cfg["phase"] + phase))
         ax.scatter(
-            emit_x,
-            np.clip(emit_y, 0.02, 0.98),
-            s=1.8 + (8.0 * (0.35 + 0.65 * glow)),
+            emit,
+            np.clip(emit_y, 0.03, 0.97),
+            s=1.6 + (7.5 * (0.35 + 0.65 * glow)),
             c=cfg["color"],
             alpha=0.22 + (0.35 * summary.active_score),
             linewidths=0,
@@ -1115,7 +1357,7 @@ def render_population_tides(
         x_bus.size,
     )
     ax.plot(
-        0.02 + 0.96 * x_bus,
+        x_bus,
         0.08 + crest_wave * crest + 0.02 * np.sin(2.0 * math.pi * (x_bus * 2.0 + phase)),
         color=INK,
         lw=1.0,
@@ -1123,8 +1365,25 @@ def render_population_tides(
         zorder=6,
     )
 
-    horizon = 0.02 + 0.18 * np.sin(2.0 * math.pi * (x + phase * 0.7))
-    ax.plot(x, np.clip(0.84 + horizon * 0.07, 0.0, 0.95), color=MINT, lw=0.8, alpha=0.22, zorder=5)
+    horizon = 0.028 + 0.024 * np.sin(2.0 * math.pi * (x + phase * 0.7))
+    ax.plot(
+        x,
+        np.clip(0.84 + horizon * 0.07, 0.0, 0.95),
+        color=MINT,
+        lw=0.8,
+        alpha=0.22,
+        zorder=5,
+    )
+    for swell in range(4):
+        band = np.clip(0.35 + 0.09 * np.sin(2.0 * math.pi * (x * 2.4 + phase * (0.7 + 0.13 * swell) + 0.17 * swell)), 0.0, 1.0)
+        ax.fill_between(
+            x,
+            np.clip(0.07 + 0.10 * band, 0.0, 0.97),
+            np.clip(0.10 + 0.12 * band, 0.0, 0.97),
+            color=[MINT, SEA, SAND][swell % 3],
+            alpha=0.018 + (0.007 * swell),
+            zorder=1,
+        )
 
     return fig_to_rgb(fig)
 
