@@ -506,6 +506,44 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "--skip-tails" in remote_poll_cached
     print("Remote helper cache command shrink: OK")
 
+    # --- Bulky run overrides should stay out of process argv ---
+    verbose_cfg = deepcopy(remote_cfg)
+    verbose_cfg["input_odors"] = {
+        step: {"name": "Apple", "rel_conc": 0.05}
+        for step in range(0, 2000, 200)
+    }
+    verbose_overrides, verbose_input_spec = hlp._benchmark_param_overrides_payload(verbose_cfg)
+    verbose_overrides_path = PurePosixPath(
+        "/remote/OlfactoryBulb/results/notebook_runs/.obgpu-wrapper/test_label/overrides.json"
+    )
+    compact_command = hlp.build_run_command(
+        verbose_cfg,
+        "test_label",
+        repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        results_base=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
+        mpi_exec="srun --mpi=pmix_v4 --cpu-bind=none",
+        overrides_file=verbose_overrides_path,
+        param_overrides=verbose_overrides,
+        input_spec_file=verbose_input_spec,
+    )
+    compact_command_text = " ".join(compact_command)
+    assert "--overrides-file" in compact_command
+    assert "--overrides-json" not in compact_command
+    assert "Apple" in json.dumps(verbose_overrides)
+    assert "Apple" not in compact_command_text
+    compact_submit = hlp._build_remote_submit_command(
+        verbose_cfg,
+        label="test_label",
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_results_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
+        benchmark_command=compact_command,
+        remote_mpi_exec="srun --mpi=pmix_v4 --cpu-bind=none",
+        remote_git_ref="abcdef1234567890",
+        remote_helper_dir=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test"),
+    )
+    assert "Apple" not in compact_submit
+    print("Benchmark overrides sidecar keeps argv compact: OK")
+
     # --- Successful fast remote sync should only request essential result artifacts ---
     fast_files_default = hlp._remote_fast_sync_files()
     assert fast_files_default == (

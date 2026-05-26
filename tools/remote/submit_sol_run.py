@@ -475,7 +475,7 @@ def write_batch_script(
         "  mkdir -p \"$result_dir\" || true",
         "  shopt -s nullglob",
         "  local artifact",
-        "  for artifact in \"$wrapper_dir\"/bootstrap.log \"$wrapper_dir\"/command.txt \"$wrapper_dir\"/stdout.txt \"$wrapper_dir\"/stderr.txt \"$wrapper_dir\"/slurm-*.out; do",
+        "  for artifact in \"$wrapper_dir\"/bootstrap.log \"$wrapper_dir\"/command.txt \"$wrapper_dir\"/stdout.txt \"$wrapper_dir\"/stderr.txt \"$wrapper_dir\"/overrides.json \"$wrapper_dir\"/slurm-*.out; do",
         "    [[ -e \"$artifact\" ]] || continue",
         "    cp -f \"$artifact\" \"$result_dir\"/ 2>/dev/null || true",
         "  done",

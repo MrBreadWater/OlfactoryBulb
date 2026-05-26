@@ -46,6 +46,8 @@ def normalize_items(items: Any) -> list[dict[str, Any]]:
                 "value": item.get("value"),
                 "result_dir": str(item["result_dir"]),
                 "command": [str(part) for part in command],
+                "overrides_file": None if item.get("overrides_file") in (None, "") else str(item["overrides_file"]),
+                "overrides": item.get("overrides"),
             }
         )
     return normalized
@@ -331,6 +333,10 @@ def main() -> None:
         write_json(sweep_root / "sim_progress.json", payload)
 
     def prepare_command(item: dict[str, Any]) -> list[str]:
+        overrides_file = item.get("overrides_file")
+        overrides = item.get("overrides")
+        if overrides_file not in (None, "") and overrides is not None:
+            write_json(Path(str(overrides_file)).expanduser(), overrides)
         command = relocate_repo_paths(
             list(item["command"]),
             shared_repo_root=shared_repo_root,

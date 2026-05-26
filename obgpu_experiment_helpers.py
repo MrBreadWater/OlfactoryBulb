@@ -1316,6 +1316,26 @@ def print_available_controls() -> None:
     """Pretty-print the notebook control catalog."""
     print(json.dumps(available_controls(), indent=2, sort_keys=True))
 
+
+def _benchmark_param_overrides_payload(config: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
+    """Return benchmark overrides plus any sidecar input-spec path."""
+    param_overrides = build_param_overrides(config)
+    input_spec_file = param_overrides.pop("_input_spec_file", None)
+    return param_overrides, input_spec_file
+
+
+def _write_benchmark_overrides_file(path: str | Path, param_overrides: dict[str, Any]) -> Path:
+    """Write benchmark overrides to a sidecar file so argv stays compact."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_json_ready(param_overrides), indent=2, sort_keys=True))
+    return path
+
+
+def _remote_benchmark_overrides_path(config: dict[str, Any], label: str) -> PurePosixPath:
+    """Return the remote sidecar path used for one run's benchmark overrides."""
+    return _remote_results_root(config) / ".obgpu-wrapper" / str(label) / "overrides.json"
+
 def add_new_connections(ob, new_connections_config):
     """Create new synaptic connections described by notebook config entries."""
     for config in new_connections_config:
@@ -1335,6 +1355,9 @@ def build_run_command(
     results_base: str | Path | None = None,
     mpi_exec: str | None = None,
     include_mpi_launcher: bool = True,
+    overrides_file: str | Path | None = None,
+    param_overrides: dict[str, Any] | None = None,
+    input_spec_file: str | Path | None = None,
 ) -> list[str]:
     """Build the benchmark subprocess command for a notebook run."""
     repo_root = repo_root or REPO_ROOT
@@ -1352,8 +1375,10 @@ def build_run_command(
             ]
         )
 
-    param_overrides = build_param_overrides(config)
-    input_spec_file = param_overrides.pop("_input_spec_file", None)
+    if param_overrides is None:
+        param_overrides, discovered_input_spec_file = _benchmark_param_overrides_payload(config)
+        if input_spec_file is None:
+            input_spec_file = discovered_input_spec_file
     command.extend(
         [
             "nrniv",
@@ -1368,10 +1393,12 @@ def build_run_command(
             label,
             "--results-base",
             str(results_base),
-            "--overrides-json",
-            json.dumps(param_overrides, sort_keys=True),
         ]
     )
+    if overrides_file is None:
+        command.extend(["--overrides-json", json.dumps(param_overrides, sort_keys=True)])
+    else:
+        command.extend(["--overrides-file", str(overrides_file)])
     if input_spec_file is not None:
         command.extend(["--input-spec-file", str(input_spec_file)])
 
@@ -2935,7 +2962,28 @@ def _upload_remote_bytes_file(
 ) -> None:
     """Upload one file to the remote host over the active notebook SSH transport."""
     if _remote_transport(config) != "paramiko":
-        raise RuntimeError("Remote file upload currently requires ssh_transport='paramiko'.")
+        remote_shell = (
+            "set -euo pipefail && "
+            f"mkdir -p {shlex.quote(remote_path.parent.as_posix())} && "
+            f"cat > {shlex.quote(remote_path.as_posix())}"
+        )
+        command = _ssh_prefix(config) + ["bash", "-lc", remote_shell]
+        completed = subprocess.run(
+            command,
+            cwd=REPO_ROOT,
+            input=data,
+            capture_output=True,
+            check=False,
+            env=_ssh_command_env(),
+        )
+        if completed.returncode != 0:
+            raise RuntimeError(
+                "Could not upload a remote file over SSH.\n"
+                f"Remote path: {remote_path.as_posix()}\n"
+                f"Stdout:\n{completed.stdout.decode('utf-8', errors='replace')}\n\n"
+                f"Stderr:\n{completed.stderr.decode('utf-8', errors='replace')}"
+            )
+        return
     mkdir_completed = _run_paramiko_shell(
         config,
         "mkdir -p {}".format(shlex.quote(remote_path.parent.as_posix())),
@@ -4726,6 +4774,9 @@ def _remote_submission_payload(
     *,
     label: str,
     remote_helper_dir: PurePosixPath | None = None,
+    overrides_file: str | PurePosixPath | None = None,
+    param_overrides: dict[str, Any] | None = None,
+    input_spec_file: str | Path | None = None,
 ) -> tuple[PurePosixPath, PurePosixPath, list[str], dict[str, Any], str]:
     """Prepare the remote paths and benchmark command for a Sol run."""
     remote_repo_root = _remote_repo_root(config)
@@ -4743,6 +4794,9 @@ def _remote_submission_payload(
         results_base=remote_results_root,
         mpi_exec=str(remote_mpi_exec),
         include_mpi_launcher=include_mpi_launcher,
+        overrides_file=overrides_file,
+        param_overrides=param_overrides,
+        input_spec_file=input_spec_file,
     )
     submit_command = _build_remote_submit_command(
         config,
@@ -5170,6 +5224,8 @@ def _run_remote_simulation(
         effective_config["remote_defer_soma_vs_sync"] = False
     remote_repo_root = _remote_repo_root(effective_config)
     remote_git_ref = _resolve_remote_git_ref(effective_config)
+    param_overrides, input_spec_file = _benchmark_param_overrides_payload(effective_config)
+    remote_overrides_path = _remote_benchmark_overrides_path(effective_config, label)
     notebook_timings: dict[str, float] = {}
     remote_helper_dir: PurePosixPath | None = None
     (
@@ -5178,7 +5234,13 @@ def _run_remote_simulation(
         remote_benchmark_command,
         remote_metadata,
         submit_shell,
-    ) = _remote_submission_payload(effective_config, label=label)
+    ) = _remote_submission_payload(
+        effective_config,
+        label=label,
+        overrides_file=remote_overrides_path,
+        param_overrides=param_overrides,
+        input_spec_file=input_spec_file,
+    )
     started = time.perf_counter()
     _ensure_remote_git_ref_available(
         effective_config,
@@ -5233,6 +5295,9 @@ def _run_remote_simulation(
             effective_config,
             label=label,
             remote_helper_dir=remote_helper_dir,
+            overrides_file=remote_overrides_path,
+            param_overrides=param_overrides,
+            input_spec_file=input_spec_file,
         )
         remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
         remote_metadata["remote_helper_cache_hit"] = bool(helper_cache_meta.get("cache_hit", False))
@@ -5265,6 +5330,9 @@ def _run_remote_simulation(
             effective_config,
             label=label,
             remote_helper_dir=remote_helper_dir,
+            overrides_file=remote_overrides_path,
+            param_overrides=param_overrides,
+            input_spec_file=input_spec_file,
         )
         if remote_helper_dir is not None:
             remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
@@ -5276,6 +5344,16 @@ def _run_remote_simulation(
         remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
         remote_metadata["allocation_location"] = allocation_info.get("location", "")
         remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
+
+    _progress_write("[Sol remote] Uploading benchmark overrides file...")
+    started = time.perf_counter()
+    _upload_remote_text_file(
+        effective_config,
+        remote_path=remote_overrides_path,
+        text=json.dumps(_json_ready(param_overrides), indent=2, sort_keys=True),
+    )
+    _record_timing(notebook_timings, "overrides_upload_s", started)
+    remote_metadata["benchmark_overrides_file"] = remote_overrides_path.as_posix()
 
     _progress_write("[Sol remote] Submitting Slurm job...")
     started = time.perf_counter()
@@ -5945,8 +6023,17 @@ def run_simulation(
     env["OB_RESULTS_BASE"] = str(config.get("results_base", DEFAULT_RESULTS_BASE))
     env["OB_CORENRN_CELL_PERMUTE"] = str(int(config.get("cell_permute", 2)))
 
-    command = build_run_command(config, label)
     result_dir.mkdir(parents=True, exist_ok=True)
+    param_overrides, input_spec_file = _benchmark_param_overrides_payload(config)
+    overrides_path = result_dir.parent / ".obgpu-wrapper" / label / "overrides.json"
+    _write_benchmark_overrides_file(overrides_path, param_overrides)
+    command = build_run_command(
+        config,
+        label,
+        overrides_file=overrides_path,
+        param_overrides=param_overrides,
+        input_spec_file=input_spec_file,
+    )
     completed = subprocess.run(
         command,
         cwd=result_dir,
@@ -6291,6 +6378,8 @@ def _build_remote_sweep_driver_command(
     manifest_items: list[dict[str, Any]] = []
     for item in sweep_plan["items"]:
         remote_result_dir = remote_runs_root / item["label"]
+        item_param_overrides, item_input_spec_file = _benchmark_param_overrides_payload(item["config"])
+        item_overrides_file = remote_sweep_root / "overrides" / f"{item['label']}.json"
         benchmark_command = build_run_command(
             item["config"],
             item["label"],
@@ -6298,6 +6387,9 @@ def _build_remote_sweep_driver_command(
             results_base=remote_runs_root,
             mpi_exec=remote_mpi_exec,
             include_mpi_launcher=True,
+            overrides_file=item_overrides_file,
+            param_overrides=item_param_overrides,
+            input_spec_file=item_input_spec_file,
         )
         manifest_items.append(
             {
@@ -6306,6 +6398,8 @@ def _build_remote_sweep_driver_command(
                 "value": _json_ready(item["value"]),
                 "result_dir": remote_result_dir.as_posix(),
                 "command": benchmark_command,
+                "overrides_file": item_overrides_file.as_posix(),
+                "overrides": _json_ready(item_param_overrides),
             }
         )
 
