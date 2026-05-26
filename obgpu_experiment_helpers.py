@@ -7075,11 +7075,12 @@ class LazyResult(dict):
     def _ensure_loaded(self, key: str) -> None:
         if key not in self._lazy_loaders:
             return
-        loader = self._lazy_loaders.pop(key)
+        loader = self._lazy_loaders[key]
         _progress_write(f"[OBGPU load] Lazy-loading {key}...")
         started = time.perf_counter()
         value = loader()
         dict.__setitem__(self, key, value)
+        self._lazy_loaders.pop(key, None)
         if key == "soma_vs":
             soma_path = dict.get(self, "soma_vs_file")
             artifact_sizes = dict.get(self, "artifact_sizes")

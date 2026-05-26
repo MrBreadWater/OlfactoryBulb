@@ -1155,6 +1155,26 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
         hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
 
+    # --- LazyResult should keep loaders available after transient failures ---
+    lazy_attempts = []
+
+    def _flaky_soma_loader():
+        lazy_attempts.append("attempt")
+        if len(lazy_attempts) == 1:
+            raise RuntimeError("transient sync failure")
+        return [("MC0", [0.0], [-65.0])]
+
+    lazy_result = hlp.LazyResult({"soma_vs": []}, lazy_loaders={"soma_vs": _flaky_soma_loader})
+    try:
+        _ = lazy_result["soma_vs"]
+        raise AssertionError("Expected first lazy load attempt to fail")
+    except RuntimeError:
+        pass
+    assert "soma_vs" in lazy_result._lazy_loaders
+    assert lazy_result["soma_vs"][0][0] == "MC0"
+    assert "soma_vs" not in lazy_result._lazy_loaders
+    print("LazyResult preserves failed loader for retry: OK")
+
     # --- Result overview should not trigger deferred soma trace downloads ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
     try:
