@@ -10984,7 +10984,6 @@ def save_sweep_animation_stream(
     output_dir.mkdir(parents=True, exist_ok=True)
     gif_path = output_dir / f"{_safe_name(name)}.gif"
 
-    writer = animation.PillowWriter(fps=max(1, int(fps)))
     display_fig, ax = plt.subplots(figsize=figsize)
     ax.axis("off")
     display_fig.tight_layout(pad=0)
@@ -10992,22 +10991,50 @@ def save_sweep_animation_stream(
     image_obj = None
     frame_count = 0
 
+    def render_display_frame(frame_rgb: np.ndarray, title: str) -> np.ndarray:
+        nonlocal image_obj
+        if image_obj is None:
+            image_obj = ax.imshow(frame_rgb)
+        else:
+            image_obj.set_data(frame_rgb)
+        title_obj.set_text(title)
+        return _fig_to_rgb_array(display_fig)
+
     try:
-        with writer.saving(display_fig, str(gif_path), dpi=display_fig.dpi):
-            for frame_rgb, title in _iter_sweep_animation_frames(
-                sweep,
-                plot_fn,
-                figsize=figsize,
-                title_fn=title_fn,
-                close_frames=close_frames,
-            ):
-                if image_obj is None:
-                    image_obj = ax.imshow(frame_rgb)
-                else:
-                    image_obj.set_data(frame_rgb)
-                title_obj.set_text(title)
-                writer.grab_frame()
-                frame_count += 1
+        try:
+            import imageio.v2 as imageio
+        except Exception:
+            imageio = None
+
+        if imageio is not None:
+            with imageio.get_writer(
+                str(gif_path),
+                mode="I",
+                duration=max(float(interval) / 1000.0, 0.001),
+                loop=0,
+            ) as writer:
+                for frame_rgb, title in _iter_sweep_animation_frames(
+                    sweep,
+                    plot_fn,
+                    figsize=figsize,
+                    title_fn=title_fn,
+                    close_frames=close_frames,
+                ):
+                    writer.append_data(render_display_frame(frame_rgb, title))
+                    frame_count += 1
+        else:
+            writer = animation.PillowWriter(fps=max(1, int(fps)))
+            with writer.saving(display_fig, str(gif_path), dpi=display_fig.dpi):
+                for frame_rgb, title in _iter_sweep_animation_frames(
+                    sweep,
+                    plot_fn,
+                    figsize=figsize,
+                    title_fn=title_fn,
+                    close_frames=close_frames,
+                ):
+                    render_display_frame(frame_rgb, title)
+                    writer.grab_frame()
+                    frame_count += 1
     finally:
         plt.close(display_fig)
 

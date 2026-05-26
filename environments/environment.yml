@@ -29,6 +29,7 @@ dependencies:
   - scipy=1.4.1
 
   - matplotlib=3.5.*
+  - imageio
   - cython>=0.29,<3.1
   - jupyterlab=4.3.*
 
