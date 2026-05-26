@@ -10493,6 +10493,92 @@ def _fig_to_rgb_array(fig: Any) -> np.ndarray:
     return np.ascontiguousarray(rgba[..., :3])
 
 
+def _render_sweep_frame(
+    sweep: dict[str, Any],
+    item: dict[str, Any],
+    frame_index: int,
+    total_frames: int,
+    plot_fn: Any,
+    *,
+    figsize: tuple[float, float],
+    title_fn: Any = None,
+    close_frames: bool = True,
+) -> tuple[np.ndarray, str]:
+    """Render one sweep item to a frame array and title."""
+    result = item.get("result") if isinstance(item, dict) else None
+    value = item.get("value") if isinstance(item, dict) else None
+
+    if result is None:
+        fig = _make_sweep_placeholder_figure(
+            sweep,
+            item,
+            frame_index,
+            total_frames,
+            reason=_describe_unavailable_sweep_item(item),
+            figsize=figsize,
+        )
+    else:
+        before_figs = set(plt.get_fignums())
+        try:
+            returned = plot_fn(result)
+            fig = returned if returned is not None else plt.gcf()
+        except Exception as exc:
+            if close_frames:
+                for fignum in set(plt.get_fignums()) - before_figs:
+                    plt.close(fignum)
+            fig = _make_sweep_placeholder_figure(
+                sweep,
+                item,
+                frame_index,
+                total_frames,
+                reason=f"Plot failed: {type(exc).__name__}: {exc}",
+                figsize=figsize,
+            )
+
+    frame_rgb = _fig_to_rgb_array(fig)
+
+    if title_fn is not None:
+        try:
+            title = title_fn(
+                value,
+                frame_index=frame_index,
+                total_frames=total_frames,
+                sweep=sweep,
+            )
+        except TypeError:
+            title = title_fn(value)
+    else:
+        title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
+
+    if close_frames:
+        plt.close(fig)
+
+    return frame_rgb, str(title)
+
+
+def _iter_sweep_animation_frames(
+    sweep: dict[str, Any],
+    plot_fn: Any,
+    *,
+    figsize: tuple[float, float],
+    title_fn: Any = None,
+    close_frames: bool = True,
+) -> Any:
+    """Yield rendered sweep animation frames one at a time."""
+    total_frames = len(sweep["items"])
+    for frame_index, item in enumerate(sweep["items"]):
+        yield _render_sweep_frame(
+            sweep,
+            item,
+            frame_index,
+            total_frames,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+        )
+
+
 def animate_sweep(
     sweep: dict[str, Any],
     plot_fn: Any,
@@ -10539,57 +10625,15 @@ def animate_sweep(
     """
     frames_rgb: list[np.ndarray] = []
     frame_titles: list[str] = []
-    total_frames = len(sweep["items"])
-
-    for frame_index, item in enumerate(sweep["items"]):
-        result = item.get("result") if isinstance(item, dict) else None
-        value = item.get("value") if isinstance(item, dict) else None
-
-        if result is None:
-            fig = _make_sweep_placeholder_figure(
-                sweep,
-                item,
-                frame_index,
-                total_frames,
-                reason=_describe_unavailable_sweep_item(item),
-                figsize=figsize,
-            )
-        else:
-            before_figs = set(plt.get_fignums())
-            try:
-                returned = plot_fn(result)
-                fig = returned if returned is not None else plt.gcf()
-            except Exception as exc:
-                if close_frames:
-                    for fignum in set(plt.get_fignums()) - before_figs:
-                        plt.close(fignum)
-                fig = _make_sweep_placeholder_figure(
-                    sweep,
-                    item,
-                    frame_index,
-                    total_frames,
-                    reason=f"Plot failed: {type(exc).__name__}: {exc}",
-                    figsize=figsize,
-                )
-
-        frames_rgb.append(_fig_to_rgb_array(fig))
-
-        if title_fn is not None:
-            try:
-                title = title_fn(
-                    value,
-                    frame_index=frame_index,
-                    total_frames=total_frames,
-                    sweep=sweep,
-                )
-            except TypeError:
-                title = title_fn(value)
-        else:
-            title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
-        frame_titles.append(str(title))
-
-        if close_frames:
-            plt.close(fig)
+    for frame_rgb, title in _iter_sweep_animation_frames(
+        sweep,
+        plot_fn,
+        figsize=figsize,
+        title_fn=title_fn,
+        close_frames=close_frames,
+    ):
+        frames_rgb.append(frame_rgb)
+        frame_titles.append(title)
 
     if not frames_rgb:
         raise ValueError("sweep has no items to animate")
@@ -10919,11 +10963,65 @@ def save_animation(
     return gif_path
 
 
+def save_sweep_animation_stream(
+    sweep: dict[str, Any],
+    plot_fn: Any,
+    name: str,
+    *,
+    output_dir: str | Path | None = None,
+    figsize: tuple[float, float] = (12.0, 5.0),
+    interval: int = 1000,
+    title_fn: Any = None,
+    close_frames: bool = True,
+    fps: int = 2,
+) -> Path:
+    """Render and save a sweep GIF without retaining all frames in memory."""
+    if not sweep.get("items"):
+        raise ValueError("sweep has no items to animate")
+    if output_dir is None and "sweep_dir" in sweep:
+        output_dir = Path(sweep["sweep_dir"]) / "animations"
+    output_dir = Path(output_dir or (DEFAULT_RESULTS_BASE / "animations" / make_timestamp()))
+    output_dir.mkdir(parents=True, exist_ok=True)
+    gif_path = output_dir / f"{_safe_name(name)}.gif"
+
+    writer = animation.PillowWriter(fps=max(1, int(fps)))
+    display_fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+    display_fig.tight_layout(pad=0)
+    title_obj = ax.set_title("")
+    image_obj = None
+    frame_count = 0
+
+    try:
+        with writer.saving(display_fig, str(gif_path), dpi=display_fig.dpi):
+            for frame_rgb, title in _iter_sweep_animation_frames(
+                sweep,
+                plot_fn,
+                figsize=figsize,
+                title_fn=title_fn,
+                close_frames=close_frames,
+            ):
+                if image_obj is None:
+                    image_obj = ax.imshow(frame_rgb)
+                else:
+                    image_obj.set_data(frame_rgb)
+                title_obj.set_text(title)
+                writer.grab_frame()
+                frame_count += 1
+    finally:
+        plt.close(display_fig)
+
+    if frame_count == 0:
+        raise ValueError("sweep has no items to animate")
+    return gif_path
+
+
 def animate_sweep_plots(
     sweep: dict[str, Any],
     plots: list[SweepPlotSpec | str | Any | dict[str, Any]],
     *,
     close_frames: bool = True,
+    stream: bool = True,
 ) -> dict[str, Path]:
     """Render and save multiple sweep animations from one completed sweep.
 
@@ -10938,20 +11036,32 @@ def animate_sweep_plots(
     for raw_spec in plots:
         spec = _normalize_sweep_plot_spec(raw_spec)
         plot_fn, filename = _build_sweep_plot_callable(spec)
-        anim = animate_sweep(
-            sweep,
-            plot_fn,
-            figsize=spec.figsize,
-            interval=spec.interval,
-            title_fn=spec.title_fn,
-            close_frames=close_frames,
-        )
-        artifacts[filename] = save_animation(
-            anim,
-            filename,
-            sweep=sweep,
-            fps=spec.fps,
-        )
+        if stream:
+            artifacts[filename] = save_sweep_animation_stream(
+                sweep,
+                plot_fn,
+                filename,
+                figsize=spec.figsize,
+                interval=spec.interval,
+                title_fn=spec.title_fn,
+                close_frames=close_frames,
+                fps=spec.fps,
+            )
+        else:
+            anim = animate_sweep(
+                sweep,
+                plot_fn,
+                figsize=spec.figsize,
+                interval=spec.interval,
+                title_fn=spec.title_fn,
+                close_frames=close_frames,
+            )
+            artifacts[filename] = save_animation(
+                anim,
+                filename,
+                sweep=sweep,
+                fps=spec.fps,
+            )
     return artifacts
 
 
