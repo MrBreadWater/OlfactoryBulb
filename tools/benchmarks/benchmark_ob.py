@@ -20,6 +20,8 @@ if str(REPO_ROOT) not in sys.path:
 
 from olfactorybulb.output_paths import configure_output_env
 from olfactorybulb.result_artifacts import (
+    SOMA_SPIKES_FILENAME_NPZ,
+    VOLTAGE_SUMMARY_FILENAME_NPZ,
     find_soma_trace_artifact,
     load_saved_result_artifact,
     soma_trace_artifact_candidates,
@@ -164,6 +166,14 @@ def summarize_pickle(path: str | Path) -> dict[str, Any]:
         return {
             "type": "list",
             "items": len(obj),
+            "sha256": sha256_file(path),
+            "canonical_sha256": sha256_bytes(pickle.dumps(canonicalize(obj), protocol=4)),
+        }
+
+    if isinstance(obj, dict):
+        return {
+            "type": "dict",
+            "keys": sorted(str(key) for key in obj.keys()),
             "sha256": sha256_file(path),
             "canonical_sha256": sha256_bytes(pickle.dumps(canonicalize(obj), protocol=4)),
         }
@@ -468,7 +478,13 @@ def main() -> None:
         soma_path = find_soma_trace_artifact(out_dir)
         if soma_path is not None and soma_path.exists():
             file_summaries[soma_path.name] = summarize_pickle(soma_path)
-        for filename in ["input_times.pkl", "lfp.pkl"]:
+        for filename in [
+            "input_times.pkl",
+            "gc_output_events.pkl",
+            "lfp.pkl",
+            SOMA_SPIKES_FILENAME_NPZ,
+            VOLTAGE_SUMMARY_FILENAME_NPZ,
+        ]:
             path = out_dir / filename
             if path.exists():
                 file_summaries[filename] = summarize_pickle(path)
@@ -492,6 +508,13 @@ def main() -> None:
                 "actual_dt": ob.h.dt,
                 "recording_period": ob.params.recording_period,
                 "record_from_somas": list(ob.params.record_from_somas),
+                "soma_trace_format": getattr(ob.params, "soma_trace_format", None),
+                "soma_trace_dtype": getattr(ob.params, "soma_trace_dtype", None),
+                "soma_spike_detection": {
+                    "threshold_mv": getattr(ob.params, "soma_spike_threshold", None),
+                    "min_prominence_mv": getattr(ob.params, "soma_spike_min_prominence_mv", None),
+                    "refractory_ms": getattr(ob.params, "soma_spike_refractory_ms", None),
+                },
                 "enable_reciprocal_synapses": getattr(ob.params, "enable_reciprocal_synapses", True),
                 "force_gid_synapses": bool(getattr(ob.bn_server, "force_gid_synapses", False)),
                 "legacy_parallel_dt": getattr(ob.params, "legacy_parallel_dt", True),

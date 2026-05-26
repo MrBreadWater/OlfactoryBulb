@@ -41,9 +41,14 @@ from olfactorybulb.inputs import InputSpec
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
     DEFAULT_SOMA_TRACE_FORMAT,
+    DEFAULT_SOMA_SPIKE_MIN_PROMINENCE_MV,
+    DEFAULT_SOMA_SPIKE_REFRACTORY_MS,
+    DEFAULT_SOMA_SPIKE_THRESHOLD_MV,
     SOMA_TRACE_FILENAME_NPZ,
     SOMA_TRACE_FILENAME_PKL,
+    save_soma_spike_artifact,
     save_soma_trace_artifact,
+    save_voltage_summary_artifact,
 )
 
 CELL_MODEL_FACTORIES = {
@@ -1427,6 +1432,22 @@ class OlfactoryBulb:
 
             trace_format = getattr(self.params, "soma_trace_format", DEFAULT_SOMA_TRACE_FORMAT)
             trace_dtype = getattr(self.params, "soma_trace_dtype", DEFAULT_SOMA_TRACE_DTYPE)
+            save_soma_spike_artifact(
+                result,
+                self.results_dir,
+                threshold=getattr(self.params, "soma_spike_threshold", DEFAULT_SOMA_SPIKE_THRESHOLD_MV),
+                min_prominence_mv=getattr(
+                    self.params,
+                    "soma_spike_min_prominence_mv",
+                    DEFAULT_SOMA_SPIKE_MIN_PROMINENCE_MV,
+                ),
+                refractory_ms=getattr(
+                    self.params,
+                    "soma_spike_refractory_ms",
+                    DEFAULT_SOMA_SPIKE_REFRACTORY_MS,
+                ),
+            )
+            save_voltage_summary_artifact(result, self.results_dir)
             save_path = save_soma_trace_artifact(
                 result,
                 self.results_dir,

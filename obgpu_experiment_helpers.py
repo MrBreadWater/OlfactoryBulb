@@ -73,7 +73,7 @@ else:
     )
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
-from scipy.signal import butter, filtfilt, find_peaks, hilbert, lfilter, spectrogram, welch
+from scipy.signal import butter, filtfilt, hilbert, lfilter, spectrogram, welch
 from scipy.stats import gaussian_kde
 from modify_model import (
     add_synaptic_connection,
@@ -84,8 +84,15 @@ from modify_model import (
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
     DEFAULT_SOMA_TRACE_FORMAT,
+    DEFAULT_SOMA_SPIKE_MIN_PROMINENCE_MV,
+    DEFAULT_SOMA_SPIKE_REFRACTORY_MS,
+    DEFAULT_SOMA_SPIKE_THRESHOLD_MV,
+    SOMA_SPIKES_FILENAME_NPZ,
     SOMA_TRACE_FILENAME_NPZ,
     SOMA_TRACE_FILENAME_PKL,
+    VOLTAGE_SUMMARY_FILENAME_NPZ,
+    adaptive_soma_spike_peak_floor,
+    detect_soma_spikes,
     find_soma_trace_artifact,
     load_saved_result_artifact,
     preferred_soma_trace_artifact_name,
@@ -103,7 +110,10 @@ CONTROL_HELP = {
     "sim_dt_ms": "Requested simulation dt in ms.",
     "recording_period_ms": "Saved sample period for LFP and soma traces.",
     "soma_trace_format": "Saved soma-trace artifact format. 'npz' stores compressed array-native traces; 'pkl' keeps the legacy Python-object format.",
-    "soma_trace_dtype": "Saved soma-trace numeric dtype, usually 'float32' or 'float64'.",
+    "soma_trace_dtype": "Saved soma-trace numeric dtype. Use 'float32' by default; 'int16' stores lossy per-trace linear-quantized voltages.",
+    "soma_spike_threshold_mv": "Optional absolute soma spike peak threshold in mV. None uses an adaptive per-trace peak floor.",
+    "soma_spike_min_prominence_mv": "Minimum peak prominence in mV for runtime soma spike detection.",
+    "soma_spike_refractory_ms": "Minimum inter-peak spacing in ms for runtime soma spike detection.",
     "legacy_parallel_dt": "When True, preserve the older parallel dt behavior. When False, let sim_dt_ms control dt more directly.",
     "lfp_electrode_location": "Probe location as [x, y, z] in microns.",
     "rnd_seed": "Random seed for odor input generation.",
@@ -744,6 +754,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "recording_period_ms": 0.1,
         "soma_trace_format": DEFAULT_SOMA_TRACE_FORMAT,
         "soma_trace_dtype": DEFAULT_SOMA_TRACE_DTYPE,
+        "soma_spike_threshold_mv": DEFAULT_SOMA_SPIKE_THRESHOLD_MV,
+        "soma_spike_min_prominence_mv": DEFAULT_SOMA_SPIKE_MIN_PROMINENCE_MV,
+        "soma_spike_refractory_ms": DEFAULT_SOMA_SPIKE_REFRACTORY_MS,
         "legacy_parallel_dt": False if mode == "fast" else True,
         "enable_lfp": True,
         "disable_status_report": True,
@@ -1162,6 +1175,17 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         "recording_period": float(config.get("recording_period_ms", config["sim_dt_ms"])),
         "soma_trace_format": str(config.get("soma_trace_format", DEFAULT_SOMA_TRACE_FORMAT)),
         "soma_trace_dtype": str(config.get("soma_trace_dtype", DEFAULT_SOMA_TRACE_DTYPE)),
+        "soma_spike_threshold": (
+            None
+            if config.get("soma_spike_threshold_mv") is None
+            else float(config["soma_spike_threshold_mv"])
+        ),
+        "soma_spike_min_prominence_mv": float(
+            config.get("soma_spike_min_prominence_mv", DEFAULT_SOMA_SPIKE_MIN_PROMINENCE_MV)
+        ),
+        "soma_spike_refractory_ms": float(
+            config.get("soma_spike_refractory_ms", DEFAULT_SOMA_SPIKE_REFRACTORY_MS)
+        ),
         "legacy_parallel_dt": bool(config.get("legacy_parallel_dt", True)),
         "enable_reciprocal_synapses": bool(config.get("enable_reciprocal_synapses", True)),
         "record_from_somas": list(config.get("record_from_somas", ["MC", "TC", "GC"])),
@@ -1541,6 +1565,8 @@ def _standard_result_artifact_sizes(result_dir: str | Path) -> dict[str, int]:
         "input_times.pkl",
         "gc_output_events.pkl",
         "lfp.pkl",
+        SOMA_SPIKES_FILENAME_NPZ,
+        VOLTAGE_SUMMARY_FILENAME_NPZ,
         "summary.json",
         "run_info.json",
     )
@@ -1566,6 +1592,8 @@ _NONEMPTY_LOCAL_SYNC_ARTIFACTS = {
     "input_times.pkl",
     SOMA_TRACE_FILENAME_PKL,
     SOMA_TRACE_FILENAME_NPZ,
+    SOMA_SPIKES_FILENAME_NPZ,
+    VOLTAGE_SUMMARY_FILENAME_NPZ,
     "gc_output_events.pkl",
     "lfp.pkl",
     "sim_progress.json",
@@ -1604,6 +1632,8 @@ def _remote_fast_sync_files(config: dict[str, Any] | None = None) -> tuple[str, 
         files.append("lfp.pkl")
     if config is None or bool(config.get("record_gc_output_events", False)):
         files.append("gc_output_events.pkl")
+    if config is None or bool(config.get("record_from_somas", [])):
+        files.extend([SOMA_SPIKES_FILENAME_NPZ, VOLTAGE_SUMMARY_FILENAME_NPZ])
     return tuple(files)
 
 
@@ -6923,6 +6953,8 @@ def load_result(
         "run_info": run_info,
         "input_times": [],
         "soma_vs": [],
+        "soma_spikes": {},
+        "voltage_summary": {},
         "gc_output_events": [],
         "lfp_t": np.array([]),
         "lfp": np.array([]),
@@ -6954,6 +6986,12 @@ def load_result(
     lfp_path = result_dir / "lfp.pkl"
     if _local_sync_artifact_is_usable(lfp_path):
         load_plan.append(("lfp", lfp_path))
+    soma_spikes_path = result_dir / SOMA_SPIKES_FILENAME_NPZ
+    if _local_sync_artifact_is_usable(soma_spikes_path):
+        load_plan.append(("soma_spikes", soma_spikes_path))
+    voltage_summary_path = result_dir / VOLTAGE_SUMMARY_FILENAME_NPZ
+    if _local_sync_artifact_is_usable(voltage_summary_path):
+        load_plan.append(("voltage_summary", voltage_summary_path))
 
     total_bytes = sum(path.stat().st_size for _key, path in load_plan)
     loaded_bytes = 0
@@ -7777,10 +7815,19 @@ def compute_spike_phase_locking(
 
     all_vectors = []
     per_cell = []
-    for label, t, v in result["soma_vs"]:
-        if not label.startswith(allowed_types):
-            continue
-        spikes = detect_spikes(t, v, threshold=threshold)
+    saved_rows = _saved_soma_spike_rows(
+        result,
+        cell_types=list(allowed_types),
+        threshold=threshold,
+    )
+    if saved_rows is None:
+        saved_rows = []
+        for label, t, v in result["soma_vs"]:
+            if not label.startswith(allowed_types):
+                continue
+            saved_rows.append((str(label), detect_spikes(t, v, threshold=threshold)))
+
+    for label, spikes in saved_rows:
         spikes = spikes[(spikes >= signal_t[0]) & (spikes <= signal_t[-1])]
         if len(spikes) == 0:
             continue
@@ -7825,6 +7872,12 @@ def load_legacy_wavelet_analysis(
     sniff_count: int = 8,
 ) -> dict[str, Any]:
     """Reproduce the legacy LFP wavelet-analysis pipeline for one result."""
+    warnings.warn(
+        "load_legacy_wavelet_analysis() is deprecated. Use plot_lfp_overview(), "
+        "plot_wavelet(), or plot_wavelet_band_power() instead.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if pywt is None:
         raise ModuleNotFoundError(
             "PyWavelets is required for wavelet analysis. Install the 'pywavelets' package."
@@ -7882,6 +7935,11 @@ def plot_legacy_sniff_average(
     xlabel: bool = True,
 ) -> None:
     """Plot the sniff-averaged legacy wavelet view used in older notebooks."""
+    warnings.warn(
+        "plot_legacy_sniff_average() is deprecated. Use plot_wavelet_band_power() for maintained wavelet summaries.",
+        FutureWarning,
+        stacklevel=2,
+    )
     if show:
         plt.subplots(figsize=(4, 5))
 
@@ -7909,6 +7967,12 @@ def show_legacy_plots(
     fig_width: float = 27,
 ) -> dict[str, Any]:
     """Render the legacy voltage, LFP, and wavelet figure set for one run."""
+    warnings.warn(
+        "show_legacy_plots() is deprecated and no longer part of show_all_outputs(). "
+        "It requires raw soma traces and may trigger deferred remote downloads.",
+        FutureWarning,
+        stacklevel=2,
+    )
     legacy = load_legacy_wavelet_analysis(result, dt=dt, sniff_count=sniff_count)
 
     i = 0
@@ -7974,14 +8038,7 @@ def show_legacy_plots(
 
 def _adaptive_spike_peak_floor(v: np.ndarray) -> float:
     """Estimate a conservative spike-height floor from one voltage trace."""
-    finite_v = np.asarray(v, dtype=float)
-    finite_v = finite_v[np.isfinite(finite_v)]
-    if finite_v.size == 0:
-        return np.inf
-    baseline = float(np.percentile(finite_v, 5.0))
-    upper = float(np.percentile(finite_v, 95.0))
-    dynamic_span = max(0.0, upper - baseline)
-    return baseline + max(20.0, 0.5 * dynamic_span)
+    return adaptive_soma_spike_peak_floor(v)
 
 
 def detect_spikes(
@@ -8000,34 +8057,13 @@ def detect_spikes(
     prominence, and uses either an explicit peak threshold or an adaptive floor
     derived from the trace itself.
     """
-    t = np.asarray(t, dtype=float)
-    v = np.asarray(v, dtype=float)
-    if len(t) < 3:
-        return np.array([])
-
-    finite_mask = np.isfinite(t) & np.isfinite(v)
-    if not np.all(finite_mask):
-        t = t[finite_mask]
-        v = v[finite_mask]
-    if len(t) < 3:
-        return np.array([])
-
-    dt_ms = float(np.median(np.diff(t)))
-    if not np.isfinite(dt_ms) or dt_ms <= 0:
-        dt_ms = 0.1
-    min_distance = max(1, int(round(float(refractory_ms) / dt_ms)))
-
-    peaks, _properties = find_peaks(
+    return detect_soma_spikes(
+        t,
         v,
-        prominence=float(min_prominence_mv),
-        distance=min_distance,
+        threshold=threshold,
+        min_prominence_mv=min_prominence_mv,
+        refractory_ms=refractory_ms,
     )
-    if len(peaks) == 0:
-        return np.array([])
-
-    peak_floor = float(threshold) if threshold is not None else _adaptive_spike_peak_floor(v)
-    keep = v[peaks] >= peak_floor
-    return t[peaks[keep]]
 
 
 def calculate_instantaneous_frequency(
@@ -8052,6 +8088,88 @@ def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarr
     t_freq = (times[:-1] + times[1:]) / 2.0
     event_hz = 1000.0 / np.diff(times)
     return t_freq, event_hz
+
+
+def _saved_soma_spikes_match_threshold(result: dict[str, Any], threshold: float | None) -> bool:
+    """Return whether saved soma spikes can satisfy one requested threshold."""
+    if threshold is None:
+        return True
+    metadata = (dict.get(result, "soma_spikes") or {}).get("metadata", {})
+    saved_threshold = metadata.get("threshold_mv")
+    return saved_threshold is not None and np.isclose(float(saved_threshold), float(threshold))
+
+
+def _saved_soma_spike_rows(
+    result: dict[str, Any],
+    *,
+    indices: list[int] | range | None = None,
+    cell_types: list[str] | tuple[str, ...] | None = None,
+    threshold: float | None = None,
+) -> list[tuple[str, np.ndarray]] | None:
+    """Return saved ``(label, spike_times)`` rows, or None when raw traces are required."""
+    soma_spikes = dict.get(result, "soma_spikes") or {}
+    labels = soma_spikes.get("labels")
+    spike_times = soma_spikes.get("spike_times")
+    if not labels or spike_times is None:
+        return None
+    if not _saved_soma_spikes_match_threshold(result, threshold):
+        return None
+
+    prefixes = tuple(str(name) for name in cell_types) if cell_types else None
+    if indices is None:
+        indices = range(len(labels))
+
+    rows = []
+    for index in indices:
+        if index >= len(labels):
+            break
+        label = str(labels[index])
+        if prefixes is not None and not any(label.startswith(prefix) for prefix in prefixes):
+            continue
+        rows.append((label, np.asarray(spike_times[index], dtype=float)))
+    return rows
+
+
+def _saved_soma_spike_rows_by_type(
+    result: dict[str, Any],
+    *,
+    max_cells_per_type: int,
+    threshold: float | None = None,
+) -> list[tuple[str, np.ndarray]] | None:
+    """Return saved spike rows grouped in MC/TC/GC order for raster plots."""
+    rows = _saved_soma_spike_rows(result, threshold=threshold)
+    if rows is None:
+        return None
+
+    grouped = {"MC": [], "TC": [], "GC": [], "other": []}
+    for label, spikes in rows:
+        bucket = "other"
+        for candidate in ("MC", "TC", "GC"):
+            if label.startswith(candidate):
+                bucket = candidate
+                break
+        grouped[bucket].append((label, spikes))
+
+    ordered = []
+    for cell_type in ("MC", "TC", "GC"):
+        ordered.extend(grouped[cell_type][:max_cells_per_type])
+    return ordered
+
+
+def _saved_voltage_summary_signal(
+    result: dict[str, Any],
+    *,
+    cell_type: str,
+    moment: str = "mean",
+    dt_ms: float | None = None,
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Return one saved voltage-summary moment, or None when raw traces are required."""
+    voltage_summary = dict.get(result, "voltage_summary") or {}
+    t_by_type = voltage_summary.get("t_by_type") or {}
+    values_by_type = voltage_summary.get(f"{moment}_by_type") or {}
+    if cell_type not in t_by_type or cell_type not in values_by_type:
+        return None
+    return uniform_trace(t_by_type[cell_type], values_by_type[cell_type], dt_ms=dt_ms)
 
 
 def _coerce_frequency_plot_config(
@@ -8103,23 +8221,34 @@ def collect_spike_frequency_samples(
     threshold: float | None = None,
 ) -> dict[str, Any]:
     """Collect midpoint/frequency samples from detected soma spikes."""
-    soma_vs = list(result.get("soma_vs", []))
-    if indices is None:
-        indices = range(len(soma_vs))
-
     prefixes = tuple(str(name) for name in cell_types) if cell_types else None
     all_freq_t = []
     all_freq = []
     labels = []
 
-    for i in indices:
-        if i >= len(soma_vs):
-            break
-        label, t, mp = soma_vs[i]
-        if prefixes is not None and not any(label.startswith(prefix) for prefix in prefixes):
-            continue
+    saved_rows = _saved_soma_spike_rows(
+        result,
+        indices=indices,
+        cell_types=cell_types,
+        threshold=threshold,
+    )
+    if saved_rows is not None:
+        trace_rows = [(label, spike_times) for label, spike_times in saved_rows]
+    else:
+        soma_vs = list(result.get("soma_vs", []))
+        if indices is None:
+            indices = range(len(soma_vs))
+        trace_rows = []
+        for i in indices:
+            if i >= len(soma_vs):
+                break
+            label, t, mp = soma_vs[i]
+            if prefixes is not None and not any(label.startswith(prefix) for prefix in prefixes):
+                continue
+            trace_rows.append((str(label), detect_spikes(t, mp, threshold=threshold)))
 
-        t_freq, spiking_hz = calculate_instantaneous_frequency(t, mp, threshold=threshold)
+    for label, spike_times in trace_rows:
+        t_freq, spiking_hz = calculate_event_frequency(spike_times)
         if len(t_freq) == 0:
             continue
         t_freq = np.asarray(t_freq, dtype=float)
@@ -8809,9 +8938,17 @@ def get_named_signal(
             normalization="per_target_cell",
         )
 
-    grouped = split_traces_by_type(result)
     if signal in {"mean_MC_voltage", "mean_TC_voltage", "mean_GC_voltage"}:
         cell_type = signal.split("_", 1)[1].split("_", 1)[0]
+        saved_signal = _saved_voltage_summary_signal(
+            result,
+            cell_type=cell_type,
+            moment="mean",
+            dt_ms=dt_ms,
+        )
+        if saved_signal is not None:
+            return saved_signal
+        grouped = split_traces_by_type(result)
         traces = grouped.get(cell_type, [])
         if not traces:
             raise KeyError(f"No soma traces found for {cell_type}")
@@ -9040,23 +9177,32 @@ def plot_spike_raster(
     max_cells_per_type: int = 24,
     ax: Any = None,
 ) -> Any:
-    """Plot a soma-spike raster derived from the saved voltage traces."""
-    grouped = split_traces_by_type(result)
-    rows = []
-    for cell_type in ("MC", "TC", "GC"):
-        rows.extend(grouped[cell_type][:max_cells_per_type])
+    """Plot a soma-spike raster, preferring compact runtime spike artifacts."""
+    saved_rows = _saved_soma_spike_rows_by_type(
+        result,
+        max_cells_per_type=max_cells_per_type,
+        threshold=threshold,
+    )
+    if saved_rows is None:
+        grouped = split_traces_by_type(result)
+        raw_rows = []
+        for cell_type in ("MC", "TC", "GC"):
+            raw_rows.extend(grouped[cell_type][:max_cells_per_type])
+        rows = [(label, detect_spikes(t, v, threshold=threshold)) for label, t, v in raw_rows]
+    else:
+        rows = saved_rows
     ax = _ensure_raster_axis(ax, len(rows), width=14.0, min_height=4.5, per_row_height=0.10)
     if not rows:
-        ax.set_title("No soma traces saved")
+        ax.set_title("No soma spikes saved")
         return ax
-    spike_times = [detect_spikes(t, v, threshold=threshold) for _label, t, v in rows]
+    spike_times = [spikes for _label, spikes in rows]
     colors = [
         "tab:blue" if label.startswith("MC") else "tab:red" if label.startswith("TC") else "tab:orange"
-        for label, _t, _v in rows
+        for label, _spikes in rows
     ]
     offsets = _style_raster_axis(
         ax,
-        [label for label, _t, _v in rows],
+        [label for label, _spikes in rows],
         ylabel="Cell",
         title="Detected Soma Spike Raster",
         fontsize=_recommended_raster_fontsize(len(rows)),
@@ -10425,9 +10571,12 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     gc_smooth_ms = float(config.get("gc_output_smooth_sigma_ms", 10.0))
     gc_max_connections = int(config.get("gc_output_max_connections", 120))
     gc_norm = str(config.get("gc_output_rate_normalization", "per_target_cell"))
-    sniff_count = int(config.get("sniff_count", 8))
+    show_raw_voltage_traces = bool(config.get("show_voltage_traces", False))
+    show_legacy = bool(config.get("show_legacy_plots", False))
 
-    show_legacy_plots(result, sniff_count=sniff_count, dt=dt_ms)
+    if show_legacy:
+        sniff_count = int(config.get("sniff_count", 8))
+        show_legacy_plots(result, sniff_count=sniff_count, dt=dt_ms)
 
     plot_input_overview(
         result,
@@ -10438,8 +10587,9 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     )
     plt.show()
 
-    plot_voltage_traces(result, max_per_type=max_voltage)
-    plt.show()
+    if show_raw_voltage_traces:
+        plot_voltage_traces(result, max_per_type=max_voltage)
+        plt.show()
 
     plot_spike_raster(result, max_cells_per_type=max_raster)
     plt.show()

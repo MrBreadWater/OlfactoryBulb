@@ -19,10 +19,16 @@ import obgpu_experiment_helpers as hlp
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
     DEFAULT_SOMA_TRACE_FORMAT,
+    SOMA_SPIKES_FILENAME_NPZ,
     SOMA_TRACE_FILENAME_NPZ,
+    VOLTAGE_SUMMARY_FILENAME_NPZ,
     find_soma_trace_artifact,
+    load_soma_spike_artifact,
     load_soma_trace_artifact,
+    load_voltage_summary_artifact,
+    save_soma_spike_artifact,
     save_soma_trace_artifact,
+    save_voltage_summary_artifact,
 )
 from obgpu_experiment_helpers import (
     build_param_overrides,
@@ -148,6 +154,57 @@ with tempfile.TemporaryDirectory() as tmp:
     assert soma_summary["items"] == 2
     assert "canonical_sha256" in soma_summary
     print("Compressed soma trace artifact round-trip: OK")
+
+    # --- Compact soma spike and voltage summary artifacts support no-raw-soma analysis ---
+    compact_dir = tmp / "compact_artifacts"
+    compact_dir.mkdir()
+    compact_traces = [
+        ("MC0[0].soma", [0, 1, 2, 3, 4, 5, 6], [-65, -20, 30, -62, -12, 35, -64]),
+        ("MC1[0].soma", [0, 1, 2, 3, 4, 5, 6], [-64, -18, 32, -61, -11, 34, -63]),
+        ("TC0[0].soma", [0, 1, 2, 3, 4, 5, 6], [-60, -60, -58, -59, -58, -60, -59]),
+    ]
+    spike_path = save_soma_spike_artifact(compact_traces, compact_dir, threshold=0.0)
+    voltage_summary_path = save_voltage_summary_artifact(compact_traces, compact_dir)
+    assert spike_path.name == SOMA_SPIKES_FILENAME_NPZ
+    assert voltage_summary_path.name == VOLTAGE_SUMMARY_FILENAME_NPZ
+    loaded_spikes = load_soma_spike_artifact(compact_dir)
+    assert loaded_spikes["metadata"]["threshold_mv"] == 0.0
+    assert [len(row) for row in loaded_spikes["spike_times"][:2]] == [2, 2]
+    loaded_voltage_summary = load_voltage_summary_artifact(compact_dir)
+    assert "MC" in loaded_voltage_summary["mean_by_type"]
+    np.testing.assert_allclose(
+        loaded_voltage_summary["mean_by_type"]["MC"],
+        np.mean(np.asarray([compact_traces[0][2], compact_traces[1][2]], dtype=float), axis=0),
+        atol=1e-5,
+    )
+
+    loaded_result = hlp.load_result(compact_dir)
+    assert dict.get(loaded_result, "soma_vs") == []
+    freq_samples = hlp.collect_spike_frequency_samples(
+        loaded_result,
+        cell_types=("MC",),
+        threshold=0.0,
+    )
+    assert freq_samples["n_traces"] == 2
+    assert len(freq_samples["freqs"]) == 2
+    t_mean, v_mean = hlp.get_named_signal(loaded_result, signal="mean_MC_voltage")
+    assert len(t_mean) == len(v_mean) == 7
+    assert "soma_vs" not in loaded_result._lazy_loaders
+    print("Compact soma spike / voltage-summary artifacts: OK")
+
+    # --- Optional int16 soma traces should round-trip with bounded quantization error ---
+    quantized_dir = tmp / "quantized_soma"
+    quantized_dir.mkdir()
+    q_path = save_soma_trace_artifact(
+        compact_traces,
+        quantized_dir,
+        trace_format="npz",
+        trace_dtype="int16",
+    )
+    q_loaded = load_soma_trace_artifact(q_path)
+    for (_label, _t, expected_v), (_loaded_label, _loaded_t, observed_v) in zip(compact_traces, q_loaded):
+        np.testing.assert_allclose(observed_v, expected_v, atol=0.01)
+    print("Quantized int16 soma trace artifact: OK")
 
     # --- Paramiko SFTP should be lazy and cached ---
     original_connect = hlp._connect_paramiko
@@ -450,7 +507,14 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- Successful fast remote sync should only request essential result artifacts ---
     fast_files_default = hlp._remote_fast_sync_files()
-    assert fast_files_default == ("summary.json", "input_times.pkl", "lfp.pkl", "gc_output_events.pkl")
+    assert fast_files_default == (
+        "summary.json",
+        "input_times.pkl",
+        "lfp.pkl",
+        "gc_output_events.pkl",
+        SOMA_SPIKES_FILENAME_NPZ,
+        VOLTAGE_SUMMARY_FILENAME_NPZ,
+    )
     fast_files_minimal = hlp._remote_fast_sync_files(
         {"enable_lfp": False, "record_gc_output_events": False}
     )
