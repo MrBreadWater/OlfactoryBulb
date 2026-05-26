@@ -16,6 +16,7 @@ WIDTH = 2280
 HEIGHT = 720
 SUPERSAMPLE = 2
 GIF_COLORS = 144
+VERTICAL_FOREGROUND_SCALE = 1.20
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -326,6 +327,27 @@ def center_geometry(
     return centered_segments, centered_nodes
 
 
+def stretch_geometry_y(
+    segments: list[RenderSegment],
+    nodes: list[RenderNode],
+    height: int,
+    scale: float,
+) -> tuple[list[RenderSegment], list[RenderNode]]:
+    if abs(scale - 1.0) < 1e-6:
+        return segments, nodes
+    center_y = height * 0.5
+
+    def stretch(y: float) -> float:
+        return center_y + (y - center_y) * scale
+
+    stretched_segments = [
+        replace(seg, y0=stretch(seg.y0), y1=stretch(seg.y1))
+        for seg in segments
+    ]
+    stretched_nodes = [replace(node, y=stretch(node.y)) for node in nodes]
+    return stretched_segments, stretched_nodes
+
+
 def background(width: int, height: int, style: str) -> Image.Image:
     del style
     return Image.new("RGBA", (width, height), BG + (255,))
@@ -370,9 +392,11 @@ def render_frame(
     mode: str,
 ) -> Image.Image:
     image = scene.base.copy()
+    bloom = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     spark = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    bloom_draw = ImageDraw.Draw(bloom, "RGBA")
     glow_draw = ImageDraw.Draw(glow, "RGBA")
     core_draw = ImageDraw.Draw(core, "RGBA")
     spark_draw = ImageDraw.Draw(spark, "RGBA")
@@ -415,12 +439,20 @@ def render_frame(
             pulse_tint = GOLD
         elif mode in ("dense_microcircuit", "layered_exchange"):
             pulse_tint = mix(TEAL, GREEN, 0.22)
+        if active > 0.10:
+            bloom_tint = mix(pulse_tint, np.array([255, 255, 255], dtype=float), 0.22)
+            draw_soft_line(bloom_draw, seg, bloom_tint, 38 * active, seg.width * (9.0 + 2.8 * active))
         draw_soft_line(glow_draw, seg, pulse_tint, 92 * active, seg.width * (6.2 + 1.9 * active))
         draw_soft_line(core_draw, seg, mix(pulse_tint, np.array([255, 255, 255], dtype=float), 0.12), 218 * active, seg.width * (1.72 + 0.85 * active))
+        if active > 0.44:
+            highlight = (active - 0.44) / 0.56
+            draw_soft_line(core_draw, seg, np.array([255, 255, 255], dtype=float), 84 * highlight, max(1.0, seg.width * 0.70))
         if active > 0.62:
             draw_soft_line(core_draw, seg, np.array([255, 255, 255], dtype=float), 56 * active, max(1.0, seg.width * 0.45))
 
+    bloom = bloom.filter(ImageFilter.GaussianBlur(radius=7.0 * SUPERSAMPLE))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=4.2 * SUPERSAMPLE))
+    image = Image.alpha_composite(image, bloom)
     image = Image.alpha_composite(image, glow)
     image = Image.alpha_composite(image, core)
 
@@ -588,6 +620,8 @@ def build_scene(variant: str, width: int, height: int) -> SceneCache:
         ]
         bg_style = "lattice"
     segments, nodes = project_scene(placed, width, height)
+    segments, nodes = center_geometry(segments, nodes, width, height)
+    segments, nodes = stretch_geometry_y(segments, nodes, height, VERTICAL_FOREGROUND_SCALE)
     segments, nodes = center_geometry(segments, nodes, width, height)
     base = background(width, height, bg_style)
     scene = SceneCache(base=base, segments=segments, nodes=nodes)
