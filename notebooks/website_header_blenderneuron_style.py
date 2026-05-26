@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v21"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v22"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -52,8 +52,8 @@ SOMA_DISPLAY_EMPHASIS = {
     "GC": 0.95,
 }
 DOF_FOCUS_Z = 0.02
-DOF_SHARP_ZONE = 0.10
-DOF_FULL_ZONE = 0.48
+DOF_SHARP_ZONE = 0.07
+DOF_FULL_ZONE = 0.34
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -1282,8 +1282,8 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
                 depth_soft_draw,
                 seg,
                 tint,
-                78 * seg.alpha * defocus,
-                seg.width * (1.16 + 0.54 * defocus),
+                112 * seg.alpha * defocus,
+                seg.width * (1.22 + 0.70 * defocus),
             )
     for node in scene.nodes:
         if not node.soma:
@@ -1294,11 +1294,11 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
         draw_soma_shape(soma_shadow_draw, node, rx, ry, fill=rgba(node.color, 54), scale=1.34)
         draw_soma_shape(soma_draw, node, rx, ry, fill=rgba(body, 255))
         if defocus > 0.02:
-            draw_soma_shape(soma_soft_draw, node, rx, ry, fill=rgba(body, 76 * defocus), scale=1.06 + 0.10 * defocus)
+            draw_soma_shape(soma_soft_draw, node, rx, ry, fill=rgba(body, 108 * defocus), scale=1.08 + 0.14 * defocus)
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
-    depth_soft = depth_soft.filter(ImageFilter.GaussianBlur(radius=1.25 * SUPERSAMPLE))
+    depth_soft = depth_soft.filter(ImageFilter.GaussianBlur(radius=1.85 * SUPERSAMPLE))
     soma_shadow = soma_shadow.filter(ImageFilter.GaussianBlur(radius=5.5 * SUPERSAMPLE))
-    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=1.9 * SUPERSAMPLE))
+    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=2.45 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
     image = Image.alpha_composite(image, base)
     image = Image.alpha_composite(image, depth_soft)
@@ -1378,7 +1378,7 @@ def render_frame(
                 trace_draw,
                 seg,
                 trace_tint,
-                (68 if is_axon else 54) * seg.alpha * memory * (1.0 - 0.14 * defocus),
+                (68 if is_axon else 54) * seg.alpha * memory * (1.0 - 0.20 * defocus),
                 seg.width * ((1.62 if is_axon else 1.20) + (1.04 if is_axon else 0.86) * memory),
             )
             if defocus > 0.02:
@@ -1386,8 +1386,8 @@ def render_frame(
                     trace_soft_draw,
                     seg,
                     trace_tint,
-                    (26 if is_axon else 20) * seg.alpha * memory * defocus,
-                    seg.width * ((1.84 if is_axon else 1.42) + (1.10 if is_axon else 0.94) * memory + 0.16 * defocus),
+                    (42 if is_axon else 34) * seg.alpha * memory * defocus,
+                    seg.width * ((2.00 if is_axon else 1.58) + (1.20 if is_axon else 1.02) * memory + 0.24 * defocus),
                 )
         active = packet_activity(
             seg.activity_profile,
@@ -1407,8 +1407,8 @@ def render_frame(
                 bloom_draw,
                 seg,
                 bloom_tint,
-                (96 if is_axon else 76) * active * (1.0 - 0.08 * defocus),
-                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active) * (1.0 + 0.10 * defocus),
+                (96 if is_axon else 76) * active * (1.0 - 0.12 * defocus),
+                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active) * (1.0 + 0.16 * defocus),
                 active,
                 0.32 if is_axon else 0.22,
             )
@@ -1416,8 +1416,8 @@ def render_frame(
             glow_draw,
             seg,
             brighten(pulse_tint, 1.18, 3.0),
-            (148 if is_axon else 116) * active * (1.0 - 0.14 * defocus),
-            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active) * (1.0 + 0.14 * defocus),
+            (148 if is_axon else 116) * active * (1.0 - 0.22 * defocus),
+            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active) * (1.0 + 0.22 * defocus),
             active,
             0.22 if is_axon else 0.14,
         )
@@ -1426,8 +1426,8 @@ def render_frame(
                 active_soft_draw,
                 seg,
                 core_tint,
-                (44 if is_axon else 34) * active * defocus,
-                seg.width * ((4.6 if is_axon else 3.7) + (1.8 if is_axon else 1.4) * active + 0.18 * defocus),
+                (70 if is_axon else 56) * active * defocus,
+                seg.width * ((5.2 if is_axon else 4.2) + (2.0 if is_axon else 1.6) * active + 0.28 * defocus),
                 active,
                 0.18 if is_axon else 0.10,
             )
@@ -1435,7 +1435,7 @@ def render_frame(
             core_draw,
             seg,
             core_tint,
-            (246 if is_axon else 238) * active * (1.0 - 0.24 * defocus),
+            (246 if is_axon else 238) * active * (1.0 - 0.34 * defocus),
             seg.width * ((2.55 if is_axon else 1.88) + (1.20 if is_axon else 0.95) * active),
             active,
             0.14 if is_axon else 0.04,
@@ -1446,7 +1446,7 @@ def render_frame(
                 core_draw,
                 seg,
                 WHITE,
-                (214 if is_axon else 192) * highlight * (1.0 - 0.18 * defocus),
+                (214 if is_axon else 192) * highlight * (1.0 - 0.28 * defocus),
                 max(1.0, seg.width * ((0.68 if is_axon else 0.48) + (0.28 if is_axon else 0.24) * highlight)),
                 active,
                 0.10 if is_axon else 0.0,
@@ -1458,7 +1458,7 @@ def render_frame(
                 spark_draw,
                 seg,
                 WHITE,
-                (230 if is_axon else 212) * hot * (1.0 - 0.16 * defocus),
+                (230 if is_axon else 212) * hot * (1.0 - 0.24 * defocus),
                 max(1.0, seg.width * ((0.56 if is_axon else 0.34) + (0.28 if is_axon else 0.18) * hot)),
                 active,
                 0.12 if is_axon else 0.0,
@@ -1468,14 +1468,14 @@ def render_frame(
                 0.5 * (seg.x0 + seg.x1),
                 0.5 * (seg.y0 + seg.y1),
                 seg.width * ((0.82 if is_axon else 0.58) + (0.68 if is_axon else 0.54) * hot),
-                rgba(WHITE, (170 if is_axon else 150) * hot * (1.0 - 0.14 * defocus)),
+                rgba(WHITE, (170 if is_axon else 150) * hot * (1.0 - 0.22 * defocus)),
             )
 
     image = Image.alpha_composite(image, trace)
-    trace_soft = trace_soft.filter(ImageFilter.GaussianBlur(radius=1.10 * SUPERSAMPLE))
+    trace_soft = trace_soft.filter(ImageFilter.GaussianBlur(radius=1.65 * SUPERSAMPLE))
     bloom = bloom.filter(ImageFilter.GaussianBlur(radius=8.3 * SUPERSAMPLE))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=4.2 * SUPERSAMPLE))
-    active_soft = active_soft.filter(ImageFilter.GaussianBlur(radius=1.50 * SUPERSAMPLE))
+    active_soft = active_soft.filter(ImageFilter.GaussianBlur(radius=2.20 * SUPERSAMPLE))
     image = Image.alpha_composite(image, trace_soft)
     image = Image.alpha_composite(image, bloom)
     image = Image.alpha_composite(image, glow)
@@ -1503,7 +1503,7 @@ def render_frame(
                 node.x,
                 node.y,
                 r,
-                rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash * (1.0 - 0.12 * defocus)),
+                rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash * (1.0 - 0.20 * defocus)),
             )
         if node.soma:
             delayed_voltage = min(1.0, delayed_profile_value(node.activity_profile, loop_ms, SOMA_RESPONSE_DELAY_MS) ** 0.92)
@@ -1527,7 +1527,7 @@ def render_frame(
                 node,
                 rx,
                 ry,
-                fill=rgba(voltage_tint, (18 + 110 * soma_spike) * (1.0 - 0.14 * defocus)),
+                fill=rgba(voltage_tint, (18 + 110 * soma_spike) * (1.0 - 0.20 * defocus)),
                 scale=1.18 + 0.34 * soma_spike,
             )
             if defocus > 0.02 and soma_level > 0.02:
@@ -1536,22 +1536,22 @@ def render_frame(
                     node,
                     rx,
                     ry,
-                    fill=rgba(voltage_tint, (26 + 48 * soma_level) * defocus),
-                    scale=1.04 + 0.10 * defocus + 0.08 * soma_spike,
+                    fill=rgba(voltage_tint, (36 + 76 * soma_level) * defocus),
+                    scale=1.08 + 0.16 * defocus + 0.10 * soma_spike,
                 )
             draw_soma_shape(
                 soma_core_draw,
                 node,
                 rx,
                 ry,
-                fill=rgba(disc_tint, 252 - 26 * defocus),
+                fill=rgba(disc_tint, 252 - 40 * defocus),
                 scale=0.98 + 0.06 * soma_spike,
             )
             if soma_spike > 0.46:
                 hot = (soma_spike - 0.46) / 0.54
-                draw_soma_shape(spark_draw, node, rx, ry, fill=rgba(WHITE, 72 * hot * (1.0 - 0.14 * defocus)), scale=0.52)
+                draw_soma_shape(spark_draw, node, rx, ry, fill=rgba(WHITE, 72 * hot * (1.0 - 0.22 * defocus)), scale=0.52)
     soma_glow = soma_glow.filter(ImageFilter.GaussianBlur(radius=4.0 * SUPERSAMPLE))
-    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=1.75 * SUPERSAMPLE))
+    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=2.35 * SUPERSAMPLE))
     image = Image.alpha_composite(image, soma_glow)
     image = Image.alpha_composite(image, soma_soft)
     image = Image.alpha_composite(image, soma_core)
