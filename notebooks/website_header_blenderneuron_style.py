@@ -11,16 +11,21 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v1"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v4"
 WIDTH = 1280
 HEIGHT = 360
-SUPERSAMPLE = 2
+SUPERSAMPLE = 3
 BG = (255, 255, 255)
 INK = np.array([24, 35, 42], dtype=float)
 CYAN = np.array([42, 177, 213], dtype=float)
 MINT = np.array([59, 204, 171], dtype=float)
 AMBER = np.array([242, 151, 67], dtype=float)
 ROSE = np.array([236, 93, 91], dtype=float)
+TYPE_COLORS = {
+    "MC": AMBER,
+    "TC": CYAN,
+    "GC": MINT,
+}
 
 
 @dataclass(frozen=True)
@@ -70,6 +75,8 @@ class RenderSegment:
     color: np.ndarray
     alpha: float
     cell_type: str
+    neurite_kind: int
+    flow_direction: float
 
 
 @dataclass(frozen=True)
@@ -85,11 +92,21 @@ class RenderNode:
     soma: bool
 
 
+@dataclass(frozen=True)
+class RenderConnector:
+    points: tuple[tuple[float, float], ...]
+    z: float
+    color: np.ndarray
+    alpha: float
+    distance: float
+
+
 @dataclass
 class SceneCache:
     base: Image.Image
     segments: list[RenderSegment]
     nodes: list[RenderNode]
+    connectors: list[RenderConnector]
 
 
 def mix(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
@@ -149,6 +166,18 @@ def load_morphology(name: str, cell_type: str, path: str | Path) -> Morphology:
     return Morphology(name, cell_type, nodes, children, root_id, distances, max(max_distance, 1e-6))
 
 
+def neurite_flow_direction(kind: int) -> float:
+    return 1.0 if kind == 2 else -1.0
+
+
+def segment_kind(child: SwcNode, parent: SwcNode) -> int:
+    if child.kind == 2 or parent.kind == 2:
+        return 2
+    if child.kind in (3, 4):
+        return child.kind
+    return parent.kind
+
+
 def rotation_matrix(yaw: float, pitch: float, roll: float) -> np.ndarray:
     ya, pi, ro = map(math.radians, (yaw, pitch, roll))
     cy, sy = math.cos(ya), math.sin(ya)
@@ -194,9 +223,11 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 continue
             p0 = projected[parent_id]
             p1 = projected[node_id]
-            radius = 0.5 * (node.radius + morph.nodes[parent_id].radius)
+            parent_node = morph.nodes[parent_id]
+            radius = 0.5 * (node.radius + parent_node.radius)
             dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / morph.max_distance
-            width_px = max(1.0, item.width_scale * (0.75 + 0.42 * math.sqrt(radius)))
+            kind = segment_kind(node, parent_node)
+            width_px = SUPERSAMPLE * max(1.5, item.width_scale * (0.72 + 0.36 * math.sqrt(radius)) + 1.25)
             segments.append(
                 RenderSegment(
                     x0=float(p0[0]),
@@ -209,6 +240,8 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     color=item.color,
                     alpha=item.alpha,
                     cell_type=morph.cell_type,
+                    neurite_kind=kind,
+                    flow_direction=neurite_flow_direction(kind),
                 )
             )
 
@@ -250,6 +283,90 @@ def draw_soft_line(
         width=max(1, int(round(width))),
         joint="curve",
     )
+
+
+def draw_polyline(
+    draw: ImageDraw.ImageDraw,
+    points: Iterable[tuple[float, float]],
+    *,
+    color: np.ndarray,
+    alpha: float,
+    width: float,
+) -> None:
+    pts = list(points)
+    if len(pts) < 2:
+        return
+    draw.line(
+        pts,
+        fill=rgba(color, alpha),
+        width=max(1, int(round(width))),
+        joint="curve",
+    )
+
+
+def bezier_points(
+    start: tuple[float, float],
+    control: tuple[float, float],
+    end: tuple[float, float],
+    *,
+    count: int = 34,
+) -> tuple[tuple[float, float], ...]:
+    points: list[tuple[float, float]] = []
+    for idx in range(count):
+        t = idx / max(1, count - 1)
+        a = (1.0 - t) * (1.0 - t)
+        b = 2.0 * (1.0 - t) * t
+        c = t * t
+        points.append(
+            (
+                a * start[0] + b * control[0] + c * end[0],
+                a * start[1] + b * control[1] + c * end[1],
+            )
+        )
+    return tuple(points)
+
+
+def build_connectors(nodes: list[RenderNode], width: int, height: int) -> list[RenderConnector]:
+    terminals = [node for node in nodes if node.terminal and 0 <= node.x <= width and 0 <= node.y <= height]
+    by_type = {cell_type: [node for node in terminals if node.cell_type == cell_type] for cell_type in TYPE_COLORS}
+    pairs = [("MC", "TC", 9), ("MC", "GC", 8), ("TC", "GC", 7)]
+    connectors: list[RenderConnector] = []
+    used: set[tuple[int, int]] = set()
+    for left_type, right_type, limit in pairs:
+        candidates: list[tuple[float, RenderNode, RenderNode]] = []
+        left_step = max(1, len(by_type[left_type]) // 140)
+        right_step = max(1, len(by_type[right_type]) // 140)
+        for left in by_type[left_type][::left_step]:
+            for right in by_type[right_type][::right_step]:
+                dx = left.x - right.x
+                dy = left.y - right.y
+                dist = math.hypot(dx, dy)
+                if 70 * SUPERSAMPLE <= dist <= 360 * SUPERSAMPLE:
+                    candidates.append((dist + abs(left.y - right.y) * 0.18, left, right))
+        candidates.sort(key=lambda item: item[0])
+        for idx, (_, left, right) in enumerate(candidates):
+            key = (id(left), id(right))
+            if key in used:
+                continue
+            used.add(key)
+            if idx >= limit:
+                break
+            mx = 0.5 * (left.x + right.x)
+            my = 0.5 * (left.y + right.y)
+            bend = ((idx % 3) - 1) * 22 * SUPERSAMPLE
+            control = (mx, my - 0.10 * height + bend)
+            color = mix(TYPE_COLORS[left_type], TYPE_COLORS[right_type], 0.5)
+            connectors.append(
+                RenderConnector(
+                    points=bezier_points((left.x, left.y), control, (right.x, right.y), count=42),
+                    z=0.5 * (left.z + right.z) + 0.05,
+                    color=color,
+                    alpha=0.36,
+                    distance=(0.5 * (left.distance + right.distance) + idx * 0.037) % 1.0,
+                )
+            )
+    connectors.sort(key=lambda conn: conn.z)
+    return connectors
 
 
 def background(width: int, height: int, style: str) -> Image.Image:
@@ -296,13 +413,30 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     shadow_draw = ImageDraw.Draw(shadow, "RGBA")
     base = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     base_draw = ImageDraw.Draw(base, "RGBA")
+    for conn in scene.connectors:
+        draw_polyline(
+            shadow_draw,
+            conn.points,
+            color=np.array([155, 171, 180], dtype=float),
+            alpha=22 * conn.alpha,
+            width=4.8 * SUPERSAMPLE,
+        )
+        draw_polyline(
+            base_draw,
+            conn.points,
+            color=mix(np.array([108, 126, 136], dtype=float), conn.color, 0.32),
+            alpha=118 * conn.alpha,
+            width=1.75 * SUPERSAMPLE,
+        )
     for seg in scene.segments:
         depth = np.clip((seg.z + 0.7) / 1.4, 0.0, 1.0)
-        neutral = mix(np.array([181, 194, 202], dtype=float), np.array([30, 45, 54], dtype=float), 0.45 + 0.34 * depth)
-        tint = mix(neutral, seg.color, 0.30 + 0.14 * depth)
+        neutral = mix(np.array([174, 188, 197], dtype=float), np.array([24, 38, 47], dtype=float), 0.43 + 0.31 * depth)
+        tint = mix(neutral, seg.color, 0.46 + 0.13 * depth)
+        if seg.neurite_kind == 2:
+            tint = mix(tint, np.array([228, 92, 83], dtype=float), 0.22)
         draw_soft_line(shadow_draw, seg, np.array([145, 157, 164], dtype=float), 34 * seg.alpha, seg.width * 3.2)
-        draw_soft_line(base_draw, seg, tint, 168 * seg.alpha * (0.68 + 0.32 * depth), seg.width * 1.12)
-        draw_soft_line(base_draw, seg, np.array([255, 255, 255], dtype=float), 22 * seg.alpha, max(1.0, seg.width * 0.22))
+        draw_soft_line(base_draw, seg, tint, 178 * seg.alpha * (0.68 + 0.32 * depth), seg.width * 1.05)
+        draw_soft_line(base_draw, seg, np.array([255, 255, 255], dtype=float), 20 * seg.alpha, max(1.0, seg.width * 0.18))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
     image = Image.alpha_composite(image, base)
@@ -337,26 +471,50 @@ def render_frame(
         pulse_color = CYAN
         count = 2
         pulse_width = 0.035
-        direction = 1.0
     elif mode == "split_wavefront":
         pulse_color = AMBER
         count = 3
         pulse_width = 0.030
-        direction = 1.0
     else:
         pulse_color = MINT
         count = 3
         pulse_width = 0.042
-        direction = -1.0
+
+    for conn in scene.connectors:
+        active = pulse_value(conn.distance, phase + 0.08, count=2, width=0.050, direction=1.0)
+        if active < 0.05:
+            continue
+        draw_polyline(
+            glow_draw,
+            conn.points,
+            color=conn.color,
+            alpha=68 * active,
+            width=8.0 * SUPERSAMPLE,
+        )
+        draw_polyline(
+            core_draw,
+            conn.points,
+            color=mix(conn.color, np.array([255, 255, 255], dtype=float), 0.16),
+            alpha=142 * active,
+            width=2.4 * SUPERSAMPLE,
+        )
 
     for seg in scene.segments:
-        p = pulse_value(seg.distance, phase, count=count, width=pulse_width, direction=direction)
+        p = pulse_value(seg.distance, phase, count=count, width=pulse_width, direction=seg.flow_direction)
         cell_shift = 0.11 if seg.cell_type == "TC" else 0.21 if seg.cell_type == "GC" else 0.0
-        secondary = pulse_value((seg.distance + cell_shift) % 1.0, phase + 0.17, count=2, width=0.055, direction=1.0)
+        secondary = pulse_value(
+            (seg.distance + cell_shift) % 1.0,
+            phase + 0.17,
+            count=2,
+            width=0.055,
+            direction=-seg.flow_direction,
+        )
         active = max(p, 0.54 * secondary)
         if active < 0.030:
             continue
-        pulse_tint = mix(pulse_color, seg.color, 0.35)
+        pulse_tint = mix(pulse_color, seg.color, 0.45)
+        if seg.neurite_kind == 2:
+            pulse_tint = mix(ROSE, seg.color, 0.22)
         if mode == "microcircuit_exchange" and seg.cell_type == "MC":
             pulse_tint = mix(AMBER, CYAN, 0.25)
         elif mode == "microcircuit_exchange" and seg.cell_type == "TC":
@@ -373,7 +531,7 @@ def render_frame(
     image = Image.alpha_composite(image, core)
 
     for node in scene.nodes:
-        terminal_flash = node.terminal and pulse_value(node.distance, phase + 0.015, count=count, width=0.025, direction=direction)
+        terminal_flash = node.terminal and pulse_value(node.distance, phase + 0.015, count=count, width=0.025, direction=-1.0)
         soma_flash = node.soma and (0.56 + 0.44 * math.sin(math.tau * phase))
         if terminal_flash:
             r = node.radius * (1.5 + 2.6 * terminal_flash)
@@ -388,30 +546,53 @@ def render_frame(
 
 
 def build_scene(variant: str, width: int, height: int) -> SceneCache:
-    mc = load_morphology("mitral", "MC", REPO / "prev_ob_models/Birgiolas2020/SWCs/MC/IF04360.CNG.swc")
-    tc = load_morphology("tufted", "TC", REPO / "prev_ob_models/Birgiolas2020/SWCs/TC/IF04355.CNG.swc")
-    gc = load_morphology("granule", "GC", REPO / "prev_ob_models/Birgiolas2020/SWCs/GC/OB_granule_cell7.CNG.swc")
-    if variant == "single_arbor_signal":
+    morphs = {
+        "mc_a": load_morphology("mitral-a", "MC", REPO / "prev_ob_models/Birgiolas2020/SWCs/MC/IF04360.CNG.swc"),
+        "mc_b": load_morphology("mitral-b", "MC", REPO / "prev_ob_models/Birgiolas2020/SWCs/MC/IF04344.CNG.swc"),
+        "tc_a": load_morphology("tufted-a", "TC", REPO / "prev_ob_models/Birgiolas2020/SWCs/TC/IF04355.CNG.swc"),
+        "tc_b": load_morphology("tufted-b", "TC", REPO / "prev_ob_models/Birgiolas2020/SWCs/TC/IF04204.CNG.swc"),
+        "gc_a": load_morphology("granule-a", "GC", REPO / "prev_ob_models/Birgiolas2020/SWCs/GC/OB_granule_cell7.CNG.swc"),
+        "gc_b": load_morphology("granule-b", "GC", REPO / "prev_ob_models/Birgiolas2020/SWCs/GC/OB_granule_cell6.CNG.swc"),
+    }
+    if variant == "connected_field":
         placed = [
-            PlacedMorph(mc, (width * 0.48, height * 0.56), 0.82, -24, 18, -7, CYAN, 1.0, 2.15, 0.0, 0.0),
+            PlacedMorph(morphs["mc_a"], (width * 0.25, height * 0.56), 0.48, -23, 17, -8, TYPE_COLORS["MC"], 0.90, 1.30, 0.02, -0.04),
+            PlacedMorph(morphs["mc_b"], (width * 0.62, height * 0.57), 0.46, 20, 15, 10, TYPE_COLORS["MC"], 0.86, 1.24, 0.19, 0.02),
+            PlacedMorph(morphs["tc_a"], (width * 0.44, height * 0.53), 0.44, 23, 10, 5, TYPE_COLORS["TC"], 0.88, 1.18, 0.33, 0.08),
+            PlacedMorph(morphs["tc_b"], (width * 0.77, height * 0.52), 0.39, -18, 12, -6, TYPE_COLORS["TC"], 0.82, 1.10, 0.46, 0.16),
+            PlacedMorph(morphs["gc_a"], (width * 0.36, height * 0.74), 0.58, -31, 8, -5, TYPE_COLORS["GC"], 0.86, 1.06, 0.65, 0.22),
+            PlacedMorph(morphs["gc_b"], (width * 0.58, height * 0.73), 0.54, 28, 6, 7, TYPE_COLORS["GC"], 0.82, 1.02, 0.78, 0.28),
         ]
         bg_style = "luminous"
-    elif variant == "split_wavefront":
+    elif variant == "layered_exchange":
         placed = [
-            PlacedMorph(mc, (width * 0.32, height * 0.57), 0.62, -20, 16, -10, AMBER, 0.90, 1.75, 0.02, 0.00),
-            PlacedMorph(tc, (width * 0.69, height * 0.55), 0.56, 25, 11, 8, CYAN, 0.82, 1.55, 0.34, 0.08),
+            PlacedMorph(morphs["mc_a"], (width * 0.18, height * 0.58), 0.44, -19, 16, -9, TYPE_COLORS["MC"], 0.88, 1.22, 0.03, -0.06),
+            PlacedMorph(morphs["mc_b"], (width * 0.46, height * 0.56), 0.43, 18, 14, 8, TYPE_COLORS["MC"], 0.86, 1.20, 0.23, 0.02),
+            PlacedMorph(morphs["mc_a"], (width * 0.75, height * 0.58), 0.40, -34, 12, -5, TYPE_COLORS["MC"], 0.80, 1.12, 0.41, 0.08),
+            PlacedMorph(morphs["tc_a"], (width * 0.34, height * 0.49), 0.38, 26, 9, 4, TYPE_COLORS["TC"], 0.88, 1.10, 0.35, 0.12),
+            PlacedMorph(morphs["tc_b"], (width * 0.61, height * 0.48), 0.36, -16, 10, -7, TYPE_COLORS["TC"], 0.84, 1.06, 0.50, 0.18),
+            PlacedMorph(morphs["gc_a"], (width * 0.29, height * 0.74), 0.52, -27, 7, -4, TYPE_COLORS["GC"], 0.83, 1.00, 0.66, 0.24),
+            PlacedMorph(morphs["gc_b"], (width * 0.53, height * 0.74), 0.50, 29, 6, 6, TYPE_COLORS["GC"], 0.80, 0.98, 0.77, 0.29),
+            PlacedMorph(morphs["gc_a"], (width * 0.73, height * 0.75), 0.49, -14, 8, 3, TYPE_COLORS["GC"], 0.76, 0.94, 0.88, 0.35),
         ]
         bg_style = "graphite"
     else:
         placed = [
-            PlacedMorph(mc, (width * 0.36, height * 0.58), 0.55, -21, 15, -8, AMBER, 0.84, 1.55, 0.08, 0.0),
-            PlacedMorph(tc, (width * 0.67, height * 0.54), 0.51, 28, 10, 9, CYAN, 0.82, 1.45, 0.38, 0.10),
-            PlacedMorph(gc, (width * 0.50, height * 0.72), 0.72, -34, 7, -4, MINT, 0.88, 1.30, 0.68, 0.18),
+            PlacedMorph(morphs["mc_a"], (width * 0.22, height * 0.58), 0.42, -22, 14, -8, TYPE_COLORS["MC"], 0.86, 1.16, 0.04, -0.07),
+            PlacedMorph(morphs["mc_b"], (width * 0.43, height * 0.56), 0.40, 21, 13, 9, TYPE_COLORS["MC"], 0.82, 1.12, 0.19, 0.00),
+            PlacedMorph(morphs["mc_a"], (width * 0.67, height * 0.58), 0.39, -29, 12, -5, TYPE_COLORS["MC"], 0.78, 1.08, 0.31, 0.05),
+            PlacedMorph(morphs["tc_a"], (width * 0.33, height * 0.50), 0.36, 24, 8, 4, TYPE_COLORS["TC"], 0.84, 1.05, 0.41, 0.13),
+            PlacedMorph(morphs["tc_b"], (width * 0.55, height * 0.49), 0.34, -18, 9, -6, TYPE_COLORS["TC"], 0.80, 1.00, 0.53, 0.19),
+            PlacedMorph(morphs["tc_a"], (width * 0.78, height * 0.50), 0.33, 31, 8, 9, TYPE_COLORS["TC"], 0.74, 0.98, 0.64, 0.25),
+            PlacedMorph(morphs["gc_a"], (width * 0.27, height * 0.75), 0.50, -29, 7, -4, TYPE_COLORS["GC"], 0.82, 0.96, 0.68, 0.25),
+            PlacedMorph(morphs["gc_b"], (width * 0.48, height * 0.75), 0.48, 28, 6, 6, TYPE_COLORS["GC"], 0.78, 0.94, 0.80, 0.31),
+            PlacedMorph(morphs["gc_a"], (width * 0.69, height * 0.76), 0.47, -16, 8, 2, TYPE_COLORS["GC"], 0.74, 0.90, 0.91, 0.37),
         ]
         bg_style = "lattice"
     segments, nodes = project_scene(placed, width, height)
+    connectors = build_connectors(nodes, width, height)
     base = background(width, height, bg_style)
-    scene = SceneCache(base=base, segments=segments, nodes=nodes)
+    scene = SceneCache(base=base, segments=segments, nodes=nodes, connectors=connectors)
     scene.base = render_base(scene, width, height)
     return scene
 
@@ -478,7 +659,7 @@ def export_all(
     frames: int,
     duration_ms: int,
 ) -> dict[str, Path]:
-    selected = variants or ["single_arbor_signal", "split_wavefront", "microcircuit_exchange"]
+    selected = variants or ["connected_field", "layered_exchange", "dense_microcircuit"]
     artifacts: dict[str, Path] = {}
     posters: dict[str, Path] = {}
     for variant in selected:
