@@ -70,7 +70,7 @@ else:
     )
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
-from scipy.ndimage import gaussian_filter
+from scipy.ndimage import gaussian_filter, gaussian_filter1d
 from scipy.signal import butter, filtfilt, hilbert, lfilter, spectrogram, welch
 from scipy.stats import gaussian_kde
 from modify_model import (
@@ -238,6 +238,7 @@ class FrequencyPlotConfig:
     modulus: float | None = 1e8
     max_freq_hz: float = 200.0
     kde_bw_method: str | float = "scott"
+    kde1d_engine: str = "histogram"
     kde_bw_x: float = 0.15
     kde_bw_y: float = 0.2
     kde2d_engine: str = "histogram"
@@ -8354,6 +8355,7 @@ def _plot_frequency_kde_1d_from_samples(
     """Plot a 1D KDE from frequency samples."""
     ax = ax or plt.subplots(figsize=(10, 5))[1]
     freqs = np.asarray(freqs, dtype=float)
+    freqs = freqs[np.isfinite(freqs)]
     if len(freqs) == 0:
         ax.text(0.5, 0.5, "No frequency samples", ha="center", va="center", transform=ax.transAxes)
         ax.set_title(title)
@@ -8362,12 +8364,22 @@ def _plot_frequency_kde_1d_from_samples(
         ax.set_xlim(0, float(config.max_freq_hz))
         return ax
 
-    kde = gaussian_kde(freqs, bw_method=config.kde_bw_method)
-    _apply_frequency_kde_y_scale(kde, config.kde_bw_y)
-
     f_upper = max(float(config.max_freq_hz), float(np.max(freqs)) * 1.1)
-    f_range = np.linspace(0.0, f_upper, int(config.kde_f_resolution))
-    density = kde(f_range)
+    engine = str(getattr(config, "kde1d_engine", "histogram")).strip().lower()
+    if engine in {"exact", "gaussian", "gaussian_kde", "scipy"}:
+        kde = gaussian_kde(freqs, bw_method=config.kde_bw_method)
+        _apply_frequency_kde_y_scale(kde, config.kde_bw_y)
+        f_range = np.linspace(0.0, f_upper, int(config.kde_f_resolution))
+        density = kde(f_range)
+    else:
+        bins = max(16, int(config.kde_f_resolution))
+        clipped = freqs[(freqs >= 0.0) & (freqs <= f_upper)]
+        if len(clipped) == 0:
+            clipped = freqs
+        density, edges = np.histogram(clipped, bins=bins, range=(0.0, f_upper), density=True)
+        sigma = max(0.0, float(config.kde_bw_y) * 8.0)
+        density = gaussian_filter1d(density, sigma=sigma, mode="nearest")
+        f_range = (edges[:-1] + edges[1:]) / 2.0
     ax.plot(f_range, density)
     ax.fill_between(f_range, density, alpha=0.3)
     ax.set_xlabel("Frequency (Hz)")
