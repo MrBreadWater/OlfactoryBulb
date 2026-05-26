@@ -39,6 +39,7 @@ from olfactorybulb.paramsets.base import *
 from olfactorybulb.paramsets.case_studies import *
 from olfactorybulb.paramsets.sensitivity import *
 from olfactorybulb.inputs import InputSpec
+from olfactorybulb.epli import extend_runtime_cell_types, extend_runtime_synapse_sets
 from prev_ob_models.cell_registry import load_cell_class, list_cell_models
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
@@ -414,10 +415,24 @@ class OlfactoryBulb:
                 self.h.quit()
 
     def get_configured_cell_types(self):
-        return list(getattr(self.params, "cell_types", ["MC", "GC", "TC"]))
+        return extend_runtime_cell_types(
+            getattr(self.params, "cell_types", ["MC", "GC", "TC"]),
+            enable_epl_interneurons=bool(getattr(self.params, "enable_epl_interneurons", False)),
+            max_epl_interneurons=int(getattr(self.params, "max_epl_interneurons", 0) or 0),
+            epl_interneuron_cell_type=str(getattr(self.params, "epl_interneuron_cell_type", "EPLI")),
+        )
 
     def get_configured_chemical_synapse_sets(self):
-        return list(getattr(self.params, "chemical_synapse_sets", ["GCs__MCs", "GCs__TCs"]))
+        return extend_runtime_synapse_sets(
+            getattr(self.params, "chemical_synapse_sets", ["GCs__MCs", "GCs__TCs"]),
+            enable_epl_interneurons=bool(getattr(self.params, "enable_epl_interneurons", False)),
+            max_epl_interneurons=int(getattr(self.params, "max_epl_interneurons", 0) or 0),
+            epl_interneuron_synapse_sets=getattr(
+                self.params,
+                "epl_interneuron_synapse_sets",
+                ["EPLIs__MCs", "EPLIs__TCs"],
+            ),
+        )
 
     def get_configured_gc_kar_synapse_sets(self):
         return list(getattr(self.params, "gc_kar_synapse_sets", self.get_configured_chemical_synapse_sets()))

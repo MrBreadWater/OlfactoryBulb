@@ -16,6 +16,15 @@ from math import pi, acos
 import json
 sys.path.append(os.getcwd())
 from olfactorybulb import slices
+from olfactorybulb.epli import (
+    DEFAULT_EPLI_MODEL_KEY,
+    EPLI_GROUP_NAME,
+    default_slice_group_colors,
+    default_slice_group_names,
+    default_slice_synapse_blueprints,
+    epli_population_enabled,
+    resolve_epli_model_spec,
+)
 from blenderneuron.blender.utils import fast_get, make_safe_filename
 from blenderneuron.blender.views.vectorconfinerview import VectorConfinerView
 from blenderneuron.blender.views.synapseformerview import SynapseFormerView
@@ -83,13 +92,20 @@ class SliceBuilderBlender:
                  odors=['Apple'],
                  slice_object_name='DorsalColumnSlice',
                  max_mcs=10, max_tcs=None, max_gcs=300,  # Uses mouse ratios if None
+                 max_eplis=0,
                  mc_particles_object_name='2 ML Particles',
                  tc_particles_object_name='1 OPL Particles',
                  gc_particles_object_name='4 GRL Particles',
+                 epli_particles_object_name=None,
                  glom_particles_object_name='0 GL Particles',
                  glom_layer_object_name='0 GL',
                  outer_opl_object_name='1 OPL-Outer',
-                 inner_opl_object_name='1 OPL-Inner'):
+                 inner_opl_object_name='1 OPL-Inner',
+                 enable_epl_interneurons=False,
+                 epl_interneuron_model=DEFAULT_EPLI_MODEL_KEY,
+                 epl_interneuron_family=None,
+                 epli_depth_min_fraction=0.2,
+                 epli_depth_max_fraction=0.8):
         """
         Prepares the slice builder
 
@@ -98,9 +114,11 @@ class SliceBuilderBlender:
         :param max_mcs: The maximum number of MCs to include in the model
         :param max_tcs: Maximum number of TCs. Use None to use mouse MC-TC ratio.
         :param max_gcs: Maximum number of GCs. Use None to use mouse MC-GC ratio.
+        :param max_eplis: Maximum number of optional EPL interneurons. 0 disables the population.
         :param mc_particles_object_name: The name of the Blender object that defines MC soma locations
         :param tc_particles_object_name: The name of the Blender object that defines TC soma locations
         :param gc_particles_object_name: The name of the Blender object that defines GC soma locations
+        :param epli_particles_object_name: Optional Blender object that defines EPLI soma candidate locations.
         :param glom_particles_object_name: The name of the Blender object that defines glomerulus locations
         :param glom_layer_object_name: The name of the Blender object that defines the geometry of glomerular layer
         :param outer_opl_object_name: The name of the Blender object that defines the outer boundary of the OPL layer
@@ -126,15 +144,28 @@ class SliceBuilderBlender:
         self.max_mcs = max_mcs
         self.max_tcs = max_tcs
         self.max_gcs = max_gcs
+        self.max_eplis = max_eplis
 
         self.glom_particles_name = glom_particles_object_name
         self.tc_particles_name = tc_particles_object_name
         self.mc_particles_name = mc_particles_object_name
         self.gc_particles_name = gc_particles_object_name
+        self.epli_particles_name = epli_particles_object_name or tc_particles_object_name
 
         self.glom_layer_object_name = glom_layer_object_name
         self.outer_opl_object_name = outer_opl_object_name
         self.inner_opl_object_name = inner_opl_object_name
+        self.enable_epl_interneurons = epli_population_enabled(
+            enable_epl_interneurons=enable_epl_interneurons,
+            max_epl_interneurons=max_eplis,
+        )
+        self.epli_depth_min_fraction = float(epli_depth_min_fraction)
+        self.epli_depth_max_fraction = float(epli_depth_max_fraction)
+        self.epli_model_spec = (
+            resolve_epli_model_spec(model=epl_interneuron_model, family=epl_interneuron_family)
+            if self.enable_epl_interneurons
+            else None
+        )
 
         # Within slice
         self.get_cell_locations()
@@ -171,6 +202,10 @@ class SliceBuilderBlender:
             print('Adding GC %s' % i)
             self.add_gc(loc)
 
+        for i, loc in enumerate(getattr(self, "epli_locs", [])):
+            print('Adding EPLI %s' % i)
+            self.add_epli(loc)
+
         # Add synapse sets
         self.add_synapse_sets()
 
@@ -178,8 +213,10 @@ class SliceBuilderBlender:
         self.node.groups['MCs'].select_roots('All','mc*')
         self.node.groups['TCs'].select_roots('All','tc*')
         self.node.groups['GCs'].select_roots('All','gc*')
+        if self.enable_epl_interneurons and EPLI_GROUP_NAME in self.node.groups:
+            self.node.groups[EPLI_GROUP_NAME].select_roots('All', 'PVCRH*')
 
-        gcs_with_syns = set()
+        connected_source_cells_by_group = {}
 
         # Find and save syns in all synapse sets
         for syn_set in self.node.synapse_sets:
@@ -188,20 +225,23 @@ class SliceBuilderBlender:
 
             pairs = syn_set.get_synapse_locations()
 
-            # Note which GCs have synapses
+            # Track connected source-side interneurons for optional pruning.
             for pair in pairs:
                 source_cell = pair.source.section_name[:pair.source.section_name.find(']')+1]
-                gcs_with_syns.add(source_cell)
+                connected_source_cells_by_group.setdefault(syn_set.group_source, set()).add(source_cell)
 
             syn_set.save_synapses(file)
 
-        # Remove unconnected GCs
-        # they won't contribute to simulation output
-        # removing them makes the simulation smaller
-        self.node.groups['GCs'].include_roots_by_name(
-            [cell + '.soma' for cell in gcs_with_syns],
-            exclude_others=True
-        )
+        # Remove unconnected source-side interneurons that would not contribute
+        # to simulation output. Keep MCs/TCs untouched.
+        for source_group_name in ('GCs', EPLI_GROUP_NAME):
+            connected_cells = connected_source_cells_by_group.get(source_group_name)
+            if source_group_name not in self.node.groups or connected_cells is None:
+                continue
+            self.node.groups[source_group_name].include_roots_by_name(
+                [cell + '.soma' for cell in connected_cells],
+                exclude_others=True
+            )
 
         # Save all cells
         for group in self.node.groups.values():
@@ -216,12 +256,11 @@ class SliceBuilderBlender:
             json.dump(self.glom_cells, f)
 
         # Initially, reduce group display detail levels - All can be changed in Blender GUI
-        self.node.groups['MCs'].interaction_granularity = 'Cell' # Clicking any cell dendrite will select the whole cell
-        self.node.groups['TCs'].interaction_granularity = 'Cell'
-        self.node.groups['GCs'].interaction_granularity = 'Cell'
-        self.node.groups['MCs'].as_lines = True # Dendrites will be shown as 0-width lines
-        self.node.groups['TCs'].as_lines = True
-        self.node.groups['GCs'].as_lines = True
+        for group_name in default_slice_group_names(include_epli=self.enable_epl_interneurons):
+            if group_name not in self.node.groups:
+                continue
+            self.node.groups[group_name].interaction_granularity = 'Cell'
+            self.node.groups[group_name].as_lines = True
 
         # Show all group cells
         print('Creating blender scene...')
@@ -230,48 +269,68 @@ class SliceBuilderBlender:
 
     def add_synapse_sets(self):
         """
-        Creates synapse sets between MCs-GCs and TCs-GCs
+        Creates reciprocal synapse sets between configured slice populations.
         """
 
         # Delete the default set
         self.node.synapse_sets.remove(0)
 
-        self.create_synapse_set('GCs', 'MCs')
-        self.create_synapse_set('GCs', 'TCs')
+        for blueprint in default_slice_synapse_blueprints(include_epli=self.enable_epl_interneurons):
+            self.create_synapse_set(**blueprint)
 
-    def create_synapse_set(self, group_from, group_to):
+    def create_synapse_set(
+        self,
+        group_from,
+        group_to,
+        max_distance=5,
+        section_pattern_source="*apic*",
+        section_pattern_dest="*dend*",
+        synapse_name_dest='GabaSyn',
+        synapse_params_dest=None,
+        is_reciprocal=True,
+        synapse_name_source='AmpaNmdaSyn',
+        synapse_params_source=None,
+        create_spines=False,
+        spine_neck_diameter=0.2,
+        spine_head_diameter=1,
+        spine_name_prefix='Spine',
+        conduction_velocity=1,
+        initial_weight=1,
+        threshold=0,
+    ):
         """
         Defines a synapse set between two BlenderNEURON groups of cells
 
-        :param group_from: One of 'MCs', 'TCs', 'GCs'
-        :param group_to: One of 'MCs', 'TCs', 'GCs'
+        :param group_from: Configured BlenderNEURON source group name
+        :param group_to: Configured BlenderNEURON destination group name
         """
 
         new_set = self.node.add_synapse_set(group_from + '->' + group_to)
         new_set.group_source = group_from
         new_set.group_dest = group_to
 
-        new_set.max_distance = 5
+        if synapse_params_dest is None:
+            synapse_params_dest = {'gmax': 0.005, 'tau1': 1, 'tau2': 100}
+        if synapse_params_source is None:
+            synapse_params_source = {'gmax': 0.1}
+
+        new_set.max_distance = max_distance
         new_set.use_radius = True
         new_set.max_syns_per_pt = 1
-        new_set.section_pattern_source = "*apic*"
-        new_set.section_pattern_dest = "*dend*"
-        new_set.synapse_name_dest = 'GabaSyn'
-        new_set.synapse_params_dest = str({
-            'gmax': 0.005,  # uS,
-            'tau1': 1,  # ms
-            'tau2': 100  # ms
-        })
-        new_set.is_reciprocal = True
-        new_set.synapse_name_source = 'AmpaNmdaSyn'
-        new_set.synapse_params_source = str({'gmax': 0.1})
-        new_set.create_spines = False
-        new_set.spine_neck_diameter = 0.2
-        new_set.spine_head_diameter = 1
-        new_set.spine_name_prefix = 'Spine'
-        new_set.conduction_velocity = 1
-        new_set.initial_weight = 1
-        new_set.threshold = 0
+        new_set.section_pattern_source = section_pattern_source
+        new_set.section_pattern_dest = section_pattern_dest
+        new_set.synapse_name_dest = synapse_name_dest
+        new_set.synapse_params_dest = str(synapse_params_dest)
+        new_set.is_reciprocal = is_reciprocal
+        new_set.synapse_name_source = synapse_name_source
+        new_set.synapse_params_source = str(synapse_params_source)
+        new_set.create_spines = create_spines
+        new_set.spine_neck_diameter = spine_neck_diameter
+        new_set.spine_head_diameter = spine_head_diameter
+        new_set.spine_name_prefix = spine_name_prefix
+        new_set.conduction_velocity = conduction_velocity
+        new_set.initial_weight = initial_weight
+        new_set.threshold = threshold
 
     def clear_slice_files(self):
         """
@@ -305,11 +364,22 @@ class SliceBuilderBlender:
         self.mc_locs = self.get_locs_within_slice(self.mc_particles_name, self.slice_name, limit=self.max_mcs)
         self.tc_locs = self.get_locs_within_slice(self.tc_particles_name, self.slice_name, limit=self.max_tcs)
         self.gc_locs = self.get_locs_within_slice(self.gc_particles_name, self.slice_name, limit=self.max_gcs)
+        if self.enable_epl_interneurons:
+            tc_particle_ids = {loc['id'] for loc in self.tc_locs} if self.epli_particles_name == self.tc_particles_name else set()
+            self.epli_locs = self.get_epli_locs(
+                self.epli_particles_name,
+                exclude_particle_ids=tc_particle_ids,
+                limit=self.max_eplis,
+            )
+        else:
+            self.epli_locs = []
 
         print('Gloms:', len(self.glom_locs))
         print('TCs:', len(self.tc_locs))
         print('MCs:', len(self.mc_locs))
         print('GCs:', len(self.gc_locs))
+        if self.enable_epl_interneurons:
+            print('EPLIs:', len(self.epli_locs))
 
     def get_opl_locs(self, opl_name, slice_obj_name):
         """
@@ -332,6 +402,44 @@ class SliceBuilderBlender:
         return np.array([pt
                          for pt in locs
                          if self.is_inside(Vector(pt), slice_obj)])
+
+    def get_epli_locs(self, particle_obj_name, exclude_particle_ids=None, limit=None):
+        """
+        Select candidate soma locations for optional EPL interneurons.
+
+        The first-pass implementation reuses one particle cloud and keeps only
+        positions that sit within a configurable interior band of the EPL,
+        estimated from distances to the inner and outer OPL boundaries.
+        """
+
+        exclude_particle_ids = set() if exclude_particle_ids is None else set(exclude_particle_ids)
+        candidates = self.get_locs_within_slice(particle_obj_name, self.slice_name)
+        result = []
+
+        inner_opl = bpy.data.objects[self.inner_opl_object_name]
+        outer_opl = bpy.data.objects[self.outer_opl_object_name]
+
+        for candidate in candidates:
+            if candidate['id'] in exclude_particle_ids:
+                continue
+
+            _closest_iopl_loc, dist_to_iopl = self.closest_point_on_object(candidate['loc'], inner_opl)
+            _closest_oopl_loc, dist_to_oopl = self.closest_point_on_object(candidate['loc'], outer_opl)
+            total_dist = dist_to_iopl + dist_to_oopl
+            if total_dist <= 0:
+                continue
+
+            depth_fraction = dist_to_iopl / total_dist
+            if self.epli_depth_min_fraction <= depth_fraction <= self.epli_depth_max_fraction:
+                candidate = dict(candidate)
+                candidate['depth_fraction'] = depth_fraction
+                result.append(candidate)
+
+        if limit is not None:
+            print('Selecting %s/%s %s EPLI locations inside slice' % (limit, len(result), particle_obj_name))
+            result = result[:limit]
+
+        return result
 
     def get_cell_base_model_info(self):
         """
@@ -367,14 +475,15 @@ class SliceBuilderBlender:
 
     def create_groups(self):
         """
-        Creates empty BlenderNEURON cell groups for MCs, TCs, and GCs.
+        Creates empty BlenderNEURON cell groups for configured populations.
         """
 
         # Remove the default group
         self.node.groups['Group.000'].remove()
 
         # Create empty cell groups
-        groups = [self.node.add_group(name, False) for name in ['MCs', 'TCs', 'GCs']]
+        group_names = default_slice_group_names(include_epli=self.enable_epl_interneurons)
+        groups = [self.node.add_group(name, False) for name in group_names]
 
         # show each section as blender objects - necessary for dend alignment
         for group in groups:
@@ -383,9 +492,9 @@ class SliceBuilderBlender:
             group.record_activity = False
 
         # Add some color
-        groups[0].default_color = [0.15, 0.71, 0.96]       # MCs - neon blue
-        groups[1].default_color = [1,    0.73, 0.82]       # TCs - pink
-        groups[2].default_color = [1,    0.80, 0.11]       # GCs - gold
+        group_colors = default_slice_group_colors(include_epli=self.enable_epl_interneurons)
+        for group in groups:
+            group.default_color = group_colors[group.name]
 
     def globalize_slice(self):
         """
@@ -688,6 +797,37 @@ class SliceBuilderBlender:
         self.position_orient_cell(soma, apic_end, gc_pt['loc'], apic_target_loc)
 
         # Retain the reoriented cell
+        bpy.ops.blenderneuron.update_groups_with_view_data()
+
+    def add_epli(self, epli_pt):
+        """
+        Instantiate and place one optional fast EPL interneuron surrogate.
+
+        The first-pass geometry is deliberately conservative: soma placed within
+        a mid-EPL band, random in-plane rotation, then dendrites confined to the
+        EPL corridor between the inner and outer OPL surfaces.
+        """
+
+        if self.epli_model_spec is None:
+            raise RuntimeError("EPLI model spec is not configured.")
+
+        instance_name = self.neuron.create_cell('EPLI', self.epli_model_spec.key)
+        self.import_instance(instance_name, EPLI_GROUP_NAME)
+
+        soma = bpy.data.objects[instance_name]
+        soma.rotation_euler[2] = random.randrange(360) / 180.0 * pi
+        soma.location = epli_pt['loc']
+        bpy.context.scene.update()
+
+        bpy.ops.blenderneuron.update_groups_with_view_data()
+        self.confine_dends(
+            EPLI_GROUP_NAME,
+            self.inner_opl_object_name,
+            self.outer_opl_object_name,
+            max_angle=self.max_alignment_angle,
+            height_start=self.epli_depth_min_fraction,
+            height_end=self.epli_depth_max_fraction,
+        )
         bpy.ops.blenderneuron.update_groups_with_view_data()
 
     def get_random_model(self, base_models, longer_idxs):
