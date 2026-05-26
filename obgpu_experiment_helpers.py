@@ -6734,7 +6734,8 @@ def load_result(
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
     summary = _read_json_if_present(result_dir / "summary.json")
     run_info = _read_json_if_present(result_dir / "run_info.json")
-    remote_payload = (run_info or {}).get("remote") if isinstance(run_info, dict) else {}
+    remote_payload_value = (run_info or {}).get("remote") if isinstance(run_info, dict) else {}
+    remote_payload = remote_payload_value if isinstance(remote_payload_value, dict) else {}
     deferred_remote_artifacts = set(remote_payload.get("deferred_remote_artifacts") or [])
     artifact_sizes = _standard_result_artifact_sizes(result_dir)
     load_timings: dict[str, float] = {}

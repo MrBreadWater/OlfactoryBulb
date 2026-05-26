@@ -1058,4 +1058,15 @@ with tempfile.TemporaryDirectory() as tmp:
     assert npz_loaded["soma_vs"][0][2].dtype == np.float32
     print("load_result NPZ soma trace path: OK")
 
+    # --- Recovered local runs may have no remote dict in run_info ---
+    recovered_result_dir = tmp / "recovered-run"
+    recovered_result_dir.mkdir(parents=True, exist_ok=True)
+    (recovered_result_dir / "run_info.json").write_text(json.dumps({"remote": None}))
+    (recovered_result_dir / "summary.json").write_text("{}")
+    with open(recovered_result_dir / "input_times.pkl", "wb") as handle:
+        pickle.dump([], handle)
+    recovered_loaded = hlp.load_result(recovered_result_dir)
+    assert recovered_loaded["input_times"] == []
+    print("load_result tolerates empty remote run_info: OK")
+
 print("\nAll tests passed.")
