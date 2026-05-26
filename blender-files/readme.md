@@ -16,16 +16,23 @@ Most assets were developed with Blender 2.79. For best results, open historical
 - `gloms-aligned-with-Mig14.blend`: registration of Migliore 2014 glomeruli to
   this model's coordinate system.
 
-## Archival Presentation Assets
+## Purged Archival Presentation Assets
 
-- `10MC-net.blend`: static 10-MC network visualization used for a defense video.
 - `bulb-layers-only.blend`: nested OB layer animation uploaded to Sketchfab.
 - `cell-galery.blend`: side-by-side cell figure source.
-- `cell-galery-animated.blend`: AP propagation animation source.
-- `ob-all-cells.blend.tar.gz`: non-simplified layer meshes with full cell
-  locations.
-- `ob-gloms.blend.tar.gz`: non-simplified layers with glomerular locations.
 
-Large binary Blender/media assets should not be added casually. Prefer keeping
-new generated renders outside git unless they are intentional documentation
+The following large archival files were removed from the active git tree and
+purged from history for repository size:
+
+- `10MC-net.blend`
+- `cell-gallery-animated.blend`
+- `ob-all-cells.blend.tar.gz`
+- `ob-gloms.blend.tar.gz`
+- `media/10MC-net.mp4`
+- generated website-header GIF renders under
+  `media/website_header_animated_concepts/`
+
+Keep replacement copies in external storage or regenerate them locally. Large
+binary Blender/media assets should not be added casually; prefer keeping new
+generated renders outside git unless they are intentional documentation
 deliverables.

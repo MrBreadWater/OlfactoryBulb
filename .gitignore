@@ -148,6 +148,14 @@ results/tmp_*/
 # Local archives
 *.zip
 
+# Purged archival binary media/assets
+blender-files/10MC-net.blend
+blender-files/cell-gallery-animated.blend
+blender-files/ob-all-cells.blend.tar.gz
+blender-files/ob-gloms.blend.tar.gz
+media/10MC-net.mp4
+media/website_header_animated_concepts/*.gif
+
 # Generated NEURON mechanism build products
 prev_ob_models/**/*.c
 prev_ob_models/**/*.o
