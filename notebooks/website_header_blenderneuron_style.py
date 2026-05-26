@@ -25,6 +25,7 @@ GOLD = np.array([241, 161, 67], dtype=float)
 TEAL = np.array([21, 168, 152], dtype=float)
 CYAN = np.array([8, 232, 232], dtype=float)
 GREEN = np.array([104, 200, 8], dtype=float)
+WHITE = np.array([255, 255, 255], dtype=float)
 BG = tuple(int(channel) for channel in INK)
 TYPE_COLORS = {
     "MC": MAROON,
@@ -440,17 +441,26 @@ def render_frame(
         elif mode in ("dense_microcircuit", "layered_exchange"):
             pulse_tint = mix(TEAL, GREEN, 0.22)
         if active > 0.10:
-            bloom_tint = mix(pulse_tint, np.array([255, 255, 255], dtype=float), 0.22)
-            draw_soft_line(bloom_draw, seg, bloom_tint, 38 * active, seg.width * (9.0 + 2.8 * active))
-        draw_soft_line(glow_draw, seg, pulse_tint, 92 * active, seg.width * (6.2 + 1.9 * active))
-        draw_soft_line(core_draw, seg, mix(pulse_tint, np.array([255, 255, 255], dtype=float), 0.12), 218 * active, seg.width * (1.72 + 0.85 * active))
-        if active > 0.44:
-            highlight = (active - 0.44) / 0.56
-            draw_soft_line(core_draw, seg, np.array([255, 255, 255], dtype=float), 84 * highlight, max(1.0, seg.width * 0.70))
-        if active > 0.62:
-            draw_soft_line(core_draw, seg, np.array([255, 255, 255], dtype=float), 56 * active, max(1.0, seg.width * 0.45))
+            bloom_tint = mix(pulse_tint, WHITE, 0.42)
+            draw_soft_line(bloom_draw, seg, bloom_tint, 64 * active, seg.width * (11.0 + 3.8 * active))
+        draw_soft_line(glow_draw, seg, pulse_tint, 108 * active, seg.width * (6.8 + 2.2 * active))
+        core_tint = mix(pulse_tint, WHITE, 0.24 + 0.46 * active)
+        draw_soft_line(core_draw, seg, core_tint, 238 * active, seg.width * (1.88 + 0.95 * active))
+        if active > 0.34:
+            highlight = (active - 0.34) / 0.66
+            draw_soft_line(core_draw, seg, WHITE, 158 * highlight, max(1.0, seg.width * (0.72 + 0.26 * highlight)))
+        if active > 0.70:
+            hot = (active - 0.70) / 0.30
+            draw_soft_line(spark_draw, seg, WHITE, 190 * hot, max(1.0, seg.width * (0.55 + 0.35 * hot)))
+            ellipse(
+                spark_draw,
+                0.5 * (seg.x0 + seg.x1),
+                0.5 * (seg.y0 + seg.y1),
+                seg.width * (0.95 + 1.05 * hot),
+                rgba(mix(pulse_tint, WHITE, 0.78), 132 * hot),
+            )
 
-    bloom = bloom.filter(ImageFilter.GaussianBlur(radius=7.0 * SUPERSAMPLE))
+    bloom = bloom.filter(ImageFilter.GaussianBlur(radius=8.3 * SUPERSAMPLE))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=4.2 * SUPERSAMPLE))
     image = Image.alpha_composite(image, bloom)
     image = Image.alpha_composite(image, glow)
@@ -636,10 +646,28 @@ def build_global_gif_palette(frames: list[Image.Image], colors: int) -> Image.Im
     scale = max(1, math.ceil(sample_frames[0].width / 760))
     sample_width = max(1, sample_frames[0].width // scale)
     sample_height = max(1, sample_frames[0].height // scale)
-    palette_source = Image.new("RGB", (sample_width, sample_height * len(sample_frames)), BG)
+    anchor_height = max(24, sample_height // 16)
+    palette_source = Image.new("RGB", (sample_width, sample_height * len(sample_frames) + anchor_height), BG)
     for idx, frame in enumerate(sample_frames):
         sample = frame.resize((sample_width, sample_height), Image.Resampling.LANCZOS)
         palette_source.paste(sample, (0, idx * sample_height))
+    anchors = [
+        BG,
+        tuple(WHITE.astype(np.uint8)),
+        tuple(GOLD.astype(np.uint8)),
+        tuple(CYAN.astype(np.uint8)),
+        tuple(GREEN.astype(np.uint8)),
+        tuple(TEAL.astype(np.uint8)),
+        tuple(MAROON.astype(np.uint8)),
+        tuple(mix(MAROON, GOLD, 0.32).astype(np.uint8)),
+        tuple(mix(TEAL, GREEN, 0.22).astype(np.uint8)),
+    ]
+    anchor_y0 = sample_height * len(sample_frames)
+    stripe_width = max(1, math.ceil(sample_width / len(anchors)))
+    draw = ImageDraw.Draw(palette_source)
+    for idx, color in enumerate(anchors):
+        x0 = idx * stripe_width
+        draw.rectangle((x0, anchor_y0, min(sample_width, x0 + stripe_width), anchor_y0 + anchor_height), fill=color)
     return palette_source.quantize(colors=colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
 
 
