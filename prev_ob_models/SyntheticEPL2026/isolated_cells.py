@@ -34,6 +34,7 @@ class _SyntheticEPLCell(IsolatedCell):
     """Shared helper for synthetic EPL interneuron surrogates."""
 
     sentinel_mechanisms = ("AmpaNmdaSyn", "GabaSyn", "GapJunction", "VecStim", "KainateSyn")
+    _instance_counter = 0
 
     def __init__(self):
         with RunInClassDirectory(type(self)):
@@ -56,6 +57,9 @@ class _SyntheticEPLCell(IsolatedCell):
             self.x = 0.0
             self.y = 0.0
             self.z = 0.0
+            self.instance_index = type(self)._instance_counter
+            type(self)._instance_counter += 1
+            self.instance_name = f"{type(self).__name__}[{self.instance_index}]"
 
             self._create_sections()
             self._connect_sections()
@@ -68,13 +72,15 @@ class _SyntheticEPLCell(IsolatedCell):
 
     def _create_sections(self):
         h = self.h
-        self.soma = h.Section(name="soma", cell=self)
+        # Use explicit deterministic names so future slice JSON and section-based
+        # bookkeeping do not depend on NEURON's object-repr cell prefixes.
+        self.soma = h.Section(name=f"{self.instance_name}.soma")
         self.primary_dendrites = [
-            h.Section(name=f"dend_primary_{index}", cell=self)
+            h.Section(name=f"{self.instance_name}.dend_primary_{index}")
             for index in range(4)
         ]
         self.branch_dendrites = [
-            h.Section(name=f"dend_branch_{index}", cell=self)
+            h.Section(name=f"{self.instance_name}.dend_branch_{index}")
             for index in range(8)
         ]
         self.dend = list(self.primary_dendrites) + list(self.branch_dendrites)

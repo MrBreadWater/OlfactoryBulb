@@ -104,6 +104,10 @@ class SilentNetwork:
     # model selection when that population is wired in.
     epl_interneuron_model = None
     epl_interneuron_family = None
+    cell_types = ["MC", "GC", "TC"]
+    chemical_synapse_sets = ["GCs__MCs", "GCs__TCs"]
+    gc_kar_synapse_sets = ["GCs__MCs", "GCs__TCs"]
+    gc_output_event_synapse_sets = ["GCs__MCs", "GCs__TCs"]
 
     # MC input disabled
     mc_input_delay = 50

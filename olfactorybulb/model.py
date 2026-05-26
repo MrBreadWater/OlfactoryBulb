@@ -32,12 +32,14 @@ from heapq import *
 from matplotlib import pyplot as plt
 from hashlib import sha1
 from random import random, seed
+from collections import defaultdict
 
 from olfactorybulb.output_paths import get_results_dir, write_run_info
 from olfactorybulb.paramsets.base import *
 from olfactorybulb.paramsets.case_studies import *
 from olfactorybulb.paramsets.sensitivity import *
 from olfactorybulb.inputs import InputSpec
+from prev_ob_models.cell_registry import load_cell_class, list_cell_models
 from olfactorybulb.result_artifacts import (
     DEFAULT_SOMA_TRACE_DTYPE,
     DEFAULT_SOMA_TRACE_FORMAT,
@@ -56,6 +58,31 @@ CELL_MODEL_FACTORIES = {
     for name, value in globals().items()
     if isinstance(value, type)
 }
+
+REGISTERED_CELL_SPECS_BY_CLASS_NAME = defaultdict(list)
+for spec in list_cell_models():
+    REGISTERED_CELL_SPECS_BY_CLASS_NAME[spec.class_name].append(spec)
+
+
+def resolve_cell_factory(model_name):
+    factory = CELL_MODEL_FACTORIES.get(model_name)
+    if factory is not None:
+        return factory
+
+    try:
+        return load_cell_class(model_name)
+    except KeyError:
+        pass
+
+    specs = REGISTERED_CELL_SPECS_BY_CLASS_NAME.get(model_name, [])
+    if len(specs) == 1:
+        return specs[0].load_class()
+    if len(specs) > 1:
+        raise KeyError(
+            "Ambiguous cell model %r; use a fully qualified registry key such as %s"
+            % (model_name, ", ".join(spec.key for spec in specs))
+        )
+    raise KeyError("Unknown cell model %r" % (model_name,))
 
 
 def should_force_gid_synapses(params, nranks):
@@ -273,13 +300,14 @@ class OlfactoryBulb:
         self.gc_output_event_vectors = []
 
         legacy_group_loading = bool(getattr(self.params, "legacy_group_loading", False))
+        configured_cell_types = self.get_configured_cell_types()
         if legacy_group_loading:
-            for cell_type in ['MC', 'GC', 'TC']:
+            for cell_type in configured_cell_types:
                 group_dict = self.load_cells(cell_type)
                 self.finish_loading_cells([group_dict])
         else:
             cell_groups = []
-            for cell_type in ['MC', 'GC', 'TC']:
+            for cell_type in configured_cell_types:
                 cell_groups.append(self.load_cells(cell_type))
             self.finish_loading_cells(cell_groups)
 
@@ -294,10 +322,10 @@ class OlfactoryBulb:
         self.apply_gc_ka_gbar_scale()
 
         if getattr(self.params, "enable_reciprocal_synapses", True):
-            for synapse_set in ['GCs__MCs', 'GCs__TCs']:
+            for synapse_set in self.get_configured_chemical_synapse_sets():
                 self.load_synapse_set(synapse_set)
             if getattr(self.params, "enable_gc_kar", False) and float(getattr(self.params, "kar_gc_gmax", 0.0)) > 0:
-                for synapse_set in ['GCs__MCs', 'GCs__TCs']:
+                for synapse_set in self.get_configured_gc_kar_synapse_sets():
                     self.add_gc_kar_synapse_set(synapse_set)
             if getattr(self.params, "record_gc_output_events", False):
                 self.record_gc_output_events()
@@ -384,6 +412,24 @@ class OlfactoryBulb:
             if self.nranks > 1:
                 database.close()
                 self.h.quit()
+
+    def get_configured_cell_types(self):
+        return list(getattr(self.params, "cell_types", ["MC", "GC", "TC"]))
+
+    def get_configured_chemical_synapse_sets(self):
+        return list(getattr(self.params, "chemical_synapse_sets", ["GCs__MCs", "GCs__TCs"]))
+
+    def get_configured_gc_kar_synapse_sets(self):
+        return list(getattr(self.params, "gc_kar_synapse_sets", self.get_configured_chemical_synapse_sets()))
+
+    def get_configured_gc_output_event_synapse_sets(self):
+        return list(
+            getattr(
+                self.params,
+                "gc_output_event_synapse_sets",
+                self.get_configured_chemical_synapse_sets(),
+            )
+        )
 
 
     def stim_glom_segments(self, time, input_segs, intensity, input_spec=None):
@@ -1318,7 +1364,7 @@ class OlfactoryBulb:
         'Busyness' of a rank is the sum of all cell complexities on that rank, as measured by the number
         of segments of each cell.
 
-        :param cell_type: One of 'MC', 'GC', 'TC'
+        :param cell_type: Configured cell-type label, e.g. 'MC', 'GC', 'TC'
         """
 
         # Load the cell json file
@@ -1363,7 +1409,7 @@ class OlfactoryBulb:
         # Load that many base instances of each model
         self.cells[cell_type] = []
         for cell_model_name, count in rank_cell_counts[self.mpirank].items():
-            cell_factory = CELL_MODEL_FACTORIES[cell_model_name]
+            cell_factory = resolve_cell_factory(cell_model_name)
             cell_models = [cell_factory() for _ in range(count)]
             self.cells[cell_type].extend(cell_models)
 
@@ -1381,12 +1427,12 @@ class OlfactoryBulb:
         """
         Adds NEURON vector recorders to the somas of the specified cell types
 
-        :param cell_type: One of 'MC', 'GC', 'TC'
+        :param cell_type: Configured cell-type label, e.g. 'MC', 'GC', 'TC'
         """
 
         h = self.h
 
-        for cell_model in self.cells[cell_type]:
+        for cell_model in self.cells.get(cell_type, []):
             v_vec = h.Vector()
             if self._use_dense_soma_recording:
                 v_vec.record(cell_model.soma(0.5)._ref_v, sec=cell_model.soma)
@@ -1520,7 +1566,7 @@ class OlfactoryBulb:
         """
         Uses BlenderNEURON to load a previously saved set of synapses between a population of cells
 
-        :param synapse_set: One of 'GCs__MCs' or 'GCs__TCs' as seen in the olfactorybulb.slices.DorsalColumnSlice folder.
+        :param synapse_set: Configured slice synapse-set name, e.g. 'GCs__MCs'
         """
 
         path = os.path.join(self.slice_dir, synapse_set + '.json')
@@ -1602,7 +1648,7 @@ class OlfactoryBulb:
     def record_gc_output_events(self):
         h = self.h
 
-        for synapse_set_name in ['GCs__MCs', 'GCs__TCs']:
+        for synapse_set_name in self.get_configured_gc_output_event_synapse_sets():
             synapses = self.bn_server.synapse_sets.get(synapse_set_name, [])
             if not synapses:
                 continue
