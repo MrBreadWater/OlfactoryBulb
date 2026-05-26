@@ -11,20 +11,24 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v4"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v5"
 WIDTH = 1280
 HEIGHT = 360
 SUPERSAMPLE = 3
 BG = (255, 255, 255)
-INK = np.array([24, 35, 42], dtype=float)
-CYAN = np.array([42, 177, 213], dtype=float)
-MINT = np.array([59, 204, 171], dtype=float)
-AMBER = np.array([242, 151, 67], dtype=float)
-ROSE = np.array([236, 93, 91], dtype=float)
+# ICON site cues: #01040f carousel black, #f1a143 nav accent, Bootstrap blue,
+# mintcream panels, plus cyan/green activity in the existing header.gif.
+INK = np.array([1, 4, 15], dtype=float)
+MAROON = np.array([140, 29, 64], dtype=float)
+GOLD = np.array([241, 161, 67], dtype=float)
+TEAL = np.array([21, 168, 152], dtype=float)
+CYAN = np.array([8, 232, 232], dtype=float)
+GREEN = np.array([104, 200, 8], dtype=float)
+PANEL_MINT = np.array([245, 255, 250], dtype=float)
 TYPE_COLORS = {
-    "MC": AMBER,
-    "TC": CYAN,
-    "GC": MINT,
+    "MC": MAROON,
+    "TC": GOLD,
+    "GC": TEAL,
 }
 
 
@@ -61,6 +65,7 @@ class PlacedMorph:
     width_scale: float
     distance_offset: float = 0.0
     z_bias: float = 0.0
+    contact_points: tuple[tuple[float, float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -92,21 +97,11 @@ class RenderNode:
     soma: bool
 
 
-@dataclass(frozen=True)
-class RenderConnector:
-    points: tuple[tuple[float, float], ...]
-    z: float
-    color: np.ndarray
-    alpha: float
-    distance: float
-
-
 @dataclass
 class SceneCache:
     base: Image.Image
     segments: list[RenderSegment]
     nodes: list[RenderNode]
-    connectors: list[RenderConnector]
 
 
 def mix(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
@@ -215,6 +210,17 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
             pos = matrix @ xyz
             sx = item.center[0] + width * item.scale * pos[0]
             sy = item.center[1] - height * item.scale * pos[1]
+            path_weight = morph.distances[node_id] / morph.max_distance
+            path_weight = path_weight ** 1.65
+            for target_x, target_y, strength in item.contact_points:
+                tx = width * target_x
+                ty = height * target_y
+                dx = tx - sx
+                dy = ty - sy
+                screen_dist = math.hypot(dx / width, dy / height)
+                local_pull = strength * path_weight * math.exp(-(screen_dist**2) / (2.0 * 0.32**2))
+                sx += dx * local_pull
+                sy += dy * local_pull
             projected[node_id] = np.array([sx, sy, pos[2] + item.z_bias], dtype=float)
 
         for node_id, node in morph.nodes.items():
@@ -285,90 +291,6 @@ def draw_soft_line(
     )
 
 
-def draw_polyline(
-    draw: ImageDraw.ImageDraw,
-    points: Iterable[tuple[float, float]],
-    *,
-    color: np.ndarray,
-    alpha: float,
-    width: float,
-) -> None:
-    pts = list(points)
-    if len(pts) < 2:
-        return
-    draw.line(
-        pts,
-        fill=rgba(color, alpha),
-        width=max(1, int(round(width))),
-        joint="curve",
-    )
-
-
-def bezier_points(
-    start: tuple[float, float],
-    control: tuple[float, float],
-    end: tuple[float, float],
-    *,
-    count: int = 34,
-) -> tuple[tuple[float, float], ...]:
-    points: list[tuple[float, float]] = []
-    for idx in range(count):
-        t = idx / max(1, count - 1)
-        a = (1.0 - t) * (1.0 - t)
-        b = 2.0 * (1.0 - t) * t
-        c = t * t
-        points.append(
-            (
-                a * start[0] + b * control[0] + c * end[0],
-                a * start[1] + b * control[1] + c * end[1],
-            )
-        )
-    return tuple(points)
-
-
-def build_connectors(nodes: list[RenderNode], width: int, height: int) -> list[RenderConnector]:
-    terminals = [node for node in nodes if node.terminal and 0 <= node.x <= width and 0 <= node.y <= height]
-    by_type = {cell_type: [node for node in terminals if node.cell_type == cell_type] for cell_type in TYPE_COLORS}
-    pairs = [("MC", "TC", 9), ("MC", "GC", 8), ("TC", "GC", 7)]
-    connectors: list[RenderConnector] = []
-    used: set[tuple[int, int]] = set()
-    for left_type, right_type, limit in pairs:
-        candidates: list[tuple[float, RenderNode, RenderNode]] = []
-        left_step = max(1, len(by_type[left_type]) // 140)
-        right_step = max(1, len(by_type[right_type]) // 140)
-        for left in by_type[left_type][::left_step]:
-            for right in by_type[right_type][::right_step]:
-                dx = left.x - right.x
-                dy = left.y - right.y
-                dist = math.hypot(dx, dy)
-                if 70 * SUPERSAMPLE <= dist <= 360 * SUPERSAMPLE:
-                    candidates.append((dist + abs(left.y - right.y) * 0.18, left, right))
-        candidates.sort(key=lambda item: item[0])
-        for idx, (_, left, right) in enumerate(candidates):
-            key = (id(left), id(right))
-            if key in used:
-                continue
-            used.add(key)
-            if idx >= limit:
-                break
-            mx = 0.5 * (left.x + right.x)
-            my = 0.5 * (left.y + right.y)
-            bend = ((idx % 3) - 1) * 22 * SUPERSAMPLE
-            control = (mx, my - 0.10 * height + bend)
-            color = mix(TYPE_COLORS[left_type], TYPE_COLORS[right_type], 0.5)
-            connectors.append(
-                RenderConnector(
-                    points=bezier_points((left.x, left.y), control, (right.x, right.y), count=42),
-                    z=0.5 * (left.z + right.z) + 0.05,
-                    color=color,
-                    alpha=0.36,
-                    distance=(0.5 * (left.distance + right.distance) + idx * 0.037) % 1.0,
-                )
-            )
-    connectors.sort(key=lambda conn: conn.z)
-    return connectors
-
-
 def background(width: int, height: int, style: str) -> Image.Image:
     image = Image.new("RGB", (width, height), BG)
     arr = np.asarray(image).astype(float)
@@ -377,18 +299,18 @@ def background(width: int, height: int, style: str) -> Image.Image:
     y = yy / max(1, height - 1)
     if style == "luminous":
         glows = [
-            (0.18, 0.56, 0.35, np.array([223, 245, 249]), 0.34),
-            (0.75, 0.40, 0.30, np.array([246, 226, 190]), 0.25),
+            (0.18, 0.56, 0.35, PANEL_MINT, 0.28),
+            (0.75, 0.40, 0.30, np.array([252, 236, 196]), 0.22),
         ]
     elif style == "graphite":
         glows = [
-            (0.42, 0.40, 0.40, np.array([230, 242, 244]), 0.30),
-            (0.88, 0.58, 0.28, np.array([240, 230, 210]), 0.20),
+            (0.42, 0.40, 0.40, np.array([238, 248, 248]), 0.26),
+            (0.88, 0.58, 0.28, np.array([249, 232, 201]), 0.20),
         ]
     else:
         glows = [
-            (0.28, 0.48, 0.40, np.array([226, 244, 240]), 0.28),
-            (0.72, 0.42, 0.34, np.array([232, 240, 248]), 0.22),
+            (0.28, 0.48, 0.40, PANEL_MINT, 0.25),
+            (0.72, 0.42, 0.34, np.array([232, 248, 248]), 0.20),
         ]
     for cx, cy, radius, color, strength in glows:
         field = np.exp(-(((x - cx) / radius) ** 2 + ((y - cy) / radius) ** 2))
@@ -413,27 +335,12 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     shadow_draw = ImageDraw.Draw(shadow, "RGBA")
     base = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     base_draw = ImageDraw.Draw(base, "RGBA")
-    for conn in scene.connectors:
-        draw_polyline(
-            shadow_draw,
-            conn.points,
-            color=np.array([155, 171, 180], dtype=float),
-            alpha=22 * conn.alpha,
-            width=4.8 * SUPERSAMPLE,
-        )
-        draw_polyline(
-            base_draw,
-            conn.points,
-            color=mix(np.array([108, 126, 136], dtype=float), conn.color, 0.32),
-            alpha=118 * conn.alpha,
-            width=1.75 * SUPERSAMPLE,
-        )
     for seg in scene.segments:
         depth = np.clip((seg.z + 0.7) / 1.4, 0.0, 1.0)
         neutral = mix(np.array([174, 188, 197], dtype=float), np.array([24, 38, 47], dtype=float), 0.43 + 0.31 * depth)
         tint = mix(neutral, seg.color, 0.46 + 0.13 * depth)
         if seg.neurite_kind == 2:
-            tint = mix(tint, np.array([228, 92, 83], dtype=float), 0.22)
+            tint = mix(tint, MAROON, 0.24)
         draw_soft_line(shadow_draw, seg, np.array([145, 157, 164], dtype=float), 34 * seg.alpha, seg.width * 3.2)
         draw_soft_line(base_draw, seg, tint, 178 * seg.alpha * (0.68 + 0.32 * depth), seg.width * 1.05)
         draw_soft_line(base_draw, seg, np.array([255, 255, 255], dtype=float), 20 * seg.alpha, max(1.0, seg.width * 0.18))
@@ -472,32 +379,17 @@ def render_frame(
         count = 2
         pulse_width = 0.035
     elif mode == "split_wavefront":
-        pulse_color = AMBER
+        pulse_color = GOLD
         count = 3
         pulse_width = 0.030
+    elif mode == "layered_exchange":
+        pulse_color = CYAN
+        count = 3
+        pulse_width = 0.038
     else:
-        pulse_color = MINT
+        pulse_color = TEAL
         count = 3
         pulse_width = 0.042
-
-    for conn in scene.connectors:
-        active = pulse_value(conn.distance, phase + 0.08, count=2, width=0.050, direction=1.0)
-        if active < 0.05:
-            continue
-        draw_polyline(
-            glow_draw,
-            conn.points,
-            color=conn.color,
-            alpha=68 * active,
-            width=8.0 * SUPERSAMPLE,
-        )
-        draw_polyline(
-            core_draw,
-            conn.points,
-            color=mix(conn.color, np.array([255, 255, 255], dtype=float), 0.16),
-            alpha=142 * active,
-            width=2.4 * SUPERSAMPLE,
-        )
 
     for seg in scene.segments:
         p = pulse_value(seg.distance, phase, count=count, width=pulse_width, direction=seg.flow_direction)
@@ -514,13 +406,13 @@ def render_frame(
             continue
         pulse_tint = mix(pulse_color, seg.color, 0.45)
         if seg.neurite_kind == 2:
-            pulse_tint = mix(ROSE, seg.color, 0.22)
-        if mode == "microcircuit_exchange" and seg.cell_type == "MC":
-            pulse_tint = mix(AMBER, CYAN, 0.25)
-        elif mode == "microcircuit_exchange" and seg.cell_type == "TC":
-            pulse_tint = CYAN
-        elif mode == "microcircuit_exchange":
-            pulse_tint = MINT
+            pulse_tint = mix(MAROON, seg.color, 0.22)
+        if mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "MC":
+            pulse_tint = mix(MAROON, GOLD, 0.32)
+        elif mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "TC":
+            pulse_tint = GOLD
+        elif mode in ("dense_microcircuit", "layered_exchange"):
+            pulse_tint = mix(TEAL, GREEN, 0.22)
         draw_soft_line(glow_draw, seg, pulse_tint, 92 * active, seg.width * (6.2 + 1.9 * active))
         draw_soft_line(core_draw, seg, mix(pulse_tint, np.array([255, 255, 255], dtype=float), 0.12), 218 * active, seg.width * (1.72 + 0.85 * active))
         if active > 0.62:
@@ -566,14 +458,118 @@ def build_scene(variant: str, width: int, height: int) -> SceneCache:
         bg_style = "luminous"
     elif variant == "layered_exchange":
         placed = [
-            PlacedMorph(morphs["mc_a"], (width * 0.18, height * 0.58), 0.44, -19, 16, -9, TYPE_COLORS["MC"], 0.88, 1.22, 0.03, -0.06),
-            PlacedMorph(morphs["mc_b"], (width * 0.46, height * 0.56), 0.43, 18, 14, 8, TYPE_COLORS["MC"], 0.86, 1.20, 0.23, 0.02),
-            PlacedMorph(morphs["mc_a"], (width * 0.75, height * 0.58), 0.40, -34, 12, -5, TYPE_COLORS["MC"], 0.80, 1.12, 0.41, 0.08),
-            PlacedMorph(morphs["tc_a"], (width * 0.34, height * 0.49), 0.38, 26, 9, 4, TYPE_COLORS["TC"], 0.88, 1.10, 0.35, 0.12),
-            PlacedMorph(morphs["tc_b"], (width * 0.61, height * 0.48), 0.36, -16, 10, -7, TYPE_COLORS["TC"], 0.84, 1.06, 0.50, 0.18),
-            PlacedMorph(morphs["gc_a"], (width * 0.29, height * 0.74), 0.52, -27, 7, -4, TYPE_COLORS["GC"], 0.83, 1.00, 0.66, 0.24),
-            PlacedMorph(morphs["gc_b"], (width * 0.53, height * 0.74), 0.50, 29, 6, 6, TYPE_COLORS["GC"], 0.80, 0.98, 0.77, 0.29),
-            PlacedMorph(morphs["gc_a"], (width * 0.73, height * 0.75), 0.49, -14, 8, 3, TYPE_COLORS["GC"], 0.76, 0.94, 0.88, 0.35),
+            PlacedMorph(
+                morphs["mc_a"],
+                (width * 0.18, height * 0.58),
+                0.44,
+                -19,
+                16,
+                -9,
+                TYPE_COLORS["MC"],
+                0.88,
+                1.22,
+                0.03,
+                -0.06,
+                ((0.42, 0.49, 0.25), (0.54, 0.58, 0.13)),
+            ),
+            PlacedMorph(
+                morphs["mc_b"],
+                (width * 0.46, height * 0.56),
+                0.43,
+                18,
+                14,
+                8,
+                TYPE_COLORS["MC"],
+                0.86,
+                1.20,
+                0.23,
+                0.02,
+                ((0.43, 0.49, 0.18), (0.58, 0.54, 0.20)),
+            ),
+            PlacedMorph(
+                morphs["mc_a"],
+                (width * 0.75, height * 0.58),
+                0.40,
+                -34,
+                12,
+                -5,
+                TYPE_COLORS["MC"],
+                0.80,
+                1.12,
+                0.41,
+                0.08,
+                ((0.60, 0.52, 0.18), (0.70, 0.61, 0.18)),
+            ),
+            PlacedMorph(
+                morphs["tc_a"],
+                (width * 0.34, height * 0.49),
+                0.38,
+                26,
+                9,
+                4,
+                TYPE_COLORS["TC"],
+                0.88,
+                1.10,
+                0.35,
+                0.12,
+                ((0.42, 0.49, 0.28), (0.51, 0.58, 0.16)),
+            ),
+            PlacedMorph(
+                morphs["tc_b"],
+                (width * 0.61, height * 0.48),
+                0.36,
+                -16,
+                10,
+                -7,
+                TYPE_COLORS["TC"],
+                0.84,
+                1.06,
+                0.50,
+                0.18,
+                ((0.58, 0.54, 0.25), (0.68, 0.61, 0.14)),
+            ),
+            PlacedMorph(
+                morphs["gc_a"],
+                (width * 0.29, height * 0.74),
+                0.52,
+                -27,
+                7,
+                -4,
+                TYPE_COLORS["GC"],
+                0.83,
+                1.00,
+                0.66,
+                0.24,
+                ((0.43, 0.65, 0.25), (0.52, 0.58, 0.17)),
+            ),
+            PlacedMorph(
+                morphs["gc_b"],
+                (width * 0.53, height * 0.74),
+                0.50,
+                29,
+                6,
+                6,
+                TYPE_COLORS["GC"],
+                0.80,
+                0.98,
+                0.77,
+                0.29,
+                ((0.55, 0.63, 0.28), (0.63, 0.55, 0.13)),
+            ),
+            PlacedMorph(
+                morphs["gc_a"],
+                (width * 0.73, height * 0.75),
+                0.49,
+                -14,
+                8,
+                3,
+                TYPE_COLORS["GC"],
+                0.76,
+                0.94,
+                0.88,
+                0.35,
+                ((0.69, 0.65, 0.25), (0.59, 0.55, 0.11)),
+            ),
         ]
         bg_style = "graphite"
     else:
@@ -590,9 +586,8 @@ def build_scene(variant: str, width: int, height: int) -> SceneCache:
         ]
         bg_style = "lattice"
     segments, nodes = project_scene(placed, width, height)
-    connectors = build_connectors(nodes, width, height)
     base = background(width, height, bg_style)
-    scene = SceneCache(base=base, segments=segments, nodes=nodes, connectors=connectors)
+    scene = SceneCache(base=base, segments=segments, nodes=nodes)
     scene.base = render_base(scene, width, height)
     return scene
 
@@ -659,7 +654,7 @@ def export_all(
     frames: int,
     duration_ms: int,
 ) -> dict[str, Path]:
-    selected = variants or ["connected_field", "layered_exchange", "dense_microcircuit"]
+    selected = variants or ["layered_exchange"]
     artifacts: dict[str, Path] = {}
     posters: dict[str, Path] = {}
     for variant in selected:
@@ -684,7 +679,7 @@ def main() -> None:
     parser.add_argument("--variant", action="append", dest="variants")
     parser.add_argument("--width", type=int, default=WIDTH)
     parser.add_argument("--height", type=int, default=HEIGHT)
-    parser.add_argument("--frames", type=int, default=96)
+    parser.add_argument("--frames", type=int, default=84)
     parser.add_argument("--duration-ms", type=int, default=55)
     args = parser.parse_args()
 
