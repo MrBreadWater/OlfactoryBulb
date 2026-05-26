@@ -1171,10 +1171,52 @@ with tempfile.TemporaryDirectory() as tmp:
             )
         ],
     )
-    assert partial_anim_artifacts["partial_placeholder_test"].exists()
+    assert len(partial_anim_artifacts) == 1
+    partial_anim_path = next(iter(partial_anim_artifacts.values()))
+    assert partial_anim_path.exists()
+    assert partial_anim_path.stem.startswith("partial_placeholder_test__")
     placeholder_anim = hlp.animate_lfp_sweep(partial_anim_sweep, interval=10)
     placeholder_anim._draw_was_started = True
     hlp.plt.close("all")
     print("Sweep animations tolerate partial sweep slots: OK")
+
+    # --- Sweep animation filenames should encode rendering settings ---
+    naming_anim_sweep = {
+        "path": "gaba_gmax",
+        "sweep_dir": tmp / "naming-animation-sweep",
+        "items": [{"label": "item_000", "value": 0.0, "result": {"y": 1.0}}],
+    }
+    naming_anim_sweep["sweep_dir"].mkdir(parents=True, exist_ok=True)
+
+    def _scaled_sweep_plot(result, scale=1.0):
+        fig, ax = hlp.plt.subplots(figsize=(2, 1.5))
+        ax.plot([0, 1], [0, result["y"] * scale])
+        return fig
+
+    named_artifacts = hlp.animate_sweep_plots(
+        naming_anim_sweep,
+        [
+            hlp.make_sweep_plot_spec(
+                _scaled_sweep_plot,
+                name="settings_sensitive",
+                plot_kwargs={"scale": 1.0},
+                interval=10,
+                fps=1,
+            ),
+            hlp.make_sweep_plot_spec(
+                _scaled_sweep_plot,
+                name="settings_sensitive",
+                plot_kwargs={"scale": 2.0},
+                interval=10,
+                fps=1,
+            ),
+        ],
+    )
+    named_paths = list(named_artifacts.values())
+    assert len(named_artifacts) == 2
+    assert len({path.name for path in named_paths}) == 2
+    assert all("scale-" in path.stem for path in named_paths)
+    assert all(path.exists() for path in named_paths)
+    print("Sweep animation filenames encode settings: OK")
 
 print("\nAll tests passed.")

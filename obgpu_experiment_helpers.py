@@ -25,7 +25,7 @@ import warnings
 from base64 import b64encode
 from collections import Counter
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, is_dataclass
 from datetime import datetime
 from getpass import getpass
 from hashlib import sha1, sha256
@@ -9647,15 +9647,13 @@ def _build_sweep_plot_callable(spec: SweepPlotSpec) -> tuple[Any, str]:
     plot_kwargs = dict(spec.plot_kwargs or {})
     if isinstance(spec.plot, str):
         plot_fn = _get_builtin_sweep_plot(spec.plot)
-        default_filename = spec.plot
     else:
         plot_fn = spec.plot
-        default_filename = spec.name
 
     def _wrapped(result: dict[str, Any]) -> Any:
         return _extract_figure_from_plot_result(plot_fn(result, **plot_kwargs))
 
-    return _wrapped, str(spec.filename or default_filename)
+    return _wrapped, _sweep_plot_artifact_stem(spec)
 
 
 def _format_sweep_value(value: Any) -> str:
@@ -9767,6 +9765,120 @@ def _make_sweep_placeholder_figure(
 def _safe_name(name: Any) -> str:
     """Make a filesystem-safe artifact basename."""
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name)).strip("._") or "animation"
+
+
+def _callable_artifact_label(value: Any) -> str:
+    """Return a stable, compact label for functions used in artifact settings."""
+    module = getattr(value, "__module__", "")
+    qualname = getattr(value, "__qualname__", None) or getattr(value, "__name__", None)
+    if qualname:
+        return f"{module}.{qualname}" if module and module != "__main__" else str(qualname)
+    return value.__class__.__name__
+
+
+def _artifact_settings_ready(value: Any) -> Any:
+    """Convert plot settings into deterministic JSON-compatible metadata."""
+    if is_dataclass(value) and not isinstance(value, type):
+        return _artifact_settings_ready(asdict(value))
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, range):
+        return list(value)
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, dict):
+        return {str(key): _artifact_settings_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_artifact_settings_ready(item) for item in value]
+    if isinstance(value, set):
+        return sorted(_artifact_settings_ready(item) for item in value)
+    if callable(value):
+        return _callable_artifact_label(value)
+    try:
+        json.dumps(value)
+    except TypeError:
+        return repr(value)
+    return value
+
+
+def _short_artifact_setting_value(value: Any, *, max_len: int = 32) -> str:
+    """Format one settings value for a human-readable artifact filename suffix."""
+    if value is None:
+        text = "none"
+    elif isinstance(value, bool):
+        text = "true" if value else "false"
+    elif isinstance(value, float):
+        text = f"{value:.6g}"
+    elif isinstance(value, (int, str)):
+        text = str(value)
+    elif isinstance(value, list):
+        if len(value) <= 8 and all(not isinstance(item, (dict, list)) for item in value):
+            text = "-".join(_short_artifact_setting_value(item, max_len=12) for item in value)
+        else:
+            encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+            text = f"list{len(value)}_{sha1(encoded.encode('utf-8')).hexdigest()[:8]}"
+    elif isinstance(value, dict):
+        encoded = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        text = f"cfg_{sha1(encoded.encode('utf-8')).hexdigest()[:8]}"
+    else:
+        text = str(value)
+    safe = _safe_name(text)
+    if len(safe) > max_len:
+        safe = f"{safe[: max_len - 9]}_{sha1(safe.encode('utf-8')).hexdigest()[:8]}"
+    return safe
+
+
+def _flatten_artifact_settings(value: Any, *, prefix: str = "") -> list[tuple[str, Any]]:
+    """Flatten deterministic settings into key/value pairs for filename labels."""
+    if isinstance(value, dict):
+        pairs: list[tuple[str, Any]] = []
+        for key in sorted(value):
+            next_prefix = f"{prefix}_{key}" if prefix else str(key)
+            pairs.extend(_flatten_artifact_settings(value[key], prefix=next_prefix))
+        return pairs
+    return [(prefix, value)]
+
+
+def _sweep_plot_artifact_stem(spec: SweepPlotSpec) -> str:
+    """Build a settings-aware, collision-resistant sweep animation filename stem."""
+    base = str(spec.filename or spec.name or (spec.plot if isinstance(spec.plot, str) else "custom_plot"))
+    settings_payload = {
+        "plot": spec.plot if isinstance(spec.plot, str) else _callable_artifact_label(spec.plot),
+        "plot_kwargs": _artifact_settings_ready(spec.plot_kwargs or {}),
+        "figsize": _artifact_settings_ready(spec.figsize),
+        "interval": int(spec.interval),
+        "fps": int(spec.fps),
+    }
+    if spec.title_fn is not None:
+        settings_payload["title_fn"] = _callable_artifact_label(spec.title_fn)
+    encoded = json.dumps(settings_payload, sort_keys=True, separators=(",", ":"))
+    digest = sha1(encoded.encode("utf-8")).hexdigest()[:10]
+
+    flat_settings = _flatten_artifact_settings(settings_payload.get("plot_kwargs") or {})
+    flat_settings.extend(
+        [
+            ("figsize", settings_payload["figsize"]),
+            ("interval", settings_payload["interval"]),
+            ("fps", settings_payload["fps"]),
+        ]
+    )
+    if "title_fn" in settings_payload:
+        flat_settings.append(("title", settings_payload["title_fn"]))
+
+    parts = [
+        f"{_safe_name(key)}-{_short_artifact_setting_value(value)}"
+        for key, value in flat_settings
+        if key
+    ]
+    suffix = "_".join(part for part in parts if part)
+    max_suffix_len = 120
+    if len(suffix) > max_suffix_len:
+        suffix = suffix[:max_suffix_len].rstrip("_")
+    if suffix:
+        return _safe_name(f"{base}__{suffix}__{digest}")
+    return _safe_name(f"{base}__{digest}")
 
 
 def _fig_to_rgb_array(fig: Any) -> np.ndarray:
@@ -10231,7 +10343,7 @@ def animate_sweep_plots(
             title_fn=spec.title_fn,
             close_frames=close_frames,
         )
-        artifacts[spec.name] = save_animation(
+        artifacts[filename] = save_animation(
             anim,
             filename,
             sweep=sweep,
