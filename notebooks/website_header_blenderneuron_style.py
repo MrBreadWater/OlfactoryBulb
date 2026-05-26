@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v12"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v13"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -27,6 +27,8 @@ ACTIVITY_SKIP_MS = 400.0
 ACTIVITY_PROPAGATION_DELAY_MS = 52.0
 ACTIVITY_PACKET_SIGMA_MS = 2.85
 BRANCH_EVENT_PROFILE_BINS = 400
+ACTIVITY_TRACE_WINDOW_MS = 104.0
+ACTIVITY_TRACE_TAU_MS = 58.0
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -538,6 +540,40 @@ def packet_activity(
     return min(1.0, best)
 
 
+def profile_value(profile: ActivityProfile | None, loop_ms: float) -> float:
+    if profile is None or profile.values.size == 0:
+        return 0.0
+    phase_ms = loop_ms % ACTIVITY_PERIOD_MS
+    pos = phase_ms / ACTIVITY_PERIOD_MS * profile.values.size
+    idx0 = int(math.floor(pos)) % profile.values.size
+    idx1 = (idx0 + 1) % profile.values.size
+    frac = pos - math.floor(pos)
+    return float((1.0 - frac) * profile.values[idx0] + frac * profile.values[idx1])
+
+
+def trace_activity(
+    profile: ActivityProfile | None,
+    loop_ms: float,
+    distance: float,
+    flow_direction: float,
+    branch_phase_ms: float,
+    branch_gain: float,
+) -> float:
+    if profile is None or not profile.event_phases_ms:
+        return 0.0
+    best = 0.0
+    if flow_direction >= 0.0:
+        propagation_ms = ACTIVITY_PROPAGATION_DELAY_MS * distance
+    else:
+        propagation_ms = ACTIVITY_PROPAGATION_DELAY_MS * (1.0 - distance)
+    for event_ms, strength in zip(profile.event_phases_ms, profile.event_strengths):
+        expected_ms = event_ms + propagation_ms + branch_phase_ms
+        elapsed_ms = circular_time_delta_ms(loop_ms, expected_ms)
+        if 0.0 <= elapsed_ms <= ACTIVITY_TRACE_WINDOW_MS:
+            best = max(best, strength * branch_gain * math.exp(-elapsed_ms / ACTIVITY_TRACE_TAU_MS))
+    return min(1.0, best)
+
+
 def neurite_flow_direction(kind: int) -> float:
     return 1.0 if kind == 2 else -1.0
 
@@ -840,6 +876,28 @@ def ellipse(draw: ImageDraw.ImageDraw, x: float, y: float, r: float, fill: tuple
     draw.ellipse((x - r, y - r, x + r, y + r), fill=fill)
 
 
+def ellipse_xy(
+    draw: ImageDraw.ImageDraw,
+    x: float,
+    y: float,
+    rx: float,
+    ry: float,
+    *,
+    fill: tuple[int, int, int, int] | None = None,
+    outline: tuple[int, int, int, int] | None = None,
+    width: int = 1,
+) -> None:
+    draw.ellipse((x - rx, y - ry, x + rx, y + ry), fill=fill, outline=outline, width=max(1, int(round(width))))
+
+
+def soma_body_axes(node: RenderNode) -> tuple[float, float]:
+    if node.cell_type == "GC":
+        radius = max(SUPERSAMPLE * 7.2, node.radius * 7.0)
+        return radius * 0.92, radius * 1.10
+    radius = max(SUPERSAMPLE * 10.5, node.radius * 8.4)
+    return radius * 1.14, radius * 0.88
+
+
 def draw_soft_line(
     draw: ImageDraw.ImageDraw,
     seg: RenderSegment,
@@ -946,6 +1004,10 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     shadow_draw = ImageDraw.Draw(shadow, "RGBA")
     base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     base_draw = ImageDraw.Draw(base, "RGBA")
+    soma_shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soma_shadow_draw = ImageDraw.Draw(soma_shadow, "RGBA")
+    soma_base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soma_draw = ImageDraw.Draw(soma_base, "RGBA")
     for seg in scene.segments:
         depth = np.clip((seg.z + 0.7) / 1.4, 0.0, 1.0)
         neutral = mix(np.array([174, 188, 197], dtype=float), np.array([24, 38, 47], dtype=float), 0.43 + 0.31 * depth)
@@ -955,9 +1017,23 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
         draw_soft_line(shadow_draw, seg, np.array([145, 157, 164], dtype=float), 34 * seg.alpha, seg.width * 3.2)
         draw_soft_line(base_draw, seg, tint, 178 * seg.alpha * (0.68 + 0.32 * depth), seg.width * 1.05)
         draw_soft_line(base_draw, seg, np.array([255, 255, 255], dtype=float), 20 * seg.alpha, max(1.0, seg.width * 0.18))
+    for node in scene.nodes:
+        if not node.soma:
+            continue
+        rx, ry = soma_body_axes(node)
+        body = mix(np.array([14, 19, 22], dtype=float), node.color, 0.52)
+        rim = mix(node.color, WHITE, 0.18)
+        core = mix(np.array([28, 35, 39], dtype=float), node.color, 0.35)
+        ellipse_xy(soma_shadow_draw, node.x, node.y, rx * 1.38, ry * 1.34, fill=rgba(node.color, 56))
+        ellipse_xy(soma_draw, node.x, node.y, rx, ry, fill=rgba(body, 232), outline=rgba(rim, 142), width=max(1, int(0.42 * SUPERSAMPLE)))
+        ellipse_xy(soma_draw, node.x - rx * 0.18, node.y - ry * 0.16, rx * 0.42, ry * 0.34, fill=rgba(core, 72))
+        ellipse_xy(soma_draw, node.x - rx * 0.22, node.y - ry * 0.24, rx * 0.22, ry * 0.12, fill=rgba(WHITE, 34))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
+    soma_shadow = soma_shadow.filter(ImageFilter.GaussianBlur(radius=5.5 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
     image = Image.alpha_composite(image, base)
+    image = Image.alpha_composite(image, soma_shadow)
+    image = Image.alpha_composite(image, soma_base)
     return image
 
 
@@ -970,13 +1046,19 @@ def render_frame(
     mode: str,
 ) -> Image.Image:
     image = scene.base.copy()
+    trace = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     bloom = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soma_glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soma_core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     spark = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    trace_draw = ImageDraw.Draw(trace, "RGBA")
     bloom_draw = ImageDraw.Draw(bloom, "RGBA")
     glow_draw = ImageDraw.Draw(glow, "RGBA")
     core_draw = ImageDraw.Draw(core, "RGBA")
+    soma_glow_draw = ImageDraw.Draw(soma_glow, "RGBA")
+    soma_core_draw = ImageDraw.Draw(soma_core, "RGBA")
     spark_draw = ImageDraw.Draw(spark, "RGBA")
     if mode == "single_arbor_signal":
         pulse_color = CYAN
@@ -989,6 +1071,33 @@ def render_frame(
     loop_ms = phase * ACTIVITY_PERIOD_MS
 
     for seg in scene.segments:
+        pulse_tint = mix(pulse_color, seg.color, 0.45)
+        if seg.neurite_kind == 2:
+            pulse_tint = mix(MAROON, seg.color, 0.22)
+        if mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "MC":
+            pulse_tint = mix(MAROON, GOLD, 0.32)
+        elif mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "TC":
+            pulse_tint = GOLD
+        elif mode in ("dense_microcircuit", "layered_exchange"):
+            pulse_tint = mix(TEAL, GREEN, 0.22)
+        memory = trace_activity(
+            seg.activity_profile,
+            loop_ms,
+            seg.distance,
+            seg.flow_direction,
+            seg.branch_phase_ms,
+            seg.branch_gain,
+        )
+        memory = min(1.0, memory ** 0.72)
+        if memory > 0.040:
+            trace_tint = mix(pulse_tint, np.array([92, 104, 108], dtype=float), 0.40)
+            draw_soft_line(
+                trace_draw,
+                seg,
+                trace_tint,
+                54 * seg.alpha * memory,
+                seg.width * (1.20 + 0.86 * memory),
+            )
         active = packet_activity(
             seg.activity_profile,
             loop_ms,
@@ -1000,15 +1109,6 @@ def render_frame(
         active = min(1.0, active ** 0.64)
         if active < 0.045:
             continue
-        pulse_tint = mix(pulse_color, seg.color, 0.45)
-        if seg.neurite_kind == 2:
-            pulse_tint = mix(MAROON, seg.color, 0.22)
-        if mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "MC":
-            pulse_tint = mix(MAROON, GOLD, 0.32)
-        elif mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "TC":
-            pulse_tint = GOLD
-        elif mode in ("dense_microcircuit", "layered_exchange"):
-            pulse_tint = mix(TEAL, GREEN, 0.22)
         bloom_tint = brighten(pulse_tint, 1.38, 5.0)
         core_tint = mix(pulse_tint, brighten(pulse_tint, 1.55, 12.0), min(0.72, 0.24 + 0.42 * active))
         if active > 0.10:
@@ -1029,6 +1129,7 @@ def render_frame(
                 rgba(WHITE, 150 * hot),
             )
 
+    image = Image.alpha_composite(image, trace)
     bloom = bloom.filter(ImageFilter.GaussianBlur(radius=8.3 * SUPERSAMPLE))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=4.2 * SUPERSAMPLE))
     image = Image.alpha_composite(image, bloom)
@@ -1052,9 +1153,43 @@ def render_frame(
             r = node.radius * (1.5 + 2.6 * terminal_flash)
             ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash))
         if node.soma:
-            r = node.radius * (2.6 + 0.7 * soma_flash)
-            ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.05), 124 + 58 * soma_flash))
-            ellipse(spark_draw, node.x, node.y, max(1.2, r * 0.36), rgba(np.array([255, 255, 255], dtype=float), 76))
+            voltage = min(1.0, profile_value(node.activity_profile, loop_ms) ** 0.76)
+            soma_level = max(voltage, soma_flash * 0.88)
+            rx, ry = soma_body_axes(node)
+            voltage_tint = mix(node.color, WHITE, 0.18 + 0.46 * soma_level)
+            body_tint = mix(np.array([19, 25, 29], dtype=float), node.color, 0.48 + 0.24 * soma_level)
+            ellipse_xy(
+                soma_glow_draw,
+                node.x,
+                node.y,
+                rx * (1.34 + 0.34 * soma_level),
+                ry * (1.30 + 0.30 * soma_level),
+                fill=rgba(voltage_tint, 32 + 80 * soma_level),
+            )
+            ellipse_xy(
+                soma_core_draw,
+                node.x,
+                node.y,
+                rx * (0.94 + 0.06 * soma_level),
+                ry * (0.94 + 0.06 * soma_level),
+                fill=rgba(body_tint, 58 + 74 * soma_level),
+                outline=rgba(voltage_tint, 92 + 138 * soma_level),
+                width=max(1, int((0.70 + 1.45 * soma_level) * SUPERSAMPLE)),
+            )
+            ellipse_xy(
+                soma_core_draw,
+                node.x - rx * 0.16,
+                node.y - ry * 0.10,
+                rx * (0.23 + 0.12 * soma_level),
+                ry * (0.18 + 0.10 * soma_level),
+                fill=rgba(WHITE, 34 + 116 * soma_level),
+            )
+            if soma_level > 0.58:
+                hot = (soma_level - 0.58) / 0.42
+                ellipse_xy(spark_draw, node.x, node.y, rx * 0.54, ry * 0.42, fill=rgba(WHITE, 72 * hot))
+    soma_glow = soma_glow.filter(ImageFilter.GaussianBlur(radius=4.0 * SUPERSAMPLE))
+    image = Image.alpha_composite(image, soma_glow)
+    image = Image.alpha_composite(image, soma_core)
     spark = spark.filter(ImageFilter.GaussianBlur(radius=0.55 * SUPERSAMPLE))
     image = Image.alpha_composite(image, spark)
     return image
