@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v18"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v19"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -35,7 +35,7 @@ SOMA_AFTERHYPERPOLARIZATION_WINDOW_MS = 30.0
 SOMA_AFTERHYPERPOLARIZATION_TAU_MS = 9.5
 AXON_EMISSION_DELAY_MS = 10.5
 AXON_PACKET_GAIN = 1.28
-AXON_EXTENSION_SEGMENTS = 5
+AXON_EXTENSION_SEGMENTS = 7
 SOMA_REFERENCE_RADII = {
     "MC": 5.3,
     "TC": 3.9,
@@ -909,15 +909,15 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 seg_len = math.hypot(dx, dy)
                 if seg_len > 1e-6:
                     root = projected.get(morph.root_id, p0)
-                    extend_len = max(seg_len * 4.8, item.scale * width * 0.058)
-                    extend_len = min(extend_len, item.scale * width * 0.12)
+                    extend_len = max(seg_len * 7.2, item.scale * width * 0.10)
+                    extend_len = min(extend_len, item.scale * width * 0.24)
                     ux, uy = unit_vector(dx, dy)
                     outx, outy = unit_vector(float(p1[0] - root[0]), float(p1[1] - root[1]))
                     dirx, diry = unit_vector(0.72 * ux + 0.28 * outx, 0.72 * uy + 0.28 * outy)
                     side_sign = -1.0 if stable_unit(morph.name, node_id, "axon-side") < 0.5 else 1.0
                     side_x, side_y = -diry * side_sign, dirx * side_sign
-                    bend_mag = extend_len * (0.10 + 0.08 * stable_unit(morph.name, node_id, "axon-bend"))
-                    sweep_mag = extend_len * (0.04 + 0.06 * stable_unit(morph.name, node_id, "axon-sweep"))
+                    bend_mag = extend_len * (0.12 + 0.10 * stable_unit(morph.name, node_id, "axon-bend"))
+                    sweep_mag = extend_len * (0.05 + 0.08 * stable_unit(morph.name, node_id, "axon-sweep"))
                     control1 = np.array(
                         [
                             float(p1[0] + dirx * extend_len * 0.30 + side_x * bend_mag * 0.72),
@@ -949,7 +949,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     ]
                     for ext_idx, (c0, c1) in enumerate(zip(curve_points[:-1], curve_points[1:]), start=1):
                         frac = ext_idx / AXON_EXTENSION_SEGMENTS
-                        width_scale = 0.88 - 0.20 * frac
+                        width_scale = 1.14 - 0.18 * frac
                         segments.append(
                             RenderSegment(
                                 x0=float(c0[0]),
@@ -960,7 +960,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                                 width=float(width_px * width_scale),
                                 distance=float(min(1.0, dist + 0.06 + 0.94 * frac)),
                                 color=item.color,
-                                alpha=item.alpha * (0.98 - 0.04 * frac),
+                                alpha=item.alpha * (0.99 - 0.03 * frac),
                                 cell_type=morph.cell_type,
                                 neurite_kind=2,
                                 flow_direction=1.0,
@@ -1174,7 +1174,7 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
         rx, ry = soma_body_axes(node)
         body = mix(np.array([13, 18, 21], dtype=float), node.color, 0.62)
         ellipse_xy(soma_shadow_draw, node.x, node.y, rx * 1.34, ry * 1.34, fill=rgba(node.color, 54))
-        ellipse_xy(soma_draw, node.x, node.y, rx, ry, fill=rgba(body, 236))
+        ellipse_xy(soma_draw, node.x, node.y, rx, ry, fill=rgba(body, 255))
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
     soma_shadow = soma_shadow.filter(ImageFilter.GaussianBlur(radius=5.5 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
@@ -1376,7 +1376,7 @@ def render_frame(
                 node.y,
                 rx * (0.98 + 0.06 * soma_spike),
                 ry * (0.98 + 0.06 * soma_spike),
-                fill=rgba(disc_tint, 62 + 156 * soma_level),
+                fill=rgba(disc_tint, 255),
             )
             if soma_spike > 0.46:
                 hot = (soma_spike - 0.46) / 0.54
