@@ -123,6 +123,40 @@ class GammaSignature(MC_TC_Combined_Base):
     }
 
 
+class GammaSignature_ContactScaled(GammaSignature):
+
+    description = (
+        "GammaSignature with contact-compressed dendrodendritic conductances; "
+        "see notes/EFFECTIVE_CONDUCTANCE_SCALING.md"
+    )
+
+    gap_juction_gmax = {
+        "MC": 0.0011,
+        "TC": 0.0011,
+    }
+
+    enable_gc_kar = True
+    kar_mt_gmax = 0.03
+    kar_gc_gmax = 0.008
+
+    synapse_properties = {
+        "AmpaNmdaSyn": {
+            'gmax': 2.0,
+
+            'ltpinvl': 0,  # Disable plasticity
+            'ltdinvl': 0
+        },
+
+        "GabaSyn": {
+            'gmax': 0.35,
+            'tau2': 36,
+
+            'ltpinvl': 0,  # Disable plasticity
+            'ltdinvl': 0
+        }
+    }
+
+
 # Experiments
 
 class GammaSignature_NoInhibition(GammaSignature):
