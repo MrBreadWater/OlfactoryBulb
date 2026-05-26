@@ -10606,41 +10606,54 @@ def save_sweep_animation_stream(
         display_step=max(1, len(sweep["items"]) // 100),
     )
 
+    duration_s = 1.0 / max(1, int(fps))
     try:
-        from PIL import GifImagePlugin, Image
+        import imageio.v2 as imageio
 
-        def to_gif_frame(frame_rgb: np.ndarray) -> Any:
-            image = Image.fromarray(frame_rgb)
-            palette_mode = getattr(getattr(Image, "Palette", Image), "ADAPTIVE", Image.ADAPTIVE)
-            dither_mode = getattr(getattr(Image, "Dither", Image), "FLOYDSTEINBERG", Image.FLOYDSTEINBERG)
-            return image.convert("P", palette=palette_mode, dither=dither_mode)
-
-        duration_ms = max(int(interval), 1)
-        with open(gif_path, "wb") as handle:
+        with imageio.get_writer(
+            gif_path,
+            mode="I",
+            fps=max(1, int(fps)),
+            loop=0,
+            palettesize=256,
+            subrectangles=False,
+        ) as writer:
             import gc as _gc
 
-            for frame_rgb, title in _iter_sweep_animation_frames(
+            for frame_rgb, _title in _iter_sweep_animation_frames(
                 sweep,
                 plot_fn,
                 figsize=figsize,
                 title_fn=title_fn,
                 close_frames=close_frames,
             ):
-                gif_frame = to_gif_frame(frame_rgb)
-                if frame_count == 0:
-                    header, _palette = GifImagePlugin.getheader(
-                        gif_frame,
-                        info={"loop": 0, "duration": duration_ms},
-                    )
-                    for chunk in header:
-                        handle.write(chunk)
-                for chunk in GifImagePlugin.getdata(gif_frame, duration=duration_ms):
-                    handle.write(chunk)
+                writer.append_data(np.asarray(frame_rgb, dtype=np.uint8))
                 frame_count += 1
                 progress.update_to(frame_count)
                 if frame_count % 16 == 0:
                     _gc.collect()
-            handle.write(b";")
+    except ImportError:
+        from PIL import Image
+
+        frames = []
+        for frame_rgb, _title in _iter_sweep_animation_frames(
+            sweep,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+        ):
+            frames.append(Image.fromarray(np.asarray(frame_rgb, dtype=np.uint8)))
+            frame_count += 1
+            progress.update_to(frame_count)
+        if frames:
+            frames[0].save(
+                gif_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=max(1, int(round(duration_s * 1000))),
+                loop=0,
+            )
     finally:
         progress.close()
 
