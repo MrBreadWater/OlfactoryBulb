@@ -989,8 +989,68 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
 
-    # --- Deferred soma traces should fall back to full-dir sync if selected-file sync fails ---
+    # --- Deferred soma traces should bypass SFTP with direct file streaming when selected sync fails ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    original_direct_deferred = hlp._sync_deferred_remote_artifact_direct
+    try:
+        deferred_direct_dir = tmp / "deferred-direct-result"
+        deferred_direct_dir.mkdir(parents=True, exist_ok=True)
+        (deferred_direct_dir / "summary.json").write_text("{}")
+        (deferred_direct_dir / "run_info.json").write_text(
+            json.dumps(
+                {
+                    "config": {
+                        "runner_backend": "sol_slurm",
+                        "remote_host": "user@host",
+                        "remote_repo_root": "/remote/OlfactoryBulb",
+                        "remote_results_root": "/remote/OlfactoryBulb/results/notebook_runs",
+                        "ssh_transport": "paramiko",
+                    },
+                    "remote": {
+                        "remote_result_dir": "/remote/OlfactoryBulb/results/notebook_runs/test_label",
+                        "deferred_remote_artifacts": ["soma_vs.pkl"],
+                    },
+                }
+            )
+        )
+
+        sync_calls = []
+        direct_calls = []
+
+        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
+            sync_calls.append((remote_result_dir, expected_files, include_files))
+            return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="selected sync failed")
+
+        def _fake_direct_deferred(_config, *, remote_result_dir, local_result_dir, filename):
+            direct_calls.append((remote_result_dir, filename))
+            local_result_dir = Path(local_result_dir)
+            with open(local_result_dir / filename, "wb") as handle:
+                import pickle
+                pickle.dump([("MC0", [0.0, 0.1], [-65.0, -64.0])], handle)
+            return subprocess.CompletedProcess(args=["direct"], returncode=0, stdout="", stderr="")
+
+        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
+        result = hlp.load_result(deferred_direct_dir)
+        assert result["soma_vs"][0][0] == "MC0"
+        assert sync_calls == [
+            (
+                PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/test_label"),
+                ("soma_vs.pkl",),
+                ("soma_vs.pkl",),
+            )
+        ]
+        assert direct_calls == [
+            (PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/test_label"), "soma_vs.pkl")
+        ]
+        print("Deferred soma direct-stream fallback: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+        hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
+
+    # --- Deferred soma traces should fall back to full-dir sync if selected and direct sync fail ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    original_direct_deferred = hlp._sync_deferred_remote_artifact_direct
     try:
         deferred_fallback_dir = tmp / "deferred-fallback-result"
         deferred_fallback_dir.mkdir(parents=True, exist_ok=True)
@@ -1014,6 +1074,7 @@ with tempfile.TemporaryDirectory() as tmp:
         )
 
         sync_calls = []
+        direct_calls = []
 
         def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
             sync_calls.append((remote_result_dir, expected_files, include_files))
@@ -1026,14 +1087,73 @@ with tempfile.TemporaryDirectory() as tmp:
                 pickle.dump([("MC0", [0.0, 0.1], [-65.0, -64.0])], handle)
             return subprocess.CompletedProcess(args=["sync"], returncode=0, stdout="", stderr="")
 
+        def _fake_direct_deferred(_config, *, remote_result_dir, local_result_dir, filename):
+            direct_calls.append((remote_result_dir, filename))
+            return subprocess.CompletedProcess(args=["direct"], returncode=1, stdout="", stderr="direct sync failed")
+
         hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
         result = hlp.load_result(deferred_fallback_dir)
         assert result["soma_vs"][0][0] == "MC0"
         assert sync_calls[0][2] == ("soma_vs.pkl",)
         assert sync_calls[1][2] is None
+        assert direct_calls == [
+            (PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/test_label"), "soma_vs.pkl")
+        ]
         print("Deferred soma fallback to full-dir sync: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
+        hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
+
+    # --- Deferred soma failures should retain all retry diagnostics ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    original_direct_deferred = hlp._sync_deferred_remote_artifact_direct
+    try:
+        deferred_error_dir = tmp / "deferred-error-result"
+        deferred_error_dir.mkdir(parents=True, exist_ok=True)
+        (deferred_error_dir / "summary.json").write_text("{}")
+        (deferred_error_dir / "run_info.json").write_text(
+            json.dumps(
+                {
+                    "config": {
+                        "runner_backend": "sol_slurm",
+                        "remote_host": "user@host",
+                        "remote_repo_root": "/remote/OlfactoryBulb",
+                        "remote_results_root": "/remote/OlfactoryBulb/results/notebook_runs",
+                        "ssh_transport": "paramiko",
+                    },
+                    "remote": {
+                        "remote_result_dir": "/remote/OlfactoryBulb/results/notebook_runs/test_label",
+                        "deferred_remote_artifacts": ["soma_vs.pkl"],
+                    },
+                }
+            )
+        )
+
+        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
+            if include_files == ("soma_vs.pkl",):
+                return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="selected failed")
+            return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="Failure")
+
+        def _fake_direct_deferred(_config, *, remote_result_dir, local_result_dir, filename):
+            return subprocess.CompletedProcess(args=["direct"], returncode=1, stdout="", stderr="direct failed")
+
+        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
+        result = hlp.load_result(deferred_error_dir)
+        try:
+            _ = result["soma_vs"]
+            raise AssertionError("Expected deferred soma sync failure")
+        except RuntimeError as exc:
+            text = str(exc)
+            assert "[selected-file sync]" in text
+            assert "[direct file stream]" in text
+            assert "[full result-dir sync]" in text
+            assert "Failure" in text
+        print("Deferred soma failure diagnostics: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+        hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
 
     # --- Result overview should not trigger deferred soma trace downloads ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
