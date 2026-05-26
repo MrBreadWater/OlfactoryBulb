@@ -114,15 +114,32 @@ def sha256_bytes(data: bytes) -> str:
 
 def canonicalize(obj: Any) -> Any:
     """Recursively normalize containers so order-insensitive comparisons are reproducible."""
+    try:
+        import numpy as np
+    except ImportError:
+        np = None
+
+    if np is not None:
+        if isinstance(obj, np.ndarray):
+            arr = np.ascontiguousarray(obj)
+            return (
+                "ndarray",
+                str(arr.dtype),
+                tuple(int(dim) for dim in arr.shape),
+                sha256_bytes(arr.tobytes()),
+            )
+        if isinstance(obj, np.generic):
+            return obj.item()
+
+    if isinstance(obj, dict):
+        return tuple(sorted((str(key), canonicalize(value)) for key, value in obj.items()))
+
     if isinstance(obj, tuple):
         return tuple(canonicalize(x) for x in obj)
 
     if isinstance(obj, list):
         canon_items = [canonicalize(x) for x in obj]
-        try:
-            canon_items = sorted(canon_items)
-        except TypeError:
-            pass
+        canon_items = sorted(canon_items, key=repr)
         return canon_items
 
     return obj

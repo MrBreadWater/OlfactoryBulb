@@ -3685,16 +3685,23 @@ def _recover_local_sweep_summary(
     sweep_dir = Path(sweep_dir)
     progress = _read_json_if_present(sweep_dir / "sim_progress.json") or {}
     finished_items = progress.get("finished_items") or []
-    if not isinstance(finished_items, list) or len(finished_items) < int(total_items):
+    if not isinstance(finished_items, list) or not finished_items:
         return {}
+    completed_items = [item for item in finished_items if bool(item.get("ok", False))]
+    failed_items = [item for item in finished_items if not bool(item.get("ok", False))]
     summary = {
         "kind": "remote_sweep",
         "sweep_label": sweep_label,
         "total_items": int(total_items),
-        "completed_items": [item for item in finished_items if bool(item.get("ok", False))],
-        "failed_items": [item for item in finished_items if not bool(item.get("ok", False))],
+        "completed_items": completed_items,
+        "failed_items": failed_items,
         "items": finished_items,
+        "partial": len(finished_items) < int(total_items),
+        "recovered_from": "sim_progress.json",
     }
+    for key in ("pending_labels", "running_items", "completed_labels", "failed_labels"):
+        if key in progress:
+            summary[key] = progress[key]
     (sweep_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
     return summary
 
@@ -6294,7 +6301,12 @@ def _run_remote_sweep(
             sweep_label=sweep_label,
             total_items=len(manifest_items),
         )
-        if metadata_sync.returncode != 0 or not sweep_summary:
+        if metadata_sync.returncode != 0 and sweep_summary:
+            stderr_parts.append(
+                "[OBGPU load] Incremental sweep metadata sync reported an error, "
+                "but local progress metadata was sufficient to recover a sweep summary.\n"
+            )
+        if not sweep_summary:
             stderr_parts.append(
                 "[OBGPU load] Incremental sweep final sync could not fetch summary metadata; "
                 "falling back to a bulk sweep-root sync.\n"
@@ -6478,12 +6490,7 @@ def _run_remote_sweep(
             }
         )
 
-    if len(completed_items) != len(sweep_plan["items"]):
-        missing = [item["label"] for item in manifest_items if not (local_runs_dir / item["label"]).exists()]
-        raise RuntimeError(
-            "Remote sweep finished without syncing every item result directory.\n"
-            f"Missing items: {missing}"
-        )
+    missing_labels = [item["label"] for item in manifest_items if not (local_runs_dir / item["label"]).exists()]
 
     sweep = {
         "path": sweep_plan["path"],
@@ -6513,10 +6520,16 @@ def _run_remote_sweep(
     for failed in sweep_summary.get("failed_items", []):
         if isinstance(failed, dict) and failed.get("label"):
             failed_labels.append(str(failed["label"]))
-    if failed_labels:
+    if failed_labels or missing_labels:
+        details = []
+        if failed_labels:
+            details.append(f"Failed labels: {failed_labels}")
+        if missing_labels:
+            details.append(f"Missing items: {missing_labels}")
         raise RuntimeError(
-            "Remote sweep completed with failed items.\n"
-            f"Failed labels: {failed_labels}\n"
+            "Remote sweep completed with failed or missing items.\n"
+            + "\n".join(details)
+            + "\n"
             f"Sweep dir: {local_sweep_dir}"
         )
     if final_status is not None and not final_status.get("ok", True) and not sweep_summary:

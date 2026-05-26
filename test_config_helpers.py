@@ -135,6 +135,17 @@ with tempfile.TemporaryDirectory() as tmp:
     assert loaded_traces[0][1].dtype == np.float32
     assert loaded_traces[0][2].dtype == np.float32
     assert find_soma_trace_artifact(tmp) == npz_path
+    benchmark_spec = importlib.util.spec_from_file_location(
+        "benchmark_ob_test",
+        hlp.REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py",
+    )
+    assert benchmark_spec is not None and benchmark_spec.loader is not None
+    benchmark_ob = importlib.util.module_from_spec(benchmark_spec)
+    benchmark_spec.loader.exec_module(benchmark_ob)
+    soma_summary = benchmark_ob.summarize_pickle(npz_path)
+    assert soma_summary["type"] == "list"
+    assert soma_summary["items"] == 2
+    assert "canonical_sha256" in soma_summary
     print("Compressed soma trace artifact round-trip: OK")
 
     # --- Paramiko SFTP should be lazy and cached ---
@@ -348,6 +359,32 @@ with tempfile.TemporaryDirectory() as tmp:
         manifest_stub,
         local_runs_dir=tmp / "no-sweep-payloads",
     ) is False
+    partial_sweep_dir = tmp / "partial-sweep"
+    partial_sweep_dir.mkdir(parents=True, exist_ok=True)
+    (partial_sweep_dir / "sim_progress.json").write_text(
+        json.dumps(
+            {
+                "finished_items": [
+                    {
+                        "index": 0,
+                        "label": "item_000",
+                        "ok": True,
+                        "result_dir": "/remote/item_000_20260525_120000",
+                    }
+                ],
+                "pending_labels": ["item_001"],
+                "running_items": [],
+            }
+        )
+    )
+    recovered_summary = hlp._recover_local_sweep_summary(
+        partial_sweep_dir,
+        sweep_label="partial-sweep",
+        total_items=2,
+    )
+    assert recovered_summary["partial"] is True
+    assert recovered_summary["completed_items"][0]["label"] == "item_000"
+    assert (partial_sweep_dir / "summary.json").exists()
     print("Incremental sweep final sync selection: OK")
 
     # --- Remote helper cache should shrink submit/poll command payloads ---
