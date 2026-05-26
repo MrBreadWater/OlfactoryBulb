@@ -75,6 +75,35 @@ To make a new family truly swappable in the full network, we will need either:
 1. slice-builder metadata plus new slice exports for that family, or
 2. a new population added alongside the existing slice-driven cells.
 
+## Alignment with the Birgiolas dissertation
+
+Justas' dissertation does not support treating a new cell as a runtime-only
+object dropped into the existing network. His workflow was:
+
+1. choose reconstructed or otherwise explicit cell morphologies,
+2. add published conductance mechanisms,
+3. validate electrophysiology and morphology against adult mouse data,
+4. place somas inside reconstructed bulb layers using the virtual-slice
+   geometry,
+5. orient dendrites into the appropriate laminar compartments,
+6. generate synapses from morphology/proximity rules,
+7. tune network conductances only after the anatomical network exists,
+8. test the resulting mechanism with ablations and LFP/spectrogram readouts.
+
+The current registry/proxy layer is therefore only a discovery and single-cell
+staging tool. The full `EPLI` / `PVI` implementation should follow the same
+pipeline as the dissertation: build a real slice-builder population, export its
+slice JSON, generate explicit synapse sets, and only then expose the population
+as network-ready.
+
+For the PV/EPL hypothesis specifically, the dissertation's most relevant
+precedent is its stated future path for adding extra cells and mechanisms, such
+as external tufted cells: add the cells to the extensible bulb model and modify
+the input/circuit wiring, then assess whether the gamma fingerprint changes.
+That is the model to follow for `EPLI` / `PVI`, except the target population is
+an EPL inhibitory population rather than a replacement for existing granule
+cells.
+
 ## Biological target vs currently available proxies
 
 ### Target inhibitory population
@@ -144,11 +173,19 @@ That gives us:
 
 The next honest step is:
 
-1. add a new `EPLI` / `PVI` population path to the network,
-2. use the registry to select an initial published proxy model,
-3. keep the existing `MC/TC/GC` slice intact,
-4. then replace the proxy with a true EPL morphology-backed family once we
-   import one.
+1. find or construct a morphology-backed `EPLI` / `PVI` family, preferably from
+   reconstructed EPL interneurons,
+2. validate the candidate cell physiology in isolation before network use,
+3. add a new `EPLI` / `PVI` population path to the slice builder,
+4. place somas in the EPL and constrain neurites to EPL laminae,
+5. generate `MC/TC -> EPLI` and `EPLI -> MC/TC` synapse sets from proximity
+   rules, with explicit target compartments,
+6. keep the existing `MC/TC/GC` slice intact,
+7. use the registry only to select an initial published proxy while this
+   plumbing is being tested,
+8. mark the population `network_ready=True` only after the generated slice and
+   synapse sets run through the same ablation/readout workflow used for the
+   existing gamma-fingerprint model.
 
 ## Citations
 
@@ -156,3 +193,4 @@ The next honest step is:
 - Li and Cleland (2013) *A two-layer biophysical model of cholinergic neuromodulation in olfactory bulb*
 - Miyamichi et al. (2013) *Parvalbumin-Expressing Interneurons Linearly Control Olfactory Bulb Output*
 - Huang et al. (2013) *Reciprocal connectivity between mitral cells and external plexiform layer interneurons in the mouse olfactory bulb*
+- Birgiolas (2019) *Towards Brains in the Cloud: A Biophysically Realistic Computational Model of Olfactory Bulb*
