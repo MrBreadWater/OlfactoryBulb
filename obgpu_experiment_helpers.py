@@ -9920,6 +9920,11 @@ def _callable_artifact_label(value: Any) -> str:
 
 def _artifact_settings_ready(value: Any) -> Any:
     """Convert plot settings into deterministic JSON-compatible metadata."""
+    if isinstance(value, FrequencyPlotConfig):
+        config = asdict(value)
+        if str(config.get("kde1d_engine", "histogram")).strip().lower() == "histogram":
+            config.pop("kde1d_engine", None)
+        return _artifact_settings_ready(config)
     if is_dataclass(value) and not isinstance(value, type):
         return _artifact_settings_ready(asdict(value))
     if isinstance(value, Path):
