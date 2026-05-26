@@ -1,124 +1,132 @@
 # Codebase Cleanup Audit
 
-Date: 2026-04-08
+Date: 2026-05-26
 
-This audit separates the actively maintained OBGPU workflow from legacy model
-archives, vendored code, generated artifacts, and scripts that appear stale or
-experimental.
+This audit separates the actively maintained OBGPU workflow from historical
+model archives, generated artifacts, and old helper paths. It is intentionally
+pragmatic: keep the modern run path clean, but do not rewrite archival model
+code unless it is directly blocking current work.
 
-## Actively Maintained Surface
+`modify_model.py` is explicitly out of scope for this cleanup pass.
 
-These files are on the live notebook/run path and should be treated as the
-primary cleanup/documentation target.
+## Active Maintained Surface
 
-- `initslice.py`
-- `runbatch.py`
+These files are on the modern setup/run/analyze path and should receive tests,
+documentation, and cleanup priority.
+
+- `install-obgpu.sh`
+- `tools/setup/setup_ob_modern.sh`
+- `tools/setup/activate_obgpu.sh`
+- `tools/setup/activate_sol_obgpu.sh`
+- `tools/setup/verify_obgpu_python_imports.py`
+- `environments/environment-modern.yml`
+- `third_party_patches/nrn/`
 - `obgpu_experiment_helpers.py`
-- `mc_gc_sweep.py`
+- `tools/benchmarks/benchmark_ob.py`
+- `tools/remote/`
 - `olfactorybulb/model.py`
 - `olfactorybulb/output_paths.py`
+- `olfactorybulb/result_artifacts.py`
 - `olfactorybulb/paramsets/`
-- `tools/benchmarks/`
-- `tools/debug/`
-  - Useful, but mostly ad hoc investigation scripts rather than stable APIs.
-  - They should be documented as debug probes, not treated as polished library code.
-- the working notebooks under `notebooks/` that drive the current OBGPU workflow
+- `notebooks/obgpu-working-experiment.ipynb`
+- `single_cell_utils.py`
+- `fi_curve_utils.py`
+- `notebooks/fi_curve_analysis.ipynb`
 
-These are the files worth deeper type-hinting, docstring work, API cleanup, and
-test coverage.
+`initslice.py` and `runbatch.py` remain compatibility entrypoints, but new
+notebook, benchmark, and Slurm work should use the helper/benchmark path.
 
-## Legacy / Reference Code
+## Remote Execution Cleanup
 
-These directories are important reference material, but they should not be
-treated as though they are part of the actively maintained application surface.
+The maintained remote backend is now Paramiko-only.
+
+Removed or retired concepts:
+
+- OpenSSH control-master transport
+- `ssh_multiplex`
+- `ssh_control_path`
+- `ssh_control_persist_s`
+- `ssh_allow_interactive_auth`
+- rsync result sync path
+- `rsync_binary`
+- `rsync_options`
+
+Kept concepts:
+
+- `ssh_options`, especially `["-p", "..."]` and jump-host style options
+- Paramiko persistent sessions
+- streamed compressed result sync
+- selected-file sync for sweeps and deferred artifacts
+- reusable Slurm allocations and manual `slurm_allocation_job_id`
+
+## Historical / Reference Code
+
+These directories are important, but most of their contents are archival rather
+than active application code.
 
 - `prev_ob_models/`
-  - Historical cell-model and fitting code from many prior publications.
-  - Still important for mechanisms and isolated cell templates.
-  - Most Python files here are effectively archival/reference code.
+  - Active dependency: `prev_ob_models/Birgiolas2020`.
+  - Historical references: Kaplan/Lansner, Li/Cleland, Short, Saghatelyan, and
+    other imported model trees.
+  - Generated NEURON build outputs inside these trees should not be tracked.
+- `blender-files/`
+  - Network construction and visualization assets.
+  - Large binary assets are not required for normal notebook runs.
+- `media/`
+  - Figures/videos/GIFs for documentation and presentation.
+  - New generated media should be kept out of git unless it is intentionally a
+    curated deliverable.
 - `external/`
-  - Vendored / patched upstream dependencies, especially NEURON/CoreNEURON.
-- `snapshots/`
-  - Historical comparison worktrees and parity references.
-- `docs/`, `docs-source/`
-  - Documentation build outputs and sources.
+  - Resettable upstream dependency checkout cache. Do not hand-edit as the
+    source of truth.
 
 ## Generated / Local-Only Noise
 
-These should stay out of normal cleanup commits and are good `.gitignore`
-targets.
+These should stay ignored and out of normal commits.
 
+- `results/notebook_runs/`
+- `results/sweeps/`
 - `results/benchmarks/`
 - `results/comparisons/`
-- `results/notebook_runs/`
 - `results/profiles/`
 - `results/debug_*/`
 - `results/tmp_*/`
 - `.jupyter-ai-state/`
 - `.codex/`
+- `.ipynb_checkpoints/`
 - `aarch64/`
+- `x86_64/`
 - `corenrn_data/`
 - `*.zip`
-- support-lib folders such as `261_22158_220-pycharm-support-libs/`
-- `.ipynb_checkpoints/`
+- generated `*.c`, `*.o`, `*.dll`, and shared-library outputs from NEURON
+  mechanism builds
 
-## Files That Look Stale, Experimental, or Weakly Integrated
+## Current High-Value Cleanup Targets
 
-These are not necessarily safe to delete immediately, but they should be
-reviewed before spending much cleanup effort on them.
+1. Keep `obgpu_experiment_helpers.py` from growing new duplicate transport,
+   sync, and sweep paths. Prefer deleting old branches over adding feature
+   flags.
+2. Keep remote config builder options minimal. If a value can be inferred from
+   Slurm resources or execution mode, avoid adding a second independent knob.
+3. Keep large generated outputs out of the active tree and history. Commit
+   source `.mod`, Python, JSON model definitions, and small curated examples;
+   rebuild generated binaries locally.
+4. Keep all active docs pointed at `install-obgpu.sh`,
+   `setup_ob_modern.sh`, `benchmark_ob.py`, and the OBGPU notebook.
+5. Treat old notebooks and historical imported models as reference material
+   unless they are proven to be on the active path.
 
-### High-confidence stale / weakly integrated
+## Test Focus
 
-- `modify_model.py`
-- `tools/debug/modify_model.py`
-  - Appears experimental and currently broken.
-  - Imports `olfactorybulb.parse_topology`, which does not exist in the current tree.
-  - Uses `re` without importing it.
-  - References globals such as `test_params` that are not defined in the file.
-  - Not referenced by the active notebook or batch workflow.
+When changing notebook-facing behavior, verify these surfaces:
 
-- `testmpi.py`
-  - Useful as a small MPI/gap-junction probe, but not part of the normal
-    simulation pipeline.
-  - Better treated as a debug/example script than a maintained entrypoint.
+- single local run
+- remote single run
+- remote sweep batch
+- live sync/final sync
+- deferred soma artifact loading
+- animation and plotting helpers
+- reusable allocation cleanup and manual allocation reuse
 
-- `notebooks/cell_current_responses.py`
-- `notebooks/cell_gallery.py`
-- `notebooks/fitting-GC.py`
-- `notebooks/fitting.py`
-  - Legacy script-style analysis/fitting helpers.
-  - Mentioned in older docs, but not on the active OBGPU workflow path.
-
-### Low-confidence / manual-use only
-
-- `build-slice.py`
-  - Still referenced by the slice-recreation docs.
-  - Probably intentionally manual and infrequently used.
-  - Should be documented, but not treated like a hot path.
-
-- `example_starter.py`
-  - A small example/teaching script.
-  - Useful, but not core to the simulation pipeline.
-
-## Recommended Next Cleanup Steps
-
-1. Keep documenting the active maintained surface first.
-2. Move or clearly label stale scripts under a dedicated `tools/legacy/` or
-   `archive/` area once they are confirmed unused.
-3. Avoid large “cleanup” edits inside `prev_ob_models/` unless there is a
-   concrete reason; that tree is better treated as archived/reference code.
-4. Add lightweight tests around:
-   - notebook run metadata persistence
-   - output-path naming
-   - run loading / summary helpers
-   - GC output event analysis helpers
-5. Consider splitting `obgpu_experiment_helpers.py` into smaller modules:
-   - run launching/loading
-   - parameter/introspection helpers
-   - signal processing
-   - plotting/animation
-
-## Cleanup Principle
-
-The goal should be to make the maintained OBGPU workflow clean and readable
-without pretending the entire historical repository is equally active.
+The tests should assert default behavior through the public config builders, not
+only through private helper implementations.

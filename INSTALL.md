@@ -123,25 +123,31 @@ The actively maintained notebook is:
 
 - `notebooks/obgpu-working-experiment.ipynb`
 
-The older `LFP Wavelet Analysis.ipynb` notebook still exists, but the repo's modern setup and remote workflow are built around the OBGPU notebook/helper path.
+The older `LFP Wavelet Analysis.ipynb` notebook still exists, but the repo's
+modern setup and remote workflow are built around the OBGPU notebook/helper
+path.
+
+Remote notebook runs use Paramiko over SSH. The previous OpenSSH
+control-master/rsync backend has been removed from the maintained path.
 
 ## Running Simulations
 
-Single run, CPU-oriented:
+Maintained benchmark smoke, CPU-oriented:
+
+```bash
+mpiexec -n 4 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_cpu --paramset GammaSignature
+```
+
+Maintained benchmark smoke, GPU/CoreNEURON-oriented:
+
+```bash
+mpiexec -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_gpu --paramset GammaSignature --coreneuron --coreneuron-gpu
+```
+
+Legacy compatibility entrypoints still exist:
 
 ```bash
 mpiexec -n 4 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
-```
-
-Single run, GPU/CoreNEURON-oriented:
-
-```bash
-OB_USE_CORENRN=1 OB_USE_CORENRN_GPU=1 mpiexec -n 1 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
-```
-
-Batch run:
-
-```bash
 python runbatch.py
 ```
 
@@ -152,6 +158,9 @@ python runbatch.py
 - If you change `.mod` files under `prev_ob_models/Birgiolas2020/Mechanisms`, rerun the setup script or recompile mechanisms in the active OBGPU environment before running simulations.
 - `environment.yml` / `environment-lock.yml` are legacy environment files. The maintained one is `environments/environment-modern.yml`.
 - `activate_obgpu.sh` is the generic local helper. `activate_sol_obgpu.sh` is the Sol-specific helper.
+- Tracked generated NEURON outputs under historical `prev_ob_models` trees are
+  intentionally being retired; rebuild mechanisms from `.mod` source when
+  needed.
 
 ## Files That Matter
 

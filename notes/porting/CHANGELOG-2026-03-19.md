@@ -1,5 +1,10 @@
 # Changelog 2026-03-19
 
+Historical note as of 2026-05-26: this file records the early legacy `OB`
+environment recovery session. It is not the current setup guide. For current
+OBGPU setup and remote execution, use `INSTALL.md`,
+`MODERN_NEURON_PORT_NOTES.md`, and `SOL_REMOTE_WORKFLOW.md`.
+
 ## Summary
 
 This log records all substantive work completed on the `OB` environment and the `OlfactoryBulb` repo during the current session.

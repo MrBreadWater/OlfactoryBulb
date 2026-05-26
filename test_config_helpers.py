@@ -573,6 +573,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert remote_builder_cfg["sweep_sync_soma_vs"] is False
     assert remote_builder_cfg["sweep_sync_voltage_summary"] is False
     assert remote_builder_cfg["sweep_live_sync_max_items_per_poll"] == 8
+    assert remote_builder_cfg["ssh_transport"] == "paramiko"
+    assert "ssh_multiplex" not in remote_builder_cfg
+    assert "rsync_options" not in remote_builder_cfg
     remote_builder_live_cfg = hlp.build_slurm_remote_config(
         remote_host="user@host",
         remote_repo_root="/remote/OlfactoryBulb",
@@ -584,6 +587,16 @@ with tempfile.TemporaryDirectory() as tmp:
     assert remote_builder_live_cfg["sweep_sync_voltage_summary"] is True
     assert remote_builder_live_cfg["sweep_live_sync_max_items_per_poll"] == 2
     print("Remote sweep builder defaults favor robust final sync: OK")
+
+    if hlp.paramiko is not None:
+        assert hlp._remote_transport({"remote_host": "user@host", "ssh_options": []}) == "paramiko"
+        assert hlp._remote_transport({"remote_host": "user@host", "ssh_transport": "auto"}) == "paramiko"
+        try:
+            hlp._remote_transport({"remote_host": "user@host", "ssh_transport": "openssh"})
+            raise AssertionError("openssh transport should not be accepted")
+        except ValueError:
+            pass
+    print("Remote transport is Paramiko-only: OK")
 
     # --- Successful fast remote sync should only request essential result artifacts ---
     fast_files_default = hlp._remote_fast_sync_files()
@@ -623,51 +636,6 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "soma_vs.pkl" in sweep_files_raw
     assert SOMA_TRACE_FILENAME_NPZ in sweep_files_raw
     print("Remote sweep sync file set stays compact by default: OK")
-
-    # --- OpenSSH/rsync selected sync should honor include_files instead of copying whole dirs ---
-    original_remote_transport = hlp._remote_transport
-    original_ensure_ssh_master = hlp._ensure_ssh_master
-    original_subprocess_run = subprocess.run
-    try:
-        selected_rsync_dir = tmp / "selected-rsync"
-        selected_rsync_dir.mkdir()
-        rsync_commands = []
-
-        def _fake_run(command, **_kwargs):
-            rsync_commands.append(list(command))
-            (selected_rsync_dir / "summary.json").write_text("{}")
-            return subprocess.CompletedProcess(args=command, returncode=0, stdout="", stderr="")
-
-        hlp._remote_transport = lambda _config: "openssh"
-        hlp._ensure_ssh_master = lambda _config: None
-        subprocess.run = _fake_run
-        selected_cfg = {
-            **remote_cfg,
-            "remote_host": "user@host",
-            "ssh_options": [],
-            "ssh_binary": "ssh",
-            "ssh_multiplex": False,
-            "rsync_options": ["-az"],
-        }
-        completed = hlp._sync_remote_result_dir(
-            selected_cfg,
-            remote_result_dir=PurePosixPath("/remote/result"),
-            local_result_dir=selected_rsync_dir,
-            expected_files=("summary.json",),
-            include_files=("summary.json", SOMA_SPIKES_FILENAME_NPZ),
-        )
-        assert completed.returncode == 0
-        assert rsync_commands
-        rsync_command = rsync_commands[0]
-        assert "--ignore-missing-args" in rsync_command
-        assert "user@host:/remote/result/summary.json" in rsync_command
-        assert f"user@host:/remote/result/{SOMA_SPIKES_FILENAME_NPZ}" in rsync_command
-        assert "user@host:/remote/result/" not in rsync_command
-        print("OpenSSH selected sync honors compact file allowlist: OK")
-    finally:
-        hlp._remote_transport = original_remote_transport
-        hlp._ensure_ssh_master = original_ensure_ssh_master
-        subprocess.run = original_subprocess_run
 
     # --- Fast result sync should fall back to full sync when selected files are not visible ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir

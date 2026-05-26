@@ -10,18 +10,19 @@ A biophysically realistic computational model of the olfactory bulb (OB) network
 
 **Active conda environment**: `OBGPU`
 
-**Single paramset (CPU)**:
+**Maintained benchmark run (CPU)**:
+```bash
+mpiexec -n 4 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_cpu --paramset GammaSignature
+```
+
+**Maintained benchmark run (GPU/CoreNEURON)**:
+```bash
+mpiexec -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_gpu --paramset GammaSignature --coreneuron --coreneuron-gpu
+```
+
+**Legacy compatibility entrypoints**:
 ```bash
 mpiexec -n 4 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
-```
-
-**Single paramset (GPU/CoreNEURON)**:
-```bash
-OB_USE_CORENRN=1 OB_USE_CORENRN_GPU=1 mpiexec -n 1 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
-```
-
-**Batch run (all paramsets in `runbatch.py`)**:
-```bash
 python runbatch.py
 ```
 
@@ -71,12 +72,16 @@ The thick convenience layer for interactive use. Key functions:
 - `build_run_config(...)` — constructs the config dict for a run
 - `run_simulation(config)` / `run_and_load(config)` — launches subprocess, polls, downloads results
 - `run_parameter_sweep(config, path, values)` — sweeps one config key over a list of values
-- `load_result(run)` — deserializes pkl files into a result dict with keys `soma_vs`, `lfp`, `input_times`, `gc_output_events`
+- `load_result(run)` — loads result artifacts, including lazy/deferred soma trace payloads when configured
 - `animate_*_sweep(sweep, ...)` — matplotlib animation wrappers for sweeps; saves GIFs
 - `save_animation(anim, name)` / `save_figure(name, ...)` — persist outputs next to results
 - `show_legacy_plots(result, ...)` — the standard stacked MC/TC/LFP/wavelet visualization
 - `plot_*` family — individual plot functions (voltage traces, spike rasters, LFP overview, spectrograms, wavelets, GC output, input overview)
 - `build_sol_remote_config(...)` / `build_slurm_remote_config(...)` — remote Slurm backends
+
+Remote notebook runs are Paramiko-only. Do not reintroduce the removed OpenSSH
+control-master or rsync transport path; it caused repeated authentication and
+stale socket failures in sweeps.
 
 ### Slice Data (`olfactorybulb/slices/DorsalColumnSlice/`)
 
@@ -108,11 +113,14 @@ Utilities to add/modify synaptic connections and swap cell types on a live `Olfa
 
 ## Compiling NEURON Mechanisms
 
-If `.mod` files change, recompile the mechanisms from the repo root:
+If maintained Birgiolas `.mod` files change, rerun setup or recompile the
+mechanisms from the repo root:
 ```bash
-nrnivmodl .
+nrnivmodl -coreneuron prev_ob_models/Birgiolas2020/Mechanisms
 ```
-This regenerates `aarch64/` (or `x86_64/` on Intel).
+This regenerates the local architecture directory (`x86_64/`, `aarch64/`, or
+the configured mechanism cache). Generated `.c`, `.o`, `.dll`, `x86_64/`, and
+`aarch64/` outputs should not be committed.
 
 ## Important Constraints
 

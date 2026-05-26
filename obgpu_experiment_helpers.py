@@ -14,7 +14,6 @@ import pickle
 import re
 import shlex
 import shutil
-import signal
 import stat
 import subprocess
 import sys
@@ -40,10 +39,6 @@ try:
     import pywt
 except ImportError:  # pragma: no cover - optional runtime dependency
     pywt = None
-try:
-    import pexpect
-except ImportError:  # pragma: no cover - optional runtime dependency
-    pexpect = None
 try:
     import paramiko
 except ImportError:  # pragma: no cover - optional runtime dependency
@@ -208,16 +203,9 @@ CONTROL_HELP = {
     "slurm_cpus_per_task": "Optional CPU count requested per Slurm task.",
     "slurm_mem": "Optional Slurm memory request, e.g. '32G'.",
     "slurm_extra_args": "Optional extra sbatch arguments passed as raw strings.",
-    "ssh_binary": "SSH client executable used by the remote backend.",
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
-    "ssh_transport": "Remote transport for the Sol backend: 'auto', 'paramiko', or 'openssh'.",
-    "ssh_multiplex": "When True, reuse a persistent SSH control socket so Sol auth happens once instead of on every submit/poll/sync step.",
-    "ssh_allow_interactive_auth": "When True, open the initial SSH control master through an interactive PTY so notebook-launched Sol runs can prompt for password and 2FA once.",
+    "ssh_transport": "Deprecated compatibility option. Remote notebook runs now always use Paramiko; 'auto' and 'paramiko' are accepted.",
     "ssh_keepalive_s": "Paramiko keepalive interval in seconds for notebook-managed SSH sessions. Higher values reduce background traffic; lower values make idle sessions less likely to die between runs.",
-    "ssh_control_path": "Optional path for the shared SSH control socket. Defaults to a hashed path under XDG_RUNTIME_DIR, TMPDIR, or the system temp directory.",
-    "ssh_control_persist_s": "How long to keep the SSH control master alive after the last use.",
-    "rsync_binary": "rsync executable used to sync remote results back locally.",
-    "rsync_options": "Extra rsync options used by the remote backend.",
     "add_connections": "Add new connections between existing neurons.",
     "modify_connections": "Modify the synaptic weight between two specific neurons.",
     "swap_cell_types": "A list of cells to swap to another cell type."
@@ -655,7 +643,6 @@ _LIVE_INSPECTION_SIGNATURE = None
 if not hasattr(builtins, "_OBGPU_NOTEBOOK_RUNTIME"):
     builtins._OBGPU_NOTEBOOK_RUNTIME = {}
 _NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
-_NOTEBOOK_RUNTIME.setdefault("ssh_masters", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_authenticated_keys", set())
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
@@ -664,7 +651,6 @@ _NOTEBOOK_RUNTIME.setdefault("remote_helper_caches", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_preflight", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_stale_cleanup", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocation_atexit_registered", False)
-_LIVE_SSH_MASTERS: dict[str, Any] = _NOTEBOOK_RUNTIME["ssh_masters"]
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 _LIVE_PARAMIKO_AUTHENTICATED_KEYS: set[str] = _NOTEBOOK_RUNTIME["paramiko_authenticated_keys"]
 _LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
@@ -681,14 +667,10 @@ def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
         "remote_results_root",
         "remote_heartbeat_timeout_s",
         "runner_backend",
-        "ssh_binary",
         "ssh_options",
         "ssh_transport",
-        "ssh_multiplex",
-        "ssh_allow_interactive_auth",
         "ssh_keepalive_s",
-        "ssh_control_path",
-        "ssh_control_persist_s",
+        "remote_preserve_paramiko_session",
     )
     return {key: deepcopy(config.get(key)) for key in keys if key in config}
 
@@ -857,16 +839,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "slurm_cpus_per_task": None,
         "slurm_mem": None,
         "slurm_extra_args": [],
-        "ssh_binary": "ssh",
         "ssh_options": [],
-        "ssh_transport": "auto",
-        "ssh_multiplex": True,
-        "ssh_allow_interactive_auth": True,
+        "ssh_transport": "paramiko",
         "ssh_keepalive_s": 30,
-        "ssh_control_path": None,
-        "ssh_control_persist_s": 28800,
-        "rsync_binary": "rsync",
-        "rsync_options": ["-az"],
         "add_connections": [],
         "modify_connections": [],
         "swap_cell_types": []
@@ -914,7 +889,6 @@ def build_slurm_remote_config(
     slurm_allocation_time: str | None = None,
     slurm_allocation_name: str | None = None,
     ssh_options: list[str] | None = None,
-    rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a generic remote Slurm config for notebook-driven runs.
@@ -972,9 +946,8 @@ def build_slurm_remote_config(
         "slurm_mem": None if slurm_mem in (None, "") else str(slurm_mem),
         "slurm_extra_args": list(slurm_extra_args or []),
         "ssh_options": list(ssh_options or []),
-        "ssh_transport": "auto",
+        "ssh_transport": "paramiko",
         "ssh_keepalive_s": 30,
-        "rsync_options": list(rsync_options or ["-az"]),
     }
     return config
 
@@ -1018,7 +991,6 @@ def build_sol_remote_config(
     slurm_allocation_time: str | None = None,
     slurm_allocation_name: str | None = None,
     ssh_options: list[str] | None = None,
-    rsync_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
 ) -> dict[str, Any]:
     """Return a Sol-specific remote runner config with Sol activation defaults.
@@ -1063,7 +1035,6 @@ def build_sol_remote_config(
         slurm_allocation_time=slurm_allocation_time,
         slurm_allocation_name=slurm_allocation_name,
         ssh_options=ssh_options,
-        rsync_options=rsync_options,
         slurm_extra_args=slurm_extra_args,
     )
     config["runner_backend"] = "sol_slurm"
@@ -1973,40 +1944,25 @@ def _require_remote_host(config: dict[str, Any]) -> str:
     return remote_host
 
 
-def _ssh_control_path(config: dict[str, Any]) -> Path | None:
-    """Return the shared SSH control-socket path for the remote backend."""
-    if not bool(config.get("ssh_multiplex", True)):
-        return None
-
-    configured = config.get("ssh_control_path")
-    if configured not in (None, ""):
-        return Path(str(configured)).expanduser()
-
-    host = _require_remote_host(config)
-    digest = sha1(host.encode("utf-8")).hexdigest()[:12]
-    runtime_base = (
-        os.environ.get("XDG_RUNTIME_DIR")
-        or os.environ.get("TMPDIR")
-        or tempfile.gettempdir()
-    )
-    return Path(runtime_base) / f"obgpu-ssh-{digest}.sock"
-
-
 def _remote_transport(config: dict[str, Any]) -> str:
-    """Return the active transport implementation for the Sol backend."""
+    """Return the active remote transport.
+
+    The notebook remote backend is Paramiko-only. The old OpenSSH control-master
+    and subprocess transfer branch repeatedly caused duplicate authentication
+    and stale socket failures in notebook sweeps, so ``ssh_transport`` remains
+    only as a compatibility guard for older configs.
+    """
     configured = str(config.get("ssh_transport", "auto")).strip().lower()
-    if configured not in {"auto", "paramiko", "openssh"}:
+    if configured in {"", "auto"}:
+        configured = "paramiko"
+    if configured != "paramiko":
         raise ValueError(f"Unsupported ssh_transport={configured!r}")
-    if configured == "auto":
-        if paramiko is not None:
-            return "paramiko"
-        return "openssh"
-    if configured == "paramiko" and paramiko is None:
+    if paramiko is None:
         raise RuntimeError(
-            "ssh_transport='paramiko' requires the optional 'paramiko' dependency "
-            "in the notebook environment."
+            "Remote notebook runs require the optional 'paramiko' dependency. "
+            "Install/update the maintained OBGPU environment before using a remote Slurm backend."
         )
-    return configured
+    return "paramiko"
 
 
 def _remote_endpoint(config: dict[str, Any]) -> tuple[str, int, str]:
@@ -2453,399 +2409,21 @@ def _sftp_copy_files(sftp: Any, remote_dir: str, local_dir: Path, file_names: li
     progress.close()
 
 
-def _ssh_common_options(config: dict[str, Any]) -> list[str]:
-    """Return SSH options shared by submit, poll, and rsync operations."""
-    options = [str(option) for option in config.get("ssh_options", [])]
-    control_path = _ssh_control_path(config)
-    if control_path is not None:
-        options.extend(
-            [
-                "-o",
-                "ControlMaster=auto",
-                "-o",
-                f"ControlPath={control_path}",
-                "-o",
-                f"ControlPersist={int(config.get('ssh_control_persist_s', 28800))}s",
-            ]
-        )
-    return options
-
-
-def _ssh_command_env() -> dict[str, str]:
-    """Return a stable environment for non-interactive SSH subprocesses."""
-    env = os.environ.copy()
-    # The notebook backend handles first-use auth through pexpect when needed.
-    # Do not fall back to GUI askpass helpers from plain subprocess calls.
-    env["SSH_ASKPASS_REQUIRE"] = "never"
-    return env
-
-
-def _ssh_master_is_ready(config: dict[str, Any], control_path: Path) -> bool:
-    """Return True when the configured SSH control master accepts mux requests."""
-    checked = subprocess.run(
-        [
-            str(config.get("ssh_binary", "ssh")),
-            *[str(option) for option in config.get("ssh_options", [])],
-            "-o",
-            f"ControlPath={control_path}",
-            "-O",
-            "check",
-            _require_remote_host(config),
-        ],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_ssh_command_env(),
-    )
-    return checked.returncode == 0
-
-
-def _ssh_master_socket_is_live(config: dict[str, Any], control_path: Path) -> bool:
-    """Return True when the control socket exists and appears to back a live master."""
-    if not control_path.exists():
-        return False
-    return _ssh_master_is_ready(config, control_path)
-
-
-def _kill_stale_ssh_master_processes(config: dict[str, Any], control_path: Path) -> None:
-    """Kill stale SSH master processes still tied to a removed or broken control path."""
-    listed = subprocess.run(
-        ["ps", "-eo", "pid=,args="],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if listed.returncode != 0:
-        return
-
-    control_path_text = str(control_path)
-    current_pid = os.getpid()
-    target_pids: list[int] = []
-    for raw_line in (listed.stdout or "").splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-        parts = line.split(maxsplit=1)
-        if len(parts) != 2:
-            continue
-        pid_text, args = parts
-        try:
-            pid = int(pid_text)
-        except ValueError:
-            continue
-        if pid == current_pid:
-            continue
-        if control_path_text not in args:
-            continue
-        if "ssh" not in args:
-            continue
-        target_pids.append(pid)
-
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        survivors: list[int] = []
-        for pid in target_pids:
-            try:
-                os.kill(pid, sig)
-            except ProcessLookupError:
-                continue
-            except OSError:
-                survivors.append(pid)
-                continue
-            survivors.append(pid)
-        if not survivors:
-            return
-        time.sleep(0.2)
-        target_pids = []
-        for pid in survivors:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                continue
-            except OSError:
-                continue
-            target_pids.append(pid)
-        if not target_pids:
-            return
-
-
-def _reset_ssh_master(config: dict[str, Any]) -> None:
-    """Tear down and remove any cached SSH control socket for the remote host."""
-    control_path = _ssh_control_path(config)
-    if control_path is None:
-        return
-
-    stored_child = _LIVE_SSH_MASTERS.pop(str(control_path), None)
-    if stored_child is not None:
-        try:
-            if hasattr(stored_child, "terminate"):
-                stored_child.terminate()
-            else:
-                stored_child.close(force=True)
-        except Exception:
-            pass
-
-    host = _require_remote_host(config)
-    ssh_binary = str(config.get("ssh_binary", "ssh"))
-    user_options = [str(option) for option in config.get("ssh_options", [])]
-    exit_command = [
-        ssh_binary,
-        *user_options,
-        "-o",
-        f"ControlPath={control_path}",
-        "-O",
-        "exit",
-        host,
-    ]
-    subprocess.run(
-        exit_command,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_ssh_command_env(),
-    )
-    if control_path.exists():
-        try:
-            control_path.unlink()
-        except OSError:
-            pass
-    _kill_stale_ssh_master_processes(config, control_path)
-
-
-def _ssh_failure_needs_reset(stderr: str) -> bool:
-    """Return True when SSH stderr indicates a stale or unusable control master."""
-    message = (stderr or "").lower()
-    return any(
-        token in message
-        for token in (
-            "master refused session request",
-            "control socket connect",
-            "permission denied",
-            "connection reset",
-            "broken pipe",
-        )
-    )
-
-
-def _ensure_ssh_master(config: dict[str, Any]) -> None:
-    """Ensure a reusable SSH control master exists for the configured remote host."""
-    control_path = _ssh_control_path(config)
-    if control_path is None:
-        return
-
-    control_path.parent.mkdir(parents=True, exist_ok=True)
-    host = _require_remote_host(config)
-    ssh_binary = str(config.get("ssh_binary", "ssh"))
-    user_options = [str(option) for option in config.get("ssh_options", [])]
-    persist_seconds = int(config.get("ssh_control_persist_s", 28800))
-
-    if _ssh_master_is_ready(config, control_path):
-        return
-
-    _reset_ssh_master(config)
-
-    start_command = [
-        ssh_binary,
-        *user_options,
-        "-o",
-        "BatchMode=yes",
-        "-o",
-        "ControlMaster=yes",
-        "-o",
-        f"ControlPath={control_path}",
-        "-o",
-        f"ControlPersist={persist_seconds}s",
-        "-MN",
-        host,
-    ]
-    started = subprocess.Popen(
-        start_command,
-        cwd=REPO_ROOT,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        env=_ssh_command_env(),
-    )
-    deadline = time.time() + 10.0
-    while time.time() < deadline:
-        if _ssh_master_socket_is_live(config, control_path):
-            _LIVE_SSH_MASTERS[str(control_path)] = started
-            return
-        if started.poll() is not None:
-            break
-        time.sleep(0.1)
-
-    stdout, stderr = started.communicate(timeout=1) if started.poll() is not None else ("", "")
-    if started.poll() is None:
-        try:
-            started.terminate()
-            started.wait(timeout=1)
-        except Exception:
-            try:
-                started.kill()
-            except Exception:
-                pass
-        stdout = stdout or ""
-        stderr = stderr or ""
-
-    if not bool(config.get("ssh_allow_interactive_auth", True)):
-        raise RuntimeError(
-            "Could not establish a persistent SSH control master for the Sol backend.\n"
-            f"Host: {host}\n"
-            f"Stdout:\n{stdout}\n\nStderr:\n{stderr}"
-        )
-    _reset_ssh_master(config)
-    _start_ssh_master_interactive(config, start_command)
-
-
-def _start_ssh_master_interactive(config: dict[str, Any], start_command: list[str]) -> None:
-    """Start the SSH control master through a PTY so notebook users can answer auth prompts."""
-    if pexpect is None:
-        raise RuntimeError(
-            "Interactive SSH auth requires the optional 'pexpect' dependency in the notebook environment."
-        )
-
-    interactive_command: list[str] = []
-    index = 0
-    while index < len(start_command):
-        part = start_command[index]
-        if (
-            part == "-o"
-            and index + 1 < len(start_command)
-            and start_command[index + 1] == "BatchMode=yes"
-        ):
-            index += 2
-            continue
-        interactive_command.append(part)
-        index += 1
-    control_path = _ssh_control_path(config)
-    if control_path is None:
-        raise RuntimeError("Interactive SSH auth requires ssh_multiplex=True")
-
-    child = pexpect.spawn(
-        interactive_command[0],
-        interactive_command[1:],
-        cwd=str(REPO_ROOT),
-        encoding="utf-8",
-        timeout=15,
-    )
-
-    password_prompt = re.compile(r"(?i)(?:^|\n).*(?:password|passphrase).{0,20}:\s*$")
-    otp_prompt = re.compile(r"(?i)(?:^|\n).*(?:passcode|verification|otp|token|duo|2fa|two-factor).{0,40}:\s*$")
-    generic_prompt = re.compile(r"(?i)(?:^|\n).{0,120}:\s*$")
-    hostkey_prompt = re.compile(r"(?i)are you sure you want to continue connecting")
-
-    deadline = time.time() + 180.0
-    auth_answered = False
-
-    while True:
-        idx = child.expect(
-            [
-                hostkey_prompt,
-                password_prompt,
-                otp_prompt,
-                generic_prompt,
-                pexpect.EOF,
-                pexpect.TIMEOUT,
-            ]
-        )
-        if idx == 0:
-            child.sendline("yes")
-            auth_answered = True
-            continue
-        if idx == 1:
-            prompt = child.after.strip() or f"Password for {_require_remote_host(config)}: "
-            child.sendline(getpass(prompt + " "))
-            auth_answered = True
-            continue
-        if idx == 2:
-            prompt = child.after.strip() or f"2FA for {_require_remote_host(config)}: "
-            child.sendline(input(prompt + " "))
-            auth_answered = True
-            continue
-        if idx == 3:
-            prompt = child.after.strip() or f"SSH prompt for {_require_remote_host(config)}: "
-            if "password" in prompt.lower() or "passphrase" in prompt.lower():
-                child.sendline(getpass(prompt + " "))
-            else:
-                child.sendline(input(prompt + " "))
-            auth_answered = True
-            continue
-        if idx == 4:
-            child.close()
-            if child.exitstatus == 0:
-                if _ssh_master_socket_is_live(config, control_path):
-                    _LIVE_SSH_MASTERS[str(control_path)] = child
-                    return
-            raise RuntimeError(
-                "Interactive SSH authentication failed while opening the Sol control master.\n"
-                f"Exit status: {child.exitstatus}\n"
-                f"Output:\n{child.before}"
-            )
-        if control_path.exists() and child.isalive() and auth_answered:
-            _LIVE_SSH_MASTERS[str(control_path)] = child
-            return
-        if time.time() > deadline:
-            child.close(force=True)
-            raise RuntimeError(
-                "Timed out while waiting for the Sol SSH control master to authenticate.\n"
-                f"Partial output:\n{child.before}"
-            )
-
-
-def _ssh_prefix(config: dict[str, Any]) -> list[str]:
-    """Build the SSH command prefix used for Sol orchestration."""
-    _ensure_ssh_master(config)
-    prefix = [str(config.get("ssh_binary", "ssh"))]
-    prefix.extend(_ssh_common_options(config))
-    prefix.append(_require_remote_host(config))
-    return prefix
-
-
 def _run_ssh_shell(
     config: dict[str, Any],
     remote_shell_command: str,
     *,
     check: bool = False,
 ) -> subprocess.CompletedProcess[str]:
-    """Run one shell command on the remote Sol host over SSH."""
-    if _remote_transport(config) == "paramiko":
-        completed = _run_paramiko_shell(config, remote_shell_command)
-        if check and completed.returncode != 0:
-            raise subprocess.CalledProcessError(
-                completed.returncode,
-                completed.args,
-                output=completed.stdout,
-                stderr=completed.stderr,
-            )
-        return completed
-
-    command = _ssh_prefix(config) + ["bash", "-lc", remote_shell_command]
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=check,
-        env=_ssh_command_env(),
-    )
-    if (
-        completed.returncode != 0
-        and bool(config.get("ssh_multiplex", True))
-        and _ssh_failure_needs_reset(completed.stderr or "")
-    ):
-        _reset_ssh_master(config)
-        _ensure_ssh_master(config)
-        completed = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=check,
-            env=_ssh_command_env(),
+    """Run one shell command on the remote Slurm host over the cached Paramiko session."""
+    _remote_transport(config)
+    completed = _run_paramiko_shell(config, remote_shell_command)
+    if check and completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode,
+            completed.args,
+            output=completed.stdout,
+            stderr=completed.stderr,
         )
     return completed
 
@@ -3034,14 +2612,9 @@ def _probe_remote_selected_sync_files(
 def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
     """Best-effort remote file removal used for temporary sync archives."""
     remote_shell = "rm -f {}".format(shlex.quote(remote_path))
-    if _remote_transport(config) == "paramiko":
-        try:
-            _run_paramiko_shell(config, remote_shell)
-        except Exception:
-            pass
-        return
+    _remote_transport(config)
     try:
-        _run_ssh_shell(config, remote_shell)
+        _run_paramiko_shell(config, remote_shell)
     except Exception:
         pass
 
@@ -3054,29 +2627,7 @@ def _upload_remote_bytes_file(
     close_sftp: bool = True,
 ) -> None:
     """Upload one file to the remote host over the active notebook SSH transport."""
-    if _remote_transport(config) != "paramiko":
-        remote_shell = (
-            "set -euo pipefail && "
-            f"mkdir -p {shlex.quote(remote_path.parent.as_posix())} && "
-            f"cat > {shlex.quote(remote_path.as_posix())}"
-        )
-        command = _ssh_prefix(config) + ["bash", "-lc", remote_shell]
-        completed = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            input=data,
-            capture_output=True,
-            check=False,
-            env=_ssh_command_env(),
-        )
-        if completed.returncode != 0:
-            raise RuntimeError(
-                "Could not upload a remote file over SSH.\n"
-                f"Remote path: {remote_path.as_posix()}\n"
-                f"Stdout:\n{completed.stdout.decode('utf-8', errors='replace')}\n\n"
-                f"Stderr:\n{completed.stderr.decode('utf-8', errors='replace')}"
-            )
-        return
+    _remote_transport(config)
     mkdir_completed = _run_paramiko_shell(
         config,
         "mkdir -p {}".format(shlex.quote(remote_path.parent.as_posix())),
@@ -3115,8 +2666,7 @@ def _upload_remote_text_file(
 
 def _ensure_remote_helper_cache(config: dict[str, Any]) -> PurePosixPath | None:
     """Upload notebook helper scripts once per session or reuse a remote cache hit."""
-    if _remote_transport(config) != "paramiko":
-        return None
+    _remote_transport(config)
 
     cache_key = _remote_helper_cache_runtime_key(config)
     cached = _LIVE_REMOTE_HELPER_CACHES.get(cache_key)
@@ -3794,70 +3344,12 @@ def _sync_remote_result_dir(
             stderr=str(last_exc) if last_exc is not None else "unknown paramiko sftp failure",
         )
 
-    _ensure_ssh_master(config)
-    command = [str(config.get("rsync_binary", "rsync"))]
-    command.extend(str(option) for option in config.get("rsync_options", ["-az"]))
-    if include_files and "--ignore-missing-args" not in command:
-        command.append("--ignore-missing-args")
-    ssh_command = [str(config.get("ssh_binary", "ssh"))]
-    ssh_command.extend(_ssh_common_options(config))
-    if len(ssh_command) > 1:
-        command.extend(["-e", _shell_join(ssh_command)])
-    remote_base = remote_result_dir.as_posix().rstrip("/")
-    if include_files:
-        remote_host = _require_remote_host(config)
-        for rel_name in include_files:
-            rel_path = str(rel_name).lstrip("/")
-            command.append(f"{remote_host}:{remote_base}/{rel_path}")
-        command.append(str(local_result_dir) + "/")
-    else:
-        command.extend(
-            [
-                f"{_require_remote_host(config)}:{remote_base}/",
-                str(local_result_dir) + "/",
-            ]
-        )
-    completed = subprocess.run(
-        command,
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-        env=_ssh_command_env(),
+    return subprocess.CompletedProcess(
+        args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
+        returncode=1,
+        stdout="",
+        stderr="Remote result sync reached an unreachable non-Paramiko path.",
     )
-    if (
-        completed.returncode != 0
-        and bool(config.get("ssh_multiplex", True))
-        and _ssh_failure_needs_reset(completed.stderr or "")
-    ):
-        _reset_ssh_master(config)
-        _ensure_ssh_master(config)
-        completed = subprocess.run(
-            command,
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-            env=_ssh_command_env(),
-        )
-    if completed.returncode == 0:
-        missing_rsync_files = _missing_local_sync_artifacts(
-            local_result_dir,
-            expected_files=expected_files,
-        )
-        if missing_rsync_files:
-            expected_text = ", ".join(missing_rsync_files)
-            return subprocess.CompletedProcess(
-                args=completed.args,
-                returncode=1,
-                stdout=completed.stdout,
-                stderr=(completed.stderr or "")
-                + (
-                    "\n[OBGPU load] Sync reported success, but expected local artifacts are missing: "
-                    f"{expected_text}\n"
-                ),
-            )
-    return completed
 
 
 def _combine_sync_attempt_stderr(attempts: list[tuple[str, subprocess.CompletedProcess[str]]]) -> str:
@@ -5243,13 +4735,7 @@ def _ensure_remote_git_ref_available(
         _progress_write(f"[Sol remote] Remote repo already has commit {remote_git_ref[:12]}.")
         return
 
-    if _remote_transport(config) != "paramiko":
-        raise RuntimeError(
-            "The requested git ref is not available in the remote Sol repo, and automatic sync "
-            "requires ssh_transport='paramiko'.\n"
-            f"Remote ref: {remote_git_ref}\n"
-            "Push the branch manually or enable the Paramiko transport."
-        )
+    _remote_transport(config)
 
     branch_name = _resolve_local_git_branch()
     source_branch_ref = (
@@ -5896,7 +5382,7 @@ def _run_remote_simulation(
             raise RuntimeError(
                 "Remote Sol result sync failed.\n"
                 f"Result dir: {local_result_dir}\n"
-                f"rsync stderr:\n{sync_completed.stderr}"
+                f"sync stderr:\n{sync_completed.stderr}"
             )
     _progress_write(f"[OBGPU load] Remote sync finished: {local_result_dir}")
 
@@ -7246,7 +6732,6 @@ def _sync_deferred_remote_artifact(
     if (
         not _local_sync_artifact_is_usable(local_path)
         and filename in soma_trace_artifact_candidates()
-        and _remote_transport(config) == "paramiko"
     ):
         _progress_write(
             "[OBGPU load] Deferred soma selected-file sync failed; "
@@ -7875,15 +7360,10 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "slurm_cpus_per_task",
         "slurm_mem",
         "slurm_extra_args",
-        "ssh_binary",
         "ssh_options",
-        "ssh_multiplex",
-        "ssh_allow_interactive_auth",
         "ssh_keepalive_s",
-        "ssh_control_path",
-        "ssh_control_persist_s",
-        "rsync_binary",
-        "rsync_options",
+        "ssh_transport",
+        "remote_preserve_paramiko_session",
     ]
     snapshot = {key: _json_ready(config.get(key)) for key in runtime_keys if key in config}
     snapshot["resolved_execution_mode"] = _json_ready(_resolve_execution_mode(config))

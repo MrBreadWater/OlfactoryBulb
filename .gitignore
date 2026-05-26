@@ -147,3 +147,11 @@ results/tmp_*/
 
 # Local archives
 *.zip
+
+# Generated NEURON mechanism build products
+prev_ob_models/**/*.c
+prev_ob_models/**/*.o
+prev_ob_models/**/nrnmech.dll
+prev_ob_models/**/special
+prev_ob_models/**/x86_64/
+prev_ob_models/**/aarch64/

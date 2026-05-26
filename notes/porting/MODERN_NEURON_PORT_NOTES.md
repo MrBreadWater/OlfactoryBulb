@@ -43,7 +43,11 @@ Important portability details:
 
 ## Runtime Defaults
 
-The current fast local default is still:
+The notebook config distinguishes local execution settings from remote Slurm
+resource requests. Local runs still use `use_corenrn` and `use_gpu`; remote
+runs infer execution mode from the Slurm request unless explicitly overridden.
+
+The current fast local default is:
 
 - rank `1`
 - GPU on
@@ -53,6 +57,9 @@ The current fast local default is still:
 The parity-oriented mode is still available by running with `2` MPI ranks.
 
 The notebook helper surface continues to expose both modes through `build_run_config(...)`.
+
+Remote sync now uses streamed compressed tar over Paramiko. The old
+OpenSSH/rsync path is no longer maintained.
 
 ## Activation Helpers
 

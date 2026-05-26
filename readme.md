@@ -1,18 +1,14 @@
-![Travis (.com)](https://img.shields.io/travis/com/JustasB/OlfactoryBulb) &nbsp;
-![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/jbirgio/olfactory-bulb) &nbsp;
-![GitHub](https://img.shields.io/github/license/justasb/OlfactoryBulb) &nbsp;
-![GitHub repo size](https://img.shields.io/github/repo-size/justasb/olfactorybulb) &nbsp;
+# OlfactoryBulb
 
+This repository contains the olfactory bulb network model and the current
+OBGPU workflow for running it with NEURON/CoreNEURON locally or through remote
+Slurm jobs.
 
-# Install & Run Network Model
+The maintained path is no longer Docker. Use the conda-based OBGPU setup, a
+patched source build of NEURON/CoreNEURON, and the notebook helper layer in
+`obgpu_experiment_helpers.py`.
 
-> The maintained install flow no longer uses Docker.
->
-> Use [INSTALL.md](INSTALL.md) and `./install-obgpu.sh` for the supported `OBGPU` setup.
->
-> The Docker instructions below are historical context, not the primary workflow.
-
-## Supported Quick Start
+## Quick Start
 
 GPU/CoreNEURON build:
 
@@ -30,105 +26,87 @@ source tools/setup/activate_obgpu.sh OBGPU-portable
 jupyter lab
 ```
 
-See [INSTALL.md](INSTALL.md) for prerequisites, smoke tests, Sol notes, and the actual patch-stack/NEURON build flow.
+The active notebook is:
 
-## Legacy Docker Instructions
+- `notebooks/obgpu-working-experiment.ipynb`
 
-The easiest way to run the model is to use [Docker](https://www.docker.com)
-(a kind of virtualization software). After installing Docker, you will download the model's Docker image
-hosted on DockerHub, and run the image. The image contains everything needed to run the model
-(NEURON, Python, MPI, all required OS and Python packages). The image will open a Jupyter Lab environment
-which you can use to interact with the model.
+See [INSTALL.md](INSTALL.md) for host prerequisites, GPU/CUDA notes, smoke
+tests, and Slurm/Phoenix/Sol setup details.
 
-## Install Docker
+## Maintained Runtime
 
-Follow the [steps for your OS to install Docker](https://www.docker.com/products/docker-desktop) 
-on your machine.
+The modern workflow is:
 
-## Download the Olfactory Bulb Model Image
-In your OS terminal, run the following command to download the model image from DockerHub:
-```
-docker pull jbirgio/olfactory-bulb:latest
-```
+1. `install-obgpu.sh` delegates to `tools/setup/setup_ob_modern.sh`.
+2. The setup script creates or updates the `OBGPU` conda environment from
+   `environments/environment-modern.yml`.
+3. It resets `external/nrn-9.0.1` to the pinned upstream ref in
+   `third_party_patches/nrn/manifest.json`.
+4. It applies the repo patch stack from `third_party_patches/nrn/`.
+5. It builds NEURON/CoreNEURON and compiles the Birgiolas mechanisms.
+6. Runs are launched by the notebook helper or by
+   `tools/benchmarks/benchmark_ob.py`.
 
-## Run the Image and Open Jupyter Lab
-Once the image is downloaded, run the image with the following command:
-```
-docker run -it -p 8888:8888 jbirgio/olfactory-bulb:latest
-```
+The important active files are:
 
-The Docker container will start and load the image. The image is programmed to start
-a Jupyter Lab environment. In the terminal output, you should see a URL that looks something like:
+- `obgpu_experiment_helpers.py`
+- `tools/benchmarks/benchmark_ob.py`
+- `tools/remote/`
+- `olfactorybulb/model.py`
+- `olfactorybulb/paramsets/`
+- `prev_ob_models/Birgiolas2020/Mechanisms/`
+- `olfactorybulb/result_artifacts.py`
 
+`initslice.py` and `runbatch.py` remain useful compatibility entrypoints, but
+new performance and notebook work should use the benchmark/helper path.
 
-```
-http://127.0.0.1:8888/?token=6e7edee...0e02142
-```
+## Remote Slurm Runs
 
-Copy and paste the URL into your browser to open the Jupyter Lab environment that is running inside
-the model's Docker container.
+Remote notebook runs use Paramiko over SSH and Slurm on the remote host. The
+old OpenSSH multiplex/rsync path has been removed from the maintained notebook
+backend because it caused repeated authentication and stale control-socket
+failures during sweeps.
 
-**To stop the container**, press `CTRL+C` (possibly twice).
+Use:
 
-**To cleanup Docker image/container cache** use `docker system prune`. Add `--filter "until=72h"` to limit the 
-cleanup to older resources. See [Docker pruning](https://docs.docker.com/config/pruning/) for more details.
+- `build_slurm_remote_config(...)` for generic clusters such as Phoenix
+- `build_sol_remote_config(...)` for Sol-specific activation defaults
 
-## Run the Notebook with Experiments
-On the right panel of Jupyter Lab, find the `notebooks` folder and open the `LFP Wavelet Analysis` notebook.
-Then run all the cells of the notebook.
+The notebook auto-publishes the current local `HEAD` commit to the remote repo
+when needed, submits through Slurm, streams live progress, and syncs results
+back into local `results/notebook_runs/...`.
 
-Once the simulation starts, you should see something like this:
+See [notes/porting/SOL_REMOTE_WORKFLOW.md](notes/porting/SOL_REMOTE_WORKFLOW.md)
+for the current remote workflow.
 
-```
-Starting paramset: GammaSignature (1/5)...
-numprocs=16
-Rank Complexity min: 551, mean: 662.625, max: 791
-Starting simulation...
-Time: 10.0 ms
-```
+## Results
 
-After the simulations finish, running the next cell will plot the simulation output:
+Modern runs write timestamped directories under `results/notebook_runs/`.
+Remote sweeps use `results/sweeps/`. Large soma trace payloads may be stored in
+compact NPZ form and loaded lazily by the notebook helper.
 
-![gamma-fingerprint-simulation-output.png](media/gamma-fingerprint-simulation-output.png)
+Generated results, profiles, temporary archives, and compiled mechanism outputs
+should not be committed.
 
- - The first row contains the odor input spikes to the glomerular tufts of mitral (blue) and tufted (red) cells.
- - Next are the somatic voltage traces of tufted (red) and mitral (blue) cells
- - The next trace is the raw LFP signal
- - Then the LFP signal band-pass filtered to include frequencies between 30-120 Hz 
- - Then a wavelett spectrogram of the filtered LFP signal
- - Finally, the average LFP spectrogram across all the sniffs, containing the two-cluster gamma fingerprint 
- 
-The remaining cells demonstrate how the gamma fingerprint is disturbed when one of the key network mechanisms is disabled.
+## Repository Layout
 
-# Adjusting Parameters
-The `show_plots` function takes the name of a parameter set Python class. 
+- `olfactorybulb/`: core model, parameter sets, database access, and result
+  artifact helpers.
+- `prev_ob_models/`: historical published models and the active
+  Birgiolas2020 cell/mechanism source used by the network.
+- `tools/setup/`: OBGPU environment, NEURON/CoreNEURON build, and activation
+  helpers.
+- `tools/remote/`: Slurm submit/poll/batch helpers used by the notebook.
+- `tools/benchmarks/`: maintained command-line benchmark/smoke runner.
+- `notes/porting/`: current porting, setup, and remote workflow notes.
+- `blender-files/` and `media/`: archival construction/visualization assets;
+  not required for normal notebook runs.
 
-To change the simulation parameters, 
-use the right panel in Jupyter Lab to open the `[repo]/olfactorybulb/paramsets/case_studies.py` file. 
+## Citation
 
-After modifying e.g. the `GammaFingerprint` class, rerun the simulation with the new parameter values 
-with this notebook command:
+If you use this model or parts of it in your project, please cite:
 
-```
-!cd ..; mpiexec -np 16 python initslice.py -paramset GammaSignature -mpi
-```
-Replace `16` with the number of cores in your machine.
-
-After simulation completes, re-run the `show_plots` function to see the updated results:
-
-```
-show_plots('GammaSignature', sniff_count=8)
-```
-
-# Model Documentation
- 
- Take a look the [Model Documentation](https://docs.olfactorybulb.org) to learn more about how the model was built and to make further modifications.
-
-# Citation
-
-If you use this model or parts of it in your project, please cite the model as follows:
-
-```
+```bibtex
 @phdthesis{birgiolas2019towards,
   title={Towards Brains in the Cloud: A Biophysically Realistic Computational Model of Olfactory Bulb},
   author={Birgiolas, Justas},
@@ -136,35 +114,3 @@ If you use this model or parts of it in your project, please cite the model as f
   school={Arizona State University}
 }
 ```
-
-# Folders
-
-**Folders needed to run the network model**
-
- - `olfactorybulb` Classes and database defining the network model
- - `prev_ob_models` Cell and network models developed by others, but cell models under `Birgiolas2020` are used in this network model. The models are compared against experimental data and to each other. 
- - `blender-files` Stores .blend used in network construction (e.g. layer coordinates)
- - `initslice.py` Runs the network model using a provided parameter set
- - `docker` Docker scripts to run the model using Docker 
-   
-   
-**Folders used to construct the network model and cell models**
-
- - `digitized-figures` Extracted figures that contained experimental data used in the model
- - `morphology-data` Subfolders with .SWC morphology archives from [NeuroMorpho.org](http://neuromorpho.org/) of the three cell types
- - `neuronunit` [NeuronUnit](https://github.com/scidash/neuronunit/) classes that define tests used to validate cell models
- - `notebooks` Jupyter notebooks used to validate, fit, and simulate the cell and network models
- - `worksheets` Excel worksheets used to derive experimental data properties when they were not directlya vailable
-  
-**Other folders**
- - `notes` Mostly notes and temporary model validation files
- - `dissertation-figures-tables` Excel spreadsheets of some dissertation tables
- - `media` Images of dissertation figures and videos used in dissertation defense slides
-  
-# Other Files
-
- - `prev_ob_models/compile_mod.sh` Compiles all .mod files 
- - `runbatch.py` Allows specifying different parameter sets and runs the model with each set
- - `testmpi.py` A test of NEURONs MPI-based network
- 
- 

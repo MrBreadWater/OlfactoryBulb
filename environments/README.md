@@ -1,26 +1,36 @@
 # Environments
 
-Environment specs and exports used during the port:
+The maintained environment spec is:
 
 - `environment-modern.yml`
-  Maintainable `OBGPU` environment spec used by the source-built NEURON/CoreNEURON workflow.
-- `environment.yml`
-  Maintainable legacy `OB` environment spec.
-- `environment-lock.yml`
-  Frozen export of the working legacy environment.
-- `environment-linux-aarch64-explicit.txt`
-  Explicit package export for this Jetson/Linux `aarch64` host.
 
-`OBGPU` is no longer tied to a hand-edited vendored NEURON tree. The supported
-source build now comes from:
+It is used by `install-obgpu.sh` and `tools/setup/setup_ob_modern.sh` to create
+or update the `OBGPU` conda environment for the source-built
+NEURON/CoreNEURON workflow.
 
-- pinned upstream ref: [third_party_patches/nrn/manifest.json](/home/alek/OlfactoryBulb/third_party_patches/nrn/manifest.json)
-- repo patch stack: [third_party_patches/nrn](/home/alek/OlfactoryBulb/third_party_patches/nrn)
-- bootstrap script: [setup_ob_modern.sh](/home/alek/OlfactoryBulb/tools/setup/setup_ob_modern.sh)
-- generic activation helper: [activate_obgpu.sh](/home/alek/OlfactoryBulb/tools/setup/activate_obgpu.sh)
-- Sol activation helper: [activate_sol_obgpu.sh](/home/alek/OlfactoryBulb/tools/setup/activate_sol_obgpu.sh)
+Historical specs remain for reference:
+
+- `environment.yml`: legacy `OB` environment used during the first NEURON port.
+- `environment-lock.yml`: frozen export of that legacy environment.
+- `environment-linux-aarch64-explicit.txt`: explicit package export from an
+  older Linux `aarch64` host.
+
+Do not update the legacy specs unless you are intentionally preserving or
+reproducing the old `OB` environment. New work should change
+`environment-modern.yml`.
+
+The `OBGPU` build comes from:
+
+- pinned upstream ref: `third_party_patches/nrn/manifest.json`
+- repo patch stack: `third_party_patches/nrn/`
+- bootstrap script: `tools/setup/setup_ob_modern.sh`
+- generic activation helper: `tools/setup/activate_obgpu.sh`
+- Sol activation helper: `tools/setup/activate_sol_obgpu.sh`
+
+The remote notebook backend uses Paramiko, so `paramiko` is part of the modern
+spec. The old OpenSSH/pexpect multiplex path is retired.
 
 See also:
 
-- [MODERN_NEURON_PORT_NOTES.md](/home/alek/OlfactoryBulb/notes/porting/MODERN_NEURON_PORT_NOTES.md)
-- [SOL_REMOTE_WORKFLOW.md](/home/alek/OlfactoryBulb/notes/porting/SOL_REMOTE_WORKFLOW.md)
+- `notes/porting/MODERN_NEURON_PORT_NOTES.md`
+- `notes/porting/SOL_REMOTE_WORKFLOW.md`

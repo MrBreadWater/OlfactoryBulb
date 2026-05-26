@@ -38,7 +38,6 @@ THIRD_PARTY_IMPORTS = [
     "peewee",
     "lmfit",
     "requests",
-    "pexpect",
     "paramiko",
     "tqdm",
     "validators",

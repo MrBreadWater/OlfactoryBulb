@@ -1,6 +1,10 @@
 OlfactorySystem
 ===============
 
+Repository status as of 2026-05-26: this directory is preserved as an archival
+published-model reference. It is not part of the maintained OBGPU notebook,
+benchmark, or remote Slurm execution path.
+
 This repository holds code that has been used for the publication:
 Kaplan BA and Lansner A (2014) A spiking neural network model of self-organized pattern recognition in the early mammalian olfactory system. Front. Neural Circuits 8:5. doi: 10.3389/fncir.2014.00005
 
@@ -74,7 +78,6 @@ Lindgren specific information
   Compilation:
   bkaplan@emil-login2:/cfs/klemming/nobackup/b/bkaplan/OlfactorySystem/neuron_files>
   /cfs/klemming/nobackup/b/bkaplan/neuron-7.3/nrn-mpi/bin/nrnivmodl
-
 
 
 

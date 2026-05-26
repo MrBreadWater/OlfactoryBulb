@@ -1,5 +1,9 @@
 # KAR analytical inversion for the olfactory bulb model
 
+Status as of 2026-05-26: this remains a modeling/design note for the KAR
+parameterization work. It is not an installation or runbook document. Use the
+current OBGPU notebook and `build_run_config(...)` controls for actual sweeps.
+
 This note specifies how to convert the Frerking and Ohliger-Frerking KAR EPSP
 voltage fit into a conductance waveform for the current olfactory bulb model.
 The main conclusion is that the original paper's 20 ms passive membrane time

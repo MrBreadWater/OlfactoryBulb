@@ -1,5 +1,9 @@
 # NEURON Upgrade Workflow
 
+Current status as of 2026-05-26: this workflow is still the supported way to
+move the pinned NEURON/CoreNEURON dependency. `external/nrn-9.0.1` remains a
+resettable checkout cache, not the source of truth for local changes.
+
 ## Supported Model
 
 The supported OBGPU build is:

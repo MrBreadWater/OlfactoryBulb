@@ -1,5 +1,10 @@
 # Published EPL Interneuron Candidate Plan
 
+Status as of 2026-05-26: this is still a planning/reference document. The
+maintained full network still uses the Birgiolas2020 MC/TC/GC slice; published
+candidate cells remain single-cell/proxy assets until a real EPL population path
+is added.
+
 ## What is implemented now
 
 The repo now has a registry of locally available published cell templates:

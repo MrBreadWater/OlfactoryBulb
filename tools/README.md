@@ -7,7 +7,8 @@ Support scripts created during the NEURON/CoreNEURON port and performance work a
 - `debug/`
   One-off diagnostics used to isolate parity and performance issues.
 - `remote/`
-  Headless Sol helpers used by the notebook's `sol_slurm` backend for submit/poll/run orchestration.
+  Headless Slurm helpers used by the notebook's `sol_slurm` and
+  `slurm_remote` backends for submit/poll/run orchestration.
 - `setup/`
   Environment/bootstrap helpers, including the `OBGPU` NEURON/CoreNEURON setup, NVHPC `libnrnmech.so` repair, and upgrade-gate checks.
 
@@ -23,6 +24,9 @@ For the supported remote workflow, see:
 - [SOL_REMOTE_WORKFLOW.md](/home/alek/OlfactoryBulb/notes/porting/SOL_REMOTE_WORKFLOW.md)
 - [submit_sol_run.py](/home/alek/OlfactoryBulb/tools/remote/submit_sol_run.py)
 - [poll_sol_run.py](/home/alek/OlfactoryBulb/tools/remote/poll_sol_run.py)
+
+The notebook remote path is Paramiko-only. The old OpenSSH multiplex and rsync
+transport branch has been removed.
 
 For interactive Sol shells, use:
 

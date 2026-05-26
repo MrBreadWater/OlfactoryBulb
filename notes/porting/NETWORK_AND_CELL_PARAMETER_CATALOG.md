@@ -2,6 +2,13 @@
 
 _Generated on 2026-03-23 from repository state._
 
+Status as of 2026-05-26: keep this as a generated reference snapshot, not as the
+canonical runtime schema. The live notebook-facing controls are documented by
+`obgpu_experiment_helpers.control_help()` and the maintained config builders.
+Core biological parameter surfaces below are still useful, but newer OBGPU
+options such as remote Slurm, artifact formats, and lazy soma loading are not
+fully represented here.
+
 This document is organized as a practical reference for all adjustable parameters currently exposed by this project for:
 
 - Full network runs (`runbatch.py` / `initslice.py` -> `olfactorybulb.model.OlfactoryBulb`)

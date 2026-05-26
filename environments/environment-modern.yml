@@ -21,7 +21,6 @@ dependencies:
   - peewee
   - lmfit
   - requests
-  - pexpect
   - paramiko
   - tqdm
   - validators
