@@ -9616,6 +9616,15 @@ def _extract_figure_from_plot_result(plot_result: Any) -> Any:
     return plt.gcf()
 
 
+_DEPRECATED_SWEEP_ANIMATION_PLOTS = {
+    "gc_output_frequency_overview",
+    "gc_output_overview",
+    "input_overview",
+    "lfp_overview",
+    "spike_frequency_overview",
+}
+
+
 def get_builtin_sweep_plot_names() -> list[str]:
     """Return built-in plot names that can be rendered across a sweep."""
     return sorted([
@@ -9653,6 +9662,11 @@ def _get_builtin_sweep_plot(plot_name: str) -> Any:
         "gc_output_frequency_time_binned": plot_gc_output_frequency_time_binned,
     }
     if plot_name not in mapping:
+        if plot_name in _DEPRECATED_SWEEP_ANIMATION_PLOTS:
+            raise KeyError(
+                f"Sweep animation plot {plot_name!r} is deprecated and intentionally "
+                "not rendered. Use the separate KDE/signal plots instead."
+            )
         available = ", ".join(get_builtin_sweep_plot_names())
         raise KeyError(f"Unknown built-in sweep plot {plot_name!r}. Available: {available}")
     return mapping[plot_name]
@@ -9736,6 +9750,17 @@ def _build_sweep_plot_callable(spec: SweepPlotSpec) -> tuple[Any, str]:
         return _extract_figure_from_plot_result(plot_fn(result, **plot_kwargs))
 
     return _wrapped, _sweep_plot_artifact_stem(spec)
+
+
+def _is_deprecated_sweep_animation_spec(spec: SweepPlotSpec) -> bool:
+    """Return True for retired sweep GIF specs that should be skipped."""
+    names = {
+        str(spec.name or ""),
+        str(spec.filename or ""),
+    }
+    if isinstance(spec.plot, str):
+        names.add(spec.plot)
+    return any(name in _DEPRECATED_SWEEP_ANIMATION_PLOTS for name in names)
 
 
 def _format_sweep_value(value: Any) -> str:
@@ -10717,6 +10742,11 @@ def animate_sweep_plots(
     artifacts: dict[str, Path] = {}
     for raw_spec in plots:
         spec = _normalize_sweep_plot_spec(raw_spec)
+        if _is_deprecated_sweep_animation_spec(spec):
+            _progress_write(
+                f"[OBGPU load] Skipping deprecated sweep animation plot {spec.name!r}."
+            )
+            continue
         plot_fn, filename = _build_sweep_plot_callable(spec)
         if stream:
             artifacts[filename] = save_sweep_animation_stream(
