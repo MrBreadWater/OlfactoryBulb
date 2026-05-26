@@ -110,6 +110,10 @@ def mix(a: np.ndarray, b: np.ndarray, t: float) -> np.ndarray:
     return (1.0 - t) * a + t * b
 
 
+def brighten(color: np.ndarray, factor: float, lift: float = 0.0) -> np.ndarray:
+    return np.clip(color * factor + lift, 0, 255)
+
+
 def rgba(color: np.ndarray, alpha: float) -> tuple[int, int, int, int]:
     rgb = np.clip(color, 0, 255).astype(np.uint8)
     return int(rgb[0]), int(rgb[1]), int(rgb[2]), int(np.clip(alpha, 0, 255))
@@ -440,24 +444,24 @@ def render_frame(
             pulse_tint = GOLD
         elif mode in ("dense_microcircuit", "layered_exchange"):
             pulse_tint = mix(TEAL, GREEN, 0.22)
+        bloom_tint = brighten(pulse_tint, 1.38, 5.0)
+        core_tint = mix(pulse_tint, brighten(pulse_tint, 1.55, 12.0), min(0.72, 0.24 + 0.42 * active))
         if active > 0.10:
-            bloom_tint = mix(pulse_tint, WHITE, 0.42)
-            draw_soft_line(bloom_draw, seg, bloom_tint, 64 * active, seg.width * (11.0 + 3.8 * active))
-        draw_soft_line(glow_draw, seg, pulse_tint, 108 * active, seg.width * (6.8 + 2.2 * active))
-        core_tint = mix(pulse_tint, WHITE, 0.24 + 0.46 * active)
+            draw_soft_line(bloom_draw, seg, bloom_tint, 76 * active, seg.width * (12.0 + 4.2 * active))
+        draw_soft_line(glow_draw, seg, brighten(pulse_tint, 1.18, 3.0), 116 * active, seg.width * (6.8 + 2.2 * active))
         draw_soft_line(core_draw, seg, core_tint, 238 * active, seg.width * (1.88 + 0.95 * active))
-        if active > 0.34:
-            highlight = (active - 0.34) / 0.66
-            draw_soft_line(core_draw, seg, WHITE, 158 * highlight, max(1.0, seg.width * (0.72 + 0.26 * highlight)))
-        if active > 0.70:
-            hot = (active - 0.70) / 0.30
-            draw_soft_line(spark_draw, seg, WHITE, 190 * hot, max(1.0, seg.width * (0.55 + 0.35 * hot)))
+        if active > 0.62:
+            highlight = (active - 0.62) / 0.38
+            draw_soft_line(core_draw, seg, WHITE, 192 * highlight, max(1.0, seg.width * (0.48 + 0.24 * highlight)))
+        if active > 0.80:
+            hot = (active - 0.80) / 0.20
+            draw_soft_line(spark_draw, seg, WHITE, 212 * hot, max(1.0, seg.width * (0.34 + 0.18 * hot)))
             ellipse(
                 spark_draw,
                 0.5 * (seg.x0 + seg.x1),
                 0.5 * (seg.y0 + seg.y1),
-                seg.width * (0.95 + 1.05 * hot),
-                rgba(mix(pulse_tint, WHITE, 0.78), 132 * hot),
+                seg.width * (0.58 + 0.54 * hot),
+                rgba(WHITE, 150 * hot),
             )
 
     bloom = bloom.filter(ImageFilter.GaussianBlur(radius=8.3 * SUPERSAMPLE))
