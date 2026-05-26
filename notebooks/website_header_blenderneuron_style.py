@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v10"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v11"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -24,6 +24,8 @@ VERTICAL_FOREGROUND_SCALE = 1.20
 ACTIVITY_PERIOD_MS = 200.0
 ACTIVITY_PROFILE_BINS = 400
 ACTIVITY_SKIP_MS = 400.0
+ACTIVITY_PROPAGATION_DELAY_MS = 52.0
+ACTIVITY_PACKET_SIGMA_MS = 2.85
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -66,6 +68,8 @@ class ActivityProfile:
     label: str
     cell_type: str
     values: np.ndarray
+    event_phases_ms: tuple[float, ...]
+    event_strengths: tuple[float, ...]
     peak_phase_ms: float
     score: float
 
@@ -102,6 +106,8 @@ class RenderSegment:
     neurite_kind: int
     flow_direction: float
     activity_profile: ActivityProfile | None
+    branch_phase_ms: float
+    branch_gain: float
 
 
 @dataclass(frozen=True)
@@ -116,6 +122,10 @@ class RenderNode:
     terminal: bool
     soma: bool
     activity_profile: ActivityProfile | None
+    neurite_kind: int
+    flow_direction: float
+    branch_phase_ms: float
+    branch_gain: float
 
 
 @dataclass
@@ -212,6 +222,34 @@ def cell_type_from_label(label: str) -> str:
     return match.group(1) if match else "UNK"
 
 
+def circular_phase_distance(a_ms: float, b_ms: float, period_ms: float = ACTIVITY_PERIOD_MS) -> float:
+    return abs(((a_ms - b_ms + 0.5 * period_ms) % period_ms) - 0.5 * period_ms)
+
+
+def profile_events(values: np.ndarray, period_ms: float, max_events: int = 3) -> tuple[tuple[float, ...], tuple[float, ...]]:
+    threshold = max(0.36, float(np.percentile(values, 82.0)))
+    candidates: list[tuple[float, float]] = []
+    for idx, value in enumerate(values):
+        prev_value = values[(idx - 1) % values.size]
+        next_value = values[(idx + 1) % values.size]
+        if value >= threshold and value >= prev_value and value >= next_value:
+            candidates.append((idx / values.size * period_ms, float(value)))
+    if not candidates:
+        peak_idx = int(np.argmax(values))
+        candidates.append((peak_idx / values.size * period_ms, float(values[peak_idx])))
+
+    chosen: list[tuple[float, float]] = []
+    for phase_ms, strength in sorted(candidates, key=lambda item: item[1], reverse=True):
+        if all(circular_phase_distance(phase_ms, other_phase, period_ms) >= 18.0 for other_phase, _ in chosen):
+            chosen.append((phase_ms, strength))
+        if len(chosen) >= max_events:
+            break
+    chosen.sort(key=lambda item: item[0])
+    phases = tuple(phase for phase, _ in chosen)
+    strengths = tuple(max(0.34, min(1.0, strength)) for _, strength in chosen)
+    return phases, strengths
+
+
 def fold_trace_activity(
     label: str,
     trace_index: int,
@@ -271,8 +309,17 @@ def fold_trace_activity(
     spike_rate = float(spike_times.size) / cycles
     score = depol_spread + 0.14 * min(spike_rate, 2.5) + 0.05 * min(spike_spread, 1.0)
     peak_phase_ms = float(np.argmax(activity)) / bins * period_ms
+    event_phases_ms, event_strengths = profile_events(activity, period_ms)
     unique_label = f"{label} #{trace_index:03d}"
-    return ActivityProfile(unique_label, cell_type_from_label(label), activity, peak_phase_ms, float(score))
+    return ActivityProfile(
+        unique_label,
+        cell_type_from_label(label),
+        activity,
+        event_phases_ms,
+        event_strengths,
+        peak_phase_ms,
+        float(score),
+    )
 
 
 @lru_cache(maxsize=4)
@@ -292,10 +339,6 @@ def load_activity_profiles(
     if not profiles:
         raise RuntimeError(f"No usable activity profiles found in {soma_path}")
     return tuple(profiles)
-
-
-def circular_phase_distance(a_ms: float, b_ms: float, period_ms: float = ACTIVITY_PERIOD_MS) -> float:
-    return abs(((a_ms - b_ms + 0.5 * period_ms) % period_ms) - 0.5 * period_ms)
 
 
 def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityProfile]]:
@@ -348,29 +391,28 @@ def attach_activity_profiles(placed: list[PlacedMorph]) -> list[PlacedMorph]:
     return attached
 
 
-def sample_activity(profile: ActivityProfile | None, phase_ms: float) -> float:
-    if profile is None:
-        return 1.0
-    values = profile.values
-    if values.size == 0:
-        return 1.0
-    position = (phase_ms % ACTIVITY_PERIOD_MS) / ACTIVITY_PERIOD_MS * values.size
-    lo = int(math.floor(position)) % values.size
-    hi = (lo + 1) % values.size
-    frac = position - math.floor(position)
-    return float((1.0 - frac) * values[lo] + frac * values[hi])
+def circular_time_delta_ms(a_ms: float, b_ms: float, period_ms: float = ACTIVITY_PERIOD_MS) -> float:
+    return ((a_ms - b_ms + 0.5 * period_ms) % period_ms) - 0.5 * period_ms
 
 
-def activity_drive(profile: ActivityProfile | None, phase_ms: float) -> float:
-    activity = sample_activity(profile, phase_ms)
-    shaped = np.clip(activity, 0.0, 1.0) ** 0.72
-    return float(np.clip(0.12 + 0.94 * shaped, 0.0, 1.0))
-
-
-def activity_phase_shift(profile: ActivityProfile | None) -> float:
-    if profile is None:
+def packet_activity(
+    profile: ActivityProfile | None,
+    loop_ms: float,
+    distance: float,
+    flow_direction: float,
+    branch_phase_ms: float,
+    branch_gain: float,
+) -> float:
+    if profile is None or not profile.event_phases_ms:
         return 0.0
-    return (profile.peak_phase_ms / ACTIVITY_PERIOD_MS) % 1.0
+    best = 0.0
+    for event_ms, strength in zip(profile.event_phases_ms, profile.event_strengths):
+        expected_ms = event_ms + flow_direction * ACTIVITY_PROPAGATION_DELAY_MS * distance + branch_phase_ms
+        delta_ms = circular_time_delta_ms(loop_ms, expected_ms)
+        core = math.exp(-(delta_ms * delta_ms) / (2.0 * ACTIVITY_PACKET_SIGMA_MS * ACTIVITY_PACKET_SIGMA_MS))
+        skirt = math.exp(-(delta_ms * delta_ms) / (2.0 * (ACTIVITY_PACKET_SIGMA_MS * 1.75) ** 2))
+        best = max(best, strength * branch_gain * (0.90 * core + 0.10 * skirt))
+    return min(1.0, best)
 
 
 def neurite_flow_direction(kind: int) -> float:
@@ -410,12 +452,43 @@ def normalized_coords(morph: Morphology) -> dict[int, np.ndarray]:
     return remapped
 
 
+def stable_unit(*parts: object) -> float:
+    text = "|".join(str(part) for part in parts)
+    h = 2166136261
+    for char in text:
+        h ^= ord(char)
+        h = (h * 16777619) & 0xFFFFFFFF
+    return h / 0xFFFFFFFF
+
+
+def primary_branch_ids(morph: Morphology) -> dict[int, int]:
+    branch_for: dict[int, int] = {morph.root_id: morph.root_id}
+    for child_id in morph.children.get(morph.root_id, []):
+        stack = [child_id]
+        while stack:
+            node_id = stack.pop()
+            branch_for[node_id] = child_id
+            stack.extend(morph.children.get(node_id, []))
+    for node_id in morph.nodes:
+        branch_for.setdefault(node_id, node_id)
+    return branch_for
+
+
+def branch_timing(morph: Morphology, branch_id: int, distance_offset: float) -> tuple[float, float]:
+    phase_unit = stable_unit(morph.name, branch_id, round(distance_offset, 3), "phase")
+    gain_unit = stable_unit(morph.name, branch_id, round(distance_offset, 3), "gain")
+    phase_ms = (phase_unit - 0.5) * 13.0
+    gain = 0.80 + 0.42 * gain_unit
+    return phase_ms, gain
+
+
 def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tuple[list[RenderSegment], list[RenderNode]]:
     segments: list[RenderSegment] = []
     nodes_out: list[RenderNode] = []
     for item in placed:
         morph = item.morphology
         coords = normalized_coords(morph)
+        branch_for = primary_branch_ids(morph)
         matrix = rotation_matrix(item.yaw, item.pitch, item.roll)
         projected: dict[int, np.ndarray] = {}
         for node_id, xyz in coords.items():
@@ -445,6 +518,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
             radius = 0.5 * (node.radius + parent_node.radius)
             dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / morph.max_distance
             kind = segment_kind(node, parent_node)
+            branch_phase_ms, branch_gain = branch_timing(morph, branch_for.get(node_id, node_id), item.distance_offset)
             width_px = SUPERSAMPLE * max(1.5, item.width_scale * (0.72 + 0.36 * math.sqrt(radius)) + 1.25)
             segments.append(
                 RenderSegment(
@@ -461,12 +535,22 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     neurite_kind=kind,
                     flow_direction=neurite_flow_direction(kind),
                     activity_profile=item.activity_profile,
+                    branch_phase_ms=branch_phase_ms,
+                    branch_gain=branch_gain,
                 )
             )
 
         for node_id, node in morph.nodes.items():
             p = projected[node_id]
             degree = len(morph.children.get(node_id, [])) + int(node.parent_id in morph.nodes)
+            if node.parent_id in morph.nodes:
+                node_kind = segment_kind(node, morph.nodes[node.parent_id])
+            elif morph.children.get(node_id):
+                child = morph.nodes[morph.children[node_id][0]]
+                node_kind = segment_kind(child, node)
+            else:
+                node_kind = node.kind
+            branch_phase_ms, branch_gain = branch_timing(morph, branch_for.get(node_id, node_id), item.distance_offset)
             nodes_out.append(
                 RenderNode(
                     x=float(p[0]),
@@ -479,6 +563,10 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     terminal=degree <= 1,
                     soma=node_id == morph.root_id or node.kind == 1,
                     activity_profile=item.activity_profile,
+                    neurite_kind=node_kind,
+                    flow_direction=neurite_flow_direction(node_kind),
+                    branch_phase_ms=branch_phase_ms,
+                    branch_gain=branch_gain,
                 )
             )
     segments.sort(key=lambda seg: seg.z)
@@ -499,6 +587,30 @@ def draw_soft_line(
 ) -> None:
     draw.line(
         (seg.x0, seg.y0, seg.x1, seg.y1),
+        fill=rgba(color, alpha),
+        width=max(1, int(round(width))),
+        joint="curve",
+    )
+
+
+def draw_packet_line(
+    draw: ImageDraw.ImageDraw,
+    seg: RenderSegment,
+    color: np.ndarray,
+    alpha: float,
+    width: float,
+    active: float,
+    extra_length: float = 0.0,
+) -> None:
+    portion = min(1.0, 0.62 + 0.30 * active + extra_length)
+    cx = 0.5 * (seg.x0 + seg.x1)
+    cy = 0.5 * (seg.y0 + seg.y1)
+    x0 = cx + (seg.x0 - cx) * portion
+    y0 = cy + (seg.y0 - cy) * portion
+    x1 = cx + (seg.x1 - cx) * portion
+    y1 = cy + (seg.y1 - cy) * portion
+    draw.line(
+        (x0, y0, x1, y1),
         fill=rgba(color, alpha),
         width=max(1, int(round(width))),
         joint="curve",
@@ -587,15 +699,6 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     return image
 
 
-def pulse_value(distance: float, phase: float, *, count: int, width: float, direction: float = 1.0) -> float:
-    centers = [(phase * direction + i / count) % 1.0 for i in range(count)]
-    best = 0.0
-    for center in centers:
-        delta = abs(((distance - center + 0.5) % 1.0) - 0.5)
-        best = max(best, math.exp(-(delta * delta) / (2.0 * width * width)))
-    return best
-
-
 def render_frame(
     scene: SceneCache,
     phase: float,
@@ -615,36 +718,25 @@ def render_frame(
     spark_draw = ImageDraw.Draw(spark, "RGBA")
     if mode == "single_arbor_signal":
         pulse_color = CYAN
-        count = 2
-        pulse_width = 0.035
     elif mode == "split_wavefront":
         pulse_color = GOLD
-        count = 3
-        pulse_width = 0.030
     elif mode == "layered_exchange":
         pulse_color = CYAN
-        count = 3
-        pulse_width = 0.038
     else:
         pulse_color = TEAL
-        count = 3
-        pulse_width = 0.042
     loop_ms = phase * ACTIVITY_PERIOD_MS
 
     for seg in scene.segments:
-        drive = activity_drive(seg.activity_profile, loop_ms)
-        local_phase = (phase - activity_phase_shift(seg.activity_profile)) % 1.0
-        p = pulse_value(seg.distance, local_phase, count=count, width=pulse_width, direction=seg.flow_direction)
-        cell_shift = 0.11 if seg.cell_type == "TC" else 0.21 if seg.cell_type == "GC" else 0.0
-        secondary = pulse_value(
-            (seg.distance + cell_shift) % 1.0,
-            local_phase + 0.17,
-            count=2,
-            width=0.055,
-            direction=-seg.flow_direction,
+        active = packet_activity(
+            seg.activity_profile,
+            loop_ms,
+            seg.distance,
+            seg.flow_direction,
+            seg.branch_phase_ms,
+            seg.branch_gain,
         )
-        active = max(p, 0.54 * secondary) * drive
-        if active < 0.030:
+        active = min(1.0, active ** 0.64)
+        if active < 0.045:
             continue
         pulse_tint = mix(pulse_color, seg.color, 0.45)
         if seg.neurite_kind == 2:
@@ -658,15 +750,15 @@ def render_frame(
         bloom_tint = brighten(pulse_tint, 1.38, 5.0)
         core_tint = mix(pulse_tint, brighten(pulse_tint, 1.55, 12.0), min(0.72, 0.24 + 0.42 * active))
         if active > 0.10:
-            draw_soft_line(bloom_draw, seg, bloom_tint, 76 * active, seg.width * (12.0 + 4.2 * active))
-        draw_soft_line(glow_draw, seg, brighten(pulse_tint, 1.18, 3.0), 116 * active, seg.width * (6.8 + 2.2 * active))
-        draw_soft_line(core_draw, seg, core_tint, 238 * active, seg.width * (1.88 + 0.95 * active))
+            draw_packet_line(bloom_draw, seg, bloom_tint, 76 * active, seg.width * (12.0 + 4.2 * active), active, 0.22)
+        draw_packet_line(glow_draw, seg, brighten(pulse_tint, 1.18, 3.0), 116 * active, seg.width * (6.8 + 2.2 * active), active, 0.14)
+        draw_packet_line(core_draw, seg, core_tint, 238 * active, seg.width * (1.88 + 0.95 * active), active, 0.04)
         if active > 0.62:
             highlight = (active - 0.62) / 0.38
-            draw_soft_line(core_draw, seg, WHITE, 192 * highlight, max(1.0, seg.width * (0.48 + 0.24 * highlight)))
+            draw_packet_line(core_draw, seg, WHITE, 192 * highlight, max(1.0, seg.width * (0.48 + 0.24 * highlight)), active)
         if active > 0.80:
             hot = (active - 0.80) / 0.20
-            draw_soft_line(spark_draw, seg, WHITE, 212 * hot, max(1.0, seg.width * (0.34 + 0.18 * hot)))
+            draw_packet_line(spark_draw, seg, WHITE, 212 * hot, max(1.0, seg.width * (0.34 + 0.18 * hot)), active)
             ellipse(
                 spark_draw,
                 0.5 * (seg.x0 + seg.x1),
@@ -682,10 +774,18 @@ def render_frame(
     image = Image.alpha_composite(image, core)
 
     for node in scene.nodes:
-        drive = activity_drive(node.activity_profile, loop_ms)
-        local_phase = (phase - activity_phase_shift(node.activity_profile)) % 1.0
-        terminal_flash = node.terminal and drive * pulse_value(node.distance, local_phase + 0.015, count=count, width=0.025, direction=-1.0)
-        soma_flash = node.soma and drive * (0.56 + 0.44 * math.sin(math.tau * local_phase))
+        node_active = packet_activity(
+            node.activity_profile,
+            loop_ms,
+            node.distance,
+            node.flow_direction,
+            node.branch_phase_ms,
+            node.branch_gain,
+        )
+        node_active = min(1.0, node_active ** 0.66)
+        terminal_flash = node.terminal and node_active
+        soma_flash = packet_activity(node.activity_profile, loop_ms, 0.0, 1.0, 0.0, 1.0) if node.soma else 0.0
+        soma_flash = min(1.0, soma_flash ** 0.66)
         if terminal_flash:
             r = node.radius * (1.5 + 2.6 * terminal_flash)
             ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash))
