@@ -26,7 +26,7 @@ import warnings
 from base64 import b64encode
 from collections import Counter
 from copy import deepcopy
-from dataclasses import asdict, dataclass, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass, replace
 from datetime import datetime
 from getpass import getpass
 from hashlib import sha1, sha256
@@ -36,6 +36,7 @@ from typing import Any
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 import numpy as np
 try:
     import pywt
@@ -289,12 +290,12 @@ def _format_bytes(num_bytes: int | float) -> str:
 
 
 def _render_progress_bar(current: int | float, total: int | float, width: int = 24) -> str:
-    """Render a compact ASCII progress bar."""
+    """Render a compact fallback progress bar for non-tqdm environments."""
     if total <= 0:
         return "[" + ("?" * width) + "]"
     progress = max(0.0, min(float(current) / float(total), 1.0))
     filled = int(round(progress * width))
-    return "[" + ("#" * filled) + ("-" * (width - filled)) + "]"
+    return "[" + ("█" * filled) + ("░" * (width - filled)) + "]"
 
 
 def _format_progress_value(value: int | float, unit: str, unit_scale: bool) -> str:
@@ -7670,6 +7671,106 @@ def uniform_trace(
     return grid, interp(grid)
 
 
+def _normalize_time_modulus(modulus: float | int | None) -> float | None:
+    """Return a usable positive time modulus, or None when disabled."""
+    if modulus is None:
+        return None
+    try:
+        value = float(modulus)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(value) or value <= 0.0:
+        return None
+    return value
+
+
+def _fold_time_series_by_modulus(
+    t: np.ndarray | list[float],
+    y: np.ndarray | list[float],
+    modulus: float | int | None,
+    *,
+    dt_ms: float | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Average a time/value trace into phase bins over one modulus period."""
+    modulus_value = _normalize_time_modulus(modulus)
+    t = np.asarray(t, dtype=float)
+    y = np.asarray(y, dtype=float)
+    if modulus_value is None or len(t) < 2 or len(y) != len(t):
+        return t, y
+
+    finite = np.isfinite(t) & np.isfinite(y)
+    t = t[finite]
+    y = y[finite]
+    if len(t) < 2:
+        return t, y
+
+    if dt_ms is None:
+        diffs = np.diff(np.sort(np.unique(t)))
+        diffs = diffs[np.isfinite(diffs) & (diffs > 0)]
+        dt_ms = float(np.median(diffs)) if len(diffs) else modulus_value / 200.0
+    bin_count = max(2, int(round(modulus_value / max(float(dt_ms), 1e-9))))
+    bin_count = min(bin_count, max(2, len(t)))
+    edges = np.linspace(0.0, modulus_value, bin_count + 1)
+    phase = np.mod(t, modulus_value)
+    sums, _ = np.histogram(phase, bins=edges, weights=y)
+    counts, _ = np.histogram(phase, bins=edges)
+    centers = (edges[:-1] + edges[1:]) / 2.0
+    folded = np.full(bin_count, np.nan, dtype=float)
+    valid = counts > 0
+    folded[valid] = sums[valid] / counts[valid]
+    if np.any(~valid) and np.any(valid):
+        folded[~valid] = np.interp(centers[~valid], centers[valid], folded[valid])
+    elif not np.any(valid):
+        folded[:] = 0.0
+    return centers, folded
+
+
+def _fold_time_matrix_by_modulus(
+    times_ms: np.ndarray | list[float],
+    values: np.ndarray,
+    modulus: float | int | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Average matrix columns into phase bins over one modulus period."""
+    modulus_value = _normalize_time_modulus(modulus)
+    times = np.asarray(times_ms, dtype=float)
+    matrix = np.asarray(values, dtype=float)
+    if modulus_value is None or matrix.ndim != 2 or len(times) != matrix.shape[1] or len(times) < 2:
+        return times, matrix
+
+    finite = np.isfinite(times)
+    times = times[finite]
+    matrix = matrix[:, finite]
+    if len(times) < 2:
+        return times, matrix
+
+    diffs = np.diff(np.sort(np.unique(times)))
+    diffs = diffs[np.isfinite(diffs) & (diffs > 0)]
+    dt_ms = float(np.median(diffs)) if len(diffs) else modulus_value / min(len(times), 200)
+    bin_count = max(2, int(round(modulus_value / max(dt_ms, 1e-9))))
+    bin_count = min(bin_count, max(2, len(times)))
+    edges = np.linspace(0.0, modulus_value, bin_count + 1)
+    phase = np.mod(times, modulus_value)
+    bin_index = np.clip(np.searchsorted(edges, phase, side="right") - 1, 0, bin_count - 1)
+    folded = np.zeros((matrix.shape[0], bin_count), dtype=float)
+    counts = np.zeros(bin_count, dtype=float)
+    for column_index, target_bin in enumerate(bin_index):
+        folded[:, target_bin] += matrix[:, column_index]
+        counts[target_bin] += 1.0
+    valid = counts > 0
+    if np.any(valid):
+        folded[:, valid] /= counts[valid][None, :]
+    if np.any(~valid) and np.any(valid):
+        centers = (edges[:-1] + edges[1:]) / 2.0
+        for row_index in range(folded.shape[0]):
+            folded[row_index, ~valid] = np.interp(
+                centers[~valid],
+                centers[valid],
+                folded[row_index, valid],
+            )
+    centers = (edges[:-1] + edges[1:]) / 2.0
+    return centers, folded
+
+
 def butter_bandpass_filter(
     signal: np.ndarray | list[float],
     lowcut_hz: float,
@@ -8263,6 +8364,16 @@ def _coerce_frequency_plot_config(
     return base
 
 
+def frequency_plot_config_with_modulus(
+    config: FrequencyPlotConfig | dict[str, Any] | None,
+    modulus: float | int | None,
+) -> FrequencyPlotConfig:
+    """Copy one frequency plot config while replacing its time modulus."""
+    copied = replace(_coerce_frequency_plot_config(config))
+    copied.modulus = _normalize_time_modulus(modulus)
+    return copied
+
+
 def _apply_frequency_kde_y_scale(kde: Any, scale_y: float) -> None:
     """Rescale a 1D KDE in-place along its frequency axis."""
     if float(scale_y) == 1.0:
@@ -8564,6 +8675,7 @@ def plot_spiking_frequencies(
     if ax.lines:
         ax.legend(loc="upper right", fontsize=8)
     return ax
+
 
 
 def split_traces_by_type(result: dict[str, Any]) -> dict[str, list[tuple[str, np.ndarray, np.ndarray]]]:
@@ -9279,6 +9391,7 @@ def plot_spike_raster(
     threshold: float | None = None,
     max_cells_per_type: int = 24,
     ax: Any = None,
+    modulus: float | None = None,
 ) -> Any:
     """Plot a soma-spike raster, preferring compact runtime spike artifacts."""
     saved_rows = _saved_soma_spike_rows_by_type(
@@ -9298,7 +9411,11 @@ def plot_spike_raster(
     if not rows:
         ax.set_title("No soma spikes saved")
         return ax
-    spike_times = [spikes for _label, spikes in rows]
+    modulus_value = _normalize_time_modulus(modulus)
+    spike_times = [
+        np.mod(spikes, modulus_value) if modulus_value is not None else spikes
+        for _label, spikes in rows
+    ]
     colors = [
         "tab:blue" if label.startswith("MC") else "tab:red" if label.startswith("TC") else "tab:orange"
         for label, _spikes in rows
@@ -9312,6 +9429,9 @@ def plot_spike_raster(
         line_spacing=1.3,
     )
     ax.eventplot(spike_times, colors=colors, lineoffsets=offsets, linelengths=1.0)
+    if modulus_value is not None:
+        ax.set_xlim(0.0, modulus_value)
+        ax.set_xlabel(f"Time modulo {modulus_value:g} ms")
     _fit_raster_labels(ax, offsets, min_height=4.5)
     return ax
 
@@ -9324,6 +9444,7 @@ def plot_gc_output_event_raster(
     *,
     fontsize: float = 7,
     line_spacing: float = 1.4,
+    modulus: float | None = None,
 ) -> Any:
     """Plot the saved reciprocal GC inhibitory-output event raster."""
     rows = filter_gc_output_events(result, target_types=target_types)[:max_connections]
@@ -9332,7 +9453,13 @@ def plot_gc_output_event_raster(
         ax.set_title("No GC inhibitory-output events saved")
         return ax
 
-    times = [np.asarray(row.get("times", []), dtype=float) for row in rows]
+    modulus_value = _normalize_time_modulus(modulus)
+    times = [
+        np.mod(np.asarray(row.get("times", []), dtype=float), modulus_value)
+        if modulus_value is not None
+        else np.asarray(row.get("times", []), dtype=float)
+        for row in rows
+    ]
     labels = [
         f"{normalize_cell_name(row.get('source_section', 'GC'))}->{normalize_cell_name(row.get('dest_section', 'cell'))}"
         for row in rows
@@ -9346,6 +9473,9 @@ def plot_gc_output_event_raster(
         line_spacing=line_spacing,
     )
     ax.eventplot(times, lineoffsets=offsets, linelengths=1.0, colors="black")
+    if modulus_value is not None:
+        ax.set_xlim(0.0, modulus_value)
+        ax.set_xlabel(f"Time modulo {modulus_value:g} ms")
     _fit_raster_labels(ax, offsets, min_height=4.5)
     return ax
 
@@ -9553,12 +9683,17 @@ def plot_named_signal(
     signal: str = "lfp",
     dt_ms: float = 0.1,
     ax: Any = None,
+    modulus: float | None = None,
 ) -> Any:
     """Plot one named analysis signal as a time trace."""
     ax = ax or plt.subplots(figsize=(14, 4))[1]
     t, y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
+    t, y = _fold_time_series_by_modulus(t, y, modulus, dt_ms=dt_ms)
     ax.plot(t, y, linewidth=1.0)
-    ax.set_xlabel("Time (ms)")
+    if _normalize_time_modulus(modulus) is not None:
+        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
+    else:
+        ax.set_xlabel("Time (ms)")
     ax.set_ylabel(signal)
     ax.set_title(f"{signal} Trace")
     return ax
@@ -9572,6 +9707,7 @@ def plot_spectrogram(
     nperseg: int = 512,
     noverlap: int = 448,
     ax: Any = None,
+    modulus: float | None = None,
 ) -> Any:
     """Plot a spectrogram for a named analysis signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
@@ -9584,12 +9720,16 @@ def plot_spectrogram(
         nperseg=nperseg,
         noverlap=noverlap,
     )
+    times_ms, power = _fold_time_matrix_by_modulus(times_ms, power, modulus)
     #power = np.clip(power, power.mean()-power.std()*200, power.mean()+power.std()*50)
     powerval = np.log(power+1e-8)
     powerval -= powerval.min()
     #powerval **= 2
     mesh = ax.pcolormesh(times_ms, freqs, powerval, shading="auto")
-    ax.set_xlabel("Time (ms)")
+    if _normalize_time_modulus(modulus) is not None:
+        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
+    else:
+        ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
     ax.set_title(f"{signal.upper()} Spectrogram")
     plt.colorbar(mesh, ax=ax, label="Power (dB)")
@@ -9601,13 +9741,18 @@ def plot_wavelet(
     signal: str = "lfp",
     dt_ms: float = 0.1,
     ax: Any = None,
+    modulus: float | None = None,
 ) -> Any:
     """Plot the continuous wavelet power map for a named signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
     ax = ax or plt.subplots(figsize=(14, 5))[1]
     t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
+    t, power = _fold_time_matrix_by_modulus(t, power, modulus)
     mesh = ax.pcolormesh(t, freqs, power, shading="auto")
-    ax.set_xlabel("Time (ms)")
+    if _normalize_time_modulus(modulus) is not None:
+        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
+    else:
+        ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Frequency (Hz)")
     ax.set_title(f"{signal.upper()} Wavelet Power")
     plt.colorbar(mesh, ax=ax, label="log(1 + |cwt|)")
@@ -9620,14 +9765,19 @@ def plot_wavelet_band_power(
     dt_ms: float = 0.1,
     bands: dict[str, tuple[float, float]] | None = None,
     ax: Any = None,
+    modulus: float | None = None,
 ) -> Any:
     """Plot band-collapsed wavelet power traces over time."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
     ax = ax or plt.subplots(figsize=(14, 4))[1]
     t, _freqs, _power, traces = compute_wavelet_band_power(signal_t, signal_y, bands=bands, dt_ms=dt_ms)
     for name, values in traces.items():
-        ax.plot(t, values, linewidth=1.2, label=name)
-    ax.set_xlabel("Time (ms)")
+        plot_t, plot_values = _fold_time_series_by_modulus(t, values, modulus, dt_ms=dt_ms)
+        ax.plot(plot_t, plot_values, linewidth=1.2, label=name)
+    if _normalize_time_modulus(modulus) is not None:
+        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
+    else:
+        ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Mean Wavelet Power")
     ax.set_title("Band Power Over Time")
     ax.legend(loc="upper right")
@@ -9736,6 +9886,70 @@ def make_sweep_plot_spec(
     )
 
 
+def make_sweep_time_variant_specs(
+    plot: str | Any,
+    *,
+    modulus: float | int | None,
+    name: str | None = None,
+    plot_kwargs: dict[str, Any] | None = None,
+    filename: str | None = None,
+    figsize: tuple[float, float] = (12.0, 5.0),
+    interval: int = 100,
+    fps: int = 10,
+    title_fn: Any = None,
+    include_full: bool = True,
+    include_modulus: bool = True,
+) -> list[SweepPlotSpec]:
+    """Build full-time and modulo-time variants for one time-axis sweep plot."""
+    base_name = name
+    if base_name is None:
+        base_name = plot if isinstance(plot, str) else getattr(plot, "__name__", "custom_plot")
+    base_filename = filename or str(base_name)
+    kwargs = dict(plot_kwargs or {})
+    specs: list[SweepPlotSpec] = []
+
+    if include_full:
+        full_kwargs = dict(kwargs)
+        full_kwargs.pop("modulus", None)
+        if "config" in full_kwargs:
+            full_kwargs["config"] = frequency_plot_config_with_modulus(full_kwargs["config"], None)
+        specs.append(
+            make_sweep_plot_spec(
+                plot,
+                name=f"{base_name}_full",
+                filename=f"{base_filename}_full",
+                plot_kwargs=full_kwargs,
+                figsize=figsize,
+                interval=interval,
+                fps=fps,
+                title_fn=title_fn,
+            )
+        )
+
+    modulus_value = _normalize_time_modulus(modulus)
+    if include_modulus and modulus_value is not None:
+        suffix = _safe_name(f"mod{_short_artifact_setting_value(modulus_value)}")
+        mod_kwargs = dict(kwargs)
+        if "config" in mod_kwargs:
+            mod_kwargs["config"] = frequency_plot_config_with_modulus(mod_kwargs["config"], modulus_value)
+        else:
+            mod_kwargs["modulus"] = modulus_value
+        specs.append(
+            make_sweep_plot_spec(
+                plot,
+                name=f"{base_name}_{suffix}",
+                filename=f"{base_filename}_{suffix}",
+                plot_kwargs=mod_kwargs,
+                figsize=figsize,
+                interval=interval,
+                fps=fps,
+                title_fn=title_fn,
+            )
+        )
+
+    return specs
+
+
 def _normalize_sweep_plot_spec(plot_spec: SweepPlotSpec | str | Any | dict[str, Any]) -> SweepPlotSpec:
     """Accept ergonomic plot-spec forms and normalize them."""
     if isinstance(plot_spec, SweepPlotSpec):
@@ -9821,14 +10035,11 @@ def _format_sweep_value_label(sweep: dict[str, Any], value: Any) -> str:
 
 
 def _format_sweep_progress_label(frame_index: int, total_frames: int, *, width: int = 12) -> str:
-    """Format one compact textual sweep-progress indicator."""
+    """Format one compact sweep-progress label without ASCII bar glyphs."""
     total = max(int(total_frames), 1)
     current = max(1, min(int(frame_index) + 1, total))
-    fraction = current / total
-    filled = max(1 if total > 1 else width, int(round(fraction * width)))
-    filled = min(filled, width)
-    bar = "#" * filled + "-" * (width - filled)
-    return f"[{bar}] {current}/{total}"
+    percent = (current / total) * 100.0
+    return f"{current}/{total} ({percent:.1f}%)"
 
 
 def _format_sweep_frame_title(sweep: dict[str, Any], value: Any, frame_index: int, total_frames: int) -> str:
@@ -10104,13 +10315,61 @@ def _compose_sweep_display_frame(
     title: str,
     *,
     figsize: tuple[float, float],
+    frame_index: int | None = None,
+    total_frames: int | None = None,
 ) -> np.ndarray:
-    """Compose a streamed frame the same way ``animate_sweep`` displays it."""
-    display_fig, ax = plt.subplots(figsize=figsize)
-    ax.axis("off")
-    display_fig.tight_layout(pad=0)
-    ax.imshow(frame_rgb)
-    ax.set_title(str(title))
+    """Compose one sweep frame with a baked-in title and visual progress bar."""
+    display_fig = plt.figure(figsize=figsize)
+    header_ax = display_fig.add_axes([0.045, 0.905, 0.91, 0.085])
+    image_ax = display_fig.add_axes([0.0, 0.0, 1.0, 0.895])
+    header_ax.axis("off")
+    image_ax.axis("off")
+    image_ax.imshow(frame_rgb)
+
+    progress_label = ""
+    fraction = 0.0
+    if frame_index is not None and total_frames:
+        total = max(int(total_frames), 1)
+        current = max(1, min(int(frame_index) + 1, total))
+        fraction = current / total
+        progress_label = f"{current}/{total} ({fraction * 100.0:.1f}%)"
+
+    header_text = str(title)
+    if progress_label and progress_label not in header_text:
+        header_text = f"{header_text} | {progress_label}"
+    header_ax.text(
+        0.0,
+        0.72,
+        header_text,
+        ha="left",
+        va="center",
+        fontsize=10,
+        fontweight="semibold",
+        color="#111111",
+        transform=header_ax.transAxes,
+    )
+    if progress_label:
+        header_ax.add_patch(
+            Rectangle(
+                (0.0, 0.12),
+                1.0,
+                0.22,
+                transform=header_ax.transAxes,
+                facecolor="#e6e8eb",
+                edgecolor="#9aa1a9",
+                linewidth=0.6,
+            )
+        )
+        header_ax.add_patch(
+            Rectangle(
+                (0.0, 0.12),
+                fraction,
+                0.22,
+                transform=header_ax.transAxes,
+                facecolor="#1f77b4",
+                edgecolor="none",
+            )
+        )
     try:
         return _fig_to_rgb_array(display_fig)
     finally:
@@ -10204,6 +10463,8 @@ def _render_sweep_animation_worker_frame(frame_index: int) -> tuple[int, np.ndar
             np.asarray(frame_rgb, dtype=np.uint8),
             title,
             figsize=state["figsize"],
+            frame_index=frame_index,
+            total_frames=len(sweep["items"]),
         ),
     )
 
@@ -10225,34 +10486,38 @@ def _iter_parallel_sweep_display_frames(
         else max(1, min(total_frames, int(workers)))
     )
     if worker_count <= 1:
-        for frame_rgb, title in _iter_sweep_animation_frames(
+        for frame_index, (frame_rgb, title) in enumerate(_iter_sweep_animation_frames(
             sweep,
             plot_fn,
             figsize=figsize,
             title_fn=title_fn,
             close_frames=close_frames,
-        ):
+        )):
             yield _compose_sweep_display_frame(
                 np.asarray(frame_rgb, dtype=np.uint8),
                 title,
                 figsize=figsize,
+                frame_index=frame_index,
+                total_frames=total_frames,
             )
         return
 
     try:
         context = _multiprocessing.get_context("fork")
     except ValueError:
-        for frame_rgb, title in _iter_sweep_animation_frames(
+        for frame_index, (frame_rgb, title) in enumerate(_iter_sweep_animation_frames(
             sweep,
             plot_fn,
             figsize=figsize,
             title_fn=title_fn,
             close_frames=close_frames,
-        ):
+        )):
             yield _compose_sweep_display_frame(
                 np.asarray(frame_rgb, dtype=np.uint8),
                 title,
                 figsize=figsize,
+                frame_index=frame_index,
+                total_frames=total_frames,
             )
         return
 
@@ -10334,16 +10599,23 @@ def animate_sweep(
         gif = save_animation(anim, 'my_sweep', sweep=sweep)
     """
     frames_rgb: list[np.ndarray] = []
-    frame_titles: list[str] = []
-    for frame_rgb, title in _iter_sweep_animation_frames(
+    total_frames = len(sweep["items"])
+    for frame_index, (frame_rgb, title) in enumerate(_iter_sweep_animation_frames(
         sweep,
         plot_fn,
         figsize=figsize,
         title_fn=title_fn,
         close_frames=close_frames,
-    ):
-        frames_rgb.append(frame_rgb)
-        frame_titles.append(title)
+    )):
+        frames_rgb.append(
+            _compose_sweep_display_frame(
+                np.asarray(frame_rgb, dtype=np.uint8),
+                title,
+                figsize=figsize,
+                frame_index=frame_index,
+                total_frames=total_frames,
+            )
+        )
 
     if not frames_rgb:
         raise ValueError("sweep has no items to animate")
@@ -10352,12 +10624,10 @@ def animate_sweep(
     ax.axis("off")
     display_fig.tight_layout(pad=0)
     im = ax.imshow(frames_rgb[0])
-    title_obj = ax.set_title(frame_titles[0])
 
     def _update(i: int) -> list:
         im.set_data(frames_rgb[i])
-        title_obj.set_text(frame_titles[i])
-        return [im, title_obj]
+        return [im]
 
     anim = animation.FuncAnimation(
         display_fig,
