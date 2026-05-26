@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v17"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v18"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -35,6 +35,7 @@ SOMA_AFTERHYPERPOLARIZATION_WINDOW_MS = 30.0
 SOMA_AFTERHYPERPOLARIZATION_TAU_MS = 9.5
 AXON_EMISSION_DELAY_MS = 10.5
 AXON_PACKET_GAIN = 1.28
+AXON_EXTENSION_SEGMENTS = 5
 SOMA_REFERENCE_RADII = {
     "MC": 5.3,
     "TC": 3.9,
@@ -665,6 +666,29 @@ def stable_unit(*parts: object) -> float:
     return h / 0xFFFFFFFF
 
 
+def unit_vector(x: float, y: float) -> tuple[float, float]:
+    length = math.hypot(x, y)
+    if length <= 1e-9:
+        return 1.0, 0.0
+    return x / length, y / length
+
+
+def bezier3(
+    p0: np.ndarray,
+    p1: np.ndarray,
+    p2: np.ndarray,
+    p3: np.ndarray,
+    t: float,
+) -> np.ndarray:
+    u = 1.0 - t
+    return (
+        (u * u * u) * p0
+        + (3.0 * u * u * t) * p1
+        + (3.0 * u * t * t) * p2
+        + (t * t * t) * p3
+    )
+
+
 def primary_branch_ids(morph: Morphology) -> dict[int, int]:
     branch_for: dict[int, int] = {morph.root_id: morph.root_id}
     for child_id in morph.children.get(morph.root_id, []):
@@ -884,31 +908,67 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 dy = float(p1[1] - p0[1])
                 seg_len = math.hypot(dx, dy)
                 if seg_len > 1e-6:
+                    root = projected.get(morph.root_id, p0)
                     extend_len = max(seg_len * 4.8, item.scale * width * 0.058)
                     extend_len = min(extend_len, item.scale * width * 0.12)
-                    ux = dx / seg_len
-                    uy = dy / seg_len
-                    x2 = float(p1[0] + ux * extend_len)
-                    y2 = float(p1[1] + uy * extend_len)
-                    segments.append(
-                        RenderSegment(
-                            x0=float(p1[0]),
-                            y0=float(p1[1]),
-                            x1=x2,
-                            y1=y2,
-                            z=float(p1[2] - 0.004),
-                            width=float(width_px * 0.82),
-                            distance=float(min(1.0, (dist + 0.22 + item.distance_offset) % 1.0)),
-                            color=item.color,
-                            alpha=item.alpha * 0.96,
-                            cell_type=morph.cell_type,
-                            neurite_kind=2,
-                            flow_direction=1.0,
-                            activity_profile=activity_profile,
-                            branch_phase_ms=base_phase_ms + route_phase_ms,
-                            branch_gain=base_gain * route_gain * 1.06,
-                        )
+                    ux, uy = unit_vector(dx, dy)
+                    outx, outy = unit_vector(float(p1[0] - root[0]), float(p1[1] - root[1]))
+                    dirx, diry = unit_vector(0.72 * ux + 0.28 * outx, 0.72 * uy + 0.28 * outy)
+                    side_sign = -1.0 if stable_unit(morph.name, node_id, "axon-side") < 0.5 else 1.0
+                    side_x, side_y = -diry * side_sign, dirx * side_sign
+                    bend_mag = extend_len * (0.10 + 0.08 * stable_unit(morph.name, node_id, "axon-bend"))
+                    sweep_mag = extend_len * (0.04 + 0.06 * stable_unit(morph.name, node_id, "axon-sweep"))
+                    control1 = np.array(
+                        [
+                            float(p1[0] + dirx * extend_len * 0.30 + side_x * bend_mag * 0.72),
+                            float(p1[1] + diry * extend_len * 0.30 + side_y * bend_mag * 0.72),
+                            float(p1[2] - 0.003),
+                        ],
+                        dtype=float,
                     )
+                    control2 = np.array(
+                        [
+                            float(p1[0] + dirx * extend_len * 0.72 + side_x * bend_mag * 1.02 + outx * sweep_mag),
+                            float(p1[1] + diry * extend_len * 0.72 + side_y * bend_mag * 1.02 + outy * sweep_mag),
+                            float(p1[2] - 0.006),
+                        ],
+                        dtype=float,
+                    )
+                    end = np.array(
+                        [
+                            float(p1[0] + dirx * extend_len + side_x * bend_mag * 0.54 + outx * sweep_mag * 1.18),
+                            float(p1[1] + diry * extend_len + side_y * bend_mag * 0.54 + outy * sweep_mag * 1.18),
+                            float(p1[2] - 0.009),
+                        ],
+                        dtype=float,
+                    )
+                    curve_start = np.array([float(p1[0]), float(p1[1]), float(p1[2])], dtype=float)
+                    curve_points = [
+                        bezier3(curve_start, control1, control2, end, step / AXON_EXTENSION_SEGMENTS)
+                        for step in range(AXON_EXTENSION_SEGMENTS + 1)
+                    ]
+                    for ext_idx, (c0, c1) in enumerate(zip(curve_points[:-1], curve_points[1:]), start=1):
+                        frac = ext_idx / AXON_EXTENSION_SEGMENTS
+                        width_scale = 0.88 - 0.20 * frac
+                        segments.append(
+                            RenderSegment(
+                                x0=float(c0[0]),
+                                y0=float(c0[1]),
+                                x1=float(c1[0]),
+                                y1=float(c1[1]),
+                                z=float(0.5 * (c0[2] + c1[2])),
+                                width=float(width_px * width_scale),
+                                distance=float(min(1.0, dist + 0.06 + 0.94 * frac)),
+                                color=item.color,
+                                alpha=item.alpha * (0.98 - 0.04 * frac),
+                                cell_type=morph.cell_type,
+                                neurite_kind=2,
+                                flow_direction=1.0,
+                                activity_profile=activity_profile,
+                                branch_phase_ms=base_phase_ms + route_phase_ms,
+                                branch_gain=base_gain * route_gain * 1.06,
+                            )
+                        )
 
         for node_id, node in morph.nodes.items():
             p = projected[node_id]
