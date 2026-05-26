@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v15"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v17"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -29,12 +29,27 @@ ACTIVITY_PACKET_SIGMA_MS = 2.85
 BRANCH_EVENT_PROFILE_BINS = 400
 ACTIVITY_TRACE_WINDOW_MS = 104.0
 ACTIVITY_TRACE_TAU_MS = 58.0
-SOMA_RESPONSE_DELAY_MS = 7.5
+SOMA_RESPONSE_DELAY_MS = 30.0
 SOMA_AFTERHYPERPOLARIZATION_DELAY_MS = 5.5
 SOMA_AFTERHYPERPOLARIZATION_WINDOW_MS = 30.0
 SOMA_AFTERHYPERPOLARIZATION_TAU_MS = 9.5
 AXON_EMISSION_DELAY_MS = 10.5
 AXON_PACKET_GAIN = 1.28
+SOMA_REFERENCE_RADII = {
+    "MC": 5.3,
+    "TC": 3.9,
+    "GC": 1.9,
+}
+SOMA_DISPLAY_RADII = {
+    "MC": 9.8 * SUPERSAMPLE,
+    "TC": 8.0 * SUPERSAMPLE,
+    "GC": 5.6 * SUPERSAMPLE,
+}
+SOMA_DISPLAY_EMPHASIS = {
+    "MC": 1.03,
+    "TC": 1.00,
+    "GC": 0.95,
+}
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -135,6 +150,7 @@ class RenderNode:
     y: float
     z: float
     radius: float
+    morph_radius: float
     distance: float
     color: np.ndarray
     cell_type: str
@@ -925,6 +941,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     y=float(p[1]),
                     z=float(p[2]),
                     radius=float(max(1.4, item.width_scale * (1.0 + 0.55 * math.sqrt(node.radius)))),
+                    morph_radius=float(node.radius),
                     distance=float((morph.distances[node_id] / distance_scale + item.distance_offset) % 1.0),
                     color=item.color,
                     cell_type=morph.cell_type,
@@ -961,10 +978,14 @@ def ellipse_xy(
 
 
 def soma_body_axes(node: RenderNode) -> tuple[float, float]:
-    if node.cell_type == "GC":
-        radius = max(SUPERSAMPLE * 7.2, node.radius * 7.0)
-        return radius, radius
-    radius = max(SUPERSAMPLE * 10.5, node.radius * 8.4)
+    # The morphologies are normalized independently for layout, so use
+    # cell-type-biased target sizes and let the SWC soma radius only nudge
+    # within-type variation rather than dictate cross-type scaling.
+    reference = SOMA_REFERENCE_RADII.get(node.cell_type, 3.5)
+    target = SOMA_DISPLAY_RADII.get(node.cell_type, 7.5 * SUPERSAMPLE)
+    emphasis = SOMA_DISPLAY_EMPHASIS.get(node.cell_type, 1.0)
+    relative_size = float(np.clip(node.morph_radius / reference, 0.78, 1.22))
+    radius = target * emphasis * relative_size
     return radius, radius
 
 
