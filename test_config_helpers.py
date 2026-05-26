@@ -521,6 +521,79 @@ with tempfile.TemporaryDirectory() as tmp:
     assert fast_files_minimal == ("summary.json", "input_times.pkl")
     print("Remote fast sync file set: OK")
 
+    # --- Fast result sync should fall back to full sync when selected files are not visible ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    try:
+        resilient_dir = tmp / "resilient-sync"
+        resilient_dir.mkdir()
+        sync_calls = []
+
+        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
+            sync_calls.append((remote_result_dir, expected_files, include_files))
+            local_result_dir = Path(local_result_dir)
+            if include_files is not None:
+                return subprocess.CompletedProcess(
+                    args=["sync-selected"],
+                    returncode=1,
+                    stdout="",
+                    stderr="[OBGPU load] None of the requested fast-sync files currently exist on the remote result dir. Missing: summary.json",
+                )
+            (local_result_dir / "summary.json").write_text("{}")
+            return subprocess.CompletedProcess(args=["sync-full"], returncode=0, stdout="", stderr="")
+
+        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        completed = hlp._sync_remote_result_dir_resilient(
+            remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=resilient_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json",),
+            retry_delay_s=0,
+        )
+        assert completed.returncode == 0
+        assert (resilient_dir / "summary.json").exists()
+        assert sync_calls == [
+            (PurePosixPath("/remote/result"), ("summary.json",), ("summary.json",)),
+            (PurePosixPath("/remote/result"), ("summary.json",), ("summary.json",)),
+            (PurePosixPath("/remote/result"), ("summary.json",), None),
+        ]
+        print("Resilient remote sync selected-to-full fallback: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+
+    # --- Failed payload sync should still pull wrapper diagnostics before returning failure ---
+    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    try:
+        diagnostic_dir = tmp / "resilient-sync-diagnostics"
+        diagnostic_dir.mkdir()
+        sync_calls = []
+
+        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
+            sync_calls.append((remote_result_dir, expected_files, include_files))
+            local_result_dir = Path(local_result_dir)
+            if remote_result_dir == PurePosixPath("/remote/wrapper"):
+                (local_result_dir / "bootstrap.log").write_text("wrapper diagnostics")
+                return subprocess.CompletedProcess(args=["sync-wrapper"], returncode=0, stdout="", stderr="")
+            return subprocess.CompletedProcess(args=["sync-fail"], returncode=1, stdout="", stderr="missing payload")
+
+        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        completed = hlp._sync_remote_result_dir_resilient(
+            remote_cfg,
+            remote_result_dir=PurePosixPath("/remote/result"),
+            local_result_dir=diagnostic_dir,
+            expected_files=("summary.json",),
+            include_files=("summary.json",),
+            wrapper_dir=PurePosixPath("/remote/wrapper"),
+            retry_delay_s=0,
+        )
+        assert completed.returncode == 1
+        assert (diagnostic_dir / "bootstrap.log").read_text() == "wrapper diagnostics"
+        assert "[wrapper diagnostic sync]" in completed.stderr
+        assert sync_calls[-1] == (PurePosixPath("/remote/wrapper"), None, None)
+        print("Resilient remote sync wrapper diagnostics: OK")
+    finally:
+        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+
     # --- Remote preflight should cache successful probes within one notebook runtime ---
     original_run_ssh_shell = hlp._run_ssh_shell
     try:

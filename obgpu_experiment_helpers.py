@@ -3709,6 +3709,89 @@ def _sync_remote_result_dir(
     return completed
 
 
+def _combine_sync_attempt_stderr(attempts: list[tuple[str, subprocess.CompletedProcess[str]]]) -> str:
+    """Render sync-attempt stderr with stage labels for actionable diagnostics."""
+    chunks = []
+    for label, completed in attempts:
+        stderr = (completed.stderr or "").strip() or "<no stderr>"
+        chunks.append(f"[{label}]\n{stderr}")
+    return "\n".join(chunks)
+
+
+def _sync_remote_result_dir_resilient(
+    config: dict[str, Any],
+    *,
+    remote_result_dir: PurePosixPath,
+    local_result_dir: Path,
+    expected_files: tuple[str, ...] | None = None,
+    include_files: tuple[str, ...] | None = None,
+    wrapper_dir: str | PurePosixPath | None = None,
+    retry_delay_s: float = 2.0,
+) -> subprocess.CompletedProcess[str]:
+    """Sync remote results while treating selected-file sync as an optimization."""
+
+    def complete_enough(completed: subprocess.CompletedProcess[str]) -> bool:
+        if completed.returncode == 0:
+            return True
+        if not _missing_local_sync_artifacts(local_result_dir, expected_files=expected_files):
+            return True
+        return False
+
+    attempts: list[tuple[str, subprocess.CompletedProcess[str]]] = []
+    completed = _sync_remote_result_dir(
+        config,
+        remote_result_dir=remote_result_dir,
+        local_result_dir=local_result_dir,
+        expected_files=expected_files,
+        include_files=include_files,
+    )
+    attempts.append(("selected fast sync" if include_files else "full result sync", completed))
+    if complete_enough(completed):
+        return completed
+
+    if include_files:
+        _progress_write("[OBGPU load] Fast remote artifact sync was incomplete; retrying once...")
+        if retry_delay_s > 0:
+            time.sleep(float(retry_delay_s))
+        completed = _sync_remote_result_dir(
+            config,
+            remote_result_dir=remote_result_dir,
+            local_result_dir=local_result_dir,
+            expected_files=expected_files,
+            include_files=include_files,
+        )
+        attempts.append(("selected fast sync retry", completed))
+        if complete_enough(completed):
+            return completed
+
+        _progress_write("[OBGPU load] Fast remote artifact sync still missing files; falling back to full result sync...")
+        completed = _sync_remote_result_dir(
+            config,
+            remote_result_dir=remote_result_dir,
+            local_result_dir=local_result_dir,
+            expected_files=expected_files,
+        )
+        attempts.append(("full result sync fallback", completed))
+        if complete_enough(completed):
+            return completed
+
+    if wrapper_dir not in (None, ""):
+        _progress_write("[OBGPU load] Result payload sync failed; syncing wrapper diagnostics...")
+        wrapper_completed = _sync_remote_result_dir(
+            config,
+            remote_result_dir=PurePosixPath(str(wrapper_dir)),
+            local_result_dir=local_result_dir,
+        )
+        attempts.append(("wrapper diagnostic sync", wrapper_completed))
+
+    return subprocess.CompletedProcess(
+        args=["remote-result-sync-resilient", remote_result_dir.as_posix(), str(local_result_dir)],
+        returncode=1,
+        stdout="\n".join((completed.stdout or "") for _label, completed in attempts if completed.stdout),
+        stderr=_combine_sync_attempt_stderr(attempts),
+    )
+
+
 def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     """Return True when the local result directory already has standard notebook payloads."""
     result_dir = Path(result_dir)
@@ -3718,6 +3801,15 @@ def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     if find_soma_trace_artifact(result_dir) is not None:
         return True
     return False
+
+
+def _local_result_dir_has_diagnostics(result_dir: str | Path) -> bool:
+    """Return True when a failed remote run has useful local logs to report."""
+    result_dir = Path(result_dir)
+    for filename in ("stdout.txt", "stderr.txt", "bootstrap.log", "command.txt", "submit_stdout.txt", "submit_stderr.txt"):
+        if _local_sync_artifact_is_usable(result_dir / filename):
+            return True
+    return any(path.is_file() and path.stat().st_size > 0 for path in result_dir.glob("slurm-*.out"))
 
 
 def _local_sweep_item_sync_complete(result_dir: str | Path) -> bool:
@@ -5560,32 +5652,19 @@ def _run_remote_simulation(
         deferred_remote_artifacts.append(preferred_soma_trace_artifact_name())
 
     sync_started = time.perf_counter()
-    sync_completed = _sync_remote_result_dir(
+    sync_completed = _sync_remote_result_dir_resilient(
         effective_config,
         remote_result_dir=remote_result_dir,
         local_result_dir=local_result_dir,
         expected_files=("summary.json",),
         include_files=final_sync_include_files,
+        wrapper_dir=submission.get("wrapper_dir"),
     )
     _record_timing(notebook_timings, "sync_s", sync_started)
     (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
     (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
     sync_warning = None
     if sync_completed.returncode != 0:
-        if final_status and final_status.get("ok") and final_sync_include_files is not None:
-            _progress_write("[OBGPU load] Fast remote artifact sync was incomplete; retrying once...")
-            time.sleep(2.0)
-            retry_fast_sync_started = time.perf_counter()
-            sync_completed = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_result_dir,
-                local_result_dir=local_result_dir,
-                expected_files=("summary.json",),
-                include_files=final_sync_include_files,
-            )
-            _record_timing(notebook_timings, "retry_fast_sync_s", retry_fast_sync_started)
-            (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
-            (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
         if _local_result_dir_has_loadable_payload(local_result_dir):
             sync_warning = (
                 "Remote Sol result sync reported an error, but standard payload files were already present locally. "
@@ -5593,6 +5672,18 @@ def _run_remote_simulation(
                 f"{sync_completed.stderr}"
             )
             _progress_write(f"[OBGPU load] {sync_warning}")
+        elif _local_result_dir_has_diagnostics(local_result_dir):
+            sync_warning = (
+                "Remote Sol result payload sync failed, but diagnostic logs were synced. "
+                "Proceeding to build a failure report instead of aborting at sync.\n"
+                f"{sync_completed.stderr}"
+            )
+            _progress_write(f"[OBGPU load] {sync_warning}")
+            if final_status is not None:
+                final_status = dict(final_status)
+                final_status["ok"] = False
+                final_status["sync_failed"] = True
+                final_status["sync_stderr"] = sync_completed.stderr or ""
         else:
             raise RuntimeError(
                 "Remote Sol result sync failed.\n"
