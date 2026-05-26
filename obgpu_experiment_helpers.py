@@ -189,7 +189,9 @@ CONTROL_HELP = {
     "sweep_engine": "Sweep execution engine: 'auto', 'legacy', or 'remote_batch'.",
     "sweep_parallelism": "Maximum concurrent sweep items inside one remote batch job. None/0 uses an automatic best-effort choice.",
     "sweep_sync_live": "When True, sync completed remote sweep items back locally while later items are still running.",
-    "sweep_sync_soma_vs": "When True, remote sweep sync includes raw soma voltage traces. Defaults to False so sweeps sync compact spike/voltage-summary artifacts only.",
+    "sweep_live_sync_max_items_per_poll": "Maximum completed sweep items to live-sync per poll. This prevents local transfer work from starving the remote heartbeat.",
+    "sweep_sync_soma_vs": "When True, remote sweep sync includes raw soma voltage traces. Defaults to False so sweeps sync compact spike/LFP artifacts only.",
+    "sweep_sync_voltage_summary": "When True, remote sweep sync includes voltage-summary arrays. Defaults to False unless a configured sweep analysis signal requires mean voltage.",
     "remote_poll_interval_s": "Polling interval in seconds for remote Slurm jobs.",
     "remote_log_poll_interval_s": "How often to do heavier remote log-tail and sacct reconciliation polls while still updating progress every remote_poll_interval_s seconds.",
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
@@ -837,7 +839,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "sweep_engine": "auto",
         "sweep_parallelism": None,
         "sweep_sync_live": True,
+        "sweep_live_sync_max_items_per_poll": 8,
         "sweep_sync_soma_vs": False,
+        "sweep_sync_voltage_summary": False,
         "remote_poll_interval_s": 1.0,
         "remote_log_poll_interval_s": 5.0,
         "remote_live_status": True,
@@ -896,7 +900,9 @@ def build_slurm_remote_config(
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = False,
+    sweep_live_sync_max_items_per_poll: int = 8,
     sweep_sync_soma_vs: bool = False,
+    sweep_sync_voltage_summary: bool = False,
     remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
@@ -943,7 +949,9 @@ def build_slurm_remote_config(
         "remote_cleanup_stale_allocations": bool(remote_cleanup_stale_allocations),
         "remote_sync_compress": True,
         "remote_defer_soma_vs_sync": bool(remote_defer_soma_vs_sync),
+        "sweep_live_sync_max_items_per_poll": int(sweep_live_sync_max_items_per_poll),
         "sweep_sync_soma_vs": bool(sweep_sync_soma_vs),
+        "sweep_sync_voltage_summary": bool(sweep_sync_voltage_summary),
         "remote_preserve_paramiko_session": bool(remote_preserve_paramiko_session),
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
@@ -994,7 +1002,9 @@ def build_sol_remote_config(
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = False,
+    sweep_live_sync_max_items_per_poll: int = 8,
     sweep_sync_soma_vs: bool = False,
+    sweep_sync_voltage_summary: bool = False,
     remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
@@ -1036,7 +1046,9 @@ def build_sol_remote_config(
         remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
         remote_cleanup_stale_allocations=remote_cleanup_stale_allocations,
         remote_defer_soma_vs_sync=remote_defer_soma_vs_sync,
+        sweep_live_sync_max_items_per_poll=sweep_live_sync_max_items_per_poll,
         sweep_sync_soma_vs=sweep_sync_soma_vs,
+        sweep_sync_voltage_summary=sweep_sync_voltage_summary,
         remote_preserve_paramiko_session=remote_preserve_paramiko_session,
         remote_repo_mode=remote_repo_mode,
         remote_git_ref=remote_git_ref,
@@ -1622,6 +1634,9 @@ def _remote_sweep_metadata_files() -> tuple[str, ...]:
         "sweep_manifest.json",
         "sweep_manifest.submit.json",
         "mpi_preflight.log",
+        "bootstrap.log",
+        "stdout.txt",
+        "stderr.txt",
     )
 
 
@@ -1676,10 +1691,51 @@ def _remote_fast_sync_files(config: dict[str, Any] | None = None) -> tuple[str, 
     return tuple(files)
 
 
+def _sweep_signal_requires_voltage_summary(signal: Any) -> bool:
+    """Return True when a configured sweep analysis signal needs saved voltage moments."""
+    if not isinstance(signal, str):
+        return False
+    normalized = signal.strip()
+    return normalized in {"mean_MC_voltage", "mean_TC_voltage", "mean_GC_voltage"}
+
+
+def _should_sync_sweep_voltage_summary(config: dict[str, Any] | None = None) -> bool:
+    """Return True when remote sweep item sync should include voltage-summary arrays."""
+    if bool((config or {}).get("sweep_sync_voltage_summary", False)):
+        return True
+    if config is None:
+        return False
+    return any(
+        _sweep_signal_requires_voltage_summary(config.get(key))
+        for key in ("spectrogram_signal", "wavelet_signal")
+    )
+
+
 def _remote_sweep_item_sync_files(config: dict[str, Any] | None = None) -> tuple[str, ...]:
     """Return compact per-item artifacts synced by remote sweeps by default."""
     files = [
-        *_remote_fast_sync_files(config),
+        "summary.json",
+        "input_times.pkl",
+        *(
+            ("lfp.pkl",)
+            if config is None or bool(config.get("enable_lfp", True))
+            else ()
+        ),
+        *(
+            ("gc_output_events.pkl",)
+            if config is None or bool(config.get("record_gc_output_events", False))
+            else ()
+        ),
+        *(
+            (SOMA_SPIKES_FILENAME_NPZ,)
+            if config is None or bool(config.get("record_from_somas", []))
+            else ()
+        ),
+        *(
+            (VOLTAGE_SUMMARY_FILENAME_NPZ,)
+            if _should_sync_sweep_voltage_summary(config)
+            else ()
+        ),
         "run_info.json",
         "command.txt",
         "stdout.txt",
@@ -6673,6 +6729,10 @@ def _run_remote_sweep(
         float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
         poll_interval_s,
     )
+    live_sync_max_items_per_poll = max(
+        int(effective_config.get("sweep_live_sync_max_items_per_poll", 8) or 0),
+        0,
+    )
     next_sacct_poll_at = time.monotonic()
 
     def refresh_remote_leases(*, warn: bool = False) -> None:
@@ -6714,15 +6774,19 @@ def _run_remote_sweep(
             return
         progress_payload = status.get("progress_payload") or {}
         finished_items = progress_payload.get("finished_items") or []
+        synced_this_poll = 0
         for finished in finished_items:
             if not isinstance(finished, dict):
                 continue
             label = str(finished.get("label") or "").strip()
             if not label or label in synced_labels or label not in manifest_by_label:
                 continue
+            if live_sync_max_items_per_poll and synced_this_poll >= live_sync_max_items_per_poll:
+                break
             manifest_item = manifest_by_label[label]
             remote_result_dir = PurePosixPath(str(finished.get("result_dir") or manifest_item["result_dir"]))
             local_result_dir = local_runs_dir / label
+            refresh_remote_leases()
             sync_completed = _sync_remote_result_dir(
                 effective_config,
                 remote_result_dir=remote_result_dir,
@@ -6730,10 +6794,12 @@ def _run_remote_sweep(
                 expected_files=("summary.json",),
                 include_files=_remote_sweep_item_sync_files(effective_config),
             )
+            refresh_remote_leases()
             if sync_completed.returncode != 0:
                 continue
             item_status_by_label[label] = dict(finished)
             synced_labels.add(label)
+            synced_this_poll += 1
 
     def sync_final_sweep_results() -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
         stdout_parts: list[str] = []
@@ -6749,6 +6815,7 @@ def _run_remote_sweep(
         if isinstance(final_progress_payload, dict) and not (local_sweep_dir / "sim_progress.json").exists():
             (local_sweep_dir / "sim_progress.json").write_text(json.dumps(final_progress_payload, indent=2, sort_keys=True))
 
+        refresh_remote_leases()
         metadata_sync = _sync_remote_result_dir(
             effective_config,
             remote_result_dir=remote_sweep_root,
@@ -6756,6 +6823,7 @@ def _run_remote_sweep(
             expected_files=("summary.json",),
             include_files=_remote_sweep_metadata_files(),
         )
+        refresh_remote_leases()
         record_completed("sweep-metadata", metadata_sync)
         sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
             local_sweep_dir,
@@ -6804,6 +6872,7 @@ def _run_remote_sweep(
                 else _remote_sweep_item_diagnostic_files()
             )
             expected_files = ("summary.json",) if ok else None
+            refresh_remote_leases()
             item_sync = _sync_remote_result_dir(
                 effective_config,
                 remote_result_dir=remote_result_dir,
@@ -6811,6 +6880,7 @@ def _run_remote_sweep(
                 expected_files=expected_files,
                 include_files=include_files,
             )
+            refresh_remote_leases()
             record_completed(f"sweep-item:{label}", item_sync)
             if item_sync.returncode != 0:
                 if ok and _local_sweep_item_sync_complete(local_result_dir):
@@ -6859,12 +6929,37 @@ def _run_remote_sweep(
                 status.get("progress_total_ms"),
                 bool(status.get("summary_exists")),
             )
+            progress_payload = status.get("progress_payload") or {}
+            finished_items = progress_payload.get("finished_items") or []
+            completed_count = len(progress_payload.get("completed_items") or [])
+            failed_count = len(progress_payload.get("failed_items") or [])
+            if finished_items:
+                completed_count = sum(1 for item in finished_items if isinstance(item, dict) and bool(item.get("ok", False)))
+                failed_count = sum(1 for item in finished_items if isinstance(item, dict) and not bool(item.get("ok", False)))
+            running_count = len(progress_payload.get("running_items") or [])
+            pending_count = len(progress_payload.get("pending_labels") or [])
+            status_signature = (
+                *status_signature,
+                completed_count,
+                failed_count,
+                running_count,
+                pending_count,
+                len(synced_labels),
+            )
             if live_status and status_signature != last_signature:
                 detail = f"{status.get('state', 'UNKNOWN')}"
                 current = status.get("progress_current_ms")
                 total = status.get("progress_total_ms")
                 if current is not None and total not in (None, 0, ""):
                     detail += f" ({int(float(current))}/{int(float(total))} items)"
+                elif completed_count or failed_count or running_count or pending_count:
+                    detail += (
+                        f" ({completed_count} done"
+                        f", {failed_count} failed"
+                        f", {running_count} running"
+                        f", {pending_count} pending"
+                        f", {len(synced_labels)} synced)"
+                    )
                 reason = str(status.get("reason") or "").strip()
                 location = str(status.get("location") or "").strip()
                 if detail.startswith("PENDING") and reason:

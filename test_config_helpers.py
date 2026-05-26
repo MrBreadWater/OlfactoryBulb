@@ -398,6 +398,9 @@ with tempfile.TemporaryDirectory() as tmp:
         "sweep_manifest.json",
         "sweep_manifest.submit.json",
         "mpi_preflight.log",
+        "bootstrap.log",
+        "stdout.txt",
+        "stderr.txt",
     )
     sweep_local_runs = tmp / "sweep-local-runs"
     manifest_stub = [
@@ -571,12 +574,24 @@ with tempfile.TemporaryDirectory() as tmp:
     assert fast_files_minimal == ("summary.json", "input_times.pkl")
     print("Remote fast sync file set: OK")
 
-    # --- Remote sweep sync should stay compact unless raw soma traces are explicitly requested ---
+    # --- Remote sweep sync should stay compact unless bulk trace payloads are explicitly requested ---
+    sweep_metadata_files = hlp._remote_sweep_metadata_files()
+    assert "summary.json" in sweep_metadata_files
+    assert "sim_progress.json" in sweep_metadata_files
+    assert "bootstrap.log" in sweep_metadata_files
+    assert "stdout.txt" in sweep_metadata_files
+    assert "stderr.txt" in sweep_metadata_files
     sweep_files_default = hlp._remote_sweep_item_sync_files()
     assert SOMA_SPIKES_FILENAME_NPZ in sweep_files_default
-    assert VOLTAGE_SUMMARY_FILENAME_NPZ in sweep_files_default
+    assert VOLTAGE_SUMMARY_FILENAME_NPZ not in sweep_files_default
     assert "soma_vs.pkl" not in sweep_files_default
     assert SOMA_TRACE_FILENAME_NPZ not in sweep_files_default
+    sweep_files_voltage = hlp._remote_sweep_item_sync_files({"sweep_sync_voltage_summary": True})
+    assert VOLTAGE_SUMMARY_FILENAME_NPZ in sweep_files_voltage
+    sweep_files_mean_signal = hlp._remote_sweep_item_sync_files(
+        {"spectrogram_signal": "mean_MC_voltage"}
+    )
+    assert VOLTAGE_SUMMARY_FILENAME_NPZ in sweep_files_mean_signal
     sweep_files_raw = hlp._remote_sweep_item_sync_files({"sweep_sync_soma_vs": True})
     assert "soma_vs.pkl" in sweep_files_raw
     assert SOMA_TRACE_FILENAME_NPZ in sweep_files_raw
