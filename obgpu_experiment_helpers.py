@@ -3610,6 +3610,40 @@ def _local_sweep_item_sync_complete(result_dir: str | Path) -> bool:
     return _local_sync_artifact_is_usable(result_dir / "summary.json") and _local_result_dir_has_loadable_payload(result_dir)
 
 
+def _local_sweep_item_dirs(local_runs_dir: str | Path, label: str) -> list[Path]:
+    """Return plausible local directories for one sweep item, newest payload dirs first."""
+    local_runs_dir = Path(local_runs_dir)
+    candidates: list[Path] = []
+    exact = local_runs_dir / str(label)
+    if exact.exists():
+        candidates.append(exact)
+    candidates.extend(path for path in local_runs_dir.glob(f"{label}_*") if path.is_dir())
+    unique = {path.resolve(): path for path in candidates}
+    return sorted(
+        unique.values(),
+        key=lambda path: (
+            _local_sweep_item_sync_complete(path),
+            _local_result_dir_has_loadable_payload(path),
+            path.stat().st_mtime if path.exists() else 0.0,
+            path.name,
+        ),
+        reverse=True,
+    )
+
+
+def _resolve_local_sweep_item_dir(
+    local_runs_dir: str | Path,
+    label: str,
+    *,
+    require_payload: bool = True,
+) -> Path | None:
+    """Return the best available local directory for one sweep item."""
+    for candidate in _local_sweep_item_dirs(local_runs_dir, label):
+        if not require_payload or _local_result_dir_has_loadable_payload(candidate):
+            return candidate
+    return None
+
+
 def _local_result_dir_has_remote_sync_artifacts(result_dir: str | Path) -> bool:
     """Return True when one local result directory has any remote-generated sync artifacts."""
     result_dir = Path(result_dir)
@@ -3670,7 +3704,13 @@ def _should_use_incremental_sweep_final_sync(
         return True
     local_runs_dir = Path(local_runs_dir)
     ready = sum(
-        1 for item in manifest_items if _local_sweep_item_sync_complete(local_runs_dir / str(item["label"]))
+        1
+        for item in manifest_items
+        if (
+            (resolved := _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"])))
+            is not None
+            and _local_sweep_item_sync_complete(resolved)
+        )
     )
     return ready > 0 and ready * 2 >= total
 
@@ -3685,7 +3725,41 @@ def _recover_local_sweep_summary(
     sweep_dir = Path(sweep_dir)
     progress = _read_json_if_present(sweep_dir / "sim_progress.json") or {}
     finished_items = progress.get("finished_items") or []
-    if not isinstance(finished_items, list) or not finished_items:
+    if not isinstance(finished_items, list):
+        finished_items = []
+
+    if not finished_items:
+        manifest_payload = (
+            _read_json_if_present(sweep_dir / "sweep_manifest.json")
+            or _read_json_if_present(sweep_dir / "sweep_manifest.submit.json")
+            or {}
+        )
+        if isinstance(manifest_payload, dict):
+            manifest_items = manifest_payload.get("items") or []
+        elif isinstance(manifest_payload, list):
+            manifest_items = manifest_payload
+        else:
+            manifest_items = []
+        item_runs_dir = sweep_dir / "item_runs"
+        for item in manifest_items:
+            if not isinstance(item, dict) or not item.get("label"):
+                continue
+            label = str(item["label"])
+            result_dir = _resolve_local_sweep_item_dir(item_runs_dir, label)
+            if result_dir is None:
+                continue
+            finished_items.append(
+                {
+                    "index": int(item.get("index", len(finished_items))),
+                    "label": label,
+                    "ok": _local_result_dir_has_loadable_payload(result_dir),
+                    "result_dir": str(result_dir),
+                    "value": item.get("value"),
+                    "recovered_from": "local_item_payload_scan",
+                }
+            )
+
+    if not finished_items:
         return {}
     completed_items = [item for item in finished_items if bool(item.get("ok", False))]
     failed_items = [item for item in finished_items if not bool(item.get("ok", False))]
@@ -5933,15 +6007,45 @@ def _write_sweep_info(
     except Exception:
         pass
 
+    run_dirs = []
+    item_statuses = []
+    item_labels = []
+    for item in sweep.get("items", []):
+        run = item.get("run") if isinstance(item, dict) else None
+        result = item.get("result") if isinstance(item, dict) else None
+        result_dir = None
+        if run is not None and getattr(run, "result_dir", None) is not None:
+            result_dir = Path(run.result_dir)
+        elif isinstance(result, dict) and result.get("result_dir") is not None:
+            result_dir = Path(result["result_dir"])
+        run_dirs.append(str(result_dir) if result_dir is not None else None)
+        if isinstance(item, dict):
+            item_statuses.append(_json_ready(item.get("status", {})))
+            item_labels.append(str(item.get("label", "")))
+
     sweep_info = {
         "path": sweep.get("path"),
         "values": [_json_ready(v) for v in sweep.get("values", [])],
         "paramset": sweep.get("paramset"),
         "timestamp": timestamp,
         "git_ref": git_ref,
-        "run_dirs": [str(item["run"].result_dir) for item in sweep.get("items", []) if item.get("run") is not None],
+        "run_dirs": run_dirs,
         "n_items": len(sweep.get("items", [])),
     }
+    if item_statuses:
+        sweep_info["item_statuses"] = item_statuses
+    if item_labels:
+        sweep_info["item_labels"] = item_labels
+    for key in (
+        "partial",
+        "failed_labels",
+        "failed_without_result",
+        "recovered_failed_labels",
+        "missing_labels",
+        "load_errors",
+    ):
+        if key in sweep:
+            sweep_info[key] = _json_ready(sweep[key])
     if sweep.get("grid") is not None:
         sweep_info["grid"] = _json_ready(sweep.get("grid"))
     (sweep_dir / "sweep_info.json").write_text(json.dumps(sweep_info, indent=2, sort_keys=True))
@@ -6082,6 +6186,7 @@ def _run_remote_sweep(
         "sweep_parallelism": int(max_concurrent),
         "sweep_items": len(manifest_items),
     }
+    (local_sweep_dir / "sweep_manifest.submit.json").write_text(manifest_json)
 
     started = time.perf_counter()
     _ensure_remote_git_ref_available(
@@ -6268,7 +6373,21 @@ def _run_remote_sweep(
                 local_result_dir=local_sweep_dir,
                 expected_files=("summary.json",),
             )
-            return completed, _read_json_if_present(local_sweep_dir / "summary.json") or {}
+            summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
+                local_sweep_dir,
+                sweep_label=sweep_label,
+                total_items=len(manifest_items),
+            )
+            if completed.returncode != 0 and summary:
+                completed = subprocess.CompletedProcess(
+                    args=completed.args,
+                    returncode=0,
+                    stdout=completed.stdout or "",
+                    stderr=(completed.stderr or "")
+                    + "\n[OBGPU load] Final sweep sync reported an error, "
+                    "but local progress metadata was sufficient to recover a sweep summary.\n",
+                )
+            return completed, summary or {}
 
         if not _should_use_incremental_sweep_final_sync(manifest_items, local_runs_dir=local_runs_dir):
             completed = _sync_remote_result_dir(
@@ -6277,7 +6396,21 @@ def _run_remote_sweep(
                 local_result_dir=local_sweep_dir,
                 expected_files=("summary.json",),
             )
-            return completed, _read_json_if_present(local_sweep_dir / "summary.json") or {}
+            summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
+                local_sweep_dir,
+                sweep_label=sweep_label,
+                total_items=len(manifest_items),
+            )
+            if completed.returncode != 0 and summary:
+                completed = subprocess.CompletedProcess(
+                    args=completed.args,
+                    returncode=0,
+                    stdout=completed.stdout or "",
+                    stderr=(completed.stderr or "")
+                    + "\n[OBGPU load] Final sweep sync reported an error, "
+                    "but local progress metadata was sufficient to recover a sweep summary.\n",
+                )
+            return completed, summary or {}
 
         stdout_parts: list[str] = []
         stderr_parts: list[str] = []
@@ -6318,20 +6451,23 @@ def _run_remote_sweep(
                 expected_files=("summary.json",),
             )
             record_completed("sweep-bulk-fallback", bulk_sync)
-            return (
-                subprocess.CompletedProcess(
-                    args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
-                    returncode=bulk_sync.returncode,
-                    stdout="".join(stdout_parts),
-                    stderr="".join(stderr_parts),
-                ),
+            fallback_summary = (
                 _read_json_if_present(local_sweep_dir / "summary.json")
                 or _recover_local_sweep_summary(
                     local_sweep_dir,
                     sweep_label=sweep_label,
                     total_items=len(manifest_items),
                 )
-                or {},
+                or {}
+            )
+            return (
+                subprocess.CompletedProcess(
+                    args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                    returncode=0 if fallback_summary else bulk_sync.returncode,
+                    stdout="".join(stdout_parts),
+                    stderr="".join(stderr_parts),
+                ),
+                fallback_summary,
             )
 
         summary_by_label: dict[str, dict[str, Any]] = {}
@@ -6374,20 +6510,23 @@ def _run_remote_sweep(
                     expected_files=("summary.json",),
                 )
                 record_completed("sweep-bulk-fallback", bulk_sync)
-                return (
-                    subprocess.CompletedProcess(
-                        args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
-                        returncode=bulk_sync.returncode,
-                        stdout="".join(stdout_parts),
-                        stderr="".join(stderr_parts),
-                    ),
+                fallback_summary = (
                     _read_json_if_present(local_sweep_dir / "summary.json")
                     or _recover_local_sweep_summary(
                         local_sweep_dir,
                         sweep_label=sweep_label,
                         total_items=len(manifest_items),
                     )
-                    or sweep_summary,
+                    or sweep_summary
+                )
+                return (
+                    subprocess.CompletedProcess(
+                        args=["remote-sweep-incremental-fallback", remote_sweep_root.as_posix(), str(local_sweep_dir)],
+                        returncode=0 if fallback_summary else bulk_sync.returncode,
+                        stdout="".join(stdout_parts),
+                        stderr="".join(stderr_parts),
+                    ),
+                    fallback_summary,
                 )
 
         return (
@@ -6467,35 +6606,60 @@ def _run_remote_sweep(
             if isinstance(payload, dict) and payload.get("label"):
                 item_status_by_label[str(payload["label"])] = dict(payload)
 
-    completed_items = []
+    sweep_items = []
+    load_errors: dict[str, str] = {}
     for item in manifest_items:
-        local_result_dir = local_runs_dir / item["label"]
-        if not local_result_dir.exists():
-            continue
+        plan_item = sweep_plan["items"][int(item["index"])]
+        finalize_item = {**item, "config": plan_item["config"], "value": plan_item["value"]}
+        local_result_dir = _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"]))
         status_payload = item_status_by_label.get(item["label"], {})
+        item_entry = {
+            "index": int(item["index"]),
+            "label": str(item["label"]),
+            "value": plan_item["value"],
+            "config": plan_item["config"],
+            "run": None,
+            "result": None,
+            "status": status_payload,
+        }
+        if local_result_dir is None:
+            sweep_items.append(item_entry)
+            continue
+        if not _local_sync_artifact_is_usable(local_result_dir / "summary.json"):
+            summary = _synthesize_partial_sync_summary(
+                local_result_dir,
+                label=str(item["label"]),
+                timestamp=timestamp,
+                config=plan_item["config"],
+            )
+            (local_result_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
         remote_metadata["notebook_timing_seconds"] = notebook_timings
-        run, result = _finalize_synced_sweep_item(
-            item=item,
-            local_result_dir=local_result_dir,
-            timestamp=timestamp,
-            remote_payload=remote_metadata,
-            returncode=int(status_payload.get("returncode", 0) or 0),
-        )
-        completed_items.append(
-            {
-                "value": sweep_plan["items"][int(item["index"])]["value"],
-                "config": sweep_plan["items"][int(item["index"])]["config"],
-                "run": run,
-                "result": result,
-            }
-        )
+        try:
+            run, result = _finalize_synced_sweep_item(
+                item=finalize_item,
+                local_result_dir=local_result_dir,
+                timestamp=timestamp,
+                remote_payload=remote_metadata,
+                returncode=int(status_payload.get("returncode", 0) or 0),
+            )
+        except Exception as exc:
+            load_errors[str(item["label"])] = str(exc)
+            item_entry["status"] = {**status_payload, "load_error": str(exc)}
+        else:
+            item_entry["run"] = run
+            item_entry["result"] = result
+        sweep_items.append(item_entry)
 
-    missing_labels = [item["label"] for item in manifest_items if not (local_runs_dir / item["label"]).exists()]
+    missing_labels = [
+        item["label"]
+        for item in manifest_items
+        if _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"])) is None
+    ]
 
     sweep = {
         "path": sweep_plan["path"],
         "values": list(sweep_plan["values"]),
-        "items": completed_items,
+        "items": sweep_items,
         "paramset": sweep_plan["paramset"],
     }
     if sweep_plan.get("grid") is not None:
@@ -6520,19 +6684,31 @@ def _run_remote_sweep(
     for failed in sweep_summary.get("failed_items", []):
         if isinstance(failed, dict) and failed.get("label"):
             failed_labels.append(str(failed["label"]))
-    if failed_labels or missing_labels:
-        details = []
-        if failed_labels:
-            details.append(f"Failed labels: {failed_labels}")
-        if missing_labels:
-            details.append(f"Missing items: {missing_labels}")
-        raise RuntimeError(
-            "Remote sweep completed with failed or missing items.\n"
-            + "\n".join(details)
-            + "\n"
-            f"Sweep dir: {local_sweep_dir}"
+    result_labels = {str(item.get("label")) for item in sweep_items if item.get("result") is not None}
+    failed_without_result = [label for label in failed_labels if label not in result_labels]
+    recovered_failed_labels = [label for label in failed_labels if label in result_labels]
+    loaded_count = sum(1 for item in sweep_items if item.get("result") is not None)
+    partial_reasons = []
+    if failed_without_result:
+        partial_reasons.append(f"{len(failed_without_result)} failed")
+    if missing_labels:
+        partial_reasons.append(f"{len(missing_labels)} missing")
+    if load_errors:
+        partial_reasons.append(f"{len(load_errors)} load errors")
+    sweep["partial"] = bool(partial_reasons)
+    sweep["failed_labels"] = failed_labels
+    sweep["failed_without_result"] = failed_without_result
+    sweep["recovered_failed_labels"] = recovered_failed_labels
+    sweep["missing_labels"] = missing_labels
+    sweep["load_errors"] = load_errors
+    if partial_reasons:
+        _write_sweep_info(sweep, sweep_dir=local_sweep_dir, timestamp=timestamp)
+        _progress_write(
+            "[OBGPU load] Remote sweep returned partial results: "
+            f"{loaded_count}/{len(manifest_items)} usable items "
+            f"({', '.join(partial_reasons)})."
         )
-    if final_status is not None and not final_status.get("ok", True) and not sweep_summary:
+    if final_status is not None and not final_status.get("ok", True) and not sweep_summary and loaded_count == 0:
         raise RuntimeError(
             "Remote sweep failed before writing a summary.\n"
             f"Sweep dir: {local_sweep_dir}\n"
@@ -9797,6 +9973,8 @@ def save_sweep(
 
     # Write per-run pointers
     run_dirs = []
+    item_statuses = []
+    item_labels = []
     for i, item in enumerate(sweep.get("items", [])):
         val = item.get("value")
         run = item.get("run")
@@ -9821,6 +9999,8 @@ def save_sweep(
                 _shutil.copy2(src, slot / "run_info.json")
 
         run_dirs.append(str(result_dir) if result_dir else None)
+        item_statuses.append(_json_ready(item.get("status", {})))
+        item_labels.append(str(item.get("label", "")))
 
     # Write sweep_info.json
     git_ref = None
@@ -9838,6 +10018,20 @@ def save_sweep(
         "run_dirs": run_dirs,
         "n_items": len(sweep.get("items", [])),
     }
+    if item_statuses:
+        sweep_info["item_statuses"] = item_statuses
+    if item_labels:
+        sweep_info["item_labels"] = item_labels
+    for key in (
+        "partial",
+        "failed_labels",
+        "failed_without_result",
+        "recovered_failed_labels",
+        "missing_labels",
+        "load_errors",
+    ):
+        if key in sweep:
+            sweep_info[key] = _json_ready(sweep[key])
     (sweep_dir / "sweep_info.json").write_text(
         json.dumps(sweep_info, indent=2, sort_keys=True)
     )
@@ -9859,31 +10053,64 @@ def load_sweep(path: str | Path) -> dict[str, Any]:
     info = json.loads(info_path.read_text())
     items = []
     runs_dir = sweep_dir / "runs"
-    for i, (value, run_dir_str) in enumerate(
-        zip(info.get("values", []), info.get("run_dirs", []))
-    ):
+    values = list(info.get("values", []))
+    run_dirs = list(info.get("run_dirs", []))
+    item_statuses = list(info.get("item_statuses", []))
+    item_labels = list(info.get("item_labels", []))
+    for i, value in enumerate(values):
+        run_dir_str = run_dirs[i] if i < len(run_dirs) else None
+        status = item_statuses[i] if i < len(item_statuses) and isinstance(item_statuses[i], dict) else {}
+        label = str(item_labels[i]) if i < len(item_labels) and item_labels[i] not in (None, "") else None
         result = None
+        load_error = None
         if run_dir_str is not None:
             run_dir = Path(run_dir_str)
-            if run_dir.exists():
-                result = load_result(run_dir)
-            else:
-                # Try the pointer file in the runs/ slot
-                slot = runs_dir / f"{i:02d}_{_safe_name(str(value))}"
-                ptr = slot / "result_dir.txt"
-                if ptr.exists():
-                    alt = Path(ptr.read_text().strip())
-                    if alt.exists():
-                        result = load_result(alt)
-        items.append({"value": value, "config": None, "run": None, "result": result})
+            try:
+                if run_dir.exists():
+                    result = load_result(run_dir)
+                else:
+                    # Try the pointer file in the runs/ slot
+                    slot = runs_dir / f"{i:02d}_{_safe_name(str(value))}"
+                    ptr = slot / "result_dir.txt"
+                    if ptr.exists():
+                        alt = Path(ptr.read_text().strip())
+                        if alt.exists():
+                            result = load_result(alt)
+            except Exception as exc:
+                load_error = str(exc)
+        item = {"value": value, "config": None, "run": None, "result": result, "status": status}
+        if label is not None:
+            item["label"] = label
+        if load_error is not None:
+            item["load_error"] = load_error
+        items.append(item)
+    inferred_missing_labels = []
+    for index, item in enumerate(items):
+        if item.get("result") is not None:
+            continue
+        inferred_missing_labels.append(str(item.get("label") or index))
+    missing_labels = list(info.get("missing_labels", [])) or inferred_missing_labels
+    item_load_errors = {
+        str(item.get("label") or index): item["load_error"]
+        for index, item in enumerate(items)
+        if isinstance(item, dict) and item.get("load_error")
+    }
+    saved_load_errors = dict(info.get("load_errors", {})) if isinstance(info.get("load_errors"), dict) else {}
+    load_errors = {**saved_load_errors, **item_load_errors}
 
     return {
         "path": info.get("path"),
-        "values": info.get("values", []),
+        "values": values,
         "items": items,
         "sweep_dir": sweep_dir,
         "sweep_info": info,
         "paramset": info.get("paramset"),
+        "partial": bool(info.get("partial", False) or missing_labels or load_errors),
+        "failed_labels": list(info.get("failed_labels", [])),
+        "failed_without_result": list(info.get("failed_without_result", [])),
+        "recovered_failed_labels": list(info.get("recovered_failed_labels", [])),
+        "missing_labels": missing_labels,
+        "load_errors": load_errors,
     }
 
 

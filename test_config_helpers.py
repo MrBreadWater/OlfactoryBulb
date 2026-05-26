@@ -12,6 +12,7 @@ import tempfile
 from copy import deepcopy
 from pathlib import Path
 from pathlib import PurePosixPath
+from types import SimpleNamespace
 
 import numpy as np
 import obgpu_experiment_helpers as hlp
@@ -385,6 +386,22 @@ with tempfile.TemporaryDirectory() as tmp:
     assert recovered_summary["partial"] is True
     assert recovered_summary["completed_items"][0]["label"] == "item_000"
     assert (partial_sweep_dir / "summary.json").exists()
+    scan_sweep_dir = tmp / "scan-recovered-sweep"
+    scan_item_runs = scan_sweep_dir / "item_runs"
+    scan_payload_dir = scan_item_runs / "item_000_20260525_120000"
+    scan_payload_dir.mkdir(parents=True, exist_ok=True)
+    for name in ("input_times.pkl", "lfp.pkl", "gc_output_events.pkl", "soma_vs.pkl"):
+        (scan_payload_dir / name).write_bytes(b"payload")
+    (scan_sweep_dir / "sweep_manifest.submit.json").write_text(
+        json.dumps([{"index": 0, "label": "item_000", "value": 1.0}])
+    )
+    scanned_summary = hlp._recover_local_sweep_summary(
+        scan_sweep_dir,
+        sweep_label="scan-recovered-sweep",
+        total_items=1,
+    )
+    assert scanned_summary["completed_items"][0]["result_dir"] == str(scan_payload_dir)
+    assert hlp._resolve_local_sweep_item_dir(scan_item_runs, "item_000") == scan_payload_dir
     print("Incremental sweep final sync selection: OK")
 
     # --- Remote helper cache should shrink submit/poll command payloads ---
@@ -1068,5 +1085,51 @@ with tempfile.TemporaryDirectory() as tmp:
     recovered_loaded = hlp.load_result(recovered_result_dir)
     assert recovered_loaded["input_times"] == []
     print("load_result tolerates empty remote run_info: OK")
+
+    # --- Sweep metadata should preserve every planned slot and tolerate bad items ---
+    robust_sweep_dir = tmp / "robust-sweep"
+    robust_good_dir = tmp / "robust-good-run"
+    robust_bad_dir = tmp / "robust-bad-run"
+    robust_good_dir.mkdir(parents=True, exist_ok=True)
+    robust_bad_dir.mkdir(parents=True, exist_ok=True)
+    (robust_good_dir / "summary.json").write_text("{}")
+    with open(robust_good_dir / "input_times.pkl", "wb") as handle:
+        pickle.dump([1], handle)
+    (robust_bad_dir / "summary.json").write_text("{}")
+    (robust_bad_dir / "input_times.pkl").write_text("not a pickle")
+    robust_sweep = {
+        "path": "gaba_gmax",
+        "values": [0.0, 0.1, 0.2],
+        "paramset": "GammaSignature",
+        "partial": True,
+        "missing_labels": ["item_002"],
+        "items": [
+            {
+                "label": "item_000",
+                "value": 0.0,
+                "run": SimpleNamespace(result_dir=robust_good_dir),
+                "result": {"result_dir": robust_good_dir},
+                "status": {"ok": True},
+            },
+            {
+                "label": "item_001",
+                "value": 0.1,
+                "run": SimpleNamespace(result_dir=robust_bad_dir),
+                "result": {"result_dir": robust_bad_dir},
+                "status": {"ok": True},
+            },
+            {"label": "item_002", "value": 0.2, "run": None, "result": None, "status": {"ok": False}},
+        ],
+    }
+    hlp._write_sweep_info(robust_sweep, sweep_dir=robust_sweep_dir, timestamp="20260525_120000")
+    robust_loaded_sweep = hlp.load_sweep(robust_sweep_dir)
+    assert len(robust_loaded_sweep["items"]) == 3
+    assert robust_loaded_sweep["items"][0]["result"] is not None
+    assert robust_loaded_sweep["items"][1]["result"] is None
+    assert "load_error" in robust_loaded_sweep["items"][1]
+    assert robust_loaded_sweep["items"][2]["result"] is None
+    assert robust_loaded_sweep["partial"] is True
+    assert robust_loaded_sweep["missing_labels"] == ["item_002"]
+    print("load_sweep preserves partial sweep slots: OK")
 
 print("\nAll tests passed.")
