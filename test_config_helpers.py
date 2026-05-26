@@ -45,6 +45,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- save_config / load_config round-trip ---
     cfg = build_run_config(paramset="GammaSignature", gaba_tau2_ms=36.0, gap_mc=32.0)
+    assert cfg["remote_defer_soma_vs_sync"] is False
     p = save_config(cfg, tmp / "smoke.json")
     assert p.exists(), "save_config did not create file"
     loaded = load_config(p)
@@ -1018,7 +1019,7 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._get_paramiko_sftp = original_get_paramiko_sftp
         hlp._close_paramiko_sftp = original_close_paramiko_sftp
 
-    # --- Deferred remote soma traces should sync on first access ---
+    # --- Deferred remote soma traces from old runs should sync during load by default ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
     try:
         deferred_result_dir = tmp / "deferred-remote-result"
@@ -1058,7 +1059,7 @@ with tempfile.TemporaryDirectory() as tmp:
         assert "soma_vs" in result
         assert result["soma_vs"][0][0] == "MC0"
         assert (deferred_result_dir / "soma_vs.pkl").exists()
-        print("Deferred remote soma lazy sync: OK")
+        print("Deferred remote soma eager sync: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
 
@@ -1213,9 +1214,8 @@ with tempfile.TemporaryDirectory() as tmp:
 
         hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
         hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
-        result = hlp.load_result(deferred_error_dir)
         try:
-            _ = result["soma_vs"]
+            _ = hlp.load_result(deferred_error_dir)
             raise AssertionError("Expected deferred soma sync failure")
         except RuntimeError as exc:
             text = str(exc)
@@ -1248,7 +1248,7 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "soma_vs" not in lazy_result._lazy_loaders
     print("LazyResult preserves failed loader for retry: OK")
 
-    # --- Result overview should not trigger deferred soma trace downloads ---
+    # --- Result overview can still inspect old deferred runs when lazy loading is explicitly requested ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
     try:
         overview_result_dir = tmp / "overview-result"
@@ -1298,12 +1298,12 @@ with tempfile.TemporaryDirectory() as tmp:
             raise AssertionError("result_overview should not trigger deferred soma trace sync")
 
         hlp._sync_remote_result_dir = _fail_sync_remote_result_dir
-        result = hlp.load_result(overview_result_dir)
+        result = hlp.load_result(overview_result_dir, lazy_soma_vs=True)
         info = hlp.result_overview(result)
         assert info["n_inputs"] == 612
         assert info["n_soma_traces"] == 193
         assert info["n_lfp_samples"] == 36000
-        print("Result overview avoids deferred soma sync: OK")
+        print("Result overview supports explicit legacy deferred soma sync: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
 
@@ -1346,7 +1346,7 @@ with tempfile.TemporaryDirectory() as tmp:
         trace_format="npz",
         trace_dtype="float32",
     )
-    npz_loaded = hlp.load_result(npz_result_dir, lazy_soma_vs=False)
+    npz_loaded = hlp.load_result(npz_result_dir)
     assert len(npz_loaded["soma_vs"]) == 2
     assert npz_loaded["soma_vs"][0][1].dtype == np.float32
     assert npz_loaded["soma_vs"][0][2].dtype == np.float32

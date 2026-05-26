@@ -196,7 +196,7 @@ CONTROL_HELP = {
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
-    "remote_defer_soma_vs_sync": "When True, remote run_and_load syncs small result artifacts first and leaves the soma trace artifact on the cluster until result['soma_vs'] is accessed.",
+    "remote_defer_soma_vs_sync": "Deprecated. Raw soma traces are synced and loaded with the main result payload; stale True values are ignored.",
     "remote_preserve_paramiko_session": "When True, never silently open a fresh Paramiko login after one notebook session has already authenticated; fail closed instead of re-prompting mid-run.",
     "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
@@ -842,7 +842,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_live_logs": True,
         "remote_heartbeat_timeout_s": 120,
         "remote_cleanup_stale_allocations": True,
-        "remote_defer_soma_vs_sync": True,
+        "remote_defer_soma_vs_sync": False,
         "remote_preserve_paramiko_session": True,
         "slurm_partition": None,
         "slurm_account": None,
@@ -893,7 +893,7 @@ def build_slurm_remote_config(
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
-    remote_defer_soma_vs_sync: bool = True,
+    remote_defer_soma_vs_sync: bool = False,
     remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
@@ -989,7 +989,7 @@ def build_sol_remote_config(
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
     remote_cleanup_stale_allocations: bool = True,
-    remote_defer_soma_vs_sync: bool = True,
+    remote_defer_soma_vs_sync: bool = False,
     remote_preserve_paramiko_session: bool = True,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
@@ -3795,7 +3795,13 @@ def _sync_remote_result_dir_resilient(
 def _local_result_dir_has_loadable_payload(result_dir: str | Path) -> bool:
     """Return True when the local result directory already has standard notebook payloads."""
     result_dir = Path(result_dir)
-    for filename in ("input_times.pkl", "gc_output_events.pkl", "lfp.pkl"):
+    for filename in (
+        "input_times.pkl",
+        "gc_output_events.pkl",
+        "lfp.pkl",
+        SOMA_SPIKES_FILENAME_NPZ,
+        VOLTAGE_SUMMARY_FILENAME_NPZ,
+    ):
         if _local_sync_artifact_is_usable(result_dir / filename):
             return True
     if find_soma_trace_artifact(result_dir) is not None:
@@ -5156,6 +5162,12 @@ def _run_remote_simulation(
 ) -> RunRecord:
     """Submit one Sol Slurm job, wait for completion, sync results, and return a run record."""
     effective_config = dict(config)
+    if bool(effective_config.get("remote_defer_soma_vs_sync", False)):
+        _progress_write(
+            "[OBGPU load] remote_defer_soma_vs_sync=True is deprecated and ignored; "
+            "raw soma traces will be synced with the main result payload."
+        )
+        effective_config["remote_defer_soma_vs_sync"] = False
     remote_repo_root = _remote_repo_root(effective_config)
     remote_git_ref = _resolve_remote_git_ref(effective_config)
     notebook_timings: dict[str, float] = {}
@@ -5647,7 +5659,7 @@ def _run_remote_simulation(
 
     deferred_remote_artifacts: list[str] = []
     final_sync_include_files: tuple[str, ...] | None = None
-    if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", True)):
+    if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", False)):
         final_sync_include_files = _remote_fast_sync_files(effective_config)
         deferred_remote_artifacts.append(preferred_soma_trace_artifact_name())
 
@@ -7196,7 +7208,7 @@ class LazyResult(dict):
 def load_result(
     run_or_dir: RunRecord | str | Path,
     *,
-    lazy_soma_vs: bool = True,
+    lazy_soma_vs: bool = False,
 ) -> dict[str, Any]:
     """Load the standard saved outputs for a notebook run directory."""
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
