@@ -196,6 +196,7 @@ CONTROL_HELP = {
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
     "remote_defer_soma_vs_sync": "Deprecated. Raw soma traces are synced and loaded with the main result payload; stale True values are ignored.",
     "remote_preserve_paramiko_session": "When True, never silently open a fresh Paramiko login after one notebook session has already authenticated; fail closed instead of re-prompting mid-run.",
+    "remote_allow_paramiko_reauth": "When True, allow a fresh Paramiko login after a prior session authenticated. Defaults to False so dropped notebook SSH sessions fail closed instead of re-prompting mid-run.",
     "slurm_partition": "Optional Slurm partition for remote submission. Set it explicitly when needed; None omits --partition entirely.",
     "slurm_account": "Optional Slurm account for remote submission.",
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
@@ -2153,15 +2154,17 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
         raise RuntimeError("Paramiko transport requested but the 'paramiko' package is not installed.")
 
     cache_key = _paramiko_connection_key(config)
+    preserve_session = bool(config.get("remote_preserve_paramiko_session", True))
+    allow_reauth = bool(config.get("remote_allow_paramiko_reauth", False))
     cached = _LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
     if cached is not None:
         transport = cached.get("transport")
         if _paramiko_transport_is_usable(transport):
             return cached
         _LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
-        if bool(config.get("remote_preserve_paramiko_session", True)) and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+        if preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not allow_reauth:
             raise RuntimeError(_paramiko_midrun_reauth_error(config))
-    elif bool(config.get("remote_preserve_paramiko_session", True)) and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+    elif preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not allow_reauth:
         raise RuntimeError(_paramiko_midrun_reauth_error(config))
 
     hostname, port, username = _remote_endpoint(config)
@@ -2570,6 +2573,108 @@ def _build_remote_selected_stream_archive_command(
         f"result_dir={shlex.quote(remote_result_dir.as_posix())} && "
         f"files=( {quoted_files} ) && "
         + compressor_commands[compressor]
+    )
+
+
+def _build_remote_sweep_compact_stream_archive_command(
+    *,
+    entries: list[dict[str, Any]],
+    compressor: str,
+) -> str:
+    """Build one remote command that streams compact artifacts for many sweep items."""
+    compressor = str(compressor)
+    if not entries:
+        raise ValueError("Sweep compact stream archive requires at least one entry")
+    compressor_commands = {
+        "zstd": "zstd -T0 -3 -q -c",
+        "pigz": "pigz -6",
+        "gzip": "gzip -6",
+        "xz": "xz -3 -T0",
+    }
+    if compressor not in compressor_commands:
+        raise ValueError(f"Unsupported archive compressor {compressor!r}")
+
+    payload = b64encode(json.dumps({"entries": _json_ready(entries)}, separators=(",", ":")).encode()).decode()
+    remote_python = r'''
+import base64
+import json
+import sys
+import tarfile
+from pathlib import Path
+
+payload = json.loads(base64.b64decode("__PAYLOAD__").decode())
+added = 0
+with tarfile.open(fileobj=sys.stdout.buffer, mode="w|") as tar:
+    for entry in payload.get("entries", []):
+        label = str(entry.get("label") or "").strip()
+        result_dir = Path(str(entry.get("result_dir") or ""))
+        if not label or not result_dir.is_dir():
+            continue
+        for raw_name in entry.get("include_files", []):
+            name = str(raw_name).strip()
+            if not name or name.startswith("/") or ".." in Path(name).parts:
+                continue
+            path = result_dir / name
+            if not path.is_file():
+                continue
+            tar.add(path, arcname=f"item_runs/{label}/{name}", recursive=False)
+            added += 1
+print(f"OBGPU_SELECTED_FILES={added}", file=sys.stderr, flush=True)
+'''.replace("__PAYLOAD__", payload)
+    return (
+        "set -euo pipefail && "
+        f"python3 -c {shlex.quote(remote_python)} | {compressor_commands[compressor]}"
+    )
+
+
+def _sync_remote_sweep_compact_items(
+    config: dict[str, Any],
+    *,
+    local_sweep_dir: Path,
+    entries: list[dict[str, Any]],
+) -> subprocess.CompletedProcess[str]:
+    """Sync compact artifacts for many remote sweep items in one Paramiko stream."""
+    if not entries:
+        return subprocess.CompletedProcess(
+            args=["remote-sweep-compact-bulk", str(local_sweep_dir)],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+    if _remote_transport(config) != "paramiko":
+        return subprocess.CompletedProcess(
+            args=["remote-sweep-compact-bulk", str(local_sweep_dir)],
+            returncode=1,
+            stdout="",
+            stderr="Bulk compact sweep sync currently requires ssh_transport='paramiko'.",
+        )
+
+    compressor = "zstd" if shutil.which("zstd") else "gzip"
+    stream_command = _build_remote_sweep_compact_stream_archive_command(
+        entries=entries,
+        compressor=compressor,
+    )
+    try:
+        completed = _stream_paramiko_archive_to_local_dir(
+            config,
+            remote_result_dir=PurePosixPath(str(entries[0].get("result_dir") or ".")),
+            local_result_dir=local_sweep_dir,
+            compressor=compressor,
+            raw_bytes=0,
+            stream_command=stream_command,
+        )
+    except Exception as exc:
+        return subprocess.CompletedProcess(
+            args=["remote-sweep-compact-bulk", str(local_sweep_dir)],
+            returncode=1,
+            stdout="",
+            stderr=str(exc),
+        )
+    return subprocess.CompletedProcess(
+        args=["remote-sweep-compact-bulk", str(local_sweep_dir)],
+        returncode=completed.returncode,
+        stdout=completed.stdout or "",
+        stderr=completed.stderr or "",
     )
 
 
@@ -6348,6 +6453,7 @@ def _run_remote_sweep(
                 if isinstance(payload, dict) and payload.get("label"):
                     summary_by_label[str(payload["label"])] = dict(payload)
 
+        bulk_sync_entries: list[dict[str, Any]] = []
         for item in manifest_items:
             label = str(item["label"])
             payload = summary_by_label.get(label)
@@ -6357,40 +6463,52 @@ def _run_remote_sweep(
             ok = bool(payload.get("ok", False))
             if ok and _local_sweep_item_sync_complete(local_result_dir):
                 continue
+            if not ok and _local_result_dir_has_diagnostics(local_result_dir):
+                continue
             remote_result_dir = PurePosixPath(str(payload.get("result_dir") or item["result_dir"]))
             include_files = (
                 _remote_sweep_item_sync_files(effective_config)
                 if ok
                 else _remote_sweep_item_diagnostic_files()
             )
-            expected_files = ("summary.json",) if ok else None
-            refresh_remote_leases()
-            item_sync = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_result_dir,
-                local_result_dir=local_result_dir,
-                expected_files=expected_files,
-                include_files=include_files,
+            bulk_sync_entries.append(
+                {
+                    "label": label,
+                    "result_dir": remote_result_dir.as_posix(),
+                    "include_files": list(include_files),
+                    "ok": ok,
+                }
+            )
+
+        if bulk_sync_entries:
+            _progress_write(
+                f"[OBGPU load] Syncing compact artifacts for {len(bulk_sync_entries)} sweep items in one stream..."
             )
             refresh_remote_leases()
-            record_completed(f"sweep-item:{label}", item_sync)
-            if item_sync.returncode != 0:
-                if ok and _local_sweep_item_sync_complete(local_result_dir):
-                    stderr_parts.append(
-                        f"[OBGPU load] Compact sweep item sync for {label} reported an error, "
-                        "but required compact artifacts are present locally.\n"
-                    )
-                    continue
-                if not ok and _local_result_dir_has_diagnostics(local_result_dir):
-                    stderr_parts.append(
-                        f"[OBGPU load] Failed sweep item diagnostic sync for {label} reported an error, "
-                        "but diagnostics are present locally.\n"
-                    )
-                    continue
+            bulk_sync = _sync_remote_sweep_compact_items(
+                effective_config,
+                local_sweep_dir=local_sweep_dir,
+                entries=bulk_sync_entries,
+            )
+            refresh_remote_leases()
+            record_completed("sweep-items-bulk", bulk_sync)
+            if bulk_sync.returncode != 0:
                 stderr_parts.append(
-                    f"[OBGPU load] Compact sweep item sync for {label} failed; "
+                    "[OBGPU load] Bulk compact sweep item sync reported an error; "
                     "continuing with any local artifacts already available.\n"
                 )
+            for entry in bulk_sync_entries:
+                label = str(entry["label"])
+                local_result_dir = local_runs_dir / label
+                if bool(entry.get("ok", False)):
+                    if not _local_sweep_item_sync_complete(local_result_dir):
+                        stderr_parts.append(
+                            f"[OBGPU load] Compact artifacts for {label} are still incomplete after bulk sync.\n"
+                        )
+                elif not _local_result_dir_has_diagnostics(local_result_dir):
+                    stderr_parts.append(
+                        f"[OBGPU load] Diagnostics for failed sweep item {label} are still incomplete after bulk sync.\n"
+                    )
 
         return (
             subprocess.CompletedProcess(
@@ -6877,6 +6995,7 @@ def load_result(
     run_or_dir: RunRecord | str | Path,
     *,
     lazy_soma_vs: bool = False,
+    progress: bool = True,
 ) -> dict[str, Any]:
     """Load the standard saved outputs for a notebook run directory."""
     result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
@@ -6937,17 +7056,22 @@ def load_result(
 
     total_bytes = sum(path.stat().st_size for _key, path in load_plan)
     loaded_bytes = 0
-    progress = _ProgressBar(total=total_bytes, desc="[OBGPU load] Load result files", unit="B", unit_scale=True)
-    if load_plan:
+    progress_bar = (
+        _ProgressBar(total=total_bytes, desc="[OBGPU load] Load result files", unit="B", unit_scale=True)
+        if progress
+        else None
+    )
+    if load_plan and progress:
         _progress_write(
             f"[OBGPU load] Loading {len(load_plan)} local result files ({_format_bytes(total_bytes)})...",
         )
 
     for index, (key, path) in enumerate(load_plan, start=1):
         file_size = path.stat().st_size
-        _progress_write(
-            f"[OBGPU load] Loading {index}/{len(load_plan)}: {path.name} ({_format_bytes(file_size)})",
-        )
+        if progress:
+            _progress_write(
+                f"[OBGPU load] Loading {index}/{len(load_plan)}: {path.name} ({_format_bytes(file_size)})",
+            )
         started = time.perf_counter()
         loaded = load_pickle(path)
         elapsed_s = time.perf_counter() - started
@@ -6959,20 +7083,24 @@ def load_result(
         else:
             result[key] = loaded
         loaded_bytes += file_size
-        progress.update_to(loaded_bytes)
-        _progress_write(
-            f"[OBGPU load] {_render_progress_bar(loaded_bytes, total_bytes)} "
-            f"{_format_bytes(loaded_bytes)} / {_format_bytes(total_bytes)} "
-            f"(loaded {path.name} in {elapsed_s:.1f}s)",
-        )
-    progress.close()
+        if progress_bar is not None:
+            progress_bar.update_to(loaded_bytes)
+        if progress:
+            _progress_write(
+                f"[OBGPU load] {_render_progress_bar(loaded_bytes, total_bytes)} "
+                f"{_format_bytes(loaded_bytes)} / {_format_bytes(total_bytes)} "
+                f"(loaded {path.name} in {elapsed_s:.1f}s)",
+            )
+    if progress_bar is not None:
+        progress_bar.close()
 
     if isinstance(soma_path, Path) and _local_sync_artifact_is_usable(soma_path) and lazy_soma_vs:
         result["soma_vs_file"] = soma_path
         result._lazy_loaders["soma_vs"] = lambda path=soma_path: load_pickle(path)
-        _progress_write(
-            f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
-        )
+        if progress:
+            _progress_write(
+                f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
+            )
     elif deferred_soma_name is not None and lazy_soma_vs:
         soma_path = result_dir / deferred_soma_name
         result["soma_vs_file"] = soma_path
@@ -6981,13 +7109,14 @@ def load_result(
                 _sync_deferred_remote_artifact(directory, run_info=info, filename=path.name)
             )
         )
-        _progress_write(
-            "[OBGPU load] Deferred soma traces remain remote until result['soma_vs'] is accessed."
-        )
+        if progress:
+            _progress_write(
+                "[OBGPU load] Deferred soma traces remain remote until result['soma_vs'] is accessed."
+            )
 
     result["load_timing_seconds"] = load_timings
     result["load_total_seconds"] = round(time.perf_counter() - load_started, 3)
-    if load_timings:
+    if load_timings and progress:
         timing_summary = ", ".join(
             f"{name}={seconds:.2f}s"
             for name, seconds in sorted(load_timings.items(), key=lambda item: item[1], reverse=True)
@@ -9987,6 +10116,18 @@ def _render_sweep_frame(
     """Render one sweep item to a frame array and title."""
     result = item.get("result") if isinstance(item, dict) else None
     value = item.get("value") if isinstance(item, dict) else None
+    if title_fn is not None:
+        try:
+            title = title_fn(
+                value,
+                frame_index=frame_index,
+                total_frames=total_frames,
+                sweep=sweep,
+            )
+        except TypeError:
+            title = title_fn(value)
+    else:
+        title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
 
     if result is None:
         fig = _make_sweep_placeholder_figure(
@@ -10001,7 +10142,7 @@ def _render_sweep_frame(
         before_figs = set(plt.get_fignums())
         try:
             returned = plot_fn(result)
-            fig = returned if returned is not None else plt.gcf()
+            fig = _extract_figure_from_plot_result(returned)
         except Exception as exc:
             if close_frames:
                 for fignum in set(plt.get_fignums()) - before_figs:
@@ -10015,20 +10156,12 @@ def _render_sweep_frame(
                 figsize=figsize,
             )
 
+    try:
+        fig.suptitle(str(title), fontsize=11)
+        fig.tight_layout(rect=(0, 0, 1, 0.96))
+    except Exception:
+        pass
     frame_rgb = _fig_to_rgb_array(fig)
-
-    if title_fn is not None:
-        try:
-            title = title_fn(
-                value,
-                frame_index=frame_index,
-                total_frames=total_frames,
-                sweep=sweep,
-            )
-        except TypeError:
-            title = title_fn(value)
-    else:
-        title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
 
     if close_frames:
         plt.close(fig)
@@ -10358,7 +10491,7 @@ def load_sweep(path: str | Path) -> dict[str, Any]:
             run_dir = Path(run_dir_str)
             try:
                 if run_dir.exists():
-                    result = load_result(run_dir)
+                    result = load_result(run_dir, progress=False)
                 else:
                     # Try the pointer file in the runs/ slot
                     slot = runs_dir / f"{i:02d}_{_safe_name(str(value))}"
@@ -10366,7 +10499,7 @@ def load_sweep(path: str | Path) -> dict[str, Any]:
                     if ptr.exists():
                         alt = Path(ptr.read_text().strip())
                         if alt.exists():
-                            result = load_result(alt)
+                            result = load_result(alt, progress=False)
             except Exception as exc:
                 load_error = str(exc)
         item = {"value": value, "config": None, "run": None, "result": result, "status": status}
@@ -10464,21 +10597,14 @@ def save_sweep_animation_stream(
     output_dir.mkdir(parents=True, exist_ok=True)
     gif_path = output_dir / f"{_safe_name(name)}.gif"
 
-    display_fig, ax = plt.subplots(figsize=figsize)
-    ax.axis("off")
-    display_fig.tight_layout(pad=0)
-    title_obj = ax.set_title("")
-    image_obj = None
     frame_count = 0
-
-    def render_display_frame(frame_rgb: np.ndarray, title: str) -> np.ndarray:
-        nonlocal image_obj
-        if image_obj is None:
-            image_obj = ax.imshow(frame_rgb)
-        else:
-            image_obj.set_data(frame_rgb)
-        title_obj.set_text(title)
-        return _fig_to_rgb_array(display_fig)
+    progress = _ProgressBar(
+        total=len(sweep["items"]),
+        desc=f"[OBGPU load] Render {name}",
+        unit="frame",
+        unit_scale=False,
+        display_step=max(1, len(sweep["items"]) // 100),
+    )
 
     try:
         from PIL import GifImagePlugin, Image
@@ -10486,7 +10612,8 @@ def save_sweep_animation_stream(
         def to_gif_frame(frame_rgb: np.ndarray) -> Any:
             image = Image.fromarray(frame_rgb)
             palette_mode = getattr(getattr(Image, "Palette", Image), "ADAPTIVE", Image.ADAPTIVE)
-            return image.convert("P", palette=palette_mode)
+            dither_mode = getattr(getattr(Image, "Dither", Image), "FLOYDSTEINBERG", Image.FLOYDSTEINBERG)
+            return image.convert("P", palette=palette_mode, dither=dither_mode)
 
         duration_ms = max(int(interval), 1)
         with open(gif_path, "wb") as handle:
@@ -10499,7 +10626,7 @@ def save_sweep_animation_stream(
                 title_fn=title_fn,
                 close_frames=close_frames,
             ):
-                gif_frame = to_gif_frame(render_display_frame(frame_rgb, title))
+                gif_frame = to_gif_frame(frame_rgb)
                 if frame_count == 0:
                     header, _palette = GifImagePlugin.getheader(
                         gif_frame,
@@ -10510,11 +10637,12 @@ def save_sweep_animation_stream(
                 for chunk in GifImagePlugin.getdata(gif_frame, duration=duration_ms):
                     handle.write(chunk)
                 frame_count += 1
+                progress.update_to(frame_count)
                 if frame_count % 16 == 0:
                     _gc.collect()
             handle.write(b";")
     finally:
-        plt.close(display_fig)
+        progress.close()
 
     if frame_count == 0:
         raise ValueError("sweep has no items to animate")
