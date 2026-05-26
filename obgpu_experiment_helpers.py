@@ -258,8 +258,8 @@ class SweepPlotSpec:
     plot_kwargs: dict[str, Any] | None = None
     filename: str | None = None
     figsize: tuple[float, float] = (12.0, 5.0)
-    interval: int = 1000
-    fps: int = 2
+    interval: int = 100
+    fps: int = 10
     title_fn: Any = None
 
 
@@ -9795,8 +9795,8 @@ def make_sweep_plot_spec(
     plot_kwargs: dict[str, Any] | None = None,
     filename: str | None = None,
     figsize: tuple[float, float] = (12.0, 5.0),
-    interval: int = 1000,
-    fps: int = 2,
+    interval: int = 100,
+    fps: int = 10,
     title_fn: Any = None,
 ) -> SweepPlotSpec:
     """Build a sweep-plot spec from a built-in plot name or custom callable."""
@@ -9847,8 +9847,8 @@ def _normalize_sweep_plot_spec(plot_spec: SweepPlotSpec | str | Any | dict[str, 
             plot_kwargs=plot_spec.get("plot_kwargs"),
             filename=plot_spec.get("filename"),
             figsize=tuple(plot_spec.get("figsize", (12.0, 5.0))),
-            interval=int(plot_spec.get("interval", 1000)),
-            fps=int(plot_spec.get("fps", 2)),
+            interval=int(plot_spec.get("interval", 100)),
+            fps=int(plot_spec.get("fps", 10)),
             title_fn=plot_spec.get("title_fn"),
         )
     raise TypeError(f"Unsupported sweep-plot spec type {type(plot_spec)!r}")
@@ -10156,17 +10156,30 @@ def _render_sweep_frame(
                 figsize=figsize,
             )
 
-    try:
-        fig.suptitle(str(title), fontsize=11)
-        fig.tight_layout(rect=(0, 0, 1, 0.96))
-    except Exception:
-        pass
     frame_rgb = _fig_to_rgb_array(fig)
 
     if close_frames:
         plt.close(fig)
 
     return frame_rgb, str(title)
+
+
+def _compose_sweep_display_frame(
+    frame_rgb: np.ndarray,
+    title: str,
+    *,
+    figsize: tuple[float, float],
+) -> np.ndarray:
+    """Compose a streamed frame the same way ``animate_sweep`` displays it."""
+    display_fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+    display_fig.tight_layout(pad=0)
+    ax.imshow(frame_rgb)
+    ax.set_title(str(title))
+    try:
+        return _fig_to_rgb_array(display_fig)
+    finally:
+        plt.close(display_fig)
 
 
 def _iter_sweep_animation_frames(
@@ -10196,7 +10209,7 @@ def animate_sweep(
     sweep: dict[str, Any],
     plot_fn: Any,
     figsize: tuple[float, float] = (12, 5),
-    interval: int = 1000,
+    interval: int = 100,
     title_fn: Any = None,
     close_frames: bool = True,
 ) -> animation.FuncAnimation:
@@ -10277,7 +10290,7 @@ def animate_lfp_sweep(
     sweep: dict[str, Any],
     signal: str = "lfp",
     dt_ms: float = 0.1,
-    interval: int = 1000,
+    interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate trace-style outputs across a one-parameter sweep."""
     if signal != "lfp":
@@ -10303,7 +10316,7 @@ def animate_spectrogram_sweep(
     max_freq_hz: float = 150.0,
     nperseg: int = 512,
     noverlap: int = 448,
-    interval: int = 1000,
+    interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate spectrograms across a one-parameter sweep."""
     return animate_sweep(
@@ -10325,7 +10338,7 @@ def animate_wavelet_sweep(
     sweep: dict[str, Any],
     signal: str = "lfp",
     dt_ms: float = 0.1,
-    interval: int = 1000,
+    interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate wavelet maps across a one-parameter sweep."""
     return animate_sweep(
@@ -10340,7 +10353,7 @@ def animate_sniff_average_sweep(
     sweep: dict[str, Any],
     dt_ms: float = 0.1,
     sniff_count: int = 8,
-    interval: int = 1000,
+    interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate sniff-averaged wavelet views across a sweep."""
     def _plot(result: dict[str, Any]) -> Any:
@@ -10559,7 +10572,7 @@ def save_animation(
     name: str,
     output_dir: str | Path | None = None,
     sweep: dict[str, Any] | None = None,
-    fps: int = 2,
+    fps: int = 10,
 ) -> Path:
     """Save an animation as a GIF and return the written path.
 
@@ -10583,10 +10596,10 @@ def save_sweep_animation_stream(
     *,
     output_dir: str | Path | None = None,
     figsize: tuple[float, float] = (12.0, 5.0),
-    interval: int = 1000,
+    interval: int = 100,
     title_fn: Any = None,
     close_frames: bool = True,
-    fps: int = 2,
+    fps: int = 10,
 ) -> Path:
     """Render and save a sweep GIF without retaining all frames in memory."""
     if not sweep.get("items"):
@@ -10620,14 +10633,20 @@ def save_sweep_animation_stream(
         ) as writer:
             import gc as _gc
 
-            for frame_rgb, _title in _iter_sweep_animation_frames(
+            for frame_rgb, title in _iter_sweep_animation_frames(
                 sweep,
                 plot_fn,
                 figsize=figsize,
                 title_fn=title_fn,
                 close_frames=close_frames,
             ):
-                writer.append_data(np.asarray(frame_rgb, dtype=np.uint8))
+                writer.append_data(
+                    _compose_sweep_display_frame(
+                        np.asarray(frame_rgb, dtype=np.uint8),
+                        title,
+                        figsize=figsize,
+                    )
+                )
                 frame_count += 1
                 progress.update_to(frame_count)
                 if frame_count % 16 == 0:
@@ -10636,14 +10655,22 @@ def save_sweep_animation_stream(
         from PIL import Image
 
         frames = []
-        for frame_rgb, _title in _iter_sweep_animation_frames(
+        for frame_rgb, title in _iter_sweep_animation_frames(
             sweep,
             plot_fn,
             figsize=figsize,
             title_fn=title_fn,
             close_frames=close_frames,
         ):
-            frames.append(Image.fromarray(np.asarray(frame_rgb, dtype=np.uint8)))
+            frames.append(
+                Image.fromarray(
+                    _compose_sweep_display_frame(
+                        np.asarray(frame_rgb, dtype=np.uint8),
+                        title,
+                        figsize=figsize,
+                    )
+                )
+            )
             frame_count += 1
             progress.update_to(frame_count)
         if frames:
