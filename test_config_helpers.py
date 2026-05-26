@@ -264,6 +264,13 @@ with tempfile.TemporaryDirectory() as tmp:
         except RuntimeError as exc:
             assert "remote_preserve_paramiko_session=True" in str(exc)
             assert cache_key in str(exc)
+        hlp._LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
+        try:
+            hlp._connect_paramiko(fake_remote_cfg)
+            raise AssertionError("Expected missing cached Paramiko transport to be refused")
+        except RuntimeError as exc:
+            assert "remote_preserve_paramiko_session=True" in str(exc)
+            assert cache_key in str(exc)
         print("Paramiko mid-run reauth refusal: OK")
     finally:
         hlp.paramiko = original_paramiko
@@ -557,6 +564,26 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     assert "Apple" not in compact_submit
     print("Benchmark overrides sidecar keeps argv compact: OK")
+
+    remote_builder_cfg = hlp.build_slurm_remote_config(
+        remote_host="user@host",
+        remote_repo_root="/remote/OlfactoryBulb",
+    )
+    assert remote_builder_cfg["sweep_sync_live"] is False
+    assert remote_builder_cfg["sweep_sync_soma_vs"] is False
+    assert remote_builder_cfg["sweep_sync_voltage_summary"] is False
+    assert remote_builder_cfg["sweep_live_sync_max_items_per_poll"] == 8
+    remote_builder_live_cfg = hlp.build_slurm_remote_config(
+        remote_host="user@host",
+        remote_repo_root="/remote/OlfactoryBulb",
+        sweep_sync_live=True,
+        sweep_sync_voltage_summary=True,
+        sweep_live_sync_max_items_per_poll=2,
+    )
+    assert remote_builder_live_cfg["sweep_sync_live"] is True
+    assert remote_builder_live_cfg["sweep_sync_voltage_summary"] is True
+    assert remote_builder_live_cfg["sweep_live_sync_max_items_per_poll"] == 2
+    print("Remote sweep builder defaults favor robust final sync: OK")
 
     # --- Successful fast remote sync should only request essential result artifacts ---
     fast_files_default = hlp._remote_fast_sync_files()

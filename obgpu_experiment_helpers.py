@@ -188,7 +188,7 @@ CONTROL_HELP = {
     "slurm_allocation_name": "Optional job-name prefix for cached reusable allocations. Defaults to 'obgpu_notebook_alloc'.",
     "sweep_engine": "Sweep execution engine: 'auto', 'legacy', or 'remote_batch'.",
     "sweep_parallelism": "Maximum concurrent sweep items inside one remote batch job. None/0 uses an automatic best-effort choice.",
-    "sweep_sync_live": "When True, sync completed remote sweep items back locally while later items are still running.",
+    "sweep_sync_live": "When True, sync completed remote sweep items back locally while later items are still running. Remote config builders default this to False so transfers do not destabilize active jobs.",
     "sweep_live_sync_max_items_per_poll": "Maximum completed sweep items to live-sync per poll. This prevents local transfer work from starving the remote heartbeat.",
     "sweep_sync_soma_vs": "When True, remote sweep sync includes raw soma voltage traces. Defaults to False so sweeps sync compact spike/LFP artifacts only.",
     "sweep_sync_voltage_summary": "When True, remote sweep sync includes voltage-summary arrays. Defaults to False unless a configured sweep analysis signal requires mean voltage.",
@@ -893,6 +893,7 @@ def build_slurm_remote_config(
     slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
+    sweep_sync_live: bool = False,
     remote_poll_interval_s: float = 1.0,
     remote_log_poll_interval_s: float = 5.0,
     remote_live_status: bool = True,
@@ -941,6 +942,7 @@ def build_slurm_remote_config(
         "remote_mechanism_profile": str(remote_mechanism_profile or "default"),
         "remote_fallback_mechanism_profile": str(remote_fallback_mechanism_profile or "portable"),
         "remote_mpi_exec": str(remote_mpi_exec or default_remote_mpi_exec()),
+        "sweep_sync_live": bool(sweep_sync_live),
         "remote_poll_interval_s": float(remote_poll_interval_s),
         "remote_log_poll_interval_s": float(remote_log_poll_interval_s),
         "remote_live_status": bool(remote_live_status),
@@ -995,6 +997,7 @@ def build_sol_remote_config(
     slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
     slurm_mem: str | None = None,
+    sweep_sync_live: bool = False,
     remote_poll_interval_s: float = 1.0,
     remote_log_poll_interval_s: float = 5.0,
     remote_live_status: bool = True,
@@ -1039,6 +1042,7 @@ def build_sol_remote_config(
         slurm_gpus=slurm_gpus,
         slurm_cpus_per_task=slurm_cpus_per_task,
         slurm_mem=slurm_mem,
+        sweep_sync_live=sweep_sync_live,
         remote_poll_interval_s=remote_poll_interval_s,
         remote_log_poll_interval_s=remote_log_poll_interval_s,
         remote_live_status=remote_live_status,
@@ -2201,6 +2205,8 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
         _LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
         if bool(config.get("remote_preserve_paramiko_session", True)) and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
             raise RuntimeError(_paramiko_midrun_reauth_error(config))
+    elif bool(config.get("remote_preserve_paramiko_session", True)) and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+        raise RuntimeError(_paramiko_midrun_reauth_error(config))
 
     hostname, port, username = _remote_endpoint(config)
     raw_sock = None
