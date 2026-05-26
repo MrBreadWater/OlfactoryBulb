@@ -1132,4 +1132,49 @@ with tempfile.TemporaryDirectory() as tmp:
     assert robust_loaded_sweep["missing_labels"] == ["item_002"]
     print("load_sweep preserves partial sweep slots: OK")
 
+    # --- Sweep animations should render placeholders for partial/bad items ---
+    partial_anim_dir = tmp / "partial-animation-sweep"
+    partial_anim_dir.mkdir(parents=True, exist_ok=True)
+    partial_anim_sweep = {
+        "path": "gaba_gmax",
+        "sweep_dir": partial_anim_dir,
+        "items": [
+            {"label": "item_000", "value": 0.0, "result": {"y": 1.0}},
+            {
+                "label": "item_001",
+                "value": 0.1,
+                "result": None,
+                "load_error": "missing payload",
+                "status": {"ok": False},
+            },
+            {"label": "item_002", "value": 0.2, "result": {"raise": True}},
+        ],
+    }
+
+    def _toy_sweep_plot(result):
+        if result.get("raise"):
+            raise RuntimeError("synthetic plot failure")
+        fig, ax = hlp.plt.subplots(figsize=(2, 1.5))
+        ax.plot([0, 1], [0, result["y"]])
+        return fig
+
+    partial_anim_artifacts = hlp.animate_sweep_plots(
+        partial_anim_sweep,
+        [
+            hlp.make_sweep_plot_spec(
+                _toy_sweep_plot,
+                name="partial_placeholder_test",
+                filename="partial_placeholder_test",
+                figsize=(2, 1.5),
+                interval=10,
+                fps=1,
+            )
+        ],
+    )
+    assert partial_anim_artifacts["partial_placeholder_test"].exists()
+    placeholder_anim = hlp.animate_lfp_sweep(partial_anim_sweep, interval=10)
+    placeholder_anim._draw_was_started = True
+    hlp.plt.close("all")
+    print("Sweep animations tolerate partial sweep slots: OK")
+
 print("\nAll tests passed.")

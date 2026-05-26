@@ -9665,6 +9665,105 @@ def _format_sweep_value(value: Any) -> str:
     return str(value)
 
 
+def _format_sweep_value_label(sweep: dict[str, Any], value: Any) -> str:
+    """Format one sweep-path/value label for animation titles."""
+    path = sweep.get("path", "")
+    if isinstance(path, dict):
+        if isinstance(value, dict):
+            return ", ".join(f"{key}={_format_sweep_value(val)}" for key, val in value.items())
+        return ", ".join(f"{key}={_format_sweep_value(path_value)}" for key, path_value in path.items())
+    if isinstance(path, (list, tuple)):
+        if isinstance(value, (list, tuple)):
+            pairs = zip(path, value)
+            return ", ".join(f"{key}={_format_sweep_value(val)}" for key, val in pairs)
+        return ", ".join(str(key) for key in path)
+    return f"{path} = {_format_sweep_value(value)}"
+
+
+def _format_sweep_progress_label(frame_index: int, total_frames: int, *, width: int = 12) -> str:
+    """Format one compact textual sweep-progress indicator."""
+    total = max(int(total_frames), 1)
+    current = max(1, min(int(frame_index) + 1, total))
+    fraction = current / total
+    filled = max(1 if total > 1 else width, int(round(fraction * width)))
+    filled = min(filled, width)
+    bar = "#" * filled + "-" * (width - filled)
+    return f"[{bar}] {current}/{total}"
+
+
+def _format_sweep_frame_title(sweep: dict[str, Any], value: Any, frame_index: int, total_frames: int) -> str:
+    """Build one default animation title with value and sweep progress."""
+    return (
+        f"{_format_sweep_value_label(sweep, value)}"
+        f" | {_format_sweep_progress_label(frame_index, total_frames)}"
+    )
+
+
+def _describe_unavailable_sweep_item(item: dict[str, Any]) -> str:
+    """Return a compact reason for a missing/unrenderable sweep frame."""
+    load_error = item.get("load_error")
+    if load_error:
+        return f"Load failed: {load_error}"
+    status = item.get("status")
+    if isinstance(status, dict):
+        for key in ("error", "reason", "state"):
+            value = status.get(key)
+            if value not in (None, ""):
+                return f"{key}: {value}"
+        if status.get("ok") is False:
+            return "Run did not produce a usable local result payload."
+    return "No local result payload was recovered for this sweep item."
+
+
+def _make_sweep_placeholder_figure(
+    sweep: dict[str, Any],
+    item: dict[str, Any],
+    frame_index: int,
+    total_frames: int,
+    *,
+    reason: str,
+    figsize: tuple[float, float],
+) -> Any:
+    """Render an explicit placeholder frame instead of aborting partial sweeps."""
+    fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+    value = item.get("value")
+    label = str(item.get("label") or f"item_{frame_index:03d}")
+    title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
+    ax.text(
+        0.5,
+        0.62,
+        "Sweep item unavailable",
+        ha="center",
+        va="center",
+        fontsize=16,
+        fontweight="bold",
+        transform=ax.transAxes,
+    )
+    ax.text(
+        0.5,
+        0.46,
+        f"{label}\n{title}",
+        ha="center",
+        va="center",
+        fontsize=11,
+        transform=ax.transAxes,
+    )
+    ax.text(
+        0.5,
+        0.27,
+        str(reason)[:500],
+        ha="center",
+        va="center",
+        fontsize=9,
+        color="tab:red",
+        wrap=True,
+        transform=ax.transAxes,
+    )
+    fig.subplots_adjust(left=0.04, right=0.96, top=0.94, bottom=0.06)
+    return fig
+
+
 def _safe_name(name: Any) -> str:
     """Make a filesystem-safe artifact basename."""
     return re.sub(r"[^A-Za-z0-9._-]+", "_", str(name)).strip("._") or "animation"
@@ -9689,10 +9788,10 @@ def animate_sweep(
 ) -> animation.FuncAnimation:
     """Animate any plot function across a parameter sweep.
 
-    ``plot_fn(result) -> matplotlib.Figure`` is called once per sweep item.
-    The figure is rendered to a pixel array so *any* plotting code works —
-    multi-panel layouts, seaborn, custom axes, etc.  No changes to existing
-    plot functions are needed.
+    ``plot_fn(result) -> matplotlib.Figure`` is called once per available
+    sweep item. The figure is rendered to a pixel array so *any* plotting code
+    works — multi-panel layouts, seaborn, custom axes, etc. Missing or failed
+    items are rendered as explicit placeholder frames.
 
     Parameters
     ----------
@@ -9725,25 +9824,54 @@ def animate_sweep(
     """
     frames_rgb: list[np.ndarray] = []
     frame_titles: list[str] = []
+    total_frames = len(sweep["items"])
 
-    for item in sweep["items"]:
-        result = item["result"]
-        value = item["value"]
+    for frame_index, item in enumerate(sweep["items"]):
+        result = item.get("result") if isinstance(item, dict) else None
+        value = item.get("value") if isinstance(item, dict) else None
 
-        returned = plot_fn(result)
-        fig = returned if returned is not None else plt.gcf()
+        if result is None:
+            fig = _make_sweep_placeholder_figure(
+                sweep,
+                item,
+                frame_index,
+                total_frames,
+                reason=_describe_unavailable_sweep_item(item),
+                figsize=figsize,
+            )
+        else:
+            before_figs = set(plt.get_fignums())
+            try:
+                returned = plot_fn(result)
+                fig = returned if returned is not None else plt.gcf()
+            except Exception as exc:
+                if close_frames:
+                    for fignum in set(plt.get_fignums()) - before_figs:
+                        plt.close(fignum)
+                fig = _make_sweep_placeholder_figure(
+                    sweep,
+                    item,
+                    frame_index,
+                    total_frames,
+                    reason=f"Plot failed: {type(exc).__name__}: {exc}",
+                    figsize=figsize,
+                )
 
         frames_rgb.append(_fig_to_rgb_array(fig))
 
         if title_fn is not None:
-            frame_titles.append(str(title_fn(value)))
+            try:
+                title = title_fn(
+                    value,
+                    frame_index=frame_index,
+                    total_frames=total_frames,
+                    sweep=sweep,
+                )
+            except TypeError:
+                title = title_fn(value)
         else:
-            path = sweep.get("path", "")
-            if isinstance(path, dict):
-                title = ", ".join(f"{k}={_format_sweep_value(v)}" for k, v in value.items())
-            else:
-                title = f"{path} = {_format_sweep_value(value)}"
-            frame_titles.append(title)
+            title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
+        frame_titles.append(str(title))
 
         if close_frames:
             plt.close(fig)
@@ -9781,51 +9909,19 @@ def animate_lfp_sweep(
 ) -> animation.FuncAnimation:
     """Animate trace-style outputs across a one-parameter sweep."""
     if signal != "lfp":
-        traces = [get_named_signal(item["result"], signal=signal, dt_ms=dt_ms) for item in sweep["items"]]
-        y_min = min(float(np.min(y)) for _t, y in traces)
-        y_max = max(float(np.max(y)) for _t, y in traces)
-        fig, ax = plt.subplots(figsize=(12, 4))
-        line, = ax.plot([], [], linewidth=1.2)
-        ax.set_ylim(y_min, y_max if y_max > y_min else y_min + 1e-9)
+        return animate_sweep(
+            sweep,
+            lambda result: plot_named_signal(result, signal=signal, dt_ms=dt_ms),
+            figsize=(12, 4),
+            interval=interval,
+        )
 
-        def update(frame_index):
-            t, y = traces[frame_index]
-            line.set_data(t, y)
-            ax.set_xlim(float(t[0]), float(t[-1]) if len(t) else 1.0)
-            ax.set_xlabel("Time (ms)")
-            ax.set_ylabel(signal)
-            ax.set_title(f"{signal} | {sweep['path']} = {_format_sweep_value(sweep['items'][frame_index]['value'])}")
-            return [line]
-
-        anim = animation.FuncAnimation(fig, update, frames=len(sweep["items"]), interval=interval, repeat=True)
-        plt.close(fig)
-        return anim
-
-    legacy_items = [load_legacy_wavelet_analysis(item["result"], dt=dt_ms, sniff_count=8) for item in sweep["items"]]
-    raw_min = min(float(np.min(item["lfp"] * 1000)) for item in legacy_items)
-    raw_max = max(float(np.max(item["lfp"] * 1000)) for item in legacy_items)
-    bp_min = min(float(np.min(item["lfp_bp"] * 10000 - 200)) for item in legacy_items)
-    bp_max = max(float(np.max(item["lfp_bp"] * 10000 - 200)) for item in legacy_items)
-    fig, axes = plt.subplots(2, 1, figsize=(12, 7), sharex=True)
-    raw_line, = axes[0].plot([], [], linewidth=1.0)
-    bp_line, = axes[1].plot([], [], linewidth=1.0, color="tab:purple")
-    axes[0].set_ylim(raw_min, raw_max if raw_max > raw_min else raw_min + 1e-9)
-    axes[1].set_ylim(bp_min, bp_max if bp_max > bp_min else bp_min + 1e-9)
-
-    def update(frame_index):
-        item = legacy_items[frame_index]
-        raw_line.set_data(item["t"], item["lfp"] * 1000)
-        bp_line.set_data(item["t"], item["lfp_bp"] * 10000 - 200)
-        axes[0].set_xlim(float(item["t"][0]), float(item["t"][-1]) if len(item["t"]) else 1.0)
-        axes[0].set_ylabel("Raw LFP x1000")
-        axes[1].set_ylabel("BP LFP x10000 - 200")
-        axes[1].set_xlabel("Simulation Time [ms]")
-        axes[0].set_title(f"LFP view | {sweep['path']} = {_format_sweep_value(sweep['items'][frame_index]['value'])}")
-        return [raw_line, bp_line]
-
-    anim = animation.FuncAnimation(fig, update, frames=len(sweep["items"]), interval=interval, repeat=True)
-    plt.close(fig)
-    return anim
+    return animate_sweep(
+        sweep,
+        lambda result: plot_lfp_overview(result, dt_ms=dt_ms),
+        figsize=(12, 7),
+        interval=interval,
+    )
 
 
 def animate_spectrogram_sweep(
@@ -9838,38 +9934,19 @@ def animate_spectrogram_sweep(
     interval: int = 1000,
 ) -> animation.FuncAnimation:
     """Animate spectrograms across a one-parameter sweep."""
-    specs = []
-    vmin = None
-    vmax = None
-    for item in sweep["items"]:
-        signal_t, signal_y = get_named_signal(item["result"], signal=signal, dt_ms=dt_ms)
-        times_ms, freqs, power = compute_spectrogram(
-            signal_t,
-            signal_y,
+    return animate_sweep(
+        sweep,
+        lambda result: plot_spectrogram(
+            result,
+            signal=signal,
             dt_ms=dt_ms,
             max_freq_hz=max_freq_hz,
             nperseg=nperseg,
             noverlap=noverlap,
-        )
-        db = 10.0 * np.log10(power + 1e-12)
-        specs.append((times_ms, freqs, db))
-        vmin = float(np.min(db)) if vmin is None else min(vmin, float(np.min(db)))
-        vmax = float(np.max(db)) if vmax is None else max(vmax, float(np.max(db)))
-
-    fig, ax = plt.subplots(figsize=(12, 4))
-
-    def update(frame_index):
-        ax.clear()
-        times_ms, freqs, db = specs[frame_index]
-        mesh = ax.pcolormesh(times_ms, freqs, db, shading="auto", vmin=vmin, vmax=vmax)
-        ax.set_xlabel("Time (ms)")
-        ax.set_ylabel("Frequency (Hz)")
-        ax.set_title(f"{signal} spectrogram | {sweep['path']} = {_format_sweep_value(sweep['items'][frame_index]['value'])}")
-        return [mesh]
-
-    anim = animation.FuncAnimation(fig, update, frames=len(sweep["items"]), interval=interval, repeat=True)
-    plt.close(fig)
-    return anim
+        ),
+        figsize=(12, 4),
+        interval=interval,
+    )
 
 
 def animate_wavelet_sweep(
@@ -9879,31 +9956,12 @@ def animate_wavelet_sweep(
     interval: int = 1000,
 ) -> animation.FuncAnimation:
     """Animate wavelet maps across a one-parameter sweep."""
-    maps = []
-    for item in sweep["items"]:
-        if signal == "lfp":
-            legacy = load_legacy_wavelet_analysis(item["result"], dt=dt_ms, sniff_count=8)
-            maps.append((legacy["t"], legacy["frequencies"], legacy["lfp_wavelet_power"]))
-        else:
-            signal_t, signal_y = get_named_signal(item["result"], signal=signal, dt_ms=dt_ms)
-            t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
-            maps.append((t, freqs, power))
-
-    fig, ax = plt.subplots(figsize=(12, 4))
-
-    def update(frame_index):
-        ax.clear()
-        t, freqs, power = maps[frame_index]
-        mesh = ax.contourf(t, freqs, power, 256, cmap="jet")
-        ax.set_xlabel("Time (ms)")
-        ax.set_ylabel("Frequency (Hz)")
-        ax.set_ylim((20, 140))
-        ax.set_title(f"{signal} wavelet | {sweep['path']} = {_format_sweep_value(sweep['items'][frame_index]['value'])}")
-        return [mesh]
-
-    anim = animation.FuncAnimation(fig, update, frames=len(sweep["items"]), interval=interval, repeat=True)
-    plt.close(fig)
-    return anim
+    return animate_sweep(
+        sweep,
+        lambda result: plot_wavelet(result, signal=signal, dt_ms=dt_ms),
+        figsize=(12, 4),
+        interval=interval,
+    )
 
 
 def animate_sniff_average_sweep(
@@ -9913,28 +9971,22 @@ def animate_sniff_average_sweep(
     interval: int = 1000,
 ) -> animation.FuncAnimation:
     """Animate sniff-averaged wavelet views across a sweep."""
-    maps = [load_legacy_wavelet_analysis(item["result"], dt=dt_ms, sniff_count=sniff_count) for item in sweep["items"]]
-    fig, ax = plt.subplots(figsize=(5, 5))
-
-    def update(frame_index):
-        ax.clear()
-        item = maps[frame_index]
-        mesh = ax.contourf(
-            item["t_average"],
-            item["frequencies"],
-            item["lfp_wavelet_power_average"],
+    def _plot(result: dict[str, Any]) -> Any:
+        legacy = load_legacy_wavelet_analysis(result, dt=dt_ms, sniff_count=sniff_count)
+        fig, ax = plt.subplots(figsize=(5, 5))
+        ax.contourf(
+            legacy["t_average"],
+            legacy["frequencies"],
+            legacy["lfp_wavelet_power_average"],
             256,
             cmap="jet",
         )
         ax.set_ylim((20, 140))
         ax.set_xlabel("Time Since Sniff Onset [ms]")
         ax.set_ylabel("Frequency [Hz]")
-        ax.set_title(f"Sniff average | {sweep['path']} = {_format_sweep_value(sweep['items'][frame_index]['value'])}")
-        return [mesh]
+        return fig
 
-    anim = animation.FuncAnimation(fig, update, frames=len(sweep["items"]), interval=interval, repeat=True)
-    plt.close(fig)
-    return anim
+    return animate_sweep(sweep, _plot, figsize=(5, 5), interval=interval)
 
 
 SWEEPS_BASE = DEFAULT_RESULTS_BASE / "sweeps"
