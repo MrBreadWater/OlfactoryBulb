@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Iterable
 
@@ -16,15 +16,14 @@ WIDTH = 2280
 HEIGHT = 720
 SUPERSAMPLE = 2
 GIF_COLORS = 144
-# ICON site cues: #01040f carousel black, #f1a143 nav accent, Bootstrap blue,
-# mintcream panels, plus cyan/green activity in the existing header.gif.
-INK = np.array([1, 4, 15], dtype=float)
+# ICON site cues: ASU maroon/gold accents plus cyan/green activity from
+# the existing header; keep the background true black.
+INK = np.array([0, 0, 0], dtype=float)
 MAROON = np.array([140, 29, 64], dtype=float)
 GOLD = np.array([241, 161, 67], dtype=float)
 TEAL = np.array([21, 168, 152], dtype=float)
 CYAN = np.array([8, 232, 232], dtype=float)
 GREEN = np.array([104, 200, 8], dtype=float)
-PANEL_MINT = np.array([245, 255, 250], dtype=float)
 BG = tuple(int(channel) for channel in INK)
 TYPE_COLORS = {
     "MC": MAROON,
@@ -292,43 +291,44 @@ def draw_soft_line(
     )
 
 
+def render_bounds(
+    segments: list[RenderSegment],
+    nodes: list[RenderNode],
+) -> tuple[float, float, float, float]:
+    xs: list[float] = []
+    ys: list[float] = []
+    for seg in segments:
+        pad = seg.width * 0.5
+        xs.extend((seg.x0 - pad, seg.x0 + pad, seg.x1 - pad, seg.x1 + pad))
+        ys.extend((seg.y0 - pad, seg.y0 + pad, seg.y1 - pad, seg.y1 + pad))
+    for node in nodes:
+        xs.extend((node.x - node.radius, node.x + node.radius))
+        ys.extend((node.y - node.radius, node.y + node.radius))
+    if not xs or not ys:
+        return 0.0, 0.0, 0.0, 0.0
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def center_geometry(
+    segments: list[RenderSegment],
+    nodes: list[RenderNode],
+    width: int,
+    height: int,
+) -> tuple[list[RenderSegment], list[RenderNode]]:
+    left, top, right, bottom = render_bounds(segments, nodes)
+    dx = width * 0.5 - (left + right) * 0.5
+    dy = height * 0.5 - (top + bottom) * 0.5
+    centered_segments = [
+        replace(seg, x0=seg.x0 + dx, y0=seg.y0 + dy, x1=seg.x1 + dx, y1=seg.y1 + dy)
+        for seg in segments
+    ]
+    centered_nodes = [replace(node, x=node.x + dx, y=node.y + dy) for node in nodes]
+    return centered_segments, centered_nodes
+
+
 def background(width: int, height: int, style: str) -> Image.Image:
-    image = Image.new("RGB", (width, height), BG)
-    arr = np.asarray(image).astype(float)
-    yy, xx = np.mgrid[0:height, 0:width]
-    x = xx / max(1, width - 1)
-    y = yy / max(1, height - 1)
-    if style == "luminous":
-        glows = [
-            (0.18, 0.56, 0.38, np.array([15, 54, 58], dtype=float), 0.46),
-            (0.75, 0.40, 0.34, np.array([82, 52, 34], dtype=float), 0.36),
-        ]
-    elif style == "graphite":
-        glows = [
-            (0.32, 0.50, 0.42, np.array([17, 72, 78], dtype=float), 0.48),
-            (0.58, 0.60, 0.44, np.array([40, 74, 54], dtype=float), 0.32),
-            (0.86, 0.45, 0.34, np.array([88, 42, 56], dtype=float), 0.42),
-        ]
-    else:
-        glows = [
-            (0.28, 0.48, 0.42, np.array([16, 58, 52], dtype=float), 0.42),
-            (0.72, 0.42, 0.36, np.array([24, 62, 82], dtype=float), 0.36),
-        ]
-    for cx, cy, radius, color, strength in glows:
-        field = np.exp(-(((x - cx) / radius) ** 2 + ((y - cy) / radius) ** 2))
-        arr = arr * (1.0 - strength * field[..., None]) + color * (strength * field[..., None])
-    image = Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8))
-    layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(layer, "RGBA")
-    for idx, y_frac in enumerate((0.18, 0.32, 0.52, 0.74)):
-        y0 = int(height * y_frac)
-        amp = 7 + idx * 2
-        points = [
-            (int(width * t / 160.0), int(y0 + amp * math.sin((t / 160.0) * math.tau * (1.15 + idx * 0.16))))
-            for t in range(161)
-        ]
-        draw.line(points, fill=(96, 142, 154, 22), width=max(1, int(1.3 * SUPERSAMPLE)))
-    return Image.alpha_composite(image.convert("RGBA"), layer)
+    del style
+    return Image.new("RGBA", (width, height), BG + (255,))
 
 
 def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
@@ -588,6 +588,7 @@ def build_scene(variant: str, width: int, height: int) -> SceneCache:
         ]
         bg_style = "lattice"
     segments, nodes = project_scene(placed, width, height)
+    segments, nodes = center_geometry(segments, nodes, width, height)
     base = background(width, height, bg_style)
     scene = SceneCache(base=base, segments=segments, nodes=nodes)
     scene.base = render_base(scene, width, height)
