@@ -8,7 +8,9 @@ notebook reruns do not corrupt the live HOC state.
 from __future__ import annotations
 
 import atexit
+import concurrent.futures
 import json
+import multiprocessing as _multiprocessing
 import os
 import pickle
 import re
@@ -10205,6 +10207,155 @@ def _iter_sweep_animation_frames(
         )
 
 
+_SWEEP_ANIMATION_WORKER_STATE: dict[str, Any] = {}
+
+
+def _default_sweep_animation_worker_count(frame_count: int) -> int:
+    """Choose a safe default worker count for CPU-bound Matplotlib frame rendering."""
+    if frame_count < 4:
+        return 1
+    raw = os.environ.get("OBGPU_SWEEP_RENDER_WORKERS")
+    if raw not in (None, ""):
+        try:
+            requested = int(raw)
+        except ValueError:
+            requested = 1
+        return max(1, min(frame_count, requested))
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(frame_count, cpu_count))
+
+
+def _init_sweep_animation_worker(
+    sweep: dict[str, Any],
+    plot_fn: Any,
+    figsize: tuple[float, float],
+    title_fn: Any,
+    close_frames: bool,
+) -> None:
+    """Initialise per-process state inherited through fork for frame rendering."""
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+    except Exception:
+        pass
+    _SWEEP_ANIMATION_WORKER_STATE.clear()
+    _SWEEP_ANIMATION_WORKER_STATE.update(
+        {
+            "sweep": sweep,
+            "plot_fn": plot_fn,
+            "figsize": figsize,
+            "title_fn": title_fn,
+            "close_frames": close_frames,
+        }
+    )
+
+
+def _render_sweep_animation_worker_frame(frame_index: int) -> tuple[int, np.ndarray]:
+    """Render one composed animation frame in a worker process."""
+    state = _SWEEP_ANIMATION_WORKER_STATE
+    sweep = state["sweep"]
+    frame_rgb, title = _render_sweep_frame(
+        sweep,
+        sweep["items"][frame_index],
+        frame_index,
+        len(sweep["items"]),
+        state["plot_fn"],
+        figsize=state["figsize"],
+        title_fn=state["title_fn"],
+        close_frames=state["close_frames"],
+    )
+    return (
+        frame_index,
+        _compose_sweep_display_frame(
+            np.asarray(frame_rgb, dtype=np.uint8),
+            title,
+            figsize=state["figsize"],
+        ),
+    )
+
+
+def _iter_parallel_sweep_display_frames(
+    sweep: dict[str, Any],
+    plot_fn: Any,
+    *,
+    figsize: tuple[float, float],
+    title_fn: Any = None,
+    close_frames: bool = True,
+    workers: int | None = None,
+) -> Any:
+    """Yield composed frames in order while rendering independent frames concurrently."""
+    total_frames = len(sweep["items"])
+    worker_count = (
+        _default_sweep_animation_worker_count(total_frames)
+        if workers is None
+        else max(1, min(total_frames, int(workers)))
+    )
+    if worker_count <= 1:
+        for frame_rgb, title in _iter_sweep_animation_frames(
+            sweep,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+        ):
+            yield _compose_sweep_display_frame(
+                np.asarray(frame_rgb, dtype=np.uint8),
+                title,
+                figsize=figsize,
+            )
+        return
+
+    try:
+        context = _multiprocessing.get_context("fork")
+    except ValueError:
+        for frame_rgb, title in _iter_sweep_animation_frames(
+            sweep,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+        ):
+            yield _compose_sweep_display_frame(
+                np.asarray(frame_rgb, dtype=np.uint8),
+                title,
+                figsize=figsize,
+            )
+        return
+
+    next_submit = 0
+    next_yield = 0
+    completed: dict[int, np.ndarray] = {}
+    pending: set[concurrent.futures.Future] = set()
+    max_pending = max(worker_count * 2, worker_count)
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=worker_count,
+        mp_context=context,
+        initializer=_init_sweep_animation_worker,
+        initargs=(sweep, plot_fn, figsize, title_fn, close_frames),
+    ) as executor:
+        while next_submit < total_frames and len(pending) < max_pending:
+            pending.add(executor.submit(_render_sweep_animation_worker_frame, next_submit))
+            next_submit += 1
+
+        while pending:
+            done, pending = concurrent.futures.wait(
+                pending,
+                return_when=concurrent.futures.FIRST_COMPLETED,
+            )
+            for future in done:
+                frame_index, frame = future.result()
+                completed[frame_index] = frame
+
+            while next_submit < total_frames and len(pending) < max_pending:
+                pending.add(executor.submit(_render_sweep_animation_worker_frame, next_submit))
+                next_submit += 1
+
+            while next_yield in completed:
+                yield completed.pop(next_yield)
+                next_yield += 1
+
+
 def animate_sweep(
     sweep: dict[str, Any],
     plot_fn: Any,
@@ -10600,6 +10751,7 @@ def save_sweep_animation_stream(
     title_fn: Any = None,
     close_frames: bool = True,
     fps: int = 10,
+    workers: int | None = None,
 ) -> Path:
     """Render and save a sweep GIF without retaining all frames in memory."""
     if not sweep.get("items"):
@@ -10633,20 +10785,15 @@ def save_sweep_animation_stream(
         ) as writer:
             import gc as _gc
 
-            for frame_rgb, title in _iter_sweep_animation_frames(
+            for frame_rgb in _iter_parallel_sweep_display_frames(
                 sweep,
                 plot_fn,
                 figsize=figsize,
                 title_fn=title_fn,
                 close_frames=close_frames,
+                workers=workers,
             ):
-                writer.append_data(
-                    _compose_sweep_display_frame(
-                        np.asarray(frame_rgb, dtype=np.uint8),
-                        title,
-                        figsize=figsize,
-                    )
-                )
+                writer.append_data(np.asarray(frame_rgb, dtype=np.uint8))
                 frame_count += 1
                 progress.update_to(frame_count)
                 if frame_count % 16 == 0:
@@ -10655,22 +10802,15 @@ def save_sweep_animation_stream(
         from PIL import Image
 
         frames = []
-        for frame_rgb, title in _iter_sweep_animation_frames(
+        for frame_rgb in _iter_parallel_sweep_display_frames(
             sweep,
             plot_fn,
             figsize=figsize,
             title_fn=title_fn,
             close_frames=close_frames,
+            workers=workers,
         ):
-            frames.append(
-                Image.fromarray(
-                    _compose_sweep_display_frame(
-                        np.asarray(frame_rgb, dtype=np.uint8),
-                        title,
-                        figsize=figsize,
-                    )
-                )
-            )
+            frames.append(Image.fromarray(np.asarray(frame_rgb, dtype=np.uint8)))
             frame_count += 1
             progress.update_to(frame_count)
         if frames:
@@ -10695,6 +10835,7 @@ def animate_sweep_plots(
     *,
     close_frames: bool = True,
     stream: bool = True,
+    workers: int | None = None,
 ) -> dict[str, Path]:
     """Render and save multiple sweep animations from one completed sweep.
 
@@ -10719,6 +10860,7 @@ def animate_sweep_plots(
                 title_fn=spec.title_fn,
                 close_frames=close_frames,
                 fps=spec.fps,
+                workers=workers,
             )
         else:
             anim = animate_sweep(
@@ -10746,6 +10888,7 @@ def run_sweep_with_animations(
     plots: list[SweepPlotSpec | str | Any | dict[str, Any]] | None = None,
     use_grid: bool = False,
     close_frames: bool = True,
+    workers: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Path]]:
     """Run a sweep once, then emit one or more animations over the same results."""
     if use_grid:
@@ -10757,7 +10900,7 @@ def run_sweep_with_animations(
 
     artifacts: dict[str, Path] = {}
     if plots:
-        artifacts = animate_sweep_plots(sweep, plots, close_frames=close_frames)
+        artifacts = animate_sweep_plots(sweep, plots, close_frames=close_frames, workers=workers)
     return sweep, artifacts
 
 
