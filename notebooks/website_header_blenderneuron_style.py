@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v19"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v21"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -44,13 +44,16 @@ SOMA_REFERENCE_RADII = {
 SOMA_DISPLAY_RADII = {
     "MC": 9.8 * SUPERSAMPLE,
     "TC": 8.0 * SUPERSAMPLE,
-    "GC": 5.6 * SUPERSAMPLE,
+    "GC": 6.3 * SUPERSAMPLE,
 }
 SOMA_DISPLAY_EMPHASIS = {
     "MC": 1.03,
     "TC": 1.00,
     "GC": 0.95,
 }
+DOF_FOCUS_Z = 0.02
+DOF_SHARP_ZONE = 0.10
+DOF_FULL_ZONE = 0.48
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -689,6 +692,18 @@ def bezier3(
     )
 
 
+def chaikin_closed(points: list[np.ndarray], refinements: int = 2) -> list[np.ndarray]:
+    smoothed = [point.astype(float, copy=True) for point in points]
+    for _ in range(max(0, refinements)):
+        refined: list[np.ndarray] = []
+        for idx, point in enumerate(smoothed):
+            nxt = smoothed[(idx + 1) % len(smoothed)]
+            refined.append(0.75 * point + 0.25 * nxt)
+            refined.append(0.25 * point + 0.75 * nxt)
+        smoothed = refined
+    return smoothed
+
+
 def primary_branch_ids(morph: Morphology) -> dict[int, int]:
     branch_for: dict[int, int] = {morph.root_id: morph.root_id}
     for child_id in morph.children.get(morph.root_id, []):
@@ -913,31 +928,31 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     extend_len = min(extend_len, item.scale * width * 0.24)
                     ux, uy = unit_vector(dx, dy)
                     outx, outy = unit_vector(float(p1[0] - root[0]), float(p1[1] - root[1]))
-                    dirx, diry = unit_vector(0.72 * ux + 0.28 * outx, 0.72 * uy + 0.28 * outy)
+                    dirx, diry = unit_vector(0.52 * ux + 0.48 * outx, 0.52 * uy + 0.48 * outy)
                     side_sign = -1.0 if stable_unit(morph.name, node_id, "axon-side") < 0.5 else 1.0
                     side_x, side_y = -diry * side_sign, dirx * side_sign
-                    bend_mag = extend_len * (0.12 + 0.10 * stable_unit(morph.name, node_id, "axon-bend"))
-                    sweep_mag = extend_len * (0.05 + 0.08 * stable_unit(morph.name, node_id, "axon-sweep"))
+                    bend_mag = extend_len * (0.20 + 0.12 * stable_unit(morph.name, node_id, "axon-bend"))
+                    sweep_mag = extend_len * (0.07 + 0.10 * stable_unit(morph.name, node_id, "axon-sweep"))
                     control1 = np.array(
                         [
-                            float(p1[0] + dirx * extend_len * 0.30 + side_x * bend_mag * 0.72),
-                            float(p1[1] + diry * extend_len * 0.30 + side_y * bend_mag * 0.72),
+                            float(p1[0] + dirx * extend_len * 0.18 + side_x * bend_mag * 1.18),
+                            float(p1[1] + diry * extend_len * 0.18 + side_y * bend_mag * 1.18),
                             float(p1[2] - 0.003),
                         ],
                         dtype=float,
                     )
                     control2 = np.array(
                         [
-                            float(p1[0] + dirx * extend_len * 0.72 + side_x * bend_mag * 1.02 + outx * sweep_mag),
-                            float(p1[1] + diry * extend_len * 0.72 + side_y * bend_mag * 1.02 + outy * sweep_mag),
+                            float(p1[0] + dirx * extend_len * 0.62 + side_x * bend_mag * 1.28 + outx * sweep_mag),
+                            float(p1[1] + diry * extend_len * 0.62 + side_y * bend_mag * 1.28 + outy * sweep_mag),
                             float(p1[2] - 0.006),
                         ],
                         dtype=float,
                     )
                     end = np.array(
                         [
-                            float(p1[0] + dirx * extend_len + side_x * bend_mag * 0.54 + outx * sweep_mag * 1.18),
-                            float(p1[1] + diry * extend_len + side_y * bend_mag * 0.54 + outy * sweep_mag * 1.18),
+                            float(p1[0] + dirx * extend_len + side_x * bend_mag * 0.78 + outx * sweep_mag * 1.22),
+                            float(p1[1] + diry * extend_len + side_y * bend_mag * 0.78 + outy * sweep_mag * 1.22),
                             float(p1[2] - 0.009),
                         ],
                         dtype=float,
@@ -1037,6 +1052,20 @@ def ellipse_xy(
     draw.ellipse((x - rx, y - ry, x + rx, y + ry), fill=fill, outline=outline, width=max(1, int(round(width))))
 
 
+def polygon_xy(
+    draw: ImageDraw.ImageDraw,
+    points: list[np.ndarray],
+    *,
+    fill: tuple[int, int, int, int] | None = None,
+    outline: tuple[int, int, int, int] | None = None,
+    width: int = 1,
+) -> None:
+    xy = [(float(point[0]), float(point[1])) for point in points]
+    draw.polygon(xy, fill=fill, outline=outline)
+    if outline is not None and width > 1:
+        draw.line(xy + [xy[0]], fill=outline, width=max(1, int(round(width))), joint="curve")
+
+
 def soma_body_axes(node: RenderNode) -> tuple[float, float]:
     # The morphologies are normalized independently for layout, so use
     # cell-type-biased target sizes and let the SWC soma radius only nudge
@@ -1046,7 +1075,77 @@ def soma_body_axes(node: RenderNode) -> tuple[float, float]:
     emphasis = SOMA_DISPLAY_EMPHASIS.get(node.cell_type, 1.0)
     relative_size = float(np.clip(node.morph_radius / reference, 0.78, 1.22))
     radius = target * emphasis * relative_size
+    if node.cell_type == "GC":
+        return radius * 0.94, radius * 1.18
+    if node.cell_type == "MC":
+        return radius * 1.02, radius * 1.06
+    if node.cell_type == "TC":
+        return radius * 0.98, radius * 1.02
     return radius, radius
+
+
+def soma_shape_points(node: RenderNode, rx: float, ry: float, scale: float = 1.0) -> list[np.ndarray]:
+    if node.cell_type == "GC":
+        return []
+    if node.cell_type == "MC":
+        control = [
+            np.array([0.00, -1.16]),
+            np.array([0.62, -0.82]),
+            np.array([0.90, -0.12]),
+            np.array([0.70, 0.56]),
+            np.array([0.20, 1.04]),
+            np.array([-0.34, 1.00]),
+            np.array([-0.82, 0.38]),
+            np.array([-0.92, -0.34]),
+            np.array([-0.48, -0.96]),
+        ]
+    else:
+        control = [
+            np.array([0.00, -1.08]),
+            np.array([0.84, -0.54]),
+            np.array([0.96, 0.10]),
+            np.array([0.62, 0.82]),
+            np.array([0.02, 1.02]),
+            np.array([-0.66, 0.76]),
+            np.array([-0.98, 0.00]),
+            np.array([-0.62, -0.78]),
+        ]
+    smoothed = chaikin_closed(control, refinements=2)
+    return [
+        np.array(
+            [
+                node.x + point[0] * rx * scale,
+                node.y + point[1] * ry * scale,
+            ],
+            dtype=float,
+        )
+        for point in smoothed
+    ]
+
+
+def draw_soma_shape(
+    draw: ImageDraw.ImageDraw,
+    node: RenderNode,
+    rx: float,
+    ry: float,
+    *,
+    fill: tuple[int, int, int, int] | None = None,
+    outline: tuple[int, int, int, int] | None = None,
+    width: int = 1,
+    scale: float = 1.0,
+) -> None:
+    if node.cell_type == "GC":
+        ellipse_xy(draw, node.x, node.y, rx * scale, ry * scale, fill=fill, outline=outline, width=width)
+        return
+    polygon_xy(draw, soma_shape_points(node, rx, ry, scale=scale), fill=fill, outline=outline, width=width)
+
+
+def depth_defocus(z: float) -> float:
+    delta = abs(z - DOF_FOCUS_Z)
+    if delta <= DOF_SHARP_ZONE:
+        return 0.0
+    t = float(np.clip((delta - DOF_SHARP_ZONE) / max(1e-6, DOF_FULL_ZONE - DOF_SHARP_ZONE), 0.0, 1.0))
+    return t * t * (3.0 - 2.0 * t)
 
 
 def draw_soft_line(
@@ -1099,8 +1198,13 @@ def render_bounds(
         xs.extend((seg.x0 - pad, seg.x0 + pad, seg.x1 - pad, seg.x1 + pad))
         ys.extend((seg.y0 - pad, seg.y0 + pad, seg.y1 - pad, seg.y1 + pad))
     for node in nodes:
-        xs.extend((node.x - node.radius, node.x + node.radius))
-        ys.extend((node.y - node.radius, node.y + node.radius))
+        if node.soma:
+            rx, ry = soma_body_axes(node)
+            xs.extend((node.x - rx, node.x + rx))
+            ys.extend((node.y - ry, node.y + ry))
+        else:
+            xs.extend((node.x - node.radius, node.x + node.radius))
+            ys.extend((node.y - node.radius, node.y + node.radius))
     if not xs or not ys:
         return 0.0, 0.0, 0.0, 0.0
     return min(xs), min(ys), max(xs), max(ys)
@@ -1155,32 +1259,52 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     shadow_draw = ImageDraw.Draw(shadow, "RGBA")
     base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     base_draw = ImageDraw.Draw(base, "RGBA")
+    depth_soft = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    depth_soft_draw = ImageDraw.Draw(depth_soft, "RGBA")
     soma_shadow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     soma_shadow_draw = ImageDraw.Draw(soma_shadow, "RGBA")
     soma_base = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     soma_draw = ImageDraw.Draw(soma_base, "RGBA")
+    soma_soft = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soma_soft_draw = ImageDraw.Draw(soma_soft, "RGBA")
     for seg in scene.segments:
         depth = np.clip((seg.z + 0.7) / 1.4, 0.0, 1.0)
+        defocus = depth_defocus(seg.z)
         neutral = mix(np.array([174, 188, 197], dtype=float), np.array([24, 38, 47], dtype=float), 0.43 + 0.31 * depth)
         tint = mix(neutral, seg.color, 0.46 + 0.13 * depth)
         if seg.neurite_kind == 2:
             tint = mix(tint, MAROON, 0.24)
         draw_soft_line(shadow_draw, seg, np.array([145, 157, 164], dtype=float), 34 * seg.alpha, seg.width * 3.2)
-        draw_soft_line(base_draw, seg, tint, 178 * seg.alpha * (0.68 + 0.32 * depth), seg.width * 1.05)
-        draw_soft_line(base_draw, seg, np.array([255, 255, 255], dtype=float), 20 * seg.alpha, max(1.0, seg.width * 0.18))
+        draw_soft_line(base_draw, seg, tint, 178 * seg.alpha * (0.68 + 0.32 * depth) * (1.0 - 0.28 * defocus), seg.width * 1.05)
+        draw_soft_line(base_draw, seg, np.array([255, 255, 255], dtype=float), 20 * seg.alpha * (1.0 - 0.38 * defocus), max(1.0, seg.width * 0.18))
+        if defocus > 0.02:
+            draw_soft_line(
+                depth_soft_draw,
+                seg,
+                tint,
+                78 * seg.alpha * defocus,
+                seg.width * (1.16 + 0.54 * defocus),
+            )
     for node in scene.nodes:
         if not node.soma:
             continue
         rx, ry = soma_body_axes(node)
+        defocus = depth_defocus(node.z)
         body = mix(np.array([13, 18, 21], dtype=float), node.color, 0.62)
-        ellipse_xy(soma_shadow_draw, node.x, node.y, rx * 1.34, ry * 1.34, fill=rgba(node.color, 54))
-        ellipse_xy(soma_draw, node.x, node.y, rx, ry, fill=rgba(body, 255))
+        draw_soma_shape(soma_shadow_draw, node, rx, ry, fill=rgba(node.color, 54), scale=1.34)
+        draw_soma_shape(soma_draw, node, rx, ry, fill=rgba(body, 255))
+        if defocus > 0.02:
+            draw_soma_shape(soma_soft_draw, node, rx, ry, fill=rgba(body, 76 * defocus), scale=1.06 + 0.10 * defocus)
     shadow = shadow.filter(ImageFilter.GaussianBlur(radius=2.2 * SUPERSAMPLE))
+    depth_soft = depth_soft.filter(ImageFilter.GaussianBlur(radius=1.25 * SUPERSAMPLE))
     soma_shadow = soma_shadow.filter(ImageFilter.GaussianBlur(radius=5.5 * SUPERSAMPLE))
+    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=1.9 * SUPERSAMPLE))
     image = Image.alpha_composite(image, shadow)
     image = Image.alpha_composite(image, base)
+    image = Image.alpha_composite(image, depth_soft)
     image = Image.alpha_composite(image, soma_shadow)
     image = Image.alpha_composite(image, soma_base)
+    image = Image.alpha_composite(image, soma_soft)
     return image
 
 
@@ -1194,17 +1318,23 @@ def render_frame(
 ) -> Image.Image:
     image = scene.base.copy()
     trace = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    trace_soft = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     bloom = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    active_soft = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     soma_glow = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    soma_soft = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     soma_core = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     spark = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     trace_draw = ImageDraw.Draw(trace, "RGBA")
+    trace_soft_draw = ImageDraw.Draw(trace_soft, "RGBA")
     bloom_draw = ImageDraw.Draw(bloom, "RGBA")
     glow_draw = ImageDraw.Draw(glow, "RGBA")
+    active_soft_draw = ImageDraw.Draw(active_soft, "RGBA")
     core_draw = ImageDraw.Draw(core, "RGBA")
     soma_glow_draw = ImageDraw.Draw(soma_glow, "RGBA")
+    soma_soft_draw = ImageDraw.Draw(soma_soft, "RGBA")
     soma_core_draw = ImageDraw.Draw(soma_core, "RGBA")
     spark_draw = ImageDraw.Draw(spark, "RGBA")
     if mode == "single_arbor_signal":
@@ -1219,6 +1349,7 @@ def render_frame(
 
     for seg in scene.segments:
         is_axon = seg.neurite_kind == 2
+        defocus = depth_defocus(seg.z)
         segment_phase_ms = seg.branch_phase_ms + (AXON_EMISSION_DELAY_MS if is_axon else 0.0)
         segment_gain = seg.branch_gain * (AXON_PACKET_GAIN if is_axon else 1.0)
         pulse_tint = mix(pulse_color, seg.color, 0.45)
@@ -1247,9 +1378,17 @@ def render_frame(
                 trace_draw,
                 seg,
                 trace_tint,
-                (68 if is_axon else 54) * seg.alpha * memory,
+                (68 if is_axon else 54) * seg.alpha * memory * (1.0 - 0.14 * defocus),
                 seg.width * ((1.62 if is_axon else 1.20) + (1.04 if is_axon else 0.86) * memory),
             )
+            if defocus > 0.02:
+                draw_soft_line(
+                    trace_soft_draw,
+                    seg,
+                    trace_tint,
+                    (26 if is_axon else 20) * seg.alpha * memory * defocus,
+                    seg.width * ((1.84 if is_axon else 1.42) + (1.10 if is_axon else 0.94) * memory + 0.16 * defocus),
+                )
         active = packet_activity(
             seg.activity_profile,
             loop_ms,
@@ -1268,8 +1407,8 @@ def render_frame(
                 bloom_draw,
                 seg,
                 bloom_tint,
-                (96 if is_axon else 76) * active,
-                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active),
+                (96 if is_axon else 76) * active * (1.0 - 0.08 * defocus),
+                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active) * (1.0 + 0.10 * defocus),
                 active,
                 0.32 if is_axon else 0.22,
             )
@@ -1277,16 +1416,26 @@ def render_frame(
             glow_draw,
             seg,
             brighten(pulse_tint, 1.18, 3.0),
-            (148 if is_axon else 116) * active,
-            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active),
+            (148 if is_axon else 116) * active * (1.0 - 0.14 * defocus),
+            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active) * (1.0 + 0.14 * defocus),
             active,
             0.22 if is_axon else 0.14,
         )
+        if defocus > 0.02:
+            draw_packet_line(
+                active_soft_draw,
+                seg,
+                core_tint,
+                (44 if is_axon else 34) * active * defocus,
+                seg.width * ((4.6 if is_axon else 3.7) + (1.8 if is_axon else 1.4) * active + 0.18 * defocus),
+                active,
+                0.18 if is_axon else 0.10,
+            )
         draw_packet_line(
             core_draw,
             seg,
             core_tint,
-            (246 if is_axon else 238) * active,
+            (246 if is_axon else 238) * active * (1.0 - 0.24 * defocus),
             seg.width * ((2.55 if is_axon else 1.88) + (1.20 if is_axon else 0.95) * active),
             active,
             0.14 if is_axon else 0.04,
@@ -1297,7 +1446,7 @@ def render_frame(
                 core_draw,
                 seg,
                 WHITE,
-                (214 if is_axon else 192) * highlight,
+                (214 if is_axon else 192) * highlight * (1.0 - 0.18 * defocus),
                 max(1.0, seg.width * ((0.68 if is_axon else 0.48) + (0.28 if is_axon else 0.24) * highlight)),
                 active,
                 0.10 if is_axon else 0.0,
@@ -1309,7 +1458,7 @@ def render_frame(
                 spark_draw,
                 seg,
                 WHITE,
-                (230 if is_axon else 212) * hot,
+                (230 if is_axon else 212) * hot * (1.0 - 0.16 * defocus),
                 max(1.0, seg.width * ((0.56 if is_axon else 0.34) + (0.28 if is_axon else 0.18) * hot)),
                 active,
                 0.12 if is_axon else 0.0,
@@ -1319,17 +1468,22 @@ def render_frame(
                 0.5 * (seg.x0 + seg.x1),
                 0.5 * (seg.y0 + seg.y1),
                 seg.width * ((0.82 if is_axon else 0.58) + (0.68 if is_axon else 0.54) * hot),
-                rgba(WHITE, (170 if is_axon else 150) * hot),
+                rgba(WHITE, (170 if is_axon else 150) * hot * (1.0 - 0.14 * defocus)),
             )
 
     image = Image.alpha_composite(image, trace)
+    trace_soft = trace_soft.filter(ImageFilter.GaussianBlur(radius=1.10 * SUPERSAMPLE))
     bloom = bloom.filter(ImageFilter.GaussianBlur(radius=8.3 * SUPERSAMPLE))
     glow = glow.filter(ImageFilter.GaussianBlur(radius=4.2 * SUPERSAMPLE))
+    active_soft = active_soft.filter(ImageFilter.GaussianBlur(radius=1.50 * SUPERSAMPLE))
+    image = Image.alpha_composite(image, trace_soft)
     image = Image.alpha_composite(image, bloom)
     image = Image.alpha_composite(image, glow)
+    image = Image.alpha_composite(image, active_soft)
     image = Image.alpha_composite(image, core)
 
     for node in scene.nodes:
+        defocus = depth_defocus(node.z)
         node_active = packet_activity(
             node.activity_profile,
             loop_ms,
@@ -1344,7 +1498,13 @@ def render_frame(
         soma_flash = min(1.0, soma_flash ** 0.66)
         if terminal_flash:
             r = node.radius * (1.5 + 2.6 * terminal_flash)
-            ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash))
+            ellipse(
+                spark_draw,
+                node.x,
+                node.y,
+                r,
+                rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash * (1.0 - 0.12 * defocus)),
+            )
         if node.soma:
             delayed_voltage = min(1.0, delayed_profile_value(node.activity_profile, loop_ms, SOMA_RESPONSE_DELAY_MS) ** 0.92)
             soma_spike = min(1.0, packet_activity(node.activity_profile, loop_ms, 0.0, 1.0, SOMA_RESPONSE_DELAY_MS, 1.0) ** 0.50)
@@ -1362,27 +1522,38 @@ def render_frame(
             body_tint = mix(np.array([15, 20, 23], dtype=float), node.color, 0.34 + 0.22 * delayed_voltage)
             disc_tint = mix(body_tint, voltage_tint, 0.14 + 0.74 * soma_level)
             disc_tint = mix(disc_tint, np.array([7, 9, 10], dtype=float), min(0.34, 0.30 * afterhyper))
-            ellipse_xy(
+            draw_soma_shape(
                 soma_glow_draw,
-                node.x,
-                node.y,
-                rx * (1.18 + 0.34 * soma_spike),
-                ry * (1.18 + 0.34 * soma_spike),
-                fill=rgba(voltage_tint, 18 + 110 * soma_spike),
+                node,
+                rx,
+                ry,
+                fill=rgba(voltage_tint, (18 + 110 * soma_spike) * (1.0 - 0.14 * defocus)),
+                scale=1.18 + 0.34 * soma_spike,
             )
-            ellipse_xy(
+            if defocus > 0.02 and soma_level > 0.02:
+                draw_soma_shape(
+                    soma_soft_draw,
+                    node,
+                    rx,
+                    ry,
+                    fill=rgba(voltage_tint, (26 + 48 * soma_level) * defocus),
+                    scale=1.04 + 0.10 * defocus + 0.08 * soma_spike,
+                )
+            draw_soma_shape(
                 soma_core_draw,
-                node.x,
-                node.y,
-                rx * (0.98 + 0.06 * soma_spike),
-                ry * (0.98 + 0.06 * soma_spike),
-                fill=rgba(disc_tint, 255),
+                node,
+                rx,
+                ry,
+                fill=rgba(disc_tint, 252 - 26 * defocus),
+                scale=0.98 + 0.06 * soma_spike,
             )
             if soma_spike > 0.46:
                 hot = (soma_spike - 0.46) / 0.54
-                ellipse_xy(spark_draw, node.x, node.y, rx * 0.52, ry * 0.52, fill=rgba(WHITE, 72 * hot))
+                draw_soma_shape(spark_draw, node, rx, ry, fill=rgba(WHITE, 72 * hot * (1.0 - 0.14 * defocus)), scale=0.52)
     soma_glow = soma_glow.filter(ImageFilter.GaussianBlur(radius=4.0 * SUPERSAMPLE))
+    soma_soft = soma_soft.filter(ImageFilter.GaussianBlur(radius=1.75 * SUPERSAMPLE))
     image = Image.alpha_composite(image, soma_glow)
+    image = Image.alpha_composite(image, soma_soft)
     image = Image.alpha_composite(image, soma_core)
     spark = spark.filter(ImageFilter.GaussianBlur(radius=0.55 * SUPERSAMPLE))
     image = Image.alpha_composite(image, spark)
