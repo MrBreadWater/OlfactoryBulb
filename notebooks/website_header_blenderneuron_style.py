@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v14"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v15"
 DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
 WIDTH = 2280
 HEIGHT = 720
@@ -29,6 +29,12 @@ ACTIVITY_PACKET_SIGMA_MS = 2.85
 BRANCH_EVENT_PROFILE_BINS = 400
 ACTIVITY_TRACE_WINDOW_MS = 104.0
 ACTIVITY_TRACE_TAU_MS = 58.0
+SOMA_RESPONSE_DELAY_MS = 7.5
+SOMA_AFTERHYPERPOLARIZATION_DELAY_MS = 5.5
+SOMA_AFTERHYPERPOLARIZATION_WINDOW_MS = 30.0
+SOMA_AFTERHYPERPOLARIZATION_TAU_MS = 9.5
+AXON_EMISSION_DELAY_MS = 10.5
+AXON_PACKET_GAIN = 1.28
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
 # the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
@@ -551,6 +557,29 @@ def profile_value(profile: ActivityProfile | None, loop_ms: float) -> float:
     return float((1.0 - frac) * profile.values[idx0] + frac * profile.values[idx1])
 
 
+def delayed_profile_value(profile: ActivityProfile | None, loop_ms: float, delay_ms: float) -> float:
+    return profile_value(profile, loop_ms - delay_ms)
+
+
+def event_decay_activity(
+    profile: ActivityProfile | None,
+    loop_ms: float,
+    *,
+    delay_ms: float,
+    window_ms: float,
+    tau_ms: float,
+    gain: float = 1.0,
+) -> float:
+    if profile is None or not profile.event_phases_ms:
+        return 0.0
+    best = 0.0
+    for event_ms, strength in zip(profile.event_phases_ms, profile.event_strengths):
+        elapsed_ms = circular_time_delta_ms(loop_ms, event_ms + delay_ms)
+        if 0.0 <= elapsed_ms <= window_ms:
+            best = max(best, strength * gain * math.exp(-elapsed_ms / tau_ms))
+    return min(1.0, best)
+
+
 def trace_activity(
     profile: ActivityProfile | None,
     loop_ms: float,
@@ -765,6 +794,15 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
         morph = item.morphology
         coords = normalized_coords(morph)
         branch_for = primary_branch_ids(morph)
+        axon_distance_scale = max(
+            (
+                morph.distances[node_id]
+                for node_id, node in morph.nodes.items()
+                if node.kind == 2
+            ),
+            default=morph.max_distance,
+        )
+        axon_distance_scale = max(axon_distance_scale, 1e-6)
         matrix = rotation_matrix(item.yaw, item.pitch, item.roll)
         projected: dict[int, np.ndarray] = {}
         for node_id, xyz in coords.items():
@@ -793,8 +831,9 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
             p1 = projected[node_id]
             parent_node = morph.nodes[parent_id]
             radius = 0.5 * (node.radius + parent_node.radius)
-            dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / morph.max_distance
             kind = segment_kind(node, parent_node)
+            distance_scale = axon_distance_scale if kind == 2 else morph.max_distance
+            dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / distance_scale
             branch_id = branch_for.get(node_id, node_id)
             base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
             activity_profile, route_phase_ms, route_gain = choose_branch_activity(
@@ -824,6 +863,36 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     branch_gain=base_gain * route_gain,
                 )
             )
+            if kind == 2 and not morph.children.get(node_id):
+                dx = float(p1[0] - p0[0])
+                dy = float(p1[1] - p0[1])
+                seg_len = math.hypot(dx, dy)
+                if seg_len > 1e-6:
+                    extend_len = max(seg_len * 4.8, item.scale * width * 0.058)
+                    extend_len = min(extend_len, item.scale * width * 0.12)
+                    ux = dx / seg_len
+                    uy = dy / seg_len
+                    x2 = float(p1[0] + ux * extend_len)
+                    y2 = float(p1[1] + uy * extend_len)
+                    segments.append(
+                        RenderSegment(
+                            x0=float(p1[0]),
+                            y0=float(p1[1]),
+                            x1=x2,
+                            y1=y2,
+                            z=float(p1[2] - 0.004),
+                            width=float(width_px * 0.82),
+                            distance=float(min(1.0, (dist + 0.22 + item.distance_offset) % 1.0)),
+                            color=item.color,
+                            alpha=item.alpha * 0.96,
+                            cell_type=morph.cell_type,
+                            neurite_kind=2,
+                            flow_direction=1.0,
+                            activity_profile=activity_profile,
+                            branch_phase_ms=base_phase_ms + route_phase_ms,
+                            branch_gain=base_gain * route_gain * 1.06,
+                        )
+                    )
 
         for node_id, node in morph.nodes.items():
             p = projected[node_id]
@@ -835,6 +904,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                 node_kind = segment_kind(child, node)
             else:
                 node_kind = node.kind
+            distance_scale = axon_distance_scale if node_kind == 2 else morph.max_distance
             branch_id = branch_for.get(node_id, node_id)
             base_phase_ms, base_gain = branch_timing(morph, branch_id, item.distance_offset)
             if node_id == morph.root_id or node.kind == 1:
@@ -855,7 +925,7 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     y=float(p[1]),
                     z=float(p[2]),
                     radius=float(max(1.4, item.width_scale * (1.0 + 0.55 * math.sqrt(node.radius)))),
-                    distance=float((morph.distances[node_id] / morph.max_distance + item.distance_offset) % 1.0),
+                    distance=float((morph.distances[node_id] / distance_scale + item.distance_offset) % 1.0),
                     color=item.color,
                     cell_type=morph.cell_type,
                     terminal=degree <= 1,
@@ -1067,62 +1137,108 @@ def render_frame(
     loop_ms = phase * ACTIVITY_PERIOD_MS
 
     for seg in scene.segments:
+        is_axon = seg.neurite_kind == 2
+        segment_phase_ms = seg.branch_phase_ms + (AXON_EMISSION_DELAY_MS if is_axon else 0.0)
+        segment_gain = seg.branch_gain * (AXON_PACKET_GAIN if is_axon else 1.0)
         pulse_tint = mix(pulse_color, seg.color, 0.45)
-        if seg.neurite_kind == 2:
-            pulse_tint = mix(MAROON, seg.color, 0.22)
+        if is_axon:
+            pulse_tint = mix(mix(MAROON, GOLD, 0.54), WHITE, 0.18)
         if mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "MC":
             pulse_tint = mix(MAROON, GOLD, 0.32)
         elif mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "TC":
             pulse_tint = GOLD
         elif mode in ("dense_microcircuit", "layered_exchange"):
             pulse_tint = mix(TEAL, GREEN, 0.22)
+        if is_axon:
+            pulse_tint = mix(pulse_tint, WHITE, 0.16)
         memory = trace_activity(
             seg.activity_profile,
             loop_ms,
             seg.distance,
             seg.flow_direction,
-            seg.branch_phase_ms,
-            seg.branch_gain,
+            segment_phase_ms,
+            segment_gain,
         )
-        memory = min(1.0, memory ** 0.72)
-        if memory > 0.040:
+        memory = min(1.0, memory ** (0.62 if is_axon else 0.72) * (1.16 if is_axon else 1.0))
+        if memory > (0.028 if is_axon else 0.040):
             trace_tint = mix(pulse_tint, np.array([92, 104, 108], dtype=float), 0.40)
             draw_soft_line(
                 trace_draw,
                 seg,
                 trace_tint,
-                54 * seg.alpha * memory,
-                seg.width * (1.20 + 0.86 * memory),
+                (68 if is_axon else 54) * seg.alpha * memory,
+                seg.width * ((1.62 if is_axon else 1.20) + (1.04 if is_axon else 0.86) * memory),
             )
         active = packet_activity(
             seg.activity_profile,
             loop_ms,
             seg.distance,
             seg.flow_direction,
-            seg.branch_phase_ms,
-            seg.branch_gain,
+            segment_phase_ms,
+            segment_gain,
         )
-        active = min(1.0, active ** 0.64)
-        if active < 0.045:
+        active = min(1.0, active ** (0.54 if is_axon else 0.64) * (1.18 if is_axon else 1.0))
+        if active < (0.022 if is_axon else 0.045):
             continue
         bloom_tint = brighten(pulse_tint, 1.38, 5.0)
         core_tint = mix(pulse_tint, brighten(pulse_tint, 1.55, 12.0), min(0.72, 0.24 + 0.42 * active))
         if active > 0.10:
-            draw_packet_line(bloom_draw, seg, bloom_tint, 76 * active, seg.width * (12.0 + 4.2 * active), active, 0.22)
-        draw_packet_line(glow_draw, seg, brighten(pulse_tint, 1.18, 3.0), 116 * active, seg.width * (6.8 + 2.2 * active), active, 0.14)
-        draw_packet_line(core_draw, seg, core_tint, 238 * active, seg.width * (1.88 + 0.95 * active), active, 0.04)
+            draw_packet_line(
+                bloom_draw,
+                seg,
+                bloom_tint,
+                (96 if is_axon else 76) * active,
+                seg.width * ((14.8 if is_axon else 12.0) + (5.0 if is_axon else 4.2) * active),
+                active,
+                0.32 if is_axon else 0.22,
+            )
+        draw_packet_line(
+            glow_draw,
+            seg,
+            brighten(pulse_tint, 1.18, 3.0),
+            (148 if is_axon else 116) * active,
+            seg.width * ((8.8 if is_axon else 6.8) + (2.8 if is_axon else 2.2) * active),
+            active,
+            0.22 if is_axon else 0.14,
+        )
+        draw_packet_line(
+            core_draw,
+            seg,
+            core_tint,
+            (246 if is_axon else 238) * active,
+            seg.width * ((2.55 if is_axon else 1.88) + (1.20 if is_axon else 0.95) * active),
+            active,
+            0.14 if is_axon else 0.04,
+        )
         if active > 0.62:
             highlight = (active - 0.62) / 0.38
-            draw_packet_line(core_draw, seg, WHITE, 192 * highlight, max(1.0, seg.width * (0.48 + 0.24 * highlight)), active)
-        if active > 0.80:
-            hot = (active - 0.80) / 0.20
-            draw_packet_line(spark_draw, seg, WHITE, 212 * hot, max(1.0, seg.width * (0.34 + 0.18 * hot)), active)
+            draw_packet_line(
+                core_draw,
+                seg,
+                WHITE,
+                (214 if is_axon else 192) * highlight,
+                max(1.0, seg.width * ((0.68 if is_axon else 0.48) + (0.28 if is_axon else 0.24) * highlight)),
+                active,
+                0.10 if is_axon else 0.0,
+            )
+        if active > (0.68 if is_axon else 0.80):
+            hot_floor = 0.68 if is_axon else 0.80
+            hot = (active - hot_floor) / (1.0 - hot_floor)
+            draw_packet_line(
+                spark_draw,
+                seg,
+                WHITE,
+                (230 if is_axon else 212) * hot,
+                max(1.0, seg.width * ((0.56 if is_axon else 0.34) + (0.28 if is_axon else 0.18) * hot)),
+                active,
+                0.12 if is_axon else 0.0,
+            )
             ellipse(
                 spark_draw,
                 0.5 * (seg.x0 + seg.x1),
                 0.5 * (seg.y0 + seg.y1),
-                seg.width * (0.58 + 0.54 * hot),
-                rgba(WHITE, 150 * hot),
+                seg.width * ((0.82 if is_axon else 0.58) + (0.68 if is_axon else 0.54) * hot),
+                rgba(WHITE, (170 if is_axon else 150) * hot),
             )
 
     image = Image.alpha_composite(image, trace)
@@ -1149,31 +1265,41 @@ def render_frame(
             r = node.radius * (1.5 + 2.6 * terminal_flash)
             ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash))
         if node.soma:
-            voltage = min(1.0, profile_value(node.activity_profile, loop_ms) ** 0.76)
-            soma_level = max(voltage, soma_flash * 0.88)
+            delayed_voltage = min(1.0, delayed_profile_value(node.activity_profile, loop_ms, SOMA_RESPONSE_DELAY_MS) ** 0.92)
+            soma_spike = min(1.0, packet_activity(node.activity_profile, loop_ms, 0.0, 1.0, SOMA_RESPONSE_DELAY_MS, 1.0) ** 0.50)
+            afterhyper = event_decay_activity(
+                node.activity_profile,
+                loop_ms,
+                delay_ms=SOMA_RESPONSE_DELAY_MS + SOMA_AFTERHYPERPOLARIZATION_DELAY_MS,
+                window_ms=SOMA_AFTERHYPERPOLARIZATION_WINDOW_MS,
+                tau_ms=SOMA_AFTERHYPERPOLARIZATION_TAU_MS,
+                gain=1.0,
+            )
+            soma_level = np.clip(0.08 + 0.22 * delayed_voltage + 1.02 * soma_spike - 0.24 * afterhyper, 0.0, 1.0)
             rx, ry = soma_body_axes(node)
-            voltage_tint = mix(node.color, WHITE, 0.18 + 0.46 * soma_level)
-            body_tint = mix(np.array([19, 25, 29], dtype=float), node.color, 0.48 + 0.24 * soma_level)
-            disc_tint = mix(body_tint, voltage_tint, 0.22 + 0.46 * soma_level)
+            voltage_tint = mix(node.color, WHITE, 0.16 + 0.62 * soma_spike)
+            body_tint = mix(np.array([15, 20, 23], dtype=float), node.color, 0.34 + 0.22 * delayed_voltage)
+            disc_tint = mix(body_tint, voltage_tint, 0.14 + 0.74 * soma_level)
+            disc_tint = mix(disc_tint, np.array([7, 9, 10], dtype=float), min(0.34, 0.30 * afterhyper))
             ellipse_xy(
                 soma_glow_draw,
                 node.x,
                 node.y,
-                rx * (1.30 + 0.30 * soma_level),
-                ry * (1.30 + 0.30 * soma_level),
-                fill=rgba(voltage_tint, 28 + 70 * soma_level),
+                rx * (1.18 + 0.34 * soma_spike),
+                ry * (1.18 + 0.34 * soma_spike),
+                fill=rgba(voltage_tint, 18 + 110 * soma_spike),
             )
             ellipse_xy(
                 soma_core_draw,
                 node.x,
                 node.y,
-                rx * (0.98 + 0.04 * soma_level),
-                ry * (0.98 + 0.04 * soma_level),
-                fill=rgba(disc_tint, 86 + 118 * soma_level),
+                rx * (0.98 + 0.06 * soma_spike),
+                ry * (0.98 + 0.06 * soma_spike),
+                fill=rgba(disc_tint, 62 + 156 * soma_level),
             )
-            if soma_level > 0.58:
-                hot = (soma_level - 0.58) / 0.42
-                ellipse_xy(spark_draw, node.x, node.y, rx * 0.56, ry * 0.56, fill=rgba(WHITE, 58 * hot))
+            if soma_spike > 0.46:
+                hot = (soma_spike - 0.46) / 0.54
+                ellipse_xy(spark_draw, node.x, node.y, rx * 0.52, ry * 0.52, fill=rgba(WHITE, 72 * hot))
     soma_glow = soma_glow.filter(ImageFilter.GaussianBlur(radius=4.0 * SUPERSAMPLE))
     image = Image.alpha_composite(image, soma_glow)
     image = Image.alpha_composite(image, soma_core)
