@@ -70,6 +70,7 @@ else:
     )
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
+from scipy.ndimage import gaussian_filter
 from scipy.signal import butter, filtfilt, hilbert, lfilter, spectrogram, welch
 from scipy.stats import gaussian_kde
 from modify_model import (
@@ -239,6 +240,7 @@ class FrequencyPlotConfig:
     kde_bw_method: str | float = "scott"
     kde_bw_x: float = 0.15
     kde_bw_y: float = 0.2
+    kde2d_engine: str = "histogram"
     kde_resolution_t: int = 100
     kde_resolution_f: int = 100
     kde_f_resolution: int = 1600
@@ -8387,6 +8389,9 @@ def _plot_frequency_kde_2d_from_samples(
     ax = ax or plt.subplots(figsize=(14, 8))[1]
     times = np.asarray(times, dtype=float)
     freqs = np.asarray(freqs, dtype=float)
+    finite = np.isfinite(times) & np.isfinite(freqs)
+    times = times[finite]
+    freqs = freqs[finite]
     if len(times) < 2 or len(freqs) < 2:
         ax.text(0.5, 0.5, "Not enough frequency samples", ha="center", va="center", transform=ax.transAxes)
         ax.set_title(title)
@@ -8395,20 +8400,38 @@ def _plot_frequency_kde_2d_from_samples(
         ax.set_ylim(0, float(config.max_freq_hz))
         return ax
 
-    kernel = gaussian_kde(np.vstack([times, freqs]), bw_method=config.kde_bw_method)
-    _apply_frequency_kde_xy_scale(kernel, config.kde_bw_x, config.kde_bw_y)
-
     tstop = float(np.max(times))
-    t_grid = np.linspace(0.0, tstop, int(config.kde_resolution_t))
-    f_grid = np.linspace(0.0, float(config.max_freq_hz), int(config.kde_resolution_f))
-    t_mesh, f_mesh = np.meshgrid(t_grid, f_grid)
-    positions = np.vstack([t_mesh.ravel(), f_mesh.ravel()])
-    density = np.reshape(kernel(positions).T, t_mesh.shape)
+    max_freq_hz = float(config.max_freq_hz)
+    engine = str(getattr(config, "kde2d_engine", "histogram")).strip().lower()
+    if engine in {"exact", "gaussian", "gaussian_kde", "scipy"}:
+        kernel = gaussian_kde(np.vstack([times, freqs]), bw_method=config.kde_bw_method)
+        _apply_frequency_kde_xy_scale(kernel, config.kde_bw_x, config.kde_bw_y)
+        t_grid = np.linspace(0.0, tstop, int(config.kde_resolution_t))
+        f_grid = np.linspace(0.0, max_freq_hz, int(config.kde_resolution_f))
+        t_mesh, f_mesh = np.meshgrid(t_grid, f_grid)
+        positions = np.vstack([t_mesh.ravel(), f_mesh.ravel()])
+        density = np.reshape(kernel(positions).T, t_mesh.shape)
+    else:
+        # Exact gaussian_kde is O(samples * grid) per frame and is too slow for
+        # large sweeps. A smoothed 2D histogram preserves the sweep-level visual
+        # signal while scaling linearly in sample count plus grid size.
+        mask = (times >= 0.0) & (freqs >= 0.0) & (freqs <= max_freq_hz)
+        times = times[mask]
+        freqs = freqs[mask]
+        density, _t_edges, _f_edges = np.histogram2d(
+            times,
+            freqs,
+            bins=(int(config.kde_resolution_t), int(config.kde_resolution_f)),
+            range=((0.0, tstop), (0.0, max_freq_hz)),
+        )
+        sigma_t = max(0.0, float(config.kde_bw_x) * 6.0)
+        sigma_f = max(0.0, float(config.kde_bw_y) * 6.0)
+        density = gaussian_filter(density.T, sigma=(sigma_f, sigma_t), mode="nearest")
 
     im = ax.imshow(
         density,
         origin="lower",
-        extent=[0, tstop, 0, float(config.max_freq_hz)],
+        extent=[0, tstop, 0, max_freq_hz],
         aspect="auto",
         cmap=config.kde_cmap,
         interpolation="bilinear",
