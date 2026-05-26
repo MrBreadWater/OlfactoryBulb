@@ -11010,6 +11010,8 @@ def save_sweep_animation_stream(
 
         duration_ms = max(int(interval), 1)
         with open(gif_path, "wb") as handle:
+            import gc as _gc
+
             for frame_rgb, title in _iter_sweep_animation_frames(
                 sweep,
                 plot_fn,
@@ -11028,6 +11030,8 @@ def save_sweep_animation_stream(
                 for chunk in GifImagePlugin.getdata(gif_frame, duration=duration_ms):
                     handle.write(chunk)
                 frame_count += 1
+                if frame_count % 16 == 0:
+                    _gc.collect()
             handle.write(b";")
     finally:
         plt.close(display_fig)
