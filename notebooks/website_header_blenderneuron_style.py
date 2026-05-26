@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import argparse
 import math
-import pickle
-import re
 from dataclasses import dataclass, replace
-from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
@@ -14,20 +11,14 @@ from PIL import Image, ImageDraw, ImageFilter
 
 
 REPO = Path("/home/alek/OlfactoryBulb")
-DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v8"
-DEFAULT_ACTIVITY_RUN = REPO / "results/notebook_runs/obgpu_experiment_GammaSignature_fast_20260520_035424"
+DEFAULT_OUTPUT_DIR = REPO / "media/website_header_blenderneuron_style_v9"
 WIDTH = 2280
 HEIGHT = 720
 SUPERSAMPLE = 2
 GIF_COLORS = 144
 VERTICAL_FOREGROUND_SCALE = 1.20
-ACTIVITY_PERIOD_MS = 200.0
-ACTIVITY_PROFILE_BINS = 400
-ACTIVITY_SKIP_MS = 400.0
-ACTIVITY_PROPAGATION_DELAY_MS = 52.0
-ACTIVITY_PACKET_SIGMA_MS = 4.8
 # ICON site cues: ASU maroon/gold accents plus cyan/green activity from
-# the existing header, on the dark header background.
+# the existing header; keep the background true black.
 INK = np.array([0, 0, 0], dtype=float)
 MAROON = np.array([140, 29, 64], dtype=float)
 GOLD = np.array([241, 161, 67], dtype=float)
@@ -64,17 +55,6 @@ class Morphology:
 
 
 @dataclass(frozen=True)
-class ActivityProfile:
-    label: str
-    cell_type: str
-    values: np.ndarray
-    event_phases_ms: tuple[float, ...]
-    event_strengths: tuple[float, ...]
-    peak_phase_ms: float
-    score: float
-
-
-@dataclass(frozen=True)
 class PlacedMorph:
     morphology: Morphology
     center: tuple[float, float]
@@ -88,7 +68,6 @@ class PlacedMorph:
     distance_offset: float = 0.0
     z_bias: float = 0.0
     contact_points: tuple[tuple[float, float, float], ...] = ()
-    activity_profile: ActivityProfile | None = None
 
 
 @dataclass(frozen=True)
@@ -105,9 +84,6 @@ class RenderSegment:
     cell_type: str
     neurite_kind: int
     flow_direction: float
-    activity_profile: ActivityProfile | None
-    branch_phase_ms: float
-    branch_gain: float
 
 
 @dataclass(frozen=True)
@@ -121,11 +97,6 @@ class RenderNode:
     cell_type: str
     terminal: bool
     soma: bool
-    neurite_kind: int
-    flow_direction: float
-    activity_profile: ActivityProfile | None
-    branch_phase_ms: float
-    branch_gain: float
 
 
 @dataclass
@@ -196,226 +167,6 @@ def load_morphology(name: str, cell_type: str, path: str | Path) -> Morphology:
     return Morphology(name, cell_type, nodes, children, root_id, distances, max(max_distance, 1e-6))
 
 
-def circular_gaussian(values: np.ndarray, sigma_bins: float) -> np.ndarray:
-    if sigma_bins <= 0:
-        return values.astype(float, copy=True)
-    radius = max(1, int(math.ceil(4.0 * sigma_bins)))
-    offsets = np.arange(-radius, radius + 1)
-    kernel = np.exp(-(offsets * offsets) / (2.0 * sigma_bins * sigma_bins))
-    kernel /= np.sum(kernel)
-    smoothed = np.zeros_like(values, dtype=float)
-    for weight, offset in zip(kernel, offsets):
-        smoothed += float(weight) * np.roll(values, int(offset))
-    return smoothed
-
-
-def normalized_profile(values: np.ndarray, low_pct: float = 15.0, high_pct: float = 99.0) -> tuple[np.ndarray, float]:
-    values = np.nan_to_num(values.astype(float, copy=False), nan=0.0, posinf=0.0, neginf=0.0)
-    low = float(np.percentile(values, low_pct))
-    high = float(np.percentile(values, high_pct))
-    spread = max(high - low, 1e-9)
-    return np.clip((values - low) / spread, 0.0, 1.0), spread
-
-
-def cell_type_from_label(label: str) -> str:
-    match = re.match(r"([A-Z]+)", label)
-    return match.group(1) if match else "UNK"
-
-
-def circular_phase_distance(a_ms: float, b_ms: float, period_ms: float = ACTIVITY_PERIOD_MS) -> float:
-    return abs(((a_ms - b_ms + 0.5 * period_ms) % period_ms) - 0.5 * period_ms)
-
-
-def profile_events(values: np.ndarray, period_ms: float, max_events: int = 3) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    threshold = max(0.36, float(np.percentile(values, 82.0)))
-    candidates: list[tuple[float, float]] = []
-    for idx, value in enumerate(values):
-        prev_value = values[(idx - 1) % values.size]
-        next_value = values[(idx + 1) % values.size]
-        if value >= threshold and value >= prev_value and value >= next_value:
-            phase_ms = idx / values.size * period_ms
-            candidates.append((phase_ms, float(value)))
-    if not candidates:
-        peak_idx = int(np.argmax(values))
-        candidates.append((peak_idx / values.size * period_ms, float(values[peak_idx])))
-
-    chosen: list[tuple[float, float]] = []
-    for phase_ms, strength in sorted(candidates, key=lambda item: item[1], reverse=True):
-        if all(circular_phase_distance(phase_ms, other_phase, period_ms) >= 18.0 for other_phase, _ in chosen):
-            chosen.append((phase_ms, strength))
-        if len(chosen) >= max_events:
-            break
-    chosen.sort(key=lambda item: item[0])
-    phases = tuple(phase for phase, _ in chosen)
-    strengths = tuple(max(0.34, min(1.0, strength)) for _, strength in chosen)
-    return phases, strengths
-
-
-def fold_trace_activity(
-    label: str,
-    trace_index: int,
-    times: Iterable[float],
-    volts: Iterable[float],
-    *,
-    period_ms: float,
-    bins: int,
-) -> ActivityProfile | None:
-    t = np.asarray(times, dtype=np.float32)
-    v = np.asarray(volts, dtype=np.float32)
-    finite = np.isfinite(t) & np.isfinite(v)
-    if int(np.count_nonzero(finite)) < 16:
-        return None
-
-    t = t[finite]
-    v = v[finite]
-    start_ms = min(float(t[0]) + ACTIVITY_SKIP_MS, max(float(t[0]), float(t[-1]) - period_ms))
-    mask = t >= start_ms
-    if int(np.count_nonzero(mask)) < bins:
-        mask = t >= float(t[0])
-    folded_t = t[mask]
-    folded_v = v[mask]
-    if folded_t.size < bins:
-        return None
-
-    phases = np.mod(folded_t, period_ms)
-    bin_idx = np.floor(phases / period_ms * bins).astype(np.int32) % bins
-
-    rest = float(np.percentile(folded_v, 15.0))
-    ceiling = float(np.percentile(folded_v, 99.4))
-    depol = np.clip((folded_v - rest) / max(ceiling - rest, 1e-6), 0.0, 1.0)
-    sums = np.bincount(bin_idx, weights=depol, minlength=bins)
-    counts = np.bincount(bin_idx, minlength=bins)
-    depol_profile = sums / np.maximum(counts, 1)
-    depol_profile = circular_gaussian(depol_profile, sigma_bins=bins * 3.2 / period_ms)
-    depol_norm, depol_spread = normalized_profile(depol_profile)
-
-    crossings = np.where((v[:-1] < -20.0) & (v[1:] >= -20.0))[0] + 1
-    spike_times = t[crossings]
-    spike_times = spike_times[spike_times >= start_ms]
-    spike_hist = np.zeros(bins, dtype=float)
-    if spike_times.size:
-        spike_phase = np.mod(spike_times, period_ms)
-        spike_idx = np.floor(spike_phase / period_ms * bins).astype(np.int32) % bins
-        spike_hist = np.bincount(spike_idx, minlength=bins).astype(float)
-        spike_hist = circular_gaussian(spike_hist, sigma_bins=bins * 4.8 / period_ms)
-    spike_norm, spike_spread = normalized_profile(spike_hist)
-
-    spike_weight = 0.0 if spike_times.size == 0 else 0.48
-    activity = (1.0 - spike_weight) * depol_norm + spike_weight * spike_norm
-    activity = circular_gaussian(activity, sigma_bins=bins * 1.4 / period_ms)
-    activity, _ = normalized_profile(activity, low_pct=8.0, high_pct=99.2)
-    activity = np.clip(activity, 0.0, 1.0) ** 0.82
-
-    cycles = max((float(folded_t[-1]) - float(folded_t[0])) / period_ms, 1.0)
-    spike_rate = float(spike_times.size) / cycles
-    score = depol_spread + 0.14 * min(spike_rate, 2.5) + 0.05 * min(spike_spread, 1.0)
-    peak_phase_ms = float(np.argmax(activity)) / bins * period_ms
-    event_phases_ms, event_strengths = profile_events(activity, period_ms)
-    unique_label = f"{label} #{trace_index:03d}"
-    return ActivityProfile(
-        unique_label,
-        cell_type_from_label(label),
-        activity,
-        event_phases_ms,
-        event_strengths,
-        peak_phase_ms,
-        float(score),
-    )
-
-
-@lru_cache(maxsize=4)
-def load_activity_profiles(
-    run_dir: str = str(DEFAULT_ACTIVITY_RUN),
-    period_ms: float = ACTIVITY_PERIOD_MS,
-    bins: int = ACTIVITY_PROFILE_BINS,
-) -> tuple[ActivityProfile, ...]:
-    soma_path = Path(run_dir) / "soma_vs.pkl"
-    with soma_path.open("rb") as handle:
-        traces = pickle.load(handle)
-    profiles: list[ActivityProfile] = []
-    for trace_index, (label, times, volts) in enumerate(traces):
-        profile = fold_trace_activity(str(label), trace_index, times, volts, period_ms=period_ms, bins=bins)
-        if profile is not None and profile.cell_type in TYPE_COLORS and math.isfinite(profile.score):
-            profiles.append(profile)
-    if not profiles:
-        raise RuntimeError(f"No usable activity profiles found in {soma_path}")
-    return tuple(profiles)
-
-
-def select_activity_profiles(counts: dict[str, int]) -> dict[str, list[ActivityProfile]]:
-    profiles = load_activity_profiles()
-    selected: dict[str, list[ActivityProfile]] = {}
-    for cell_type, count in counts.items():
-        candidates = sorted(
-            (profile for profile in profiles if profile.cell_type == cell_type and profile.score > 0.015),
-            key=lambda profile: profile.score,
-            reverse=True,
-        )
-        if not candidates:
-            selected[cell_type] = []
-            continue
-        pool = candidates[: min(90, len(candidates))]
-        chosen: list[ActivityProfile] = []
-        while len(chosen) < count and pool:
-            def rank(profile: ActivityProfile) -> float:
-                value = profile.score
-                if chosen:
-                    nearest_phase = min(circular_phase_distance(profile.peak_phase_ms, other.peak_phase_ms) for other in chosen)
-                    phase_bonus = 0.52 + 0.48 * min(1.0, nearest_phase / 42.0)
-                    base_label = profile.label.split(" #", 1)[0]
-                    label_bonus = 0.88 if any(other.label.split(" #", 1)[0] == base_label for other in chosen) else 1.0
-                    value *= phase_bonus * label_bonus
-                return value
-
-            best = max(pool, key=rank)
-            chosen.append(best)
-            pool.remove(best)
-        while len(chosen) < count:
-            chosen.append(candidates[len(chosen) % len(candidates)])
-        selected[cell_type] = chosen
-    return selected
-
-
-def attach_activity_profiles(placed: list[PlacedMorph]) -> list[PlacedMorph]:
-    counts: dict[str, int] = {}
-    for item in placed:
-        counts[item.morphology.cell_type] = counts.get(item.morphology.cell_type, 0) + 1
-    profiles_by_type = select_activity_profiles(counts)
-    used: dict[str, int] = {cell_type: 0 for cell_type in counts}
-    attached: list[PlacedMorph] = []
-    for item in placed:
-        cell_type = item.morphology.cell_type
-        profiles = profiles_by_type.get(cell_type, [])
-        profile = profiles[used[cell_type] % len(profiles)] if profiles else None
-        used[cell_type] += 1
-        attached.append(replace(item, activity_profile=profile))
-    return attached
-
-
-def circular_time_delta_ms(a_ms: float, b_ms: float, period_ms: float = ACTIVITY_PERIOD_MS) -> float:
-    return ((a_ms - b_ms + 0.5 * period_ms) % period_ms) - 0.5 * period_ms
-
-
-def packet_activity(
-    profile: ActivityProfile | None,
-    loop_ms: float,
-    distance: float,
-    flow_direction: float,
-    branch_phase_ms: float,
-    branch_gain: float,
-) -> float:
-    if profile is None or not profile.event_phases_ms:
-        return 0.0
-    best = 0.0
-    for event_ms, strength in zip(profile.event_phases_ms, profile.event_strengths):
-        expected_ms = event_ms + flow_direction * ACTIVITY_PROPAGATION_DELAY_MS * distance + branch_phase_ms
-        delta_ms = circular_time_delta_ms(loop_ms, expected_ms)
-        packet = math.exp(-(delta_ms * delta_ms) / (2.0 * ACTIVITY_PACKET_SIGMA_MS * ACTIVITY_PACKET_SIGMA_MS))
-        shoulder = math.exp(-(delta_ms * delta_ms) / (2.0 * (ACTIVITY_PACKET_SIGMA_MS * 2.15) ** 2))
-        best = max(best, strength * branch_gain * (0.86 * packet + 0.14 * shoulder))
-    return min(1.0, best)
-
-
 def neurite_flow_direction(kind: int) -> float:
     return 1.0 if kind == 2 else -1.0
 
@@ -453,43 +204,12 @@ def normalized_coords(morph: Morphology) -> dict[int, np.ndarray]:
     return remapped
 
 
-def stable_unit(*parts: object) -> float:
-    text = "|".join(str(part) for part in parts)
-    h = 2166136261
-    for char in text:
-        h ^= ord(char)
-        h = (h * 16777619) & 0xFFFFFFFF
-    return h / 0xFFFFFFFF
-
-
-def primary_branch_ids(morph: Morphology) -> dict[int, int]:
-    branch_for: dict[int, int] = {morph.root_id: morph.root_id}
-    for child_id in morph.children.get(morph.root_id, []):
-        stack = [child_id]
-        while stack:
-            node_id = stack.pop()
-            branch_for[node_id] = child_id
-            stack.extend(morph.children.get(node_id, []))
-    for node_id in morph.nodes:
-        branch_for.setdefault(node_id, node_id)
-    return branch_for
-
-
-def branch_timing(morph: Morphology, branch_id: int, distance_offset: float) -> tuple[float, float]:
-    phase_unit = stable_unit(morph.name, branch_id, round(distance_offset, 3), "phase")
-    gain_unit = stable_unit(morph.name, branch_id, round(distance_offset, 3), "gain")
-    phase_ms = (phase_unit - 0.5) * 13.0
-    gain = 0.76 + 0.52 * gain_unit
-    return phase_ms, gain
-
-
 def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tuple[list[RenderSegment], list[RenderNode]]:
     segments: list[RenderSegment] = []
     nodes_out: list[RenderNode] = []
     for item in placed:
         morph = item.morphology
         coords = normalized_coords(morph)
-        branch_for = primary_branch_ids(morph)
         matrix = rotation_matrix(item.yaw, item.pitch, item.roll)
         projected: dict[int, np.ndarray] = {}
         for node_id, xyz in coords.items():
@@ -519,7 +239,6 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
             radius = 0.5 * (node.radius + parent_node.radius)
             dist = 0.5 * (morph.distances[node_id] + morph.distances.get(parent_id, 0.0)) / morph.max_distance
             kind = segment_kind(node, parent_node)
-            branch_phase_ms, branch_gain = branch_timing(morph, branch_for.get(node_id, node_id), item.distance_offset)
             width_px = SUPERSAMPLE * max(1.5, item.width_scale * (0.72 + 0.36 * math.sqrt(radius)) + 1.25)
             segments.append(
                 RenderSegment(
@@ -535,23 +254,12 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     cell_type=morph.cell_type,
                     neurite_kind=kind,
                     flow_direction=neurite_flow_direction(kind),
-                    activity_profile=item.activity_profile,
-                    branch_phase_ms=branch_phase_ms,
-                    branch_gain=branch_gain,
                 )
             )
 
         for node_id, node in morph.nodes.items():
             p = projected[node_id]
             degree = len(morph.children.get(node_id, [])) + int(node.parent_id in morph.nodes)
-            if node.parent_id in morph.nodes:
-                node_kind = segment_kind(node, morph.nodes[node.parent_id])
-            elif morph.children.get(node_id):
-                child = morph.nodes[morph.children[node_id][0]]
-                node_kind = segment_kind(child, node)
-            else:
-                node_kind = node.kind
-            branch_phase_ms, branch_gain = branch_timing(morph, branch_for.get(node_id, node_id), item.distance_offset)
             nodes_out.append(
                 RenderNode(
                     x=float(p[0]),
@@ -563,11 +271,6 @@ def project_scene(placed: Iterable[PlacedMorph], width: int, height: int) -> tup
                     cell_type=morph.cell_type,
                     terminal=degree <= 1,
                     soma=node_id == morph.root_id or node.kind == 1,
-                    neurite_kind=node_kind,
-                    flow_direction=neurite_flow_direction(node_kind),
-                    activity_profile=item.activity_profile,
-                    branch_phase_ms=branch_phase_ms,
-                    branch_gain=branch_gain,
                 )
             )
     segments.sort(key=lambda seg: seg.z)
@@ -676,6 +379,15 @@ def render_base(scene: SceneCache, width: int, height: int) -> Image.Image:
     return image
 
 
+def pulse_value(distance: float, phase: float, *, count: int, width: float, direction: float = 1.0) -> float:
+    centers = [(phase * direction + i / count) % 1.0 for i in range(count)]
+    best = 0.0
+    for center in centers:
+        delta = abs(((distance - center + 0.5) % 1.0) - 0.5)
+        best = max(best, math.exp(-(delta * delta) / (2.0 * width * width)))
+    return best
+
+
 def render_frame(
     scene: SceneCache,
     phase: float,
@@ -693,35 +405,51 @@ def render_frame(
     glow_draw = ImageDraw.Draw(glow, "RGBA")
     core_draw = ImageDraw.Draw(core, "RGBA")
     spark_draw = ImageDraw.Draw(spark, "RGBA")
-    del mode
-    loop_ms = phase * ACTIVITY_PERIOD_MS
+    if mode == "single_arbor_signal":
+        pulse_color = CYAN
+        count = 2
+        pulse_width = 0.035
+    elif mode == "split_wavefront":
+        pulse_color = GOLD
+        count = 3
+        pulse_width = 0.030
+    elif mode == "layered_exchange":
+        pulse_color = CYAN
+        count = 3
+        pulse_width = 0.038
+    else:
+        pulse_color = TEAL
+        count = 3
+        pulse_width = 0.042
 
     for seg in scene.segments:
-        active = packet_activity(
-            seg.activity_profile,
-            loop_ms,
-            seg.distance,
-            seg.flow_direction,
-            seg.branch_phase_ms,
-            seg.branch_gain,
+        p = pulse_value(seg.distance, phase, count=count, width=pulse_width, direction=seg.flow_direction)
+        cell_shift = 0.11 if seg.cell_type == "TC" else 0.21 if seg.cell_type == "GC" else 0.0
+        secondary = pulse_value(
+            (seg.distance + cell_shift) % 1.0,
+            phase + 0.17,
+            count=2,
+            width=0.055,
+            direction=-seg.flow_direction,
         )
-        active = min(1.0, active ** 0.68)
-        if active < 0.026:
+        active = max(p, 0.54 * secondary)
+        if active < 0.030:
             continue
-        if seg.cell_type == "MC":
-            pulse_tint = mix(MAROON, GOLD, 0.32)
-        elif seg.cell_type == "TC":
-            pulse_tint = GOLD
-        else:
-            pulse_tint = mix(TEAL, GREEN, 0.22)
+        pulse_tint = mix(pulse_color, seg.color, 0.45)
         if seg.neurite_kind == 2:
-            pulse_tint = mix(pulse_tint, MAROON, 0.22)
+            pulse_tint = mix(MAROON, seg.color, 0.22)
+        if mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "MC":
+            pulse_tint = mix(MAROON, GOLD, 0.32)
+        elif mode in ("dense_microcircuit", "layered_exchange") and seg.cell_type == "TC":
+            pulse_tint = GOLD
+        elif mode in ("dense_microcircuit", "layered_exchange"):
+            pulse_tint = mix(TEAL, GREEN, 0.22)
         bloom_tint = brighten(pulse_tint, 1.38, 5.0)
-        core_tint = mix(pulse_tint, brighten(pulse_tint, 1.56, 14.0), min(0.72, 0.24 + 0.42 * active))
+        core_tint = mix(pulse_tint, brighten(pulse_tint, 1.55, 12.0), min(0.72, 0.24 + 0.42 * active))
         if active > 0.10:
-            draw_soft_line(bloom_draw, seg, bloom_tint, 78 * active, seg.width * (12.0 + 4.2 * active))
-        draw_soft_line(glow_draw, seg, brighten(pulse_tint, 1.20, 3.0), 122 * active, seg.width * (6.8 + 2.3 * active))
-        draw_soft_line(core_draw, seg, core_tint, 240 * active, seg.width * (1.88 + 0.98 * active))
+            draw_soft_line(bloom_draw, seg, bloom_tint, 76 * active, seg.width * (12.0 + 4.2 * active))
+        draw_soft_line(glow_draw, seg, brighten(pulse_tint, 1.18, 3.0), 116 * active, seg.width * (6.8 + 2.2 * active))
+        draw_soft_line(core_draw, seg, core_tint, 238 * active, seg.width * (1.88 + 0.95 * active))
         if active > 0.62:
             highlight = (active - 0.62) / 0.38
             draw_soft_line(core_draw, seg, WHITE, 192 * highlight, max(1.0, seg.width * (0.48 + 0.24 * highlight)))
@@ -743,24 +471,15 @@ def render_frame(
     image = Image.alpha_composite(image, core)
 
     for node in scene.nodes:
-        node_active = packet_activity(
-            node.activity_profile,
-            loop_ms,
-            node.distance,
-            node.flow_direction,
-            node.branch_phase_ms,
-            node.branch_gain,
-        )
-        node_active = min(1.0, node_active ** 0.70)
-        soma_flash = packet_activity(node.activity_profile, loop_ms, 0.0, 1.0, 0.0, 1.0) if node.soma else 0.0
-        soma_flash = min(1.0, soma_flash ** 0.70)
-        if node.terminal and node_active > 0.12:
-            r = node.radius * (1.5 + 2.6 * node_active)
-            ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, WHITE, 0.18), 158 * node_active))
+        terminal_flash = node.terminal and pulse_value(node.distance, phase + 0.015, count=count, width=0.025, direction=-1.0)
+        soma_flash = node.soma and (0.56 + 0.44 * math.sin(math.tau * phase))
+        if terminal_flash:
+            r = node.radius * (1.5 + 2.6 * terminal_flash)
+            ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.15), 158 * terminal_flash))
         if node.soma:
             r = node.radius * (2.6 + 0.7 * soma_flash)
-            ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, WHITE, 0.08), 112 + 70 * soma_flash))
-            ellipse(spark_draw, node.x, node.y, max(1.2, r * 0.36), rgba(WHITE, 66 + 54 * soma_flash))
+            ellipse(spark_draw, node.x, node.y, r, rgba(mix(node.color, np.array([255, 255, 255], dtype=float), 0.05), 124 + 58 * soma_flash))
+            ellipse(spark_draw, node.x, node.y, max(1.2, r * 0.36), rgba(np.array([255, 255, 255], dtype=float), 76))
     spark = spark.filter(ImageFilter.GaussianBlur(radius=0.55 * SUPERSAMPLE))
     image = Image.alpha_composite(image, spark)
     return image
@@ -914,7 +633,6 @@ def build_scene(variant: str, width: int, height: int) -> SceneCache:
             PlacedMorph(morphs["gc_a"], (width * 0.69, height * 0.76), 0.47, -16, 8, 2, TYPE_COLORS["GC"], 0.74, 0.90, 0.91, 0.37),
         ]
         bg_style = "lattice"
-    placed = attach_activity_profiles(placed)
     segments, nodes = project_scene(placed, width, height)
     segments, nodes = center_geometry(segments, nodes, width, height)
     segments, nodes = stretch_geometry_y(segments, nodes, height, VERTICAL_FOREGROUND_SCALE)
@@ -940,8 +658,6 @@ def build_global_gif_palette(frames: list[Image.Image], colors: int) -> Image.Im
     anchors = [
         BG,
         tuple(WHITE.astype(np.uint8)),
-        (24, 38, 47),
-        (108, 120, 128),
         tuple(GOLD.astype(np.uint8)),
         tuple(CYAN.astype(np.uint8)),
         tuple(GREEN.astype(np.uint8)),
