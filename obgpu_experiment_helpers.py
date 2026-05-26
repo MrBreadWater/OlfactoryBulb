@@ -9449,128 +9449,6 @@ def plot_gc_output_overview(
     return fig, axes
 
 
-def plot_spike_frequency_overview(
-    result: dict[str, Any],
-    *,
-    indices: list[int] | range | None = None,
-    cell_types: list[str] | tuple[str, ...] | None = ("TC", "MC"),
-    threshold: float | None = None,
-    config: FrequencyPlotConfig | dict[str, Any] | None = None,
-    show_kde1d: bool = True,
-    show_kde2d: bool = True,
-    show_time_binned: bool = False,
-    show_dots: bool = True,
-    show_ridgeline_kde: bool = False,
-) -> tuple[Any, list[Any]]:
-    """Render the notebook-style soma spike frequency plots in one figure."""
-    panels = []
-    if show_kde1d:
-        panels.append("kde1d")
-    if show_kde2d:
-        panels.append("kde2d")
-    if show_time_binned:
-        panels.append("time_binned")
-    if not panels:
-        raise ValueError("At least one spike-frequency panel must be enabled")
-
-    height = 5.0 if len(panels) == 1 else 4.0 * len(panels)
-    fig, axes = plt.subplots(len(panels), 1, figsize=(14, height), squeeze=False)
-    axes_list = list(axes[:, 0])
-
-    for panel, ax in zip(panels, axes_list):
-        if panel == "kde1d":
-            plot_spike_frequency_kde_1d(
-                result,
-                indices=indices,
-                cell_types=cell_types,
-                threshold=threshold,
-                config=config,
-                ax=ax,
-            )
-        elif panel == "kde2d":
-            plot_spike_frequency_kde_2d(
-                result,
-                indices=indices,
-                cell_types=cell_types,
-                threshold=threshold,
-                config=config,
-                ax=ax,
-            )
-        else:
-            plot_spike_frequency_time_binned(
-                result,
-                indices=indices,
-                cell_types=cell_types,
-                threshold=threshold,
-                config=config,
-                ax=ax,
-                show_dots=show_dots,
-                show_ridgeline_kde=show_ridgeline_kde,
-            )
-
-    fig.tight_layout()
-    return fig, axes_list
-
-
-def plot_gc_output_frequency_overview(
-    result: dict[str, Any],
-    *,
-    indices: list[int] | range | None = None,
-    target_types: list[str] | tuple[str, ...] | None = ("MC", "TC"),
-    config: FrequencyPlotConfig | dict[str, Any] | None = None,
-    show_kde1d: bool = True,
-    show_kde2d: bool = True,
-    show_time_binned: bool = False,
-    show_dots: bool = True,
-    show_ridgeline_kde: bool = False,
-) -> tuple[Any, list[Any]]:
-    """Render the notebook-style GC-output frequency plots in one figure."""
-    panels = []
-    if show_kde1d:
-        panels.append("kde1d")
-    if show_kde2d:
-        panels.append("kde2d")
-    if show_time_binned:
-        panels.append("time_binned")
-    if not panels:
-        raise ValueError("At least one GC-output frequency panel must be enabled")
-
-    height = 5.0 if len(panels) == 1 else 4.0 * len(panels)
-    fig, axes = plt.subplots(len(panels), 1, figsize=(14, height), squeeze=False)
-    axes_list = list(axes[:, 0])
-
-    for panel, ax in zip(panels, axes_list):
-        if panel == "kde1d":
-            plot_gc_output_frequency_kde_1d(
-                result,
-                indices=indices,
-                target_types=target_types,
-                config=config,
-                ax=ax,
-            )
-        elif panel == "kde2d":
-            plot_gc_output_frequency_kde_2d(
-                result,
-                indices=indices,
-                target_types=target_types,
-                config=config,
-                ax=ax,
-            )
-        else:
-            plot_gc_output_frequency_time_binned(
-                result,
-                indices=indices,
-                target_types=target_types,
-                config=config,
-                ax=ax,
-                show_dots=show_dots,
-                show_ridgeline_kde=show_ridgeline_kde,
-            )
-
-    fig.tight_layout()
-    return fig, axes_list
-
-
 def plot_lfp_overview(
     result: dict[str, Any],
     dt_ms: float = 0.1,
@@ -9743,17 +9621,12 @@ def get_builtin_sweep_plot_names() -> list[str]:
     return sorted([
         "gc_output_frequency_kde_1d",
         "gc_output_frequency_kde_2d",
-        "gc_output_frequency_overview",
         "gc_output_frequency_time_binned",
-        "gc_output_overview",
         "hfo_power_summary",
-        "input_overview",
-        "lfp_overview",
         "named_signal",
         "spectrogram",
         "spike_frequency_kde_1d",
         "spike_frequency_kde_2d",
-        "spike_frequency_overview",
         "spike_frequency_time_binned",
         "spike_raster",
         "voltage_traces",
@@ -9767,9 +9640,6 @@ def _get_builtin_sweep_plot(plot_name: str) -> Any:
     mapping = {
         "voltage_traces": plot_voltage_traces,
         "spike_raster": plot_spike_raster,
-        "gc_output_overview": plot_gc_output_overview,
-        "input_overview": plot_input_overview,
-        "lfp_overview": plot_lfp_overview,
         "hfo_power_summary": plot_hfo_power_summary,
         "named_signal": plot_named_signal,
         "spectrogram": plot_spectrogram,
@@ -9778,11 +9648,9 @@ def _get_builtin_sweep_plot(plot_name: str) -> Any:
         "spike_frequency_kde_1d": plot_spike_frequency_kde_1d,
         "spike_frequency_kde_2d": plot_spike_frequency_kde_2d,
         "spike_frequency_time_binned": plot_spike_frequency_time_binned,
-        "spike_frequency_overview": plot_spike_frequency_overview,
         "gc_output_frequency_kde_1d": plot_gc_output_frequency_kde_1d,
         "gc_output_frequency_kde_2d": plot_gc_output_frequency_kde_2d,
         "gc_output_frequency_time_binned": plot_gc_output_frequency_time_binned,
-        "gc_output_frequency_overview": plot_gc_output_frequency_overview,
     }
     if plot_name not in mapping:
         available = ", ".join(get_builtin_sweep_plot_names())
