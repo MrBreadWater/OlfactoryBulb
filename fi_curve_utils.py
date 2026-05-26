@@ -16,6 +16,7 @@ from scipy.stats import linregress
 
 from single_cell_utils import (
     _resolve_cell_class,
+    run_current_clamp_batch,
     run_current_clamp_series,
     run_fi_ramp,
 )
@@ -140,7 +141,7 @@ def _estimate_rheobase(currents_nA: np.ndarray, freqs_hz: np.ndarray) -> float:
 
 def run_cell_type_fi(
     cell_type: str,
-    protocol: str = "steps",
+    protocol: str = "batch",
     n_cells: int = 5,
     use_coreneuron: bool = False,
     use_gpu: bool = False,
@@ -159,7 +160,7 @@ def run_cell_type_fi(
     Parameters
     ----------
     cell_type  : 'MC', 'TC', or 'GC'
-    protocol   : 'steps' (independent runs) or 'ramp' (staircase)
+    protocol   : 'batch' (one clone per current), 'steps', or 'ramp'
     use_coreneuron : enable CoreNEURON for this sweep (fast for many amplitudes)
     use_gpu    : enable GPU-accelerated CoreNEURON (requires GPU-capable build)
     n_cells    : run models 1 through n_cells
@@ -168,14 +169,52 @@ def run_cell_type_fi(
     -------
     dict : {cell_name → {currents_nA, freqs_hz, slope, intercept, r2}}
     """
-    if protocol not in {"steps", "ramp"}:
-        raise ValueError("protocol must be 'steps' or 'ramp'")
+    if protocol not in {"batch", "steps", "ramp"}:
+        raise ValueError("protocol must be 'batch', 'steps', or 'ramp'")
 
     amps = np.arange(i_start_nA, i_stop_nA + i_step_nA * 0.5, i_step_nA)
     results = {}
+    cell_names = [f"{cell_type}{i}" for i in range(1, n_cells + 1)]
 
-    for i in range(1, n_cells + 1):
-        name = f"{cell_type}{i}"
+    if protocol == "batch":
+        print(
+            f"  {cell_type}: batching {len(cell_names)} cells x {len(amps)} currents...",
+            end=" ",
+            flush=True,
+        )
+        batch_rows = run_current_clamp_batch(
+            cell_names,
+            amps_nA=amps,
+            duration_ms=step_dur_ms,
+            delay_ms=delay_ms,
+            tail_ms=tail_ms,
+            dt=dt,
+            celsius=celsius,
+            threshold_mV=threshold_mV,
+            use_coreneuron=use_coreneuron,
+            use_gpu=use_gpu,
+        )
+
+        rows_by_cell = {name: [] for name in cell_names}
+        for row in batch_rows:
+            rows_by_cell[row["cell_name"]].append(row)
+
+        for name in cell_names:
+            cell_rows = sorted(rows_by_cell[name], key=lambda row: row["amp_index"])
+            currents = np.array([row["amp_nA"] for row in cell_rows])
+            freqs = np.array([row["freq_hz"] for row in cell_rows])
+            slope, intercept, r2 = compute_fi_slope(currents, freqs)
+            results[name] = dict(
+                currents_nA=currents,
+                freqs_hz=freqs,
+                slope=slope,
+                intercept=intercept,
+                r2=r2,
+            )
+        print("done")
+        return results
+
+    for name in cell_names:
         print(f"  {name}...", end=" ", flush=True)
 
         if protocol == "steps":
