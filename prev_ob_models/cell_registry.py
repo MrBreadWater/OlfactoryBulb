@@ -120,6 +120,26 @@ CELL_MODEL_SPECS: Tuple[CellModelSpec, ...] = tuple(
             network_ready=False,
             notes="Published granule template from the Li/Cleland cholinergic model.",
         ),
+        CellModelSpec(
+            key="SyntheticEPL2026.PVCRH_FSI1",
+            family="SyntheticEPL2026",
+            role="EPLI",
+            source_title="Synthetic PV/CRH-overlap EPL FSI surrogate (2026)",
+            citation=(
+                "Literature-constrained synthetic axonless EPL fast-spiking interneuron "
+                "surrogate derived from Huang et al. (2013), Kato et al. (2013), "
+                "and Burton et al. (2024)"
+            ),
+            module_path="prev_ob_models.SyntheticEPL2026.isolated_cells",
+            class_name="PVCRH_FSI1",
+            morphology_style="literature_constrained_synthetic",
+            target_use="fast_epl_inhibitory_surrogate",
+            network_ready=False,
+            notes=(
+                "Compact axonless multipolar EPL interneuron surrogate for isolated-cell "
+                "and future slice-builder work. Not yet wired into the live network."
+            ),
+        ),
     ]
 )
 
@@ -139,6 +159,7 @@ DEFAULT_FAMILY_MODELS: Dict[Tuple[str, str], str] = {
     ("Short2016", "ETC"): "Short2016.ETC",
     ("LiCleland2013", "PGC"): "LiCleland2013.PGC",
     ("LiCleland2013", "GC"): "LiCleland2013.GC",
+    ("SyntheticEPL2026", "EPLI"): "SyntheticEPL2026.PVCRH_FSI1",
 }
 
 
