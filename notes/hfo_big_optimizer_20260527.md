@@ -217,3 +217,15 @@ Ridge steering for the next stage:
 - Batch 20 plan verified the ridge policy:
   - `proposal_counts = {"targeted": 11, "local": 3, "covariance": 1, "explore": 1}`
   - `targeted_detail.mode = "ridge"`
+
+First ridge improvement:
+
+- Batch 20 completed cleanly and produced a new archive best, `C00327`:
+  - ketamine peak: `180.664 Hz`
+  - control peak: `195.312 Hz`
+  - ketamine target relative power: `0.1547`
+  - control target relative power: `0.0680`
+  - pair score: `4.2544`
+  - key parameters: `ampa_nmda_gmax=112.4676`, `gaba_gmax=1.7132`, `gap_tc=10.8407`, `tc_input_weight=0.4268`
+- This result supports the ridge interpretation: combining the lower AMPA value from the high-power near-miss with the higher GABA / lower TC-gap setting from `C00261` improved ketamine/control separation while keeping the ketamine peak centered in the requested band.
+- Batch 21 launched from commit `8669ab2`; its plan continues ridge refinement around top pair `["C00327", "C00261"]`.
