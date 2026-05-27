@@ -202,3 +202,5 @@ Micro-refinement launch:
   - `targeted_detail.mode = "micro"`
   - `targeted_detail.top_pair = ["C00261", "C00053"]`
 - Current archive best remains `C00261`, score `3.8415`.
+- Batch 18 completed cleanly but did not improve the archive. Its best new candidate was `C00294`, score `2.7377`, with ketamine peak shifted down to `166.016 Hz`, ketamine target relative power `0.1449`, control peak `195.312 Hz`, and control target relative power `0.0676`.
+- Batch 19 launched on Phoenix step `14537854.3197` from commit `4180d89`. Its plan continues the micro policy around `C00261` and `C00053`.
