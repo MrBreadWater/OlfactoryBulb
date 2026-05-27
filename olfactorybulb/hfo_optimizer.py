@@ -173,6 +173,30 @@ def default_hfo_search_space() -> list[ParameterSpec]:
             scale="linear",
             description="Feedforward MC input weight",
         ),
+        ParameterSpec(
+            path="kar_osn_weight_scale",
+            low=0.25,
+            high=8.0,
+            scale="log",
+            default=1.0,
+            description="OSN event weight multiplier for M/T KAR traces",
+        ),
+        ParameterSpec(
+            path="kar_gc_weight_scale",
+            low=0.25,
+            high=8.0,
+            scale="log",
+            default=1.0,
+            description="M/T event weight multiplier for GC KAR traces",
+        ),
+        ParameterSpec(
+            path="gc_ka_gbar_scale",
+            low=0.25,
+            high=3.0,
+            scale="log",
+            default=1.0,
+            description="Granule-cell A-type potassium conductance scale",
+        ),
     ]
 
 

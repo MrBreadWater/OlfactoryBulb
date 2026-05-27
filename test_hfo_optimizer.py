@@ -12,6 +12,7 @@ import numpy as np
 from olfactorybulb.hfo_optimizer import (
     DEFAULT_CAMPAIGNS_BASE,
     ParameterSpec,
+    default_hfo_search_space,
     propose_elite_batch,
     score_candidate_pair,
     score_condition_result,
@@ -21,6 +22,16 @@ from olfactorybulb.hfo_optimizer import (
 home_checkout = Path.home() / "OlfactoryBulb"
 if home_checkout.exists():
     assert DEFAULT_CAMPAIGNS_BASE == home_checkout / "results" / "notebook_runs" / "optimization"
+
+default_paths = [spec.path for spec in default_hfo_search_space()]
+for required_path in (
+    "epli_ampa_weight_scale",
+    "epli_gaba_weight_scale",
+    "kar_osn_weight_scale",
+    "kar_gc_weight_scale",
+    "gc_ka_gbar_scale",
+):
+    assert required_path in default_paths
 
 
 def synthetic_result(
