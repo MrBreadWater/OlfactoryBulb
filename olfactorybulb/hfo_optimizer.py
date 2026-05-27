@@ -347,7 +347,7 @@ def default_campaign_run_config(
         epl_interneuron_cell_type="EPLI",
         enable_gc_kar=True,
         record_from_somas=["MC", "TC", "GC", "EPLI"],
-        record_gc_output_events=True,
+        record_gc_output_events=False,
         keep_native_lfp_debug_files=False,
         sweep_engine="remote_batch",
         sweep_sync_live=False,

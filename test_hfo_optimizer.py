@@ -46,6 +46,7 @@ assert len(schedule) == 45
 campaign_config = default_campaign_run_config({}, tstop_ms=9000.0)
 assert campaign_config["input_odors"] == schedule
 assert campaign_config["inhale_duration_ms"] == 125.0
+assert campaign_config["record_gc_output_events"] is False
 
 lfp_filter_config = hlp.build_run_config(
     lfp_include_cell_types=["MC", "TC"],
