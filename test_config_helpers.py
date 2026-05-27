@@ -133,6 +133,27 @@ with tempfile.TemporaryDirectory() as tmp:
     assert overrides["gc_ka_gbar_scale"] == 0.5
     print("KAR / ketamine controls: OK")
 
+    # --- EPLI opt-in controls should bridge into param overrides cleanly ---
+    cfg_epli = build_run_config(
+        enable_epl_interneurons=True,
+        max_epl_interneurons=12,
+    )
+    epli_overrides = build_param_overrides(cfg_epli)
+    assert epli_overrides["enable_epl_interneurons"] is True
+    assert epli_overrides["max_epl_interneurons"] == 12
+    assert "EPLI" in epli_overrides["record_from_somas"]
+
+    cfg_custom_epli = build_run_config(
+        record_from_somas=["MC"],
+        enable_epl_interneurons=True,
+        max_epl_interneurons=4,
+        epl_interneuron_cell_type="PVI",
+    )
+    custom_epli_overrides = build_param_overrides(cfg_custom_epli)
+    assert custom_epli_overrides["epl_interneuron_cell_type"] == "PVI"
+    assert custom_epli_overrides["record_from_somas"] == ["MC", "PVI"]
+    print("EPLI controls: OK")
+
     # --- Compressed soma trace artifacts should default to float32 NPZ and round-trip cleanly ---
     assert cfg["soma_trace_format"] == DEFAULT_SOMA_TRACE_FORMAT
     assert cfg["soma_trace_dtype"] == DEFAULT_SOMA_TRACE_DTYPE

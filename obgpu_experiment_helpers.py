@@ -124,7 +124,10 @@ CONTROL_HELP = {
     "legacy_parallel_dt": "When True, preserve the older parallel dt behavior. When False, let sim_dt_ms control dt more directly.",
     "lfp_electrode_location": "Probe location as [x, y, z] in microns.",
     "rnd_seed": "Random seed for odor input generation.",
-    "record_from_somas": "Which cell types to record from, e.g. ['MC', 'TC', 'GC'].",
+    "record_from_somas": "Which cell types to record from, e.g. ['MC', 'TC', 'GC']. When EPLIs are enabled their configured cell type is appended automatically unless already present.",
+    "enable_epl_interneurons": "Enable the opt-in EPLI slice population when the slice export and paramset support it.",
+    "max_epl_interneurons": "Maximum EPLI cells to instantiate. Must be > 0 together with enable_epl_interneurons.",
+    "epl_interneuron_cell_type": "Runtime cell-type label for the opt-in EPLI population, e.g. 'EPLI'.",
     "record_gc_output_events": "Record reciprocal GC->MC/TC GABA event times for direct inhibitory-output plots.",
     "keep_native_lfp_debug_files": "Keep raw CoreNEURON native-LFP TSV/config artifacts instead of deleting them after lfp.pkl is written.",
     "gc_output_bin_ms": "Bin width in ms for the GC inhibitory-output population-rate plot.",
@@ -766,6 +769,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "record_gc_output_events": True,
         "keep_native_lfp_debug_files": False,
         "enable_reciprocal_synapses": True,
+        "enable_epl_interneurons": None,
+        "max_epl_interneurons": None,
+        "epl_interneuron_cell_type": None,
         "gc_output_bin_ms": 5.0,
         "gc_output_smooth_sigma_ms": 10.0,
         "gc_output_max_connections": 120,
@@ -1178,6 +1184,12 @@ def normalize_input_odors(value: Any) -> Any:
 
 def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
     """Translate notebook controls into model param overrides."""
+    record_from_somas = list(config.get("record_from_somas", ["MC", "TC", "GC"]))
+    if config.get("enable_epl_interneurons"):
+        epli_cell_type = str(config.get("epl_interneuron_cell_type") or "EPLI")
+        if epli_cell_type not in record_from_somas:
+            record_from_somas.append(epli_cell_type)
+
     overrides = {
         "sim_dt": float(config["sim_dt_ms"]),
         "recording_period": float(config.get("recording_period_ms", config["sim_dt_ms"])),
@@ -1196,7 +1208,7 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         ),
         "legacy_parallel_dt": bool(config.get("legacy_parallel_dt", True)),
         "enable_reciprocal_synapses": bool(config.get("enable_reciprocal_synapses", True)),
-        "record_from_somas": list(config.get("record_from_somas", ["MC", "TC", "GC"])),
+        "record_from_somas": record_from_somas,
         "record_gc_output_events": bool(config.get("record_gc_output_events", True)),
         "keep_native_lfp_debug_files": bool(config.get("keep_native_lfp_debug_files", False)),
         "lfp_electrode_location": list(config.get("lfp_electrode_location", [116, 1078, -61])),
@@ -1310,6 +1322,12 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
             overrides[param_key] = float(config[config_key])
     if config.get("enable_gc_kar") is not None:
         overrides["enable_gc_kar"] = bool(config["enable_gc_kar"])
+    if config.get("enable_epl_interneurons") is not None:
+        overrides["enable_epl_interneurons"] = bool(config["enable_epl_interneurons"])
+    if config.get("max_epl_interneurons") is not None:
+        overrides["max_epl_interneurons"] = int(config["max_epl_interneurons"])
+    if config.get("epl_interneuron_cell_type") is not None:
+        overrides["epl_interneuron_cell_type"] = str(config["epl_interneuron_cell_type"])
     extra = dict(config.get("extra_overrides", {}))
     deep_update(overrides, extra)
     return overrides
