@@ -37,3 +37,14 @@ Startup checks:
 - Fixed by hashing long sweep labels in `_safe_sweep_path_label`.
 - `python test_config_helpers.py` passed after the fix.
 - The restarted run submitted successfully and progressed past the prior failure point, showing remote sweep status updates and completed item counts.
+
+Correction during monitoring:
+
+- The initial `hfo_epli_big_120cpu_20260527_061046` campaign revealed a scoring bug: missing/failed control runs could create artificially huge ketamine-control contrast scores.
+- Fixed in commit `c08ee7722d3d7cb0f1cbfe623ec54d8ed0b137a2`: incomplete candidate pairs now receive `pair_score = -inf`.
+- Stopped the stale worker and canceled its active remote step `14537854.1980`.
+- Active corrected campaign:
+  - Campaign dir: `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/hfo_epli_big_fixedscore_120cpu_20260527_073229`
+  - Runtime log: `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/codex_big_hfo_logs/big_hfo_optimizer_20260527_073229.log`
+  - First corrected remote sweep step: `14537854.2025`
+  - Commit used by the remote run: `c08ee7722d3d7cb0f1cbfe623ec54d8ed0b137a2`
