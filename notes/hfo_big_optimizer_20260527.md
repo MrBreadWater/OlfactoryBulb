@@ -317,3 +317,6 @@ Iteration-speed audit:
   - `save_voltage_summary = False`
   - `recording_period_ms = 0.1`
   - `analysis_dt_ms = 0.1`
+- Batch 54 completed cleanly with `32/32` successful remote items. Local compact payload dropped from about `93 MB` in batch 53 to about `58 MB` in batch 54, with `lfp.pkl` still present at the unchanged 0.1 ms sampling period.
+- Batch 54 did not beat the current filtered leaders. Its best row was `C00870`, score `-2.8279`, ketamine peak `205.078 Hz`, control peak `209.961 Hz`, ketamine target relative power `0.1644`, and control target relative power `0.1584`. The high control leakage means this is not a useful improvement.
+- Batch 55 launched after batch 54 with the same lean artifact settings and GC-excluded LFP. It is still using simulation commit `a4111f2`; the later `bde6212` commit only touched notes, so this does not affect simulation behavior.
