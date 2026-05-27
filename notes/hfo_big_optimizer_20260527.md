@@ -145,3 +145,7 @@ Targeted probe refinement after batch 11:
   - reduced exploration tail to keep the batch concentrated on the promising `C00053`/`C00144` neighborhood while preserving covariance proposals
 - Intended batch-13 shape for 16 candidates: `targeted=4`, `local=7`, `covariance=3`, `explore=2`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+- Implementation commit: `fcdd5e4`.
+- Reloaded `olfactorybulb.hfo_optimizer` in the live authenticated notebook kernel.
+- Batch 12 completed cleanly but did not improve on `C00053`; its best new candidate was `C00201` with score `1.1712`.
+- Batch 13 launched from commit `fcdd5e4` on Phoenix step `14537854.2993`. Its plan records `proposal_counts = {"targeted": 4, "local": 7, "covariance": 3, "explore": 2}` and `targeted_detail = {"top_pair": ["C00053", "C00144"], "line_probe_count": 3, "coordinate_probe_count": 1}`.
