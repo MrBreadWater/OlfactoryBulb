@@ -243,3 +243,9 @@ Late trust-region steering:
 - Batch 23 launched with the first, pre-bracket needle plan and did not improve the archive. Its best new candidate was `C00372`, score `3.4581`, preserving ketamine `180.664 Hz` but losing target relative power (`0.1404`) and raising control leakage (`0.0742`).
 - Batch 24 launched with the bracketed needle plan and also did not improve the archive. Its best new candidate was `C00386`, score `3.3077`, again preserving ketamine `180.664 Hz` but weakening the ketamine/control target-power contrast.
 - Added a post-416-candidate `basin` proposal mode. This uses the full candidate archive, not just the top-scoring elite rows, to pick alternative centers by ketamine target power, low control target power, and distance from `C00327`. The intent is to keep the long optimization from over-polishing a local optimum when the local neighborhood is no longer improving.
+
+EPLI weight-scaling audit:
+
+- Batches 32-34 showed an implementation-level diagnostic: paired runs that differed only in `epli_ampa_weight_scale` and/or `epli_gaba_weight_scale` produced byte-identical `lfp.pkl`, `soma_spikes.npz`, `soma_vs.npz`, and `gc_output_events.pkl` outputs.
+- Root cause: upstream BlenderNEURON `NeuronNode.create_synapses()` mutates `self.synapse_sets[set_name]` in place and returns `None`. Our wrapper forwarded that `None`, so `load_synapse_set()` could not apply direction-specific reciprocal NetCon weight scaling after the earlier guard fix.
+- Fix: `OBNeuronNode.create_synapses()` now returns the stored synapse list from `self.synapse_sets[syn_set["name"]]`. Added a smoke test that monkeypatches the parent method to the same in-place/no-return behavior and asserts that the wrapper returns the populated set, then separately verifies EPLI forward GABA and reciprocal AMPA weight scaling.

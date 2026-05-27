@@ -203,7 +203,8 @@ class OBNeuronNode(NeuronNode):
         self.cell_source_gids.setdefault(cell_name, int(gid))
 
     def create_synapses(self, syn_set):
-        synapses = super().create_synapses(syn_set)
+        super().create_synapses(syn_set)
+        synapses = self.synapse_sets.get(syn_set["name"], [])
 
         for entry in syn_set["entries"]:
             rank_source_section = self.rank_section_name(entry["source_section"])
