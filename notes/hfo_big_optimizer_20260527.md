@@ -192,3 +192,13 @@ First improved combo candidate:
 - Added a micro-refinement stage for campaigns with at least 288 valid candidates. It spends 12 of 16 proposals on smaller local steps around the current best, focused on GABA, TC gap, AMPA, TC input, KAR weight, and GC A-current scale. Implementation commit: `84a8018`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
 - Reloaded `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel; batch 18 and later should use `targeted_detail.mode = "micro"` once the archive reaches 288 valid candidates.
+
+Micro-refinement launch:
+
+- Batch 17 completed cleanly but did not improve the archive. Its best new candidate was `C00275`, score `0.7385`, ketamine peak `195.312 Hz`, and control peak `161.133 Hz`.
+- Batch 18 launched on Phoenix step `14537854.3163` from commit `e6b1cc4`.
+- Batch 18 plan verified the micro policy:
+  - `proposal_counts = {"targeted": 12, "local": 2, "covariance": 1, "explore": 1}`
+  - `targeted_detail.mode = "micro"`
+  - `targeted_detail.top_pair = ["C00261", "C00053"]`
+- Current archive best remains `C00261`, score `3.8415`.
