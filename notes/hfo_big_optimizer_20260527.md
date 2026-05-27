@@ -304,3 +304,9 @@ Iteration-speed audit:
 - Changed `default_campaign_run_config()` for optimizer campaigns to set `record_gc_output_events=False`. Future batches launched from this config should stop generating/syncing `gc_output_events.pkl`, cutting roughly `40%` of the compact sync payload.
 - Reloaded the live kernel and patched `CODEX_HFO_BIG_BASE_CONFIG["record_gc_output_events"] = False`; current batch 53 was already launched, so this should take effect from batch 54 onward.
 - Implementation commit: `f35747c`.
+- Item summaries show remote save time around `18.5 s` per simulation item. The remote run still wrote raw soma traces and voltage-summary arrays even though the optimizer only needs `soma_spikes.npz`.
+- Added non-breaking controls:
+  - `save_soma_traces`
+  - `save_voltage_summary`
+- Defaults remain `True` for ordinary notebook runs, but `default_campaign_run_config()` now sets both to `False` for optimizer batches. Spike detection is still saved before those optional writes are skipped.
+- Implementation commit: `979f1b8`.
