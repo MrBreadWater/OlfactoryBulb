@@ -21,7 +21,6 @@ def main():
     ob.params.coreneuron = SimpleNamespace(enable=True, gpu=False, file_mode=False, verbose=0)
     ob.params.parallel_timeout = 0.0
     ob.params.enable_lfp = True
-    ob.params.legacy_parallel_dt = True
 
     h = ob.h
     pc = ob.pc

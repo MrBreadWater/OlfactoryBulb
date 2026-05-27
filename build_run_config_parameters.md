@@ -13,8 +13,8 @@ Defaults below are the normalized defaults from the helper itself, not necessari
 ## Notes
 
 - `mode` changes a few defaults:
-  - `fast`: `nranks=1`, `legacy_parallel_dt=False`
-  - `parity`: `nranks=2`, `legacy_parallel_dt=True`
+  - `fast`: `nranks=1`
+  - `parity`: `nranks=2`
 - `mpi_exec` is environment-dependent:
   - inside Slurm: `srun --mpi=${OB_SLURM_MPI_TYPE:-pmix}`
   - otherwise: `mpiexec`
@@ -32,7 +32,6 @@ Defaults below are the normalized defaults from the helper itself, not necessari
 | `tstop_ms` | `None` | global | Simulation duration in ms. |
 | `sim_dt_ms` | `0.1` | global | Requested simulation dt in ms. |
 | `recording_period_ms` | `0.1` | global | Sample period for saved voltages and LFP. |
-| `legacy_parallel_dt` | `False` or `True` by mode | global | Preserve old parallel dt behavior or use direct `sim_dt_ms` control. |
 | `parallel_timeout` | `None` | global | Optional NEURON parallel timeout override. |
 | `rnd_seed` | `None` | global | Random seed for odor/input generation. |
 | `enable_reciprocal_synapses` | `True` | MC/TC <-> GC loop | Toggle reciprocal dendrodendritic circuitry. |

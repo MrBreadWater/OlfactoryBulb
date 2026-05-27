@@ -43,7 +43,6 @@ def main():
     ob.results_dir = os.path.join("results", label)
     ob.params.parallel_timeout = 0.0
     ob.params.enable_lfp = True
-    ob.params.legacy_parallel_dt = True
     ob.params.coreneuron = SimpleNamespace(enable=True, gpu=use_gpu, file_mode=False, verbose=0)
 
     if gid_kind != "source":

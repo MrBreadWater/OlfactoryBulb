@@ -54,6 +54,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- save_config / load_config round-trip ---
     cfg = build_run_config(paramset="GammaSignature", gaba_tau2_ms=36.0, gap_mc=32.0)
+    assert "legacy_parallel_dt" not in cfg
     assert cfg["remote_defer_soma_vs_sync"] is False
     p = save_config(cfg, tmp / "smoke.json")
     assert p.exists(), "save_config did not create file"
@@ -122,6 +123,7 @@ with tempfile.TemporaryDirectory() as tmp:
         gc_ka_gbar_scale=0.5,
     )
     overrides = build_param_overrides(cfg_kar)
+    assert "legacy_parallel_dt" not in overrides
     assert overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block"] == 0.05
     assert overrides["synapse_properties"]["AmpaNmdaSyn"]["ampa_block"] == 1.0
     assert overrides["kar_mt_gmax"] == 0.002
@@ -139,6 +141,7 @@ with tempfile.TemporaryDirectory() as tmp:
         max_epl_interneurons=12,
     )
     epli_overrides = build_param_overrides(cfg_epli)
+    assert "legacy_parallel_dt" not in epli_overrides
     assert epli_overrides["enable_epl_interneurons"] is True
     assert epli_overrides["max_epl_interneurons"] == 12
     assert "EPLI" in epli_overrides["record_from_somas"]

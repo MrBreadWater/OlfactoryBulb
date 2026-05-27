@@ -111,7 +111,7 @@ CELL_TYPE_COLORS = {
     "other": "tab:gray",
 }
 CONTROL_HELP = {
-    "mode": "Use 'fast' for 1-rank exploration or 'parity' for exact match to a previous version.",
+    "mode": "Use 'fast' for 1-rank exploration or 'parity' for 2-rank comparison runs.",
     "nranks": "MPI rank count for the run. 1 is faster on this machine",
     "tstop_ms": "Simulation duration in ms. Use None to keep the paramset default.",
     "sim_dt_ms": "Requested simulation dt in ms.",
@@ -121,7 +121,6 @@ CONTROL_HELP = {
     "soma_spike_threshold_mv": "Optional absolute soma spike peak threshold in mV. None uses an adaptive per-trace peak floor.",
     "soma_spike_min_prominence_mv": "Minimum peak prominence in mV for runtime soma spike detection.",
     "soma_spike_refractory_ms": "Minimum inter-peak spacing in ms for runtime soma spike detection.",
-    "legacy_parallel_dt": "When True, preserve the older parallel dt behavior. When False, let sim_dt_ms control dt more directly.",
     "lfp_electrode_location": "Probe location as [x, y, z] in microns.",
     "rnd_seed": "Random seed for odor input generation.",
     "record_from_somas": "Which cell types to record from, e.g. ['MC', 'TC', 'GC']. When EPLIs are enabled their configured cell type is appended automatically unless already present.",
@@ -760,7 +759,6 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "soma_spike_threshold_mv": DEFAULT_SOMA_SPIKE_THRESHOLD_MV,
         "soma_spike_min_prominence_mv": DEFAULT_SOMA_SPIKE_MIN_PROMINENCE_MV,
         "soma_spike_refractory_ms": DEFAULT_SOMA_SPIKE_REFRACTORY_MS,
-        "legacy_parallel_dt": False if mode == "fast" else True,
         "enable_lfp": True,
         "disable_status_report": True,
         "parallel_timeout": None,
@@ -1206,7 +1204,6 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         "soma_spike_refractory_ms": float(
             config.get("soma_spike_refractory_ms", DEFAULT_SOMA_SPIKE_REFRACTORY_MS)
         ),
-        "legacy_parallel_dt": bool(config.get("legacy_parallel_dt", True)),
         "enable_reciprocal_synapses": bool(config.get("enable_reciprocal_synapses", True)),
         "record_from_somas": record_from_somas,
         "record_gc_output_events": bool(config.get("record_gc_output_events", True)),
@@ -8130,176 +8127,6 @@ def compute_spike_phase_locking(
     }
 
 
-def load_legacy_wavelet_analysis(
-    result: dict[str, Any],
-    dt: float = 0.1,
-    sniff_count: int = 8,
-) -> dict[str, Any]:
-    """Reproduce the legacy LFP wavelet-analysis pipeline for one result."""
-    warnings.warn(
-        "load_legacy_wavelet_analysis() is deprecated. Use plot_lfp_overview(), "
-        "plot_wavelet(), or plot_wavelet_band_power() instead.",
-        FutureWarning,
-        stacklevel=2,
-    )
-    if pywt is None:
-        raise ModuleNotFoundError(
-            "PyWavelets is required for wavelet analysis. Install the 'pywavelets' package."
-        )
-    input_times = sorted(result["input_times"], key=lambda row: row[0])
-    events = {}
-    for seg_name, seg_times in input_times:
-        events[seg_name] = events.get(seg_name, []) + list(seg_times)
-
-    vs = list(result["soma_vs"])
-    vs.sort(key=lambda row: row[0][0:2])
-
-    t, lfp = uniform_trace(result["lfp_t"], result["lfp"], dt_ms=dt)
-    lfp_bp = butter_bandpass_filter(lfp, 30, 120, 1 / dt * 1000, order=4)
-
-    scales = np.linspace(3 / dt, 32 / dt, 50)
-    cfs, frequencies = pywt.cwt(lfp_bp, scales, "cgau5", dt / 1000.0)
-    lfp_wavelet_power = np.log(1 + np.abs(cfs))
-
-    sniff_duration = 200
-    skip_first_n_sniffs = 1
-    step = int(round(sniff_duration / dt))
-    chunks = []
-    for i in range(sniff_count + skip_first_n_sniffs)[skip_first_n_sniffs:]:
-        start = i * step
-        stop = (i + 1) * step - 2
-        if stop <= lfp_wavelet_power.shape[1]:
-            chunks.append(lfp_wavelet_power[:, start:stop])
-    if chunks:
-        lfp_wavelet_power_average = sum(chunks)
-        t_average = t[0:chunks[0].shape[1]]
-    else:
-        lfp_wavelet_power_average = lfp_wavelet_power[:, : max(1, step - 2)]
-        t_average = t[0:lfp_wavelet_power_average.shape[1]]
-
-    return {
-        "events": events,
-        "vs": vs,
-        "t": t,
-        "lfp": lfp,
-        "lfp_bp": lfp_bp,
-        "lfp_wavelet_power": lfp_wavelet_power,
-        "frequencies": frequencies,
-        "t_average": t_average,
-        "lfp_wavelet_power_average": lfp_wavelet_power_average,
-    }
-
-
-def plot_legacy_sniff_average(
-    t_average: np.ndarray,
-    frequencies: np.ndarray,
-    lfp_wavelet_power_average: np.ndarray,
-    show: bool = True,
-    yaxis: bool = True,
-    xlabel: bool = True,
-) -> None:
-    """Plot the sniff-averaged legacy wavelet view used in older notebooks."""
-    warnings.warn(
-        "plot_legacy_sniff_average() is deprecated. Use plot_wavelet_band_power() for maintained wavelet summaries.",
-        FutureWarning,
-        stacklevel=2,
-    )
-    if show:
-        plt.subplots(figsize=(4, 5))
-
-    plt.contourf(t_average, frequencies, lfp_wavelet_power_average, 256, cmap="jet")
-    plt.ylim((20, 140))
-
-    if yaxis:
-        plt.ylabel("Frequency [Hz]")
-    else:
-        plt.gca().axes.get_yaxis().set_visible(False)
-
-    if xlabel:
-        plt.xlabel("Time Since Sniff Onset [ms]")
-
-    plt.xticks(np.arange(round(min(t_average)), max(t_average) + 1, 50.0)[:-1])
-
-    if show:
-        plt.show()
-
-
-def show_legacy_plots(
-    result: dict[str, Any],
-    sniff_count: int = 8,
-    dt: float = 0.1,
-    fig_width: float = 27,
-) -> dict[str, Any]:
-    """Render the legacy voltage, LFP, and wavelet figure set for one run."""
-    warnings.warn(
-        "show_legacy_plots() is deprecated and no longer part of show_all_outputs(). "
-        "It requires raw soma traces and may trigger deferred remote downloads.",
-        FutureWarning,
-        stacklevel=2,
-    )
-    legacy = load_legacy_wavelet_analysis(result, dt=dt, sniff_count=sniff_count)
-
-    i = 0
-    plt.subplots(figsize=(fig_width, len(legacy["vs"]) * 0.1))
-    for cell, t, v in legacy["vs"]:
-        if "MC" in cell:
-            col = "blue"
-        if "TC" in cell:
-            col = "red"
-        if "GC" in cell:
-            col = "orange"
-
-        plt.plot(t, np.array(v) + i, col, label=cell)
-        i += 100
-
-    events = [(seg, times) for seg, times in legacy["events"].items()]
-    events.sort(key=lambda row: row[0])
-
-    for seg, times in events:
-        if "MC" in seg:
-            col = "b"
-        if "TC" in seg:
-            col = "r"
-        plt.plot(times, [i] * len(times), col + "|", ms=5, label=seg)
-        i += 10
-
-    plt.xticks(np.arange(min(legacy["t"]), max(legacy["t"]) + 1, 50.0))
-    plt.margins(0)
-    plt.yticks([])
-    plt.gca().spines["top"].set_visible(False)
-    plt.gca().spines["right"].set_visible(False)
-    plt.gca().spines["left"].set_visible(False)
-    plt.xlabel("Simulation Time [ms]")
-    plt.show()
-
-    plt.subplots(figsize=(fig_width, 5))
-    plt.margins(0)
-    plt.plot(legacy["t"], legacy["lfp"] * 1000)
-    plt.plot(legacy["t"], legacy["lfp_bp"] * 10000 - 200)
-    plt.xticks(np.arange(min(legacy["t"]), max(legacy["t"]) + 1, 50.0))
-    plt.yticks([])
-    plt.gca().spines["top"].set_visible(False)
-    plt.gca().spines["right"].set_visible(False)
-    plt.gca().spines["left"].set_visible(False)
-    plt.xlabel("Simulation Time [ms]")
-    plt.show()
-
-    plt.subplots(figsize=(fig_width, 5))
-    plt.contourf(legacy["t"], legacy["frequencies"], legacy["lfp_wavelet_power"], 256, cmap="jet")
-    plt.ylim((20, 140))
-    plt.xticks(np.arange(round(min(legacy["t"])), max(legacy["t"]) + 1, 50.0))
-    plt.ylabel("Frequency [Hz]")
-    plt.xlabel("Simulation Time [ms]")
-    plt.show()
-
-    plot_legacy_sniff_average(
-        legacy["t_average"],
-        legacy["frequencies"],
-        legacy["lfp_wavelet_power_average"],
-    )
-    return legacy
-
-
 def _adaptive_spike_peak_floor(v: np.ndarray) -> float:
     """Estimate a conservative spike-height floor from one voltage trace."""
     return adaptive_soma_spike_peak_floor(v)
@@ -10848,12 +10675,28 @@ def animate_sniff_average_sweep(
 ) -> animation.FuncAnimation:
     """Animate sniff-averaged wavelet views across a sweep."""
     def _plot(result: dict[str, Any]) -> Any:
-        legacy = load_legacy_wavelet_analysis(result, dt=dt_ms, sniff_count=sniff_count)
+        signal_t, signal_y = get_named_signal(result, signal="lfp", dt_ms=dt_ms)
+        _t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
+        sniff_duration_ms = 200.0
+        skip_first_n_sniffs = 1
+        step = max(1, int(round(sniff_duration_ms / dt_ms)))
+        start_index = step * skip_first_n_sniffs
+        available_columns = max(0, power.shape[1] - start_index)
+        chunk_count = min(int(sniff_count), available_columns // step)
+        if chunk_count > 0:
+            chunks = [
+                power[:, start_index + i * step : start_index + (i + 1) * step]
+                for i in range(chunk_count)
+            ]
+            averaged = np.mean(np.asarray(chunks, dtype=float), axis=0)
+        else:
+            averaged = power[:, :step]
+        plot_t = np.arange(averaged.shape[1], dtype=float) * dt_ms
         fig, ax = plt.subplots(figsize=(5, 5))
         ax.contourf(
-            legacy["t_average"],
-            legacy["frequencies"],
-            legacy["lfp_wavelet_power_average"],
+            plot_t,
+            freqs,
+            averaged,
             256,
             cmap="jet",
         )
@@ -11300,11 +11143,6 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     gc_max_connections = int(config.get("gc_output_max_connections", 120))
     gc_norm = str(config.get("gc_output_rate_normalization", "per_target_cell"))
     show_raw_voltage_traces = bool(config.get("show_voltage_traces", False))
-    show_legacy = bool(config.get("show_legacy_plots", False))
-
-    if show_legacy:
-        sniff_count = int(config.get("sniff_count", 8))
-        show_legacy_plots(result, sniff_count=sniff_count, dt=dt_ms)
 
     plot_input_overview(
         result,

@@ -719,7 +719,6 @@ class OlfactoryBulb:
                 "nranks": int(self.nranks),
                 "recording_period": float(self.params.recording_period),
                 "sim_dt": float(self.params.sim_dt),
-                "legacy_parallel_dt": bool(getattr(self.params, "legacy_parallel_dt", True)),
                 "runtime_mode": getattr(self.params, "runtime_mode", "scientific"),
                 "coreneuron": {
                     "enable": bool(getattr(getattr(self.params, "coreneuron", None), "enable", False)),
@@ -911,11 +910,10 @@ class OlfactoryBulb:
                 self.pc.timeout(parallel_timeout)
             # h.cvode.cache_efficient(0) # This line causes gap junction Seg Faults
             h.cvode_active(0)
+            h.steps_per_ms = 1.0 / self.params.sim_dt
             h.dt = self.params.sim_dt
+            h.setdt()
             self.pc.set_maxstep(1)
-            if not getattr(self.params, "legacy_parallel_dt", True):
-                h.steps_per_ms = 1.0 / self.params.sim_dt
-                h.setdt()
             h.stdinit()
             self._actual_dt = float(h.dt)
             if native_corenrn_lfp:

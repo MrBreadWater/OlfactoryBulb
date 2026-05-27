@@ -81,13 +81,6 @@ def build_params(paramset_name: str):
     if "OB_ENABLE_LFP" in os.environ:
         params.enable_lfp = env_flag("OB_ENABLE_LFP", params.enable_lfp)
 
-    if "OB_LEGACY_PARALLEL_DT" in os.environ:
-        params.legacy_parallel_dt = env_flag("OB_LEGACY_PARALLEL_DT", params.legacy_parallel_dt)
-    elif runtime_mode == "scientific":
-        params.legacy_parallel_dt = True
-    else:
-        params.legacy_parallel_dt = False
-
     return params
 
 

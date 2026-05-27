@@ -399,9 +399,6 @@ def main() -> None:
     if args.overrides_file is not None:
         with open(args.overrides_file) as f:
             apply_param_overrides(params, json.load(f))
-    if args.runtime_mode is not None and not (overrides_json and "legacy_parallel_dt" in overrides_json):
-        params.legacy_parallel_dt = args.runtime_mode == "scientific"
-
     build_start = time.perf_counter()
     ob = OlfactoryBulb(params, autorun=False)
     if add_connections is not None or modify_connections is not None or swap_cell_types is not None:
@@ -517,7 +514,6 @@ def main() -> None:
                 },
                 "enable_reciprocal_synapses": getattr(ob.params, "enable_reciprocal_synapses", True),
                 "force_gid_synapses": bool(getattr(ob.bn_server, "force_gid_synapses", False)),
-                "legacy_parallel_dt": getattr(ob.params, "legacy_parallel_dt", True),
                 "runtime_mode": getattr(ob.params, "runtime_mode", "scientific"),
                 "coreneuron": {
                     "enable": args.coreneuron,

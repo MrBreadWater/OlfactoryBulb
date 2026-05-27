@@ -75,7 +75,6 @@ The thick convenience layer for interactive use. Key functions:
 - `load_result(run)` — loads result artifacts, including lazy/deferred soma trace payloads when configured
 - `animate_*_sweep(sweep, ...)` — matplotlib animation wrappers for sweeps; saves GIFs
 - `save_animation(anim, name)` / `save_figure(name, ...)` — persist outputs next to results
-- `show_legacy_plots(result, ...)` — the standard stacked MC/TC/LFP/wavelet visualization
 - `plot_*` family — individual plot functions (voltage traces, spike rasters, LFP overview, spectrograms, wavelets, GC output, input overview)
 - `build_sol_remote_config(...)` / `build_slurm_remote_config(...)` — remote Slurm backends
 
