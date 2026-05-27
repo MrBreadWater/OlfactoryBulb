@@ -22,6 +22,7 @@ from olfactorybulb import slices
 from olfactorybulb.epli import (
     DEFAULT_EPLI_MODEL_KEY,
     EPLI_GROUP_NAME,
+    PRINCIPAL_PERISOMATIC_SELECTOR,
     default_slice_group_colors,
     default_slice_group_names,
     default_slice_synapse_blueprints,
@@ -69,13 +70,14 @@ def _matmul(left, right):
 
 def _evaluated_mesh_obj(mesh_obj):
     """Return the depsgraph-evaluated form of a mesh-like object when available."""
-    if bpy.app.background:
-        return mesh_obj
     try:
         depsgraph = bpy.context.evaluated_depsgraph_get()
-        return mesh_obj.evaluated_get(depsgraph)
+        evaluated = mesh_obj.evaluated_get(depsgraph)
+        if getattr(getattr(evaluated, "data", None), "vertices", None) is not None:
+            return evaluated
     except Exception:
-        return mesh_obj
+        pass
+    return mesh_obj
 
 
 def _object_vertex_points_global(mesh_obj):
@@ -276,42 +278,45 @@ def _confine_curve(curve_obj, mesh, outer_mesh, name_pattern, height_range, max_
 
 def _synapse_build_tree(group_view, pattern):
     """Compatibility implementation of SynapseFormerView.build_tree()."""
-    size = 0
-    for container in group_view.containers.values():
-        splines = container.object.data.splines
-        for spline_index, spline in enumerate(splines):
-            section_name = container.spline_index2section[spline_index].name
-            if fnmatch(section_name, pattern):
-                size += len(spline.bezier_points)
-
-    tree = mathutils.kdtree.KDTree(size)
-    node2terminal = {}
-    max_radius = 0
-    node_id = 0
+    terminals = []
+    soma_center_cache = {}
 
     for container in group_view.containers.values():
         cell_obj = container.object
         splines = cell_obj.data.splines
         mw = cell_obj.matrix_world
 
-        for spline_id, spline in enumerate(splines):
-            section = container.spline_index2section[spline_id]
+        for spline_index, spline in enumerate(splines):
+            section = container.spline_index2section[spline_index]
             section_name = section.name
-            if not fnmatch(section_name, pattern):
+            matching_points = _matching_synapse_points(
+                container,
+                spline_index,
+                spline,
+                section,
+                mw,
+                pattern,
+                soma_center_cache,
+            )
+            if len(matching_points) == 0:
                 continue
 
             arc_lengths = section.arc_lengths()
             tot_length = arc_lengths[-1]
 
-            for pt_id, pt in enumerate(spline.bezier_points):
-                loc = Vector(_matmul(mw, pt.co)).copy().freeze()
+            for pt_id, loc, radius in matching_points:
                 x = arc_lengths[pt_id] / tot_length
                 seg_i = min(floor(section.nseg * x), section.nseg - 1)
-                tree.insert(loc, node_id)
-                node2terminal[node_id] = SynapseTerminal(loc, pt.radius, section_name, pt_id, x, seg_i)
-                if pt.radius > max_radius:
-                    max_radius = pt.radius
-                node_id += 1
+                terminals.append(SynapseTerminal(loc, radius, section_name, pt_id, x, seg_i))
+
+    tree = mathutils.kdtree.KDTree(len(terminals))
+    node2terminal = {}
+    max_radius = 0
+    for node_id, terminal in enumerate(terminals):
+        tree.insert(terminal.loc, node_id)
+        node2terminal[node_id] = terminal
+        if terminal.radius > max_radius:
+            max_radius = terminal.radius
 
     tree.balance()
     return tree, node2terminal, max_radius
@@ -322,6 +327,7 @@ def _synapse_find_pairs(group_view1, view1_pattern, group_view2, group2_tree, gr
     """Compatibility implementation of SynapseFormerView.find_pairs()."""
     pair_heap = []
     search_dist = max_dist + max_radius if use_radii else max_dist
+    soma_center_cache = {}
 
     for container1 in group_view1.containers.values():
         cell_obj = container1.object
@@ -331,17 +337,25 @@ def _synapse_find_pairs(group_view1, view1_pattern, group_view2, group2_tree, gr
             section = container1.spline_index2section[spline1_id]
             section_name = section.name
 
-            if not fnmatch(section_name, view1_pattern):
+            matching_points = _matching_synapse_points(
+                container1,
+                spline1_id,
+                spline1,
+                section,
+                mw,
+                view1_pattern,
+                soma_center_cache,
+            )
+            if len(matching_points) == 0:
                 continue
 
             arc_lengths = section.arc_lengths()
             tot_length = arc_lengths[-1]
 
-            for pt1_id, pt1 in enumerate(spline1.bezier_points):
-                pt_glob = Vector(_matmul(mw, pt1.co.copy())).freeze()
+            for pt1_id, pt_glob, pt1_radius in matching_points:
                 matches = group2_tree.find_range(
                     pt_glob,
-                    search_dist + (pt1.radius if use_radii else 0),
+                    search_dist + (pt1_radius if use_radii else 0),
                 )
 
                 if len(matches) > 0:
@@ -349,12 +363,12 @@ def _synapse_find_pairs(group_view1, view1_pattern, group_view2, group2_tree, gr
                     seg_i = min(floor(section.nseg * x), section.nseg - 1)
 
                 for _pt2_glob, node2_id, dist in matches:
-                    term1 = SynapseTerminal(pt_glob, pt1.radius, section_name, pt1_id, x, seg_i)
+                    term1 = SynapseTerminal(pt_glob, pt1_radius, section_name, pt1_id, x, seg_i)
                     term2 = group2_node2synterm[node2_id]
                     pair = SynapsePair(term1, term2, dist)
 
                     if use_radii:
-                        true_dist = dist - pt1.radius - term2.radius
+                        true_dist = dist - pt1_radius - term2.radius
                         if true_dist <= max_dist:
                             pair.length = true_dist
                             heappush(pair_heap, (true_dist, pair))
@@ -379,6 +393,70 @@ def _synapse_find_pairs(group_view1, view1_pattern, group_view2, group2_tree, gr
         result_pairs.append(pair)
 
     return result_pairs
+
+
+def _section_family_name(section_name):
+    suffix = section_name.split(".", 1)[1] if "." in section_name else section_name
+    if suffix.startswith("dend_primary"):
+        return "dend_primary"
+    if suffix.startswith("dend_branch"):
+        return "dend_branch"
+    if suffix.startswith("soma"):
+        return "soma"
+    if suffix.startswith("apic"):
+        return "apic"
+    if suffix.startswith("dend"):
+        return "dend"
+    if suffix.startswith("axon"):
+        return "axon"
+    return suffix.split("[", 1)[0]
+
+
+def _container_soma_center(container, matrix_world, cache):
+    cache_key = id(container.object)
+    if cache_key in cache:
+        return cache[cache_key]
+
+    soma_points = []
+    for spline_index, spline in enumerate(container.object.data.splines):
+        section = container.spline_index2section[spline_index]
+        if _section_family_name(section.name) != "soma":
+            continue
+        for pt in spline.bezier_points:
+            soma_points.append(np.asarray(_matmul(matrix_world, pt.co), dtype=float))
+
+    if len(soma_points) == 0:
+        center = np.zeros(3, dtype=float)
+    else:
+        center = np.mean(np.asarray(soma_points, dtype=float), axis=0)
+    cache[cache_key] = center
+    return center
+
+
+def _matching_synapse_points(container, spline_index, spline, section, matrix_world, selector, soma_center_cache):
+    section_name = section.name
+
+    if selector == PRINCIPAL_PERISOMATIC_SELECTOR:
+        family = _section_family_name(section_name)
+        if family not in {"soma", "apic", "axon"}:
+            return []
+
+        soma_center = _container_soma_center(container, matrix_world, soma_center_cache)
+        max_perisomatic_distance_um = 25.0
+        matches = []
+        for pt_id, pt in enumerate(spline.bezier_points):
+            loc = Vector(_matmul(matrix_world, pt.co)).copy().freeze()
+            if np.linalg.norm(np.asarray(loc, dtype=float) - soma_center) <= max_perisomatic_distance_um:
+                matches.append((pt_id, loc, pt.radius))
+        return matches
+
+    if not fnmatch(section_name, selector):
+        return []
+
+    return [
+        (pt_id, Vector(_matmul(matrix_world, pt.co)).copy().freeze(), pt.radius)
+        for pt_id, pt in enumerate(spline.bezier_points)
+    ]
 
 
 def _ensure_blenderneuron_ready():

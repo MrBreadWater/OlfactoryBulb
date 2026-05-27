@@ -8,7 +8,15 @@ from pathlib import Path
 from typing import Any
 
 from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded
-from olfactorybulb.epli import default_slice_synapse_blueprints
+from olfactorybulb.audit.epli_reference import (
+    BRANCHING_ZONE_MAX_UM,
+    FAST_SPIKING_REFERENCE,
+    PLANAR_SPAN_UM,
+    PRIMARY_PROCESS_COUNT,
+    SOMA_DIAMETER_UM,
+)
+from olfactorybulb.audit.neuron_protocols import monotonic_non_decreasing, sweep_soma_step_responses
+from olfactorybulb.epli import PRINCIPAL_PERISOMATIC_SELECTOR, default_slice_synapse_blueprints
 from olfactorybulb.slice_connectivity_optimizer import (
     load_slice_geometry,
     observed_metrics_for_synapse_set,
@@ -81,13 +89,15 @@ def audit_epli_defaults() -> list[AuditItem]:
         )
     )
 
-    soma_only = all(blueprint.get("section_pattern_dest") == "*soma*" for blueprint in epli_blueprints)
+    selectors = [blueprint.get("section_pattern_dest") for blueprint in epli_blueprints]
+    has_semantic_perisomatic_selector = all(selector == PRINCIPAL_PERISOMATIC_SELECTOR for selector in selectors)
+    soma_only = all(selector == "*soma*" for selector in selectors)
     items.append(
         AuditItem(
             check_id="epli_target_pattern_specificity",
-            status="FAIL" if soma_only else "WARN",
-            title="Default EPLI target pattern is soma-only",
-            criterion="Perisomatic inhibition in the literature includes soma, proximal apical dendrite, and axon hillock territory; soma-only targeting is too narrow.",
+            status="PASS" if has_semantic_perisomatic_selector else ("FAIL" if soma_only else "WARN"),
+            title="Default EPLI target pattern encodes perisomatic principal territory",
+            criterion="Perisomatic inhibition in the literature includes soma, proximal apical dendrite, and axon hillock territory; the default selector should encode that broader territory instead of soma-only.",
             evidence={
                 blueprint["group_to"]: {
                     "section_pattern_dest": blueprint.get("section_pattern_dest"),
@@ -95,7 +105,11 @@ def audit_epli_defaults() -> list[AuditItem]:
                 }
                 for blueprint in epli_blueprints
             },
-            note="Current defaults encode a placeholder contact class, not a validated anatomical targeting rule.",
+            note=(
+                "The current selector is a semantic perisomatic scaffold."
+                if has_semantic_perisomatic_selector
+                else "Current defaults encode a placeholder contact class, not a validated anatomical targeting rule."
+            ),
         )
     )
 
@@ -173,6 +187,7 @@ def audit_synthetic_cell_geometry(*, skip_neuron: bool = False) -> list[AuditIte
         )
         return items
 
+    PVCRH_FSI1._instance_counter = 0
     cell = PVCRH_FSI1()
     soma_diameter_um = float(cell.soma.diam)
     primary_count = len(cell.primary_dendrites)
@@ -188,30 +203,30 @@ def audit_synthetic_cell_geometry(*, skip_neuron: bool = False) -> list[AuditIte
         [
             AuditItem(
                 check_id="synthetic_soma_diameter",
-                status="PASS" if 8.9 <= soma_diameter_um <= 10.3 else "FAIL",
+                status="PASS" if SOMA_DIAMETER_UM.low <= soma_diameter_um <= SOMA_DIAMETER_UM.high else "FAIL",
                 title="Synthetic EPLI soma diameter matches Huang 2013 target",
-                criterion="Target soma diameter is 9.6 ± 0.7 um for CRH+ EPL interneurons.",
-                evidence={"observed_um": rounded(soma_diameter_um)},
+                criterion=f"Target soma diameter is {SOMA_DIAMETER_UM.mean} ± {SOMA_DIAMETER_UM.tolerance} {SOMA_DIAMETER_UM.units}.",
+                evidence={"observed_um": rounded(soma_diameter_um), "target_low_um": SOMA_DIAMETER_UM.low, "target_high_um": SOMA_DIAMETER_UM.high},
             ),
             AuditItem(
                 check_id="synthetic_primary_process_count",
-                status="PASS" if 3 <= primary_count <= 4 else "FAIL",
+                status="PASS" if PRIMARY_PROCESS_COUNT.low <= primary_count <= PRIMARY_PROCESS_COUNT.high else "FAIL",
                 title="Synthetic EPLI primary process count matches target regime",
-                criterion="Target primary-process count is 3.5 ± 0.4, so 3-4 primaries is the intended range.",
-                evidence={"observed_count": primary_count},
+                criterion=f"Target primary-process count is {PRIMARY_PROCESS_COUNT.mean} ± {PRIMARY_PROCESS_COUNT.tolerance}.",
+                evidence={"observed_count": primary_count, "target_low": PRIMARY_PROCESS_COUNT.low, "target_high": PRIMARY_PROCESS_COUNT.high},
             ),
             AuditItem(
                 check_id="synthetic_planar_span",
-                status="PASS" if 66.5 <= planar_span_um <= 75.5 else "FAIL",
+                status="PASS" if PLANAR_SPAN_UM.low <= planar_span_um <= PLANAR_SPAN_UM.high else "FAIL",
                 title="Synthetic EPLI planar span matches Huang 2013 target",
-                criterion="Target neurite span is 71 ± 4.5 um.",
-                evidence={"observed_um": rounded(planar_span_um)},
+                criterion=f"Target neurite span is {PLANAR_SPAN_UM.mean} ± {PLANAR_SPAN_UM.tolerance} {PLANAR_SPAN_UM.units}.",
+                evidence={"observed_um": rounded(planar_span_um), "target_low_um": PLANAR_SPAN_UM.low, "target_high_um": PLANAR_SPAN_UM.high},
             ),
             AuditItem(
                 check_id="synthetic_branching_zone",
-                status="PASS" if max(branch_root_distances) <= 30.0 else "FAIL",
+                status="PASS" if max(branch_root_distances) <= BRANCHING_ZONE_MAX_UM else "FAIL",
                 title="Synthetic EPLI branching occurs within proximal EPL territory",
-                criterion="Highest branching should occur within roughly 30 um of the soma.",
+                criterion=f"Highest branching should occur within roughly {BRANCHING_ZONE_MAX_UM:g} um of the soma.",
                 evidence={
                     "max_branch_origin_um": rounded(max(branch_root_distances)),
                     "branch_origin_distances_um": [rounded(value) for value in branch_root_distances],
@@ -223,6 +238,108 @@ def audit_synthetic_cell_geometry(*, skip_neuron: bool = False) -> list[AuditIte
                 title="Synthetic EPLI topology is axonless",
                 criterion="Current target class is implemented as an axonless/anaxonic surrogate.",
                 evidence={"has_axon_sections": hasattr(cell, "axon") and bool(getattr(cell, "axon"))},
+            ),
+        ]
+    )
+
+    return items
+
+
+def audit_synthetic_cell_behavior(*, skip_neuron: bool = False) -> list[AuditItem]:
+    items: list[AuditItem] = []
+
+    if skip_neuron:
+        items.append(
+            AuditItem(
+                check_id="synthetic_cell_behavior_skipped",
+                status="WARN",
+                title="Synthetic EPLI behavior check skipped",
+                criterion="Run this audit under the OBGPU/NEURON environment to verify stable fast-spiking behavior.",
+            )
+        )
+        return items
+
+    try:
+        from prev_ob_models.SyntheticEPL2026.isolated_cells import PVCRH_FSI1
+    except Exception as exc:  # pragma: no cover
+        items.append(
+            AuditItem(
+                check_id="synthetic_cell_behavior_import",
+                status="FAIL",
+                title="Synthetic EPLI behavior audit could not import the surrogate cell",
+                criterion="Behavior audit must be able to instantiate the configured surrogate cell in NEURON.",
+                evidence={"error": repr(exc)},
+            )
+        )
+        return items
+
+    def cell_factory():
+        PVCRH_FSI1._instance_counter = 0
+        return PVCRH_FSI1()
+
+    amplitudes = [0.0, 0.02, 0.05, 0.1, 0.2, 0.5, 1.0, 1.5, FAST_SPIKING_REFERENCE.audit_current_max_nA]
+    responses = sweep_soma_step_responses(cell_factory, amplitudes)
+    response_by_amp = {response.amp_nA: response for response in responses}
+    response_rates = [response.step_rate_hz for response in responses if response.amp_nA > 0]
+    rest = response_by_amp[0.0]
+    moderate = response_by_amp[0.2]
+    fast = response_by_amp[FAST_SPIKING_REFERENCE.audit_current_max_nA]
+    max_rate = max(response_rates) if response_rates else 0.0
+
+    items.extend(
+        [
+            AuditItem(
+                check_id="synthetic_rest_stability",
+                status="PASS" if (not rest.has_nan and len(rest.step_spike_times_ms) == 0) else "FAIL",
+                title="Synthetic EPLI remains numerically stable at rest",
+                criterion="The surrogate should not generate NaNs or spontaneous spikes during a resting fixed-step audit run.",
+                evidence={
+                    "has_nan": rest.has_nan,
+                    "rest_final_v_mV": rounded(rest.final_v_mV),
+                    "rest_max_v_mV": rounded(rest.max_v_mV),
+                    "rest_spike_count": len(rest.step_spike_times_ms),
+                },
+            ),
+            AuditItem(
+                check_id="synthetic_moderate_current_spiking",
+                status="PASS" if (not moderate.has_nan and len(moderate.step_spike_times_ms) > 0) else "FAIL",
+                title="Synthetic EPLI spikes under moderate current injection",
+                criterion="The surrogate should fire repetitively under a moderate somatic current step without numerical instability.",
+                evidence={
+                    "amp_nA": moderate.amp_nA,
+                    "has_nan": moderate.has_nan,
+                    "spike_count": len(moderate.step_spike_times_ms),
+                    "step_rate_hz": rounded(moderate.step_rate_hz),
+                    "max_v_mV": rounded(moderate.max_v_mV),
+                },
+            ),
+            AuditItem(
+                check_id="synthetic_fast_spiking_capability",
+                status="PASS" if (not fast.has_nan and max_rate >= FAST_SPIKING_REFERENCE.minimum_fast_spiking_rate_hz) else "FAIL",
+                title="Synthetic EPLI reaches a literature-consistent fast-spiking regime",
+                criterion=(
+                    f"The audit sweep should reach at least {FAST_SPIKING_REFERENCE.minimum_fast_spiking_rate_hz:g} Hz "
+                    f"by {FAST_SPIKING_REFERENCE.audit_current_max_nA:g} nA, consistent with the Huang 2013 fast-spiking regime."
+                ),
+                evidence={
+                    "reference": FAST_SPIKING_REFERENCE.source,
+                    "audit_current_max_nA": FAST_SPIKING_REFERENCE.audit_current_max_nA,
+                    "target_min_rate_hz": FAST_SPIKING_REFERENCE.minimum_fast_spiking_rate_hz,
+                    "target_stretch_rate_hz": FAST_SPIKING_REFERENCE.stretch_fast_spiking_rate_hz,
+                    "observed_max_rate_hz": rounded(max_rate),
+                    "observed_rate_at_max_current_hz": rounded(fast.step_rate_hz),
+                },
+                note="Kato 2013 reports still higher PV-FSI rates, but the current audit only requires the Huang-like fast-spiking regime.",
+            ),
+            AuditItem(
+                check_id="synthetic_fi_monotonicity",
+                status="PASS" if monotonic_non_decreasing(response_rates) else "WARN",
+                title="Synthetic EPLI firing rate increases monotonically across the audit step sweep",
+                criterion="A first-pass fast-spiking scaffold should exhibit a nondecreasing f-I curve over the audit current range.",
+                evidence={
+                    "amps_nA": [response.amp_nA for response in responses if response.amp_nA > 0],
+                    "rates_hz": [rounded(rate) for rate in response_rates],
+                },
             ),
         ]
     )
@@ -302,6 +419,7 @@ def run(args: argparse.Namespace) -> AuditReport:
         audit_epli_defaults(),
         audit_epli_distribution_assumptions(),
         audit_synthetic_cell_geometry(skip_neuron=bool(args.skip_neuron)),
+        audit_synthetic_cell_behavior(skip_neuron=bool(args.skip_neuron)),
         audit_candidate_slice(getattr(args, "candidate_slice", None)),
     )
     return AuditReport(
@@ -309,4 +427,3 @@ def run(args: argparse.Namespace) -> AuditReport:
         title="EPLI correctness audit",
         items=items,
     )
-

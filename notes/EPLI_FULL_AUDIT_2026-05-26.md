@@ -130,6 +130,27 @@ That means the runtime hooks are ahead of the maintained biological asset.
 Today, "EPLI support" means infrastructure exists, not that the biological
 population is validated and ready.
 
+Follow-up export evidence is now more specific than that:
+
+- reduced headless smoke exports do write valid `MCs.json`, `TCs.json`,
+  `GCs.json`, `EPLIs.json`, and the corresponding synapse-set files
+- however, those reduced exports still write `0` explicit entries in:
+  - `GCs__MCs`
+  - `GCs__TCs`
+  - `EPLIs__MCs`
+  - `EPLIs__TCs`
+- canonical-density headless exports still hit repeated Blender background
+  errors of the form:
+  - `Error: Object '1 OPL-Inner' has no evaluated mesh data`
+  - `Error: Object '1 OPL-Outer' has no evaluated mesh data`
+  and did not complete to a maintained asset
+
+So the remaining hard failure is now specifically twofold:
+
+- **maintained canonical-density EPLI slice asset export is not reliable yet**
+- **the current reduced deterministic exports are too sparse to certify
+  network-ready connectivity**
+
 ### 2. The default EPLI placement distribution is not biologically grounded yet
 
 Severity: high
@@ -159,26 +180,37 @@ See:
 
 - `notes/EPLI_PLACEMENT_DEBUG_2026-05-26.md`
 
-### 3. The default EPLI synapse geometry is too narrow relative to the literature
+### 3. The default EPLI synapse geometry is still heuristic, but no longer soma-only
 
-Severity: high
+Severity: medium
 
 Current default EPLI blueprints:
 
 - source pattern: `*dend*`
-- dest pattern: `*soma*`
+- dest pattern: `@principal_perisomatic`
 - max distance: `20 um`
 
 Relevant code:
 
 - `olfactorybulb/epli.py`
+- selector implementation: `olfactorybulb/slicebuilder/blender.py`
 
-That does **not** adequately reflect Burton 2024, which argues for
-perisomatic inhibition involving soma, proximal apical dendrite, and axon
-hillock territory.
+This is materially better than the earlier `*soma*` placeholder. The selector
+now encodes a broader perisomatic principal-cell territory spanning:
 
-The current default therefore encodes a placeholder contact class, not a
-validated anatomical targeting rule.
+- soma
+- proximal apical dendrite
+- axon hillock / axon-root territory
+
+with a local point-level distance gate around the soma.
+
+That is directionally consistent with Burton 2024.
+
+However, it is still **heuristic**:
+
+- the local perisomatic radius is a coded scaffold, not a published exact
+  anatomical threshold
+- the selector has not yet been validated on a maintained exported EPLI slice
 
 ### 4. Slice-level contact evidence is still incomplete
 
@@ -186,40 +218,76 @@ Severity: medium-high
 
 What has been shown so far:
 
-- small smoke slices can support nonzero local `EPLI -> TC` dendritic overlap
-- the same smoke slices did **not** produce robust `EPLI -> MC` overlap
-  even after:
-  - fixing the root-export bug
-  - improving soma-candidate ranking
-  - widening the dendrite confinement corridor
+- reduced deterministic slices now provide a usable local evidence base
+- under the **exported default** perisomatic rule, all tested reduced slices
+  still produce `0` explicit `EPLI -> MC` and `EPLI -> TC` entries
+- offline latent-contact search on those same exports shows:
+  - reproducible nonzero `EPLI -> TC` dendritic overlap
+  - persistent `EPLI -> MC` zero overlap across all tested reduced scans,
+    including MC-favoring count/depth sweeps
+
+Observed examples from the reduced scans:
+
+- `DorsalColumnSliceEPLI_mcscan_d`
+  - export: `10 MC / 4 TC / 27 GC / 8 EPLI`
+  - latent best `EPLI -> TCs`: `24` entries, `src_cov=0.875`,
+    `dst_cov=0.5`, `dist50=5.98 um`
+  - latent best `EPLI -> MCs`: `0` entries
+- `DorsalColumnSliceEPLI_mcscan_f`
+  - export: `10 MC / 10 TC / 42 GC / 10 EPLI`
+  - latent best `EPLI -> TCs`: `99` entries, `src_cov=1.0`,
+    `dst_cov=0.4`, `dist50=12.63 um`
+  - latent best `EPLI -> MCs`: `0` entries
+- `DorsalColumnSliceEPLI_mcscan_g`
+  - export: `12 MC / 6 TC / 58 GC / 12 EPLI`
+  - latent best `EPLI -> TCs`: `91` entries, `src_cov=0.833`,
+    `dst_cov=0.833`, `dist50=15.70 um`
+  - latent best `EPLI -> MCs`: `0` entries
 
 Interpretation:
 
 - the current synthetic morphology plus current placement heuristic is not yet
-  enough to justify a default `EPLI -> MC` connectivity claim
-- the next bottleneck is likely morphology reach and/or distribution, not only
-  the contact-radius parameter
+  enough to justify a default **PV-symmetric MC/TC** connectivity claim
+- the strongest current mismatch is **TC-biased latent geometry**
+- the next bottleneck is likely morphology reach and/or soma-depth
+  distribution, not only the contact-radius parameter
 
-### 5. Behavioral validation is missing for the new population
+### 5. Behavioral validation is now partial rather than absent
 
-Severity: high
+Severity: medium-high
 
-The repo contains historical validation artifacts for the maintained cell
-classes, including:
+The repo now has a machine-runnable isolated-cell behavior gate for the
+synthetic surrogate via:
 
-- `notes/gc_model_ephyz_validation_results.csv`
-- `prev_ob_models/morphology-validation-results.xlsx`
+- `olfactorybulb/audit/neuron_protocols.py`
+- `tools/run_audit.py epli_correctness`
+- `test_synthetic_epl_fsi.py`
 
-But there is no equivalent validation suite yet for:
+Current observed fixed-step behavior after removing the destabilizing `Ih`
+mechanism from the surrogate soma:
 
-- EPLI FI curves
-- passive properties
-- synaptic response properties
+- stable at rest with no spontaneous spikes
+- fires repetitively under modest current injection
+- reaches:
+  - `30 Hz` at `0.2 nA`
+  - `53.3 Hz` at `1.0 nA`
+  - `66.7 Hz` at `1.5 nA`
+  - `76.7 Hz` at `2.0 nA`
+  - `113.3 Hz` at `3.0 nA`
+
+This is now enough to say the surrogate has a validated isolated
+fast-spiking regime in the Huang range.
+
+What is still missing:
+
+- passive-property comparison against reported electrophysiology
+- synaptic response validation
+- slice-distribution validation
 - network ablation signatures
 - gamma / HFO effects under explicit perturbations
 
-That means the surrogate is morphologically constrained but not yet
-behaviorally validated.
+So the surrogate is no longer "behaviorally unvalidated" in the narrow
+single-cell sense, but it is still far from network-validated.
 
 ## Current pass/fail judgment
 
@@ -234,12 +302,21 @@ behaviorally validated.
 - EPLI placement distribution is heuristic
 - default candidate ranking is order-sensitive unless explicitly overridden
 - default contact radius is heuristic rather than evidence-backed
+- isolated behavior is now stable and fast-spiking, but MC/TC balance is not
+  yet validated
 
 ### FAIL
 
 - no maintained network-ready EPLI slice asset is shipped
-- default EPLI target pattern is too narrow relative to the literature
-- no cell-level or network-level validation suite exists yet for the new class
+- reduced deterministic slices remain too sparse to certify network-ready
+  connectivity
+- current reduced-slice evidence is TC-biased and does not support the intended
+  default MC/TC symmetry
+
+### Remaining structural WARN
+
+- default EPLI perisomatic selector is still heuristic rather than directly
+  measured
 
 ## What "guarantee correctness" can and cannot mean here
 

@@ -154,9 +154,10 @@ class _SyntheticEPLCell(IsolatedCell):
         self.soma.gbar_KA = 0.012
         self.soma.insert("KM")
         self.soma.gbar_KM = 0.0015
-        self.soma.insert("Ih")
-        self.soma.gbar_Ih = 0.00002
-        self.soma.eh = -32.0
+        # The Birgiolas Ih mechanism destabilizes this compact surrogate under
+        # both CVode and fixed-step protocols. The literature constraints we are
+        # using here do not require Ih, so omit it until the fast-spiking
+        # scaffold is fitted against dedicated EPL interneuron physiology.
 
         for section in self.primary_dendrites:
             section.gbar_Na = 0.10

@@ -17,6 +17,7 @@ DEFAULT_EPLI_MODEL_KEY = "SyntheticEPL2026.PVCRH_FSI1"
 DEFAULT_EPLI_FAMILY = "SyntheticEPL2026"
 DEFAULT_EPLI_SYNAPSE_SET_NAMES = ("EPLIs__MCs", "EPLIs__TCs")
 DEFAULT_EPLI_GROUP_COLOR = [0.57, 0.93, 0.37]
+PRINCIPAL_PERISOMATIC_SELECTOR = "@principal_perisomatic"
 
 
 def unique_extend(base_items: Sequence[str], extra_items: Iterable[str]) -> list[str]:
@@ -154,7 +155,7 @@ def default_slice_synapse_blueprints(*, include_epli: bool = False) -> list[dict
                     "group_to": target_group,
                     "max_distance": 20,
                     "section_pattern_source": "*dend*",
-                    "section_pattern_dest": "*soma*",
+                    "section_pattern_dest": PRINCIPAL_PERISOMATIC_SELECTOR,
                     "synapse_name_dest": "GabaSyn",
                     "synapse_params_dest": {"gmax": 0.005, "tau1": 1, "tau2": 20},
                     "is_reciprocal": True,
@@ -179,6 +180,7 @@ __all__ = [
     "DEFAULT_EPLI_SYNAPSE_SET_NAMES",
     "EPLI_CELL_TYPE",
     "EPLI_GROUP_NAME",
+    "PRINCIPAL_PERISOMATIC_SELECTOR",
     "default_slice_group_colors",
     "default_slice_group_names",
     "default_slice_synapse_blueprints",

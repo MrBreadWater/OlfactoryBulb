@@ -9,6 +9,7 @@ from olfactorybulb.epli import (
     DEFAULT_EPLI_SYNAPSE_SET_NAMES,
     EPLI_CELL_TYPE,
     EPLI_GROUP_NAME,
+    PRINCIPAL_PERISOMATIC_SELECTOR,
     default_slice_group_colors,
     default_slice_group_names,
     default_slice_synapse_blueprints,
@@ -57,7 +58,7 @@ assert len(epli_blueprints) == 4
 assert epli_blueprints[2]["group_from"] == EPLI_GROUP_NAME
 assert epli_blueprints[2]["group_to"] == "MCs"
 assert epli_blueprints[2]["section_pattern_source"] == "*dend*"
-assert epli_blueprints[2]["section_pattern_dest"] == "*soma*"
+assert epli_blueprints[2]["section_pattern_dest"] == PRINCIPAL_PERISOMATIC_SELECTOR
 assert epli_blueprints[3]["group_to"] == "TCs"
 
 print("EPLI helper smoke test: OK")
