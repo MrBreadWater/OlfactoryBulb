@@ -947,7 +947,16 @@ def _deduplicate_candidate_rows(
     for row in np.asarray(rows, dtype=float):
         if len(selected) >= int(n_candidates):
             break
-        add_row(row, count_drop=True)
+        if add_row(row):
+            continue
+        dropped += 1
+        for scale_fraction in (0.012, 0.024, 0.040, 0.065):
+            jittered = np.asarray(row, dtype=float) + rng.normal(
+                loc=0.0,
+                scale=np.maximum(float(scale_fraction) * encoded_span, 1e-6),
+            )
+            if add_row(jittered):
+                break
 
     centers = np.asarray(fallback_centers, dtype=float)
     if centers.ndim != 2 or centers.shape[0] == 0:
