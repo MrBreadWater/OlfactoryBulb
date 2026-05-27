@@ -497,6 +497,32 @@ def _targeted_elite_probe_rows(
             row[dim] += float(step_fraction) * encoded_span[dim]
             rows.append(np.clip(row, encoded_lo, encoded_hi))
 
+    if mode == "combo":
+        combo_plan = [
+            (("tc_input_weight", -0.030), ("ampa_nmda_gmax", -0.020)),
+            (("tc_input_weight", -0.030), ("gaba_gmax", 0.030)),
+            (("kar_gc_gmax", 0.020), ("gaba_gmax", 0.020)),
+            (("kar_gc_gmax", -0.020), ("kar_mt_gmax", 0.020)),
+            (("kar_mt_gmax", 0.020), ("gaba_gmax", 0.020)),
+            (("gap_tc", -0.030), ("gaba_gmax", 0.020)),
+            (("gap_tc", -0.030), ("tc_input_weight", -0.020)),
+            (("kar_gc_weight_scale", 0.025), ("kar_gc_gmax", -0.015)),
+            (("gc_ka_gbar_scale", 0.025), ("gaba_gmax", 0.015)),
+            (("ampa_nmda_gmax", 0.015), ("gaba_gmax", 0.025)),
+            (("kar_gc_weight_scale", 0.025), ("kar_mt_gmax", -0.015), ("gaba_gmax", 0.015)),
+        ]
+        path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
+        for moves in combo_plan:
+            if len(rows) >= n:
+                break
+            row = np.array(top, copy=True)
+            for path, step_fraction in moves:
+                if path not in path_to_index:
+                    continue
+                dim = path_to_index[path]
+                row[dim] += float(step_fraction) * encoded_span[dim]
+            rows.append(np.clip(row, encoded_lo, encoded_hi))
+
     # Fill any remaining slots with small one-coordinate probes around the top two points.
     while len(rows) < n:
         center = top if (mode == "stencil" or len(rows) % 2 == 0) else second
@@ -642,7 +668,11 @@ def propose_elite_batch(
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     targeted_n = 0
     targeted_mode = "none"
-    if len(valid) >= 224 and len(elite) >= 2 and total_n >= 8:
+    if len(valid) >= 256 and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
+        targeted_n = min(max(8, int(round(0.60 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_mode = "combo"
+    elif len(valid) >= 224 and len(elite) >= 2 and total_n >= 8:
         explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
         targeted_n = min(max(6, int(round(0.50 * total_n))), max(total_n - explore_n - 3, 0))
         targeted_mode = "stencil"

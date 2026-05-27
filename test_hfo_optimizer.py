@@ -198,4 +198,54 @@ with TemporaryDirectory() as tmpdir:
     assert sum(batch["proposal_counts"].values()) == 16
     assert len(batch["candidates"]) == 16
 
+with TemporaryDirectory() as tmpdir:
+    search_space = [
+        ParameterSpec(path="kar_mt_gmax", low=0.01, high=100.0, scale="log"),
+        ParameterSpec(path="kar_gc_gmax", low=0.001, high=10.0, scale="log"),
+        ParameterSpec(path="gaba_gmax", low=0.1, high=10.0, scale="log"),
+        ParameterSpec(path="ampa_nmda_gmax", low=16.0, high=128.0, scale="log"),
+        ParameterSpec(path="gap_tc", low=4.0, high=64.0, scale="log"),
+        ParameterSpec(path="kar_gc_weight_scale", low=0.5, high=6.0, scale="log"),
+        ParameterSpec(path="gc_ka_gbar_scale", low=0.25, high=3.0, scale="log"),
+        ParameterSpec(path="tc_input_weight", low=0.4, high=1.2, scale="linear"),
+    ]
+    state_path = f"{tmpdir}/state.json"
+    with open(state_path, "w") as handle:
+        json.dump({"next_batch_index": 0, "next_candidate_index": 0, "completed_batches": []}, handle)
+    rows = []
+    for index in range(256):
+        rows.append(
+            {
+                "candidate_id": f"C{index:05d}",
+                "pair_score": float(256 - index),
+                "parameters": {
+                    "kar_mt_gmax": 0.02 + 0.01 * index,
+                    "kar_gc_gmax": 0.002 + 0.001 * index,
+                    "gaba_gmax": 0.2 + 0.02 * index,
+                    "ampa_nmda_gmax": 20.0 + 0.1 * index,
+                    "gap_tc": 8.0 + 0.05 * index,
+                    "kar_gc_weight_scale": 0.6 + 0.01 * index,
+                    "gc_ka_gbar_scale": 0.4 + 0.005 * index,
+                    "tc_input_weight": 0.5 + 0.001 * index,
+                },
+            }
+        )
+    with open(f"{tmpdir}/candidate_archive.jsonl", "w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+    batch = propose_elite_batch(
+        tmpdir,
+        search_space=search_space,
+        n_candidates=16,
+        seed=13,
+        method="elite_truncated_gaussian_plus_lhs",
+    )
+    assert batch["proposal_counts"]["targeted"] == 10
+    assert batch["proposal_counts"]["explore"] == 1
+    assert batch["targeted_detail"]["mode"] == "combo"
+    assert batch["targeted_detail"]["coordinate_probe_count"] == 10
+    assert sum(batch["proposal_counts"].values()) == 16
+    assert len(batch["candidates"]) == 16
+
 print("hfo optimizer scoring: OK")
