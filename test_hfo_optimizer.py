@@ -102,6 +102,8 @@ with TemporaryDirectory() as tmpdir:
     assert batch["strategy"] == "elite_truncated_gaussian_plus_lhs"
     assert batch["local_source_ids"] == ["C00000", "C00001", "C00002", "C00003"]
     assert sum(batch["proposal_counts"].values()) == 8
+    assert batch["local_detail_counts"]["tight_best"] >= 1
+    assert batch["local_detail_counts"]["tight_best"] + batch["local_detail_counts"]["broad_weighted"] == batch["proposal_counts"]["local"]
     assert len(batch["candidates"]) == 8
 
 print("hfo optimizer scoring: OK")

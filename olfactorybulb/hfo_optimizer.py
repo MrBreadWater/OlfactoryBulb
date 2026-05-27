@@ -553,11 +553,20 @@ def propose_elite_batch(
         dtype=float,
     )
     local_weights = raw_weights / raw_weights.sum()
-    local_sigma = np.maximum(0.10 * encoded_span, 1e-6)
+    tight_local_n = min(local_n, max(1, int(round(0.50 * local_n)))) if local_n > 0 else 0
+    broad_local_n = max(0, local_n - tight_local_n)
+
+    tight_local_sigma = np.maximum(0.035 * encoded_span, 1e-6)
+    broad_local_sigma = np.maximum(0.10 * encoded_span, 1e-6)
     local_rows = []
-    for _ in range(local_n):
+    if tight_local_n > 0:
+        best_center = local_centers[0]
+        for _ in range(tight_local_n):
+            row = rng.normal(loc=best_center, scale=tight_local_sigma)
+            local_rows.append(np.clip(row, encoded_lo, encoded_hi))
+    for _ in range(broad_local_n):
         center = local_centers[int(rng.choice(local_source_count, p=local_weights))]
-        row = rng.normal(loc=center, scale=local_sigma)
+        row = rng.normal(loc=center, scale=broad_local_sigma)
         local_rows.append(np.clip(row, encoded_lo, encoded_hi))
     local_rows = (
         np.asarray(local_rows, dtype=float)
@@ -605,6 +614,10 @@ def propose_elite_batch(
             "local": int(local_n),
             "covariance": int(covariance_n),
             "explore": int(explore_n),
+        },
+        "local_detail_counts": {
+            "tight_best": int(tight_local_n),
+            "broad_weighted": int(broad_local_n),
         },
     }
     _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)
