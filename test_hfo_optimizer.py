@@ -110,6 +110,7 @@ assert upper_target_metrics["peak_hz"] > 210.0 and upper_target_metrics["peak_hz
 
 good_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=target_metrics)
 bad_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=target_metrics)
+upper_bad_pair = score_candidate_pair(control_metrics=upper_target_metrics, ketamine_metrics=upper_target_metrics)
 reversed_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=flat_metrics)
 artifact_control_metrics = {
     **flat_metrics,
@@ -121,6 +122,14 @@ artifact_control_metrics = {
     },
 }
 artifact_pair = score_candidate_pair(control_metrics=artifact_control_metrics, ketamine_metrics=target_metrics)
+leaky_control_metrics = {
+    **flat_metrics,
+    "relative_band_power": {
+        **flat_metrics["relative_band_power"],
+        "target_hfo": 0.14,
+    },
+}
+leaky_pair = score_candidate_pair(control_metrics=leaky_control_metrics, ketamine_metrics=target_metrics)
 missing_control_pair = score_candidate_pair(
     control_metrics={"condition_score": float("-inf"), "relative_band_power": {}, "peak_ratio": 0.0},
     ketamine_metrics=target_metrics,
@@ -128,10 +137,14 @@ missing_control_pair = score_candidate_pair(
 
 assert good_pair["pair_score"] > bad_pair["pair_score"]
 assert good_pair["pair_score"] > artifact_pair["pair_score"]
+assert good_pair["control_target_excess_penalty"] == 0.0
 assert bad_pair["pair_score"] > reversed_pair["pair_score"]
 assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
+assert upper_bad_pair["same_peak_penalty"] > 0.0
+assert upper_bad_pair["pair_score_version"] == 3
+assert leaky_pair["control_target_excess_penalty"] > 0.0
 assert bad_pair["target_delta"] == 0.0
 assert artifact_pair["control_wrong_band_penalty"] > 0.0
 assert reversed_pair["negative_delta_penalty"] > 0.0

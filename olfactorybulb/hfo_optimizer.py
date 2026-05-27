@@ -46,7 +46,7 @@ DEFAULT_SCORE_BANDS = {
     "supra_hfo": (230.0, 260.0),
 }
 
-PAIR_SCORE_VERSION = 2
+PAIR_SCORE_VERSION = 3
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 
 
@@ -647,6 +647,26 @@ def _target_clean_fraction(metrics: dict[str, Any]) -> float:
         supra_power = _band_power(metrics, "hfo_200_250")
     denom = target_power + lower_side_power + supra_power
     return target_power / denom if denom > 0.0 else 0.0
+
+
+def _target_band_for_pair(
+    control_metrics: dict[str, Any],
+    ketamine_metrics: dict[str, Any],
+) -> tuple[float, float]:
+    """Return the active target band recorded in condition metrics."""
+    for metrics in (ketamine_metrics, control_metrics):
+        raw_band = metrics.get("target_band_hz")
+        if not isinstance(raw_band, (list, tuple)) or len(raw_band) != 2:
+            continue
+        try:
+            lo = float(raw_band[0])
+            hi = float(raw_band[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lo) and math.isfinite(hi) and hi > lo:
+            return lo, hi
+    lo, hi = DEFAULT_SCORE_BANDS["target_hfo"]
+    return float(lo), float(hi)
 
 
 def rescore_candidate_row(row: dict[str, Any]) -> dict[str, Any]:
@@ -1722,6 +1742,7 @@ def score_candidate_pair(
     ketamine_input_dropout = float(ketamine_metrics.get("input_dropout_penalty", 0.0))
     control_peak_hz = float(control_metrics.get("peak_hz", math.nan))
     ketamine_peak_hz = float(ketamine_metrics.get("peak_hz", math.nan))
+    target_lo_hz, target_hi_hz = _target_band_for_pair(control_metrics, ketamine_metrics)
 
     target_contrast = math.log10((ketamine_target + 1e-12) / (control_target + 1e-12))
     density_contrast = math.log10((ketamine_ratio + 1e-12) / (control_ratio + 1e-12))
@@ -1739,11 +1760,13 @@ def score_candidate_pair(
         + 0.8 * max(control_score, 0.0)
         + control_input_dropout
     )
+    control_target_excess_penalty = 35.0 * max(control_target - 0.12, 0.0)
     same_peak_penalty = 0.0
     if (
         math.isfinite(control_peak_hz)
         and math.isfinite(ketamine_peak_hz)
-        and 160.0 <= control_peak_hz <= 200.0
+        and target_lo_hz <= control_peak_hz <= target_hi_hz
+        and target_lo_hz <= ketamine_peak_hz <= target_hi_hz
         and abs(control_peak_hz - ketamine_peak_hz) <= 5.0
     ):
         same_peak_penalty = 4.0 + 10.0 * control_target
@@ -1762,6 +1785,7 @@ def score_candidate_pair(
         + 3.0 * clean_delta
         + 1.5 * max(-supra_delta, 0.0)
         - control_leak_penalty
+        - control_target_excess_penalty
         - same_peak_penalty
         - negative_delta_penalty
         - ketamine_wrong_band_penalty
@@ -1778,6 +1802,7 @@ def score_candidate_pair(
         "supra_delta": float(supra_delta),
         "target_clean_delta": float(clean_delta),
         "control_leak_penalty": float(control_leak_penalty),
+        "control_target_excess_penalty": float(control_target_excess_penalty),
         "same_peak_penalty": float(same_peak_penalty),
         "negative_delta_penalty": float(negative_delta_penalty),
         "ketamine_wrong_band_penalty": float(ketamine_wrong_band_penalty),
