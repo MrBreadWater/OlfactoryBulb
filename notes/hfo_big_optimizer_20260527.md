@@ -204,3 +204,10 @@ Micro-refinement launch:
 - Current archive best remains `C00261`, score `3.8415`.
 - Batch 18 completed cleanly but did not improve the archive. Its best new candidate was `C00294`, score `2.7377`, with ketamine peak shifted down to `166.016 Hz`, ketamine target relative power `0.1449`, control peak `195.312 Hz`, and control target relative power `0.0676`.
 - Batch 19 launched on Phoenix step `14537854.3197` from commit `4180d89`. Its plan continues the micro policy around `C00261` and `C00053`.
+
+Ridge steering for the next stage:
+
+- The micro stage found useful near-miss structure but did not improve the archive: `C00247` retains high ketamine target power at `180.664 Hz`, while `C00294` keeps control leakage low but shifts ketamine peak down to `166.016 Hz`.
+- Added a `ridge` proposal mode for campaigns with at least 320 valid candidates. It keeps the top candidate as the main anchor but deliberately proposes small moves around the stronger-power and lower-control-leak near-misses too, instead of repeatedly perturbing only `C00261`.
+- For 16-candidate batches the intended post-320 mix is `targeted=11`, `local=3`, `covariance=1`, and `explore=1`.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
