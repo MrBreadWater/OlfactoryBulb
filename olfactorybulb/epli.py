@@ -46,6 +46,12 @@ def resolve_epli_model_spec(*, model: str | None = None, family: str | None = No
     return resolve_cell_choice(model=model, family=family, role=EPLI_CELL_TYPE)
 
 
+def epli_root_name_pattern(*, model: str | None = None, family: str | None = None) -> str:
+    """Return the lower-case BlenderNEURON root-name pattern for the configured EPLI model."""
+    spec = resolve_epli_model_spec(model=model, family=family)
+    return f"{spec.class_name.lower()}*"
+
+
 def extend_runtime_cell_types(
     base_cell_types: Sequence[str],
     *,
@@ -176,6 +182,7 @@ __all__ = [
     "default_slice_group_colors",
     "default_slice_group_names",
     "default_slice_synapse_blueprints",
+    "epli_root_name_pattern",
     "epli_population_enabled",
     "extend_runtime_cell_types",
     "extend_runtime_synapse_sets",

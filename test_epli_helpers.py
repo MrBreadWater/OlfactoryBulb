@@ -12,6 +12,7 @@ from olfactorybulb.epli import (
     default_slice_group_colors,
     default_slice_group_names,
     default_slice_synapse_blueprints,
+    epli_root_name_pattern,
     epli_population_enabled,
     extend_runtime_cell_types,
     extend_runtime_synapse_sets,
@@ -26,6 +27,7 @@ assert epli_population_enabled(enable_epl_interneurons=True, max_epl_interneuron
 spec = resolve_epli_model_spec()
 assert spec.key == DEFAULT_EPLI_MODEL_KEY
 assert spec.role == EPLI_CELL_TYPE
+assert epli_root_name_pattern() == "pvcrh_fsi1*"
 
 assert extend_runtime_cell_types(["MC", "GC", "TC"]) == ["MC", "GC", "TC"]
 assert extend_runtime_cell_types(

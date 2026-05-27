@@ -25,6 +25,7 @@ from olfactorybulb.epli import (
     default_slice_group_colors,
     default_slice_group_names,
     default_slice_synapse_blueprints,
+    epli_root_name_pattern,
     epli_population_enabled,
     resolve_epli_model_spec,
 )
@@ -1022,7 +1023,10 @@ class SliceBuilderBlender:
         self.node.groups['TCs'].select_roots('All','tc*')
         self.node.groups['GCs'].select_roots('All','gc*')
         if self.enable_epl_interneurons and EPLI_GROUP_NAME in self.node.groups:
-            self.node.groups[EPLI_GROUP_NAME].select_roots('All', 'PVCRH*')
+            self.node.groups[EPLI_GROUP_NAME].select_roots(
+                'All',
+                epli_root_name_pattern(model=self.epli_model_spec.key),
+            )
 
         connected_source_cells_by_group = {}
 
