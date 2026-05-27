@@ -814,16 +814,16 @@ def _targeted_elite_probe_rows(
         frontier_plan = [
             ("top", (("epli_ampa_weight_scale", 0.16),)),
             ("top", (("epli_gaba_weight_scale", 0.16),)),
-            ("top", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16))),
-            ("top", (("epli_ampa_weight_scale", 0.32), ("epli_gaba_weight_scale", 0.16))),
-            ("top", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.32))),
-            ("exact", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16), ("gaba_gmax", 0.004))),
-            ("low_control", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16), ("ampa_nmda_gmax", -0.004))),
+            ("top", (("epli_ampa_weight_scale", -0.16),)),
+            ("top", (("epli_gaba_weight_scale", -0.16),)),
+            ("top", (("epli_ampa_weight_scale", -0.16), ("epli_gaba_weight_scale", -0.16))),
+            ("top", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", -0.16))),
+            ("top", (("epli_ampa_weight_scale", -0.16), ("epli_gaba_weight_scale", 0.16))),
+            ("exact", (("epli_ampa_weight_scale", -0.16), ("epli_gaba_weight_scale", -0.16), ("gaba_gmax", 0.004))),
+            ("low_control", (("epli_ampa_weight_scale", -0.24), ("epli_gaba_weight_scale", -0.24), ("ampa_nmda_gmax", -0.004))),
             ("power", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.08), ("gaba_gmax", 0.006))),
-            ("contrast25", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16))),
-            ("contrast25", (("epli_ampa_weight_scale", 0.24), ("epli_gaba_weight_scale", 0.16), ("gap_tc", -0.006))),
-            ("contrast50", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16), ("ampa_nmda_gmax", 0.006))),
-            ("contrast50", (("epli_ampa_weight_scale", 0.24), ("epli_gaba_weight_scale", 0.24), ("gap_tc", -0.010))),
+            ("contrast25", (("epli_ampa_weight_scale", -0.16), ("epli_gaba_weight_scale", -0.16))),
+            ("contrast50", (("epli_ampa_weight_scale", -0.24), ("epli_gaba_weight_scale", -0.16), ("gap_tc", -0.006))),
         ]
         path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
         for center_name, moves in frontier_plan:
