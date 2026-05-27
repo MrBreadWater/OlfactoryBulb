@@ -1612,18 +1612,20 @@ class OlfactoryBulb:
                     DEFAULT_SOMA_SPIKE_REFRACTORY_MS,
                 ),
             )
-            save_voltage_summary_artifact(result, self.results_dir)
-            save_path = save_soma_trace_artifact(
-                result,
-                self.results_dir,
-                trace_format=trace_format,
-                trace_dtype=trace_dtype,
-            )
-            legacy_path = os.path.join(self.results_dir, SOMA_TRACE_FILENAME_PKL)
-            compressed_path = os.path.join(self.results_dir, SOMA_TRACE_FILENAME_NPZ)
-            stale_path = legacy_path if os.path.basename(str(save_path)) == SOMA_TRACE_FILENAME_NPZ else compressed_path
-            if os.path.exists(stale_path):
-                os.unlink(stale_path)
+            if getattr(self.params, "save_voltage_summary", True):
+                save_voltage_summary_artifact(result, self.results_dir)
+            if getattr(self.params, "save_soma_traces", True):
+                save_path = save_soma_trace_artifact(
+                    result,
+                    self.results_dir,
+                    trace_format=trace_format,
+                    trace_dtype=trace_dtype,
+                )
+                legacy_path = os.path.join(self.results_dir, SOMA_TRACE_FILENAME_PKL)
+                compressed_path = os.path.join(self.results_dir, SOMA_TRACE_FILENAME_NPZ)
+                stale_path = legacy_path if os.path.basename(str(save_path)) == SOMA_TRACE_FILENAME_NPZ else compressed_path
+                if os.path.exists(stale_path):
+                    os.unlink(stale_path)
 
         # Gather input event time vectors
         all_input_vecs = self.pc.py_gather(self.input_vectors, 0)

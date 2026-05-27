@@ -47,14 +47,20 @@ campaign_config = default_campaign_run_config({}, tstop_ms=9000.0)
 assert campaign_config["input_odors"] == schedule
 assert campaign_config["inhale_duration_ms"] == 125.0
 assert campaign_config["record_gc_output_events"] is False
+assert campaign_config["save_soma_traces"] is False
+assert campaign_config["save_voltage_summary"] is False
 
 lfp_filter_config = hlp.build_run_config(
     lfp_include_cell_types=["MC", "TC"],
     lfp_exclude_cell_types=["GC"],
+    save_soma_traces=False,
+    save_voltage_summary=False,
 )
 lfp_filter_overrides = hlp.build_param_overrides(lfp_filter_config)
 assert lfp_filter_overrides["lfp_include_cell_types"] == ["MC", "TC"]
 assert lfp_filter_overrides["lfp_exclude_cell_types"] == ["GC"]
+assert lfp_filter_overrides["save_soma_traces"] is False
+assert lfp_filter_overrides["save_voltage_summary"] is False
 assert hlp.cell_type_of("PVCRH_FSI1[0].soma") == "EPLI"
 lfp_diagnostics = lfp_source_diagnostic_configs(
     lfp_filter_config,

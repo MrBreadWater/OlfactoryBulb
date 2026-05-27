@@ -20,6 +20,8 @@ class SilentNetwork:
     enable_status_report = True
     enable_lfp = True
     record_gc_output_events = False
+    save_soma_traces = True
+    save_voltage_summary = True
     keep_native_lfp_debug_files = False
     parallel_timeout = None  # Use NEURON's default MPI timeout unless overridden.
     runtime_mode = "scientific"

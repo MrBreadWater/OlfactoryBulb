@@ -348,6 +348,8 @@ def default_campaign_run_config(
         enable_gc_kar=True,
         record_from_somas=["MC", "TC", "GC", "EPLI"],
         record_gc_output_events=False,
+        save_soma_traces=False,
+        save_voltage_summary=False,
         keep_native_lfp_debug_files=False,
         sweep_engine="remote_batch",
         sweep_sync_live=False,
