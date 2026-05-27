@@ -86,3 +86,13 @@ Scoring correction after batch 2:
   - penalize same-bin target peaks in control and ketamine as a function of control target-band power
   - add an explicit ketamine peak frequency match centered at 180 Hz
 - This should keep the wide-seed batches useful while preventing the elite-refine stage from exploiting a rhythm that is already present in control.
+- Implementation commit: `a8e70662c48a`.
+- Reloaded `olfactorybulb.hfo_optimizer` in Michael's authenticated live kernel and rescored the active campaign archive before elite refinement.
+- Batch 3 then found a substantially better provisional candidate, `C00053`:
+  - ketamine peak: `180.664 Hz`
+  - control peak: `195.312 Hz`
+  - ketamine target relative power: `0.1565`
+  - control target relative power: `0.0885`
+  - pair score: `3.0511`
+  - parameters: `kar_mt_gmax=0.0351`, `kar_gc_gmax=0.0853`, `gaba_gmax=1.544`, `ampa_nmda_gmax=117.244`, `gap_tc=11.781`, `gap_mc=31.640`, `tc_input_weight=0.427`, `mc_input_weight=0.344`
+- Batch 4 launched with remote commit `a8e70662c48a`, confirming the corrected scoring code is in the remote run lineage.
