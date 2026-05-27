@@ -73,4 +73,5 @@ Scoring correction after batch 0:
 
 - Batch 0 completed cleanly and confirmed the remote sweep-driver fix, but the best candidates were not ketamine-specific: several had the same 160-190 Hz peak in both control and ketamine.
 - Tightened `score_candidate_pair` so target-band power in control is treated as leakage, same target-band peak frequency in control/ketamine is penalized, and positive ketamine-control target-band delta is rewarded explicitly.
+- Rewrote the active campaign's batch-0 `candidate_archive.jsonl` and `batch_0000_scored.json` with the tightened formula so elite refinement will not inherit stale nonspecific scores. After rescoring, the top batch-0 candidates were ketamine-shifted cases rather than same-peak control/ketamine cases.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python test_hfo_optimizer.py`.
