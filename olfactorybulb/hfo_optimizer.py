@@ -419,6 +419,7 @@ def _targeted_elite_probe_rows(
     search_space: Sequence[ParameterSpec],
     n: int,
     *,
+    mode: str = "line",
     seed: int | None = None,
 ) -> np.ndarray:
     """Return deterministic local probes around the top two elite candidates."""
@@ -433,12 +434,6 @@ def _targeted_elite_probe_rows(
     top = np.asarray(elite_vectors[0], dtype=float)
     second = np.asarray(elite_vectors[1], dtype=float)
     rows: list[np.ndarray] = []
-
-    # First walk the line between the current best and the strongest near miss.
-    for alpha in (0.25, 0.50, 0.75):
-        if len(rows) >= n:
-            break
-        rows.append(np.clip((1.0 - alpha) * top + alpha * second, encoded_lo, encoded_hi))
 
     priority_paths = [
         "gaba_gmax",
@@ -462,9 +457,41 @@ def _targeted_elite_probe_rows(
     if not priority_indices:
         priority_indices = list(range(len(search_space)))
 
-    # Then do small one-coordinate probes around the top two points.
+    if mode == "line":
+        # First walk the line between the current best and the strongest near miss.
+        for alpha in (0.25, 0.50, 0.75):
+            if len(rows) >= n:
+                break
+            rows.append(np.clip((1.0 - alpha) * top + alpha * second, encoded_lo, encoded_hi))
+
+    if mode == "stencil":
+        move_plan = [
+            ("gaba_gmax", 0.030),
+            ("gaba_gmax", -0.030),
+            ("kar_gc_gmax", 0.030),
+            ("kar_gc_gmax", -0.030),
+            ("kar_mt_gmax", 0.030),
+            ("kar_mt_gmax", -0.030),
+            ("tc_input_weight", -0.030),
+            ("ampa_nmda_gmax", -0.020),
+            ("gap_tc", -0.020),
+            ("kar_gc_weight_scale", 0.020),
+            ("gc_ka_gbar_scale", 0.020),
+        ]
+        path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
+        for path, step_fraction in move_plan:
+            if len(rows) >= n:
+                break
+            if path not in path_to_index:
+                continue
+            row = np.array(top, copy=True)
+            dim = path_to_index[path]
+            row[dim] += float(step_fraction) * encoded_span[dim]
+            rows.append(np.clip(row, encoded_lo, encoded_hi))
+
+    # Fill any remaining slots with small one-coordinate probes around the top two points.
     while len(rows) < n:
-        center = top if (len(rows) % 2 == 0) else second
+        center = top if (mode == "stencil" or len(rows) % 2 == 0) else second
         row = np.array(center, copy=True)
         dim = priority_indices[int(rng.integers(0, len(priority_indices)))]
         step_fraction = 0.018 if len(rows) % 3 else 0.035
@@ -606,9 +633,15 @@ def propose_elite_batch(
     if len(valid) >= 128:
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     targeted_n = 0
-    if len(valid) >= 192 and len(elite) >= 2 and total_n >= 8:
+    targeted_mode = "none"
+    if len(valid) >= 224 and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
+        targeted_n = min(max(6, int(round(0.50 * total_n))), max(total_n - explore_n - 3, 0))
+        targeted_mode = "stencil"
+    elif len(valid) >= 192 and len(elite) >= 2 and total_n >= 8:
         explore_n = min(explore_n, max(1, int(round(0.125 * total_n))))
         targeted_n = min(max(2, int(round(0.25 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_mode = "line"
     remaining_n = total_n - explore_n - targeted_n
     local_fraction = 0.70 if targeted_n > 0 else 0.55
     local_n = min(max(1, int(round(local_fraction * remaining_n))), remaining_n) if remaining_n > 0 else 0
@@ -656,6 +689,7 @@ def propose_elite_batch(
         elite_vectors,
         search_space,
         targeted_n,
+        mode=targeted_mode,
         seed=None if seed is None else seed + 2,
     )
 
@@ -699,8 +733,9 @@ def propose_elite_batch(
         },
         "targeted_detail": {
             "top_pair": [row["candidate_id"] for row in elite[:2]],
-            "line_probe_count": int(min(targeted_n, 3)),
-            "coordinate_probe_count": int(max(targeted_n - 3, 0)),
+            "mode": targeted_mode,
+            "line_probe_count": int(min(targeted_n, 3) if targeted_mode == "line" else 0),
+            "coordinate_probe_count": int(max(targeted_n - 3, 0) if targeted_mode == "line" else targeted_n),
         },
     }
     _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)
