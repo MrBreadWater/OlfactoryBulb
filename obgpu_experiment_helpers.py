@@ -4056,11 +4056,13 @@ def _build_remote_submit_command(
     """Build the remote `submit_sol_run.py` invocation shell line."""
     resolved_step_ntasks = 1
     if config.get("slurm_allocation_job_id") not in (None, ""):
-        resolved_step_ntasks = max(
-            int(step_ntasks or 1),
-            int(config.get("slurm_step_ntasks", 1) or 1),
-            int(config.get("nranks", 1) or 1),
-        )
+        if step_ntasks is None:
+            resolved_step_ntasks = max(
+                int(config.get("slurm_step_ntasks", 1) or 1),
+                int(config.get("nranks", 1) or 1),
+            )
+        else:
+            resolved_step_ntasks = max(int(step_ntasks or 1), 1)
     remote_helper = REPO_ROOT / "tools" / "remote" / "submit_sol_run.py"
     benchmark_b64 = b64encode(json.dumps(benchmark_command).encode("utf-8")).decode("ascii")
     argv = [
@@ -6344,10 +6346,7 @@ def _run_remote_sweep(
         benchmark_command=remote_driver_command,
         remote_mpi_exec=str(effective_config.get("remote_mpi_exec") or default_remote_mpi_exec()),
         remote_git_ref=remote_git_ref,
-        step_ntasks=max(
-            int(effective_config.get("slurm_step_ntasks", 1) or 1),
-            int(effective_config.get("nranks", 1) or 1),
-        ),
+        step_ntasks=1,
         remote_helper_dir=remote_helper_dir,
     )
 

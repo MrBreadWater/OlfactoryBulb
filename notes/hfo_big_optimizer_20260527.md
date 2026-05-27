@@ -48,3 +48,14 @@ Correction during monitoring:
   - Runtime log: `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/codex_big_hfo_logs/big_hfo_optimizer_20260527_073229.log`
   - First corrected remote sweep step: `14537854.2025`
   - Commit used by the remote run: `c08ee7722d3d7cb0f1cbfe623ec54d8ed0b137a2`
+
+Second correction during monitoring:
+
+- The fixed-score campaign still failed all items in batch 0 with `AttributeError: module 'olfactorybulb.model' has no attribute 'GammaSignature_EPLI_Provisional_TCOnly'`.
+- Direct compute-node probes through the authenticated kernel showed the paramset was present under both `python` and `nrniv -mpi -python` at commit `c08ee77`.
+- The real failure was a remote sweep wrapper race: the sweep driver wrapper was launched with `15` Slurm tasks, so 15 copies of the wrapper entered bootstrap concurrently. Some copies launched item simulations while another copy was still moving the shared checkout from `5cf41c3` to `c08ee77`.
+- Fixed locally by making explicit `step_ntasks` exact for reusable-allocation wrapper submission and using `step_ntasks=1` for the remote sweep driver. The driver still launches each simulation item with `nranks=15`, and the sweep keeps `sweep_parallelism=8`, so intended simulation occupancy remains `15 * 8 = 120` CPU tasks.
+- Validation:
+  - `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q obgpu_experiment_helpers.py test_config_helpers.py`
+  - `source tools/setup/activate_obgpu.sh OBGPU; python test_config_helpers.py`
+  - `source tools/setup/activate_obgpu.sh OBGPU; python test_hfo_optimizer.py`

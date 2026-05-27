@@ -608,6 +608,42 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "--step-ntasks" in submit_sol_run_source
     print("Reusable allocation wrapper step launch: OK")
 
+    allocation_cfg = build_run_config(
+        runner_backend="sol_slurm",
+        remote_host="user@host",
+        remote_repo_root="/remote/OlfactoryBulb",
+        remote_results_root="/remote/OlfactoryBulb/results/notebook_runs",
+        remote_conda_activate_cmd="source activate OBGPU",
+        remote_git_ref="abcdef1234567890",
+        slurm_allocation_job_id="12345",
+        slurm_step_ntasks=15,
+        nranks=15,
+    )
+    single_run_submit = hlp._build_remote_submit_command(
+        allocation_cfg,
+        label="single_run",
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_results_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
+        benchmark_command=["nrniv", "-mpi", "-python", "bench.py"],
+        remote_mpi_exec="srun --mpi=pmix_v4 --cpu-bind=none",
+        remote_git_ref="abcdef1234567890",
+        remote_helper_dir=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test"),
+    )
+    sweep_driver_submit = hlp._build_remote_submit_command(
+        allocation_cfg,
+        label="sweep_driver",
+        remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_results_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/sweeps"),
+        benchmark_command=["python3", "/remote/OlfactoryBulb/tools/remote/remote_sweep_driver.py"],
+        remote_mpi_exec="srun --mpi=pmix_v4 --cpu-bind=none",
+        remote_git_ref="abcdef1234567890",
+        step_ntasks=1,
+        remote_helper_dir=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test"),
+    )
+    assert "--step-ntasks 15" in single_run_submit
+    assert "--step-ntasks 1" in sweep_driver_submit
+    print("Remote sweep wrapper uses one allocation task: OK")
+
     # --- Bulky run overrides should stay out of process argv ---
     verbose_cfg = deepcopy(remote_cfg)
     verbose_cfg["input_odors"] = {
