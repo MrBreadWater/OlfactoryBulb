@@ -542,6 +542,8 @@ def propose_elite_batch(
 
     total_n = int(n_candidates)
     explore_n = min(max(0, int(round(float(explore_frac) * total_n))), max(total_n - 1, 0))
+    if len(valid) >= 128:
+        explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     remaining_n = total_n - explore_n
     local_n = min(max(1, int(round(0.55 * remaining_n))), remaining_n) if remaining_n > 0 else 0
     covariance_n = max(0, total_n - explore_n - local_n)
@@ -560,9 +562,12 @@ def propose_elite_batch(
     broad_local_sigma = np.maximum(0.10 * encoded_span, 1e-6)
     local_rows = []
     if tight_local_n > 0:
-        best_center = local_centers[0]
+        tight_source_count = min(2, local_source_count)
+        tight_weights = local_weights[:tight_source_count]
+        tight_weights = tight_weights / tight_weights.sum()
         for _ in range(tight_local_n):
-            row = rng.normal(loc=best_center, scale=tight_local_sigma)
+            center = local_centers[int(rng.choice(tight_source_count, p=tight_weights))]
+            row = rng.normal(loc=center, scale=tight_local_sigma)
             local_rows.append(np.clip(row, encoded_lo, encoded_hi))
     for _ in range(broad_local_n):
         center = local_centers[int(rng.choice(local_source_count, p=local_weights))]
@@ -616,7 +621,7 @@ def propose_elite_batch(
             "explore": int(explore_n),
         },
         "local_detail_counts": {
-            "tight_best": int(tight_local_n),
+            "tight_top": int(tight_local_n),
             "broad_weighted": int(broad_local_n),
         },
     }
