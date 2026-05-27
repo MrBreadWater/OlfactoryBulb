@@ -229,3 +229,11 @@ First ridge improvement:
   - key parameters: `ampa_nmda_gmax=112.4676`, `gaba_gmax=1.7132`, `gap_tc=10.8407`, `tc_input_weight=0.4268`
 - This result supports the ridge interpretation: combining the lower AMPA value from the high-power near-miss with the higher GABA / lower TC-gap setting from `C00261` improved ketamine/control separation while keeping the ketamine peak centered in the requested band.
 - Batch 21 launched from commit `8669ab2`; its plan continues ridge refinement around top pair `["C00327", "C00261"]`.
+- Batch 21 completed cleanly but did not beat `C00327`. Its best new candidate was `C00343`, score `3.4613`, with ketamine peak `180.664 Hz`, ketamine target relative power `0.1507`, control peak `195.312 Hz`, and control target relative power `0.0858`.
+
+Late trust-region steering:
+
+- Added a post-368-candidate `needle` proposal mode for very small trust-region moves around the current best ridge candidates. The intent is to keep the ketamine peak centered at `180.664 Hz` while testing smaller AMPA/GABA/TC-gap combinations than the broader ridge stage.
+- For 16-candidate batches the intended post-368 mix is `targeted=12`, `local=2`, `covariance=1`, and `explore=1`.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+- The next step is to reload `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel before batch 22 finishes, so batch 23 and later can use `targeted_detail.mode = "needle"` once the archive reaches 368 valid candidates.

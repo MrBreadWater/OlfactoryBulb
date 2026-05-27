@@ -344,4 +344,38 @@ with TemporaryDirectory() as tmpdir:
     assert sum(batch["proposal_counts"].values()) == 16
     assert len(batch["candidates"]) == 16
 
+    for index in range(320, 368):
+        rows.append(
+            {
+                "candidate_id": f"C{index:05d}",
+                "pair_score": float(320 - index) / 10.0,
+                "parameters": {
+                    "kar_gc_gmax": 0.002 + 0.001 * index,
+                    "gaba_gmax": 0.2 + 0.02 * index,
+                    "ampa_nmda_gmax": 20.0 + 0.1 * index,
+                    "gap_tc": 8.0 + 0.05 * index,
+                    "kar_gc_weight_scale": 0.6 + 0.01 * index,
+                    "gc_ka_gbar_scale": 0.4 + 0.005 * index,
+                    "tc_input_weight": 0.5 + 0.001 * index,
+                },
+            }
+        )
+    with open(f"{tmpdir}/candidate_archive.jsonl", "w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+    batch = propose_elite_batch(
+        tmpdir,
+        search_space=search_space,
+        n_candidates=16,
+        seed=16,
+        method="elite_truncated_gaussian_plus_lhs",
+    )
+    assert batch["proposal_counts"]["targeted"] == 12
+    assert batch["proposal_counts"]["explore"] == 1
+    assert batch["targeted_detail"]["mode"] == "needle"
+    assert batch["targeted_detail"]["coordinate_probe_count"] == 12
+    assert sum(batch["proposal_counts"].values()) == 16
+    assert len(batch["candidates"]) == 16
+
 print("hfo optimizer scoring: OK")

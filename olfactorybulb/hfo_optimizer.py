@@ -584,6 +584,39 @@ def _targeted_elite_probe_rows(
                 row[dim] += float(step_fraction) * encoded_span[dim]
             rows.append(np.clip(row, encoded_lo, encoded_hi))
 
+    if mode == "needle":
+        needle_centers = {
+            "top": top,
+            "second": second,
+            "third": elite_vectors[2] if len(elite_vectors) > 2 else second,
+            "fourth": elite_vectors[3] if len(elite_vectors) > 3 else second,
+        }
+        needle_plan = [
+            ("top", (("gaba_gmax", 0.003),)),
+            ("top", (("gaba_gmax", 0.009),)),
+            ("top", (("gaba_gmax", 0.003), ("ampa_nmda_gmax", -0.004))),
+            ("top", (("gaba_gmax", 0.009), ("ampa_nmda_gmax", -0.004))),
+            ("top", (("gap_tc", -0.004),)),
+            ("top", (("gaba_gmax", 0.006), ("gap_tc", -0.004))),
+            ("top", (("ampa_nmda_gmax", -0.004), ("gap_tc", 0.004))),
+            ("top", (("tc_input_weight", -0.004), ("gaba_gmax", 0.004))),
+            ("second", (("gaba_gmax", 0.018), ("gap_tc", -0.010), ("ampa_nmda_gmax", -0.010))),
+            ("third", (("gaba_gmax", 0.012), ("gap_tc", -0.012), ("ampa_nmda_gmax", -0.008))),
+            ("third", (("gaba_gmax", 0.006), ("gap_tc", -0.018), ("tc_input_weight", -0.006))),
+            ("fourth", (("gaba_gmax", 0.012), ("gap_tc", -0.012), ("ampa_nmda_gmax", -0.006))),
+        ]
+        path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
+        for center_name, moves in needle_plan:
+            if len(rows) >= n:
+                break
+            row = np.array(needle_centers[center_name], copy=True)
+            for path, step_fraction in moves:
+                if path not in path_to_index:
+                    continue
+                dim = path_to_index[path]
+                row[dim] += float(step_fraction) * encoded_span[dim]
+            rows.append(np.clip(row, encoded_lo, encoded_hi))
+
     # Fill any remaining slots with small one-coordinate probes around the top two points.
     while len(rows) < n:
         center = top if (mode in {"stencil", "ridge"} or len(rows) % 2 == 0) else second
@@ -729,7 +762,11 @@ def propose_elite_batch(
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     targeted_n = 0
     targeted_mode = "none"
-    if len(valid) >= 320 and len(elite) >= 2 and total_n >= 8:
+    if len(valid) >= 368 and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
+        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_mode = "needle"
+    elif len(valid) >= 320 and len(elite) >= 2 and total_n >= 8:
         explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
         targeted_n = min(max(10, int(round(0.70 * total_n))), max(total_n - explore_n - 2, 0))
         targeted_mode = "ridge"
