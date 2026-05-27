@@ -80,3 +80,43 @@ Interpretation discipline
 - A high score means the model reproduces the target spectral signature under the current scoring assumptions.
 - A high score does not by itself prove biological correctness.
 - If the optimizer keeps pushing parameters to the search boundary, expand or revise the search space deliberately instead of silently trusting the result.
+
+## Phoenix-authenticated notebook-run workflow (interactive continuation)
+
+Because Phoenix SSH on `localhost:2223` requires Duo, this environment cannot initiate new remote runs non-interactively. Use the existing authenticated notebook kernel (the one where you already passed `paramiko_auth_probe`) to run autonomous batches.
+
+From that notebook kernel:
+
+```python
+from olfactorybulb.hfo_optimizer import *
+import os
+
+# Reuse your authenticated kernel context (do not pass verify_auth in first run)
+from tools.run_hfo_campaign import run_campaign
+
+campaign_dir = run_campaign(
+    allocation="14537854",   # replace with your active 7-day job id
+    campaign_name="epli_live",  # optional: any string under results/notebook_runs/optimization
+    max_batches=10,
+    total_tasks=120,
+    nranks=15,
+    tstop_ms=9000.0,
+    cell_permute=0,
+    early_stop_score=2.2,
+    verify_auth=False,
+)
+print(campaign_dir)
+```
+
+This keeps the 120-task allocation saturated and records:
+- `batches/batch_*.json`
+- `candidate_archive.jsonl`
+- `item_archive.jsonl`
+
+If needed later, stop and inspect top candidates:
+
+```python
+from olfactorybulb.hfo_optimizer import top_candidate_rows
+rows = top_candidate_rows(campaign_dir, limit=20)
+rows[:5]
+```
