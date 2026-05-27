@@ -278,3 +278,16 @@ GC-excluded LFP pivot after source audit:
   - `lfp_include_cell_types = None`
   - `lfp_exclude_cell_types = ["GC"]`
 - Batch 50 itself remains an all-source LFP batch because its run config had already been copied into the remote sweep. Batch 51 and later should score the same circuit with GC sections excluded from LFP registration, testing whether candidate HFOs survive without GC current dominating the LFP proxy.
+
+Scoring/objective consistency correction:
+
+- Inspecting the live worker source showed the notebook loop still called `score_hfo_batch(... target_hz=180.0, target_half_width_hz=20.0)`, even after the objective had moved to integrated `target_hfo = 160-230 Hz`.
+- Fixed `score_condition_result()` so the named `target_hfo` band is authoritative whenever it is present in the configured score bands. This prevents stale notebook arguments from silently narrowing the target mask back to `160-200 Hz`.
+- Added a campaign-local `objective_filter.json` mechanism so an objective pivot can exclude earlier archive rows from ranking/proposal while preserving the old data on disk.
+- Reloaded the fixed module into Michael's authenticated live kernel while batch 52 was running and wrote:
+  - `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/hfo_epli_big_singlewrapper_120cpu_20260527_082225/objective_filter.json`
+  - `min_batch_index = 52`
+  - `lfp_exclude_cell_types = ["GC"]`
+  - `target_hfo_hz = [160.0, 230.0]`
+- Live-kernel smoke check confirmed that a 220 Hz synthetic signal still scores inside `target_band_hz = [160.0, 230.0]` even when stale `target_hz=180.0, target_half_width_hz=20.0` arguments are passed.
+- Implementation commit: `13488a8`.
