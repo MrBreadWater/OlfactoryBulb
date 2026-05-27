@@ -216,6 +216,7 @@ CONTROL_HELP = {
     "slurm_time": "Optional Slurm walltime, e.g. '02:00:00'.",
     "slurm_gpus": "Optional GPU count requested from Slurm.",
     "slurm_cpus_per_task": "Optional CPU count requested per Slurm task.",
+    "slurm_step_ntasks": "When reusing a remote allocation, number of tasks to request per benchmark step. Defaults to nranks for remote MPI runs.",
     "slurm_mem": "Optional Slurm memory request, e.g. '32G'.",
     "slurm_extra_args": "Optional extra sbatch arguments passed as raw strings.",
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
@@ -856,6 +857,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "slurm_time": None,
         "slurm_gpus": None,
         "slurm_cpus_per_task": None,
+        "slurm_step_ntasks": None,
         "slurm_mem": None,
         "slurm_extra_args": [],
         "ssh_options": [],
@@ -886,6 +888,7 @@ def build_slurm_remote_config(
     slurm_time: str | None = None,
     slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
+    slurm_step_ntasks: int | None = None,
     slurm_mem: str | None = None,
     sweep_sync_live: bool = False,
     remote_poll_interval_s: float = 1.0,
@@ -962,6 +965,11 @@ def build_slurm_remote_config(
         "slurm_time": None if slurm_time in (None, "") else str(slurm_time),
         "slurm_gpus": None if slurm_gpus in (None, "") else int(slurm_gpus),
         "slurm_cpus_per_task": None if slurm_cpus_per_task in (None, "") else int(slurm_cpus_per_task),
+        "slurm_step_ntasks": (
+            None
+            if slurm_step_ntasks in (None, "")
+            else int(max(int(slurm_step_ntasks), 1))
+        ),
         "slurm_mem": None if slurm_mem in (None, "") else str(slurm_mem),
         "slurm_extra_args": list(slurm_extra_args or []),
         "ssh_options": list(ssh_options or []),
@@ -988,6 +996,7 @@ def build_sol_remote_config(
     slurm_time: str | None = None,
     slurm_gpus: int | None = None,
     slurm_cpus_per_task: int | None = None,
+    slurm_step_ntasks: int | None = None,
     slurm_mem: str | None = None,
     sweep_sync_live: bool = False,
     remote_poll_interval_s: float = 1.0,
@@ -1032,6 +1041,7 @@ def build_sol_remote_config(
         slurm_time=slurm_time,
         slurm_gpus=slurm_gpus,
         slurm_cpus_per_task=slurm_cpus_per_task,
+        slurm_step_ntasks=slurm_step_ntasks,
         slurm_mem=slurm_mem,
         sweep_sync_live=sweep_sync_live,
         remote_poll_interval_s=remote_poll_interval_s,
@@ -4034,9 +4044,17 @@ def _build_remote_submit_command(
     benchmark_command: list[str],
     remote_mpi_exec: str,
     remote_git_ref: str | None,
+    step_ntasks: int | None = None,
     remote_helper_dir: PurePosixPath | None = None,
 ) -> str:
     """Build the remote `submit_sol_run.py` invocation shell line."""
+    resolved_step_ntasks = 1
+    if config.get("slurm_allocation_job_id") not in (None, ""):
+        resolved_step_ntasks = max(
+            int(step_ntasks or 1),
+            int(config.get("slurm_step_ntasks", 1) or 1),
+            int(config.get("nranks", 1) or 1),
+        )
     remote_helper = REPO_ROOT / "tools" / "remote" / "submit_sol_run.py"
     benchmark_b64 = b64encode(json.dumps(benchmark_command).encode("utf-8")).decode("ascii")
     argv = [
@@ -4083,6 +4101,7 @@ def _build_remote_submit_command(
     allocation_job_id = config.get("slurm_allocation_job_id")
     if allocation_job_id not in (None, ""):
         argv.extend(["--allocation-job-id", str(allocation_job_id)])
+        argv.extend(["--step-ntasks", str(resolved_step_ntasks)])
 
     for key, flag in (
         ("slurm_partition", "--partition"),
@@ -4551,6 +4570,10 @@ def _remote_submission_payload(
         benchmark_command=remote_command,
         remote_mpi_exec=str(remote_mpi_exec),
         remote_git_ref=remote_git_ref,
+        step_ntasks=max(
+            int(config.get("slurm_step_ntasks", 1) or 1),
+            int(config.get("nranks", 1) or 1),
+        ),
         remote_helper_dir=remote_helper_dir,
     )
     return (
@@ -6315,6 +6338,10 @@ def _run_remote_sweep(
         benchmark_command=remote_driver_command,
         remote_mpi_exec=str(effective_config.get("remote_mpi_exec") or default_remote_mpi_exec()),
         remote_git_ref=remote_git_ref,
+        step_ntasks=max(
+            int(effective_config.get("slurm_step_ntasks", 1) or 1),
+            int(effective_config.get("nranks", 1) or 1),
+        ),
         remote_helper_dir=remote_helper_dir,
     )
 

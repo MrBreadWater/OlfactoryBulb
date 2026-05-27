@@ -726,8 +726,9 @@ def submit_batch(batch_path):
     return job_id
 
 
-def submit_allocation_step(batch_path, allocation_job_id, wrapper_dir):
+def submit_allocation_step(batch_path, allocation_job_id, wrapper_dir, step_ntasks: int = 1):
     """Launch the generated script as a reusable step inside an existing allocation."""
+    step_ntasks = max(int(step_ntasks), 1)
     wrapper_dir = Path(wrapper_dir)
     step_id_path = wrapper_dir / "srun-step-id.txt"
     launcher_stderr_path = wrapper_dir / "srun-launch.stderr"
@@ -750,8 +751,9 @@ batch_path={batch_path}
 allocation_job_id={allocation_job_id}
 slurm_log_path={slurm_log_path}
 step_name={step_name}
+step_ntasks={step_ntasks}
 
-srun --jobid "$allocation_job_id" --overlap --cpu-bind=none --nodes=1 --ntasks=1 --job-name "$step_name" --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$launcher_stdout_path" 2> "$launcher_stderr_path" &
+srun --jobid "$allocation_job_id" --overlap --cpu-bind=none --nodes=1 --ntasks="$step_ntasks" --job-name "$step_name" --output "$slurm_log_path" --error "$slurm_log_path" bash "$batch_path" > "$launcher_stdout_path" 2> "$launcher_stderr_path" &
 launcher_pid=$!
 printf '%s\\n' "$launcher_pid" > "$launcher_pid_path"
 
@@ -784,6 +786,7 @@ head -n 1 "$step_id_path"
         allocation_job_id=shlex.quote(str(allocation_job_id)),
         slurm_log_path=shlex.quote(str(slurm_log_path)),
         step_name=shlex.quote(step_name),
+        step_ntasks=shlex.quote(str(step_ntasks)),
     )
     completed = subprocess.run(
         ["bash", "-lc", shell_script],
@@ -819,6 +822,7 @@ def main():
     parser.add_argument("--repo-mode", default="shared")
     parser.add_argument("--mpi-exec", default="")
     parser.add_argument("--conda-activate-cmd", required=True)
+    parser.add_argument("--step-ntasks", type=int, default=1)
     parser.add_argument("--runtime-profiles-b64", default="")
     parser.add_argument("--fallback-conda-activate-cmd", default=None)
     parser.add_argument("--fast-node-feature", default=None)
@@ -901,7 +905,12 @@ def main():
 
     if not args.dry_run:
         if args.allocation_job_id not in (None, ""):
-            payload["job_id"] = submit_allocation_step(batch_path, args.allocation_job_id, wrapper_dir)
+            payload["job_id"] = submit_allocation_step(
+                batch_path,
+                args.allocation_job_id,
+                wrapper_dir,
+                step_ntasks=args.step_ntasks,
+            )
         else:
             payload["job_id"] = submit_batch(batch_path)
         payload["submitted"] = True
