@@ -44,8 +44,13 @@ assert target_metrics["peak_hz"] > 150.0 and target_metrics["peak_hz"] < 210.0
 
 good_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=target_metrics)
 bad_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=target_metrics)
+missing_control_pair = score_candidate_pair(
+    control_metrics={"condition_score": float("-inf"), "relative_band_power": {}, "peak_ratio": 0.0},
+    ketamine_metrics=target_metrics,
+)
 
 assert good_pair["pair_score"] > bad_pair["pair_score"]
 assert good_pair["target_contrast_log10"] > 0.0
+assert missing_control_pair["pair_score"] == float("-inf")
 
 print("hfo optimizer scoring: OK")

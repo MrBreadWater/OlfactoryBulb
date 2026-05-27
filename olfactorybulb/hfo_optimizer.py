@@ -755,6 +755,14 @@ def score_candidate_pair(
     ketamine_metrics = dict(ketamine_metrics or {})
     control_score = float(control_metrics.get("condition_score", 0.0))
     ketamine_score = float(ketamine_metrics.get("condition_score", 0.0))
+    if not (math.isfinite(control_score) and math.isfinite(ketamine_score)):
+        return {
+            "pair_score": float("-inf"),
+            "target_contrast_log10": float("-inf"),
+            "peak_contrast_log10": float("-inf"),
+            "control_score": float(control_score),
+            "ketamine_score": float(ketamine_score),
+        }
     control_target = float((control_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
     ketamine_target = float((ketamine_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
     control_ratio = float(control_metrics.get("peak_ratio", 0.0))
