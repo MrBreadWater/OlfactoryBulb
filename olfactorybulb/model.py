@@ -751,8 +751,11 @@ class OlfactoryBulb:
     def get_cell_report_gid(self, cell_model):
         gid = self._native_lfp_cell_gids.get(id(cell_model))
         if gid is None:
-            gid = int(self._next_lfp_report_gid)
-            self._next_lfp_report_gid += 1
+            cell_name = self.get_cell_name(cell_model)
+            gid = self._native_lfp_gid_source.get(cell_name)
+            if gid is None:
+                gid = int(self._next_lfp_report_gid)
+                self._next_lfp_report_gid += 1
             self._native_lfp_cell_gids[id(cell_model)] = gid
         return gid
 
