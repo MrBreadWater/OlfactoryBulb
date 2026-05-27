@@ -268,3 +268,13 @@ Duplicate-proposal correction:
 - Follow-up refinement: duplicate structured probes now first become small jittered variants of the intended probe before falling back to broader elite-centered refill. This keeps late-stage batches aligned with the frontier direction instead of replacing every exhausted EPLI stencil with unrelated local samples.
 - Batch 46 surfaced a different high-power basin (`C00745`) with ketamine peak `185.547 Hz` and target relative power `0.2412`, but with excessive control target power (`0.1774`). The frontier `power` center previously excluded that row with a hard `control <= 0.16` gate. Widened the gate to `control <= 0.20` so late batches can try to reduce leakage around this stronger ketamine-power basin instead of only polishing `C00327`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+
+GC-excluded LFP pivot after source audit:
+
+- After visual review, the clearest spectrogram lines appeared to persist even when MC, TC, and EPLI spike activity fell off. That makes a GC-dominated LFP source a plausible artifact path.
+- Runtime LFP source filtering was already implemented in `olfactorybulb.model` and exposed through notebook/benchmark config as `lfp_include_cell_types` and `lfp_exclude_cell_types`.
+- While batch 50 was already running, the authenticated live notebook kernel globals were patched for subsequent batches:
+  - `remote_git_ref = 739d8dff813749df1d23659c4c99b39961e9efb9`
+  - `lfp_include_cell_types = None`
+  - `lfp_exclude_cell_types = ["GC"]`
+- Batch 50 itself remains an all-source LFP batch because its run config had already been copied into the remote sweep. Batch 51 and later should score the same circuit with GC sections excluded from LFP registration, testing whether candidate HFOs survive without GC current dominating the LFP proxy.
