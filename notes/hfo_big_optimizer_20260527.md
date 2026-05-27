@@ -114,3 +114,7 @@ Focused-refine monitoring:
 - Batch 7 was the first batch using the focused proposal mix. Its plan recorded `proposal_counts = {"local": 6, "covariance": 4, "explore": 6}`, `local_source_ids = ["C00053", "C00093", "C00103", "C00072"]`, and a capped 12-candidate elite source set.
 - Batch 7 completed cleanly on Phoenix step `14537854.2789`; its best new candidate was `C00116` with score `0.9797`, so it did not displace `C00053`.
 - Batch 8 launched immediately on commit `442901eb08fc` as Phoenix step `14537854.2823`; the campaign remains active in Michael's authenticated notebook kernel.
+- Because the first focused-refine batch still did not improve on `C00053`, the next proposal update splits local elite proposals into tight-best samples around the current best candidate and broader weighted samples around the top 4 candidates.
+- Implementation commit: `a03fc77`.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+- Reloaded `olfactorybulb.hfo_optimizer` in the live authenticated notebook kernel; future locally generated batch plans should include `local_detail_counts`.
