@@ -68,3 +68,9 @@ Next campaign launch plan:
 - Code fix commit included in launch lineage: `8c5c78c`
 - Launch git ref will be resolved from local `HEAD` immediately before the campaign starts.
 - The live kernel must reload `obgpu_experiment_helpers` and `olfactorybulb.hfo_optimizer` before launching because an earlier diagnostic monkey-patched `score_hfo_batch` to stop the stale worker.
+
+Scoring correction after batch 0:
+
+- Batch 0 completed cleanly and confirmed the remote sweep-driver fix, but the best candidates were not ketamine-specific: several had the same 160-190 Hz peak in both control and ketamine.
+- Tightened `score_candidate_pair` so target-band power in control is treated as leakage, same target-band peak frequency in control/ketamine is penalized, and positive ketamine-control target-band delta is rewarded explicitly.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python test_hfo_optimizer.py`.

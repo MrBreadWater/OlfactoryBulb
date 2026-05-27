@@ -51,6 +51,8 @@ missing_control_pair = score_candidate_pair(
 
 assert good_pair["pair_score"] > bad_pair["pair_score"]
 assert good_pair["target_contrast_log10"] > 0.0
+assert bad_pair["same_peak_penalty"] > 0.0
+assert bad_pair["target_delta"] == 0.0
 assert missing_control_pair["pair_score"] == float("-inf")
 
 print("hfo optimizer scoring: OK")

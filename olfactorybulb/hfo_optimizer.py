@@ -767,14 +767,36 @@ def score_candidate_pair(
     ketamine_target = float((ketamine_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
     control_ratio = float(control_metrics.get("peak_ratio", 0.0))
     ketamine_ratio = float(ketamine_metrics.get("peak_ratio", 0.0))
+    control_peak_hz = float(control_metrics.get("peak_hz", math.nan))
+    ketamine_peak_hz = float(ketamine_metrics.get("peak_hz", math.nan))
 
     target_contrast = math.log10((ketamine_target + 1e-12) / (control_target + 1e-12))
     peak_contrast = math.log10((ketamine_ratio + 1e-12) / (control_ratio + 1e-12))
-    pair_score = ketamine_score + 1.5 * target_contrast + 1.0 * peak_contrast - 0.5 * max(control_score, 0.0)
+    target_delta = ketamine_target - control_target
+    control_leak_penalty = 5.0 * control_target + 0.75 * max(control_score, 0.0)
+    same_peak_penalty = 0.0
+    if (
+        math.isfinite(control_peak_hz)
+        and math.isfinite(ketamine_peak_hz)
+        and 160.0 <= control_peak_hz <= 200.0
+        and abs(control_peak_hz - ketamine_peak_hz) <= 5.0
+    ):
+        same_peak_penalty = 1.0
+    pair_score = (
+        ketamine_score
+        + 2.5 * target_contrast
+        + 1.5 * peak_contrast
+        + 4.0 * max(target_delta, 0.0)
+        - control_leak_penalty
+        - same_peak_penalty
+    )
     return {
         "pair_score": float(pair_score),
         "target_contrast_log10": float(target_contrast),
         "peak_contrast_log10": float(peak_contrast),
+        "target_delta": float(target_delta),
+        "control_leak_penalty": float(control_leak_penalty),
+        "same_peak_penalty": float(same_peak_penalty),
         "control_score": float(control_score),
         "ketamine_score": float(ketamine_score),
     }
