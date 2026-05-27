@@ -177,3 +177,18 @@ Visible-path and combo-stencil refinement after batch 15:
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
 - Reloaded `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel.
 - Batch 16 launched from commit `716167e` on Phoenix step `14537854.3095`. Its plan records `proposal_counts = {"targeted": 10, "local": 4, "covariance": 1, "explore": 1}` and `targeted_detail.mode = "combo"`.
+
+First improved combo candidate:
+
+- Batch 16 completed cleanly and produced a new best candidate, `C00261`, from the GABA-up plus TC-gap-down combo:
+  - ketamine peak: `180.664 Hz`
+  - control peak: `195.312 Hz`
+  - ketamine target relative power: `0.1318`
+  - control target relative power: `0.0655`
+  - pair score: `3.8415`
+  - parameters changed from `C00053`: `gaba_gmax=1.6549` and `gap_tc=10.8407`
+- This is the first candidate to beat `C00053` by a substantial margin. It trades away some absolute ketamine target-band power but improves ketamine/control specificity and control leakage.
+- Batch 17 launched on Phoenix step `14537854.3129`; its plan uses the combo policy around `C00261` with top pair `["C00261", "C00053"]`.
+- Added a micro-refinement stage for campaigns with at least 288 valid candidates. It spends 12 of 16 proposals on smaller local steps around the current best, focused on GABA, TC gap, AMPA, TC input, KAR weight, and GC A-current scale. Implementation commit: `84a8018`.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+- Reloaded `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel; batch 18 and later should use `targeted_detail.mode = "micro"` once the archive reaches 288 valid candidates.
