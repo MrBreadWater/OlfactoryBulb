@@ -6,6 +6,12 @@ from __future__ import annotations
 from pathlib import Path
 import argparse
 import json
+import sys
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import obgpu_experiment_helpers as hlp
 from olfactorybulb.hfo_optimizer import (
@@ -23,6 +29,28 @@ from olfactorybulb.hfo_optimizer import (
     score_hfo_batch,
     top_candidate_rows,
 )
+
+
+def _require_live_paramiko_session(remote_config: dict) -> bool:
+    """Return True when this kernel already has an authenticated Paramiko transport cached."""
+    connection_cache = getattr(hlp, "_LIVE_PARAMIKO_CONNECTIONS", None)
+    key_getter = getattr(hlp, "_paramiko_connection_key", None)
+    transport_check = getattr(hlp, "_paramiko_transport_is_usable", None)
+    if not isinstance(connection_cache, dict) or key_getter is None or transport_check is None:
+        return False
+
+    try:
+        cache_key = key_getter(remote_config)  # type: ignore[misc]
+    except Exception:
+        return False
+    connection = connection_cache.get(cache_key)
+    if not isinstance(connection, dict):
+        return False
+    transport = connection.get("transport")
+    try:
+        return bool(transport_check(transport))
+    except Exception:
+        return False
 
 
 def _build_configs(allocation: str, total_tasks: int, nranks: int, tstop_ms: float, cell_permute: int):
@@ -171,6 +199,7 @@ def run_campaign(
     min_target_contrast_log10: float,
     max_control_score: float,
     require_criteria_for_early_stop: bool,
+    require_live_paramiko_session: bool,
     verify_auth: bool,
 ) -> Path:
     search_space = default_hfo_search_space()
@@ -183,6 +212,13 @@ def run_campaign(
 
     campaign_slug = campaign_name or f"hfo_epli_live_{hlp.make_timestamp()}"
     campaign_dir = _load_or_init_campaign(Path("/home/alek/OlfactoryBulb/results/notebook_runs/optimization") / campaign_slug, base_config, search_space)
+
+    if require_live_paramiko_session and not _require_live_paramiko_session(remote_config):
+        raise RuntimeError(
+            "Existing live Paramiko session was not found in this Python process. "
+            "Run `paramiko_auth_probe(REMOTE_CONFIG)` first in the same kernel, then rerun this script "
+            "from this same kernel context (or disable --require-live-paramiko-session)."
+        )
 
     state = load_campaign_state(campaign_dir)
     print(json.dumps({"campaign_dir": str(campaign_dir), "state": state}, indent=2))
@@ -315,6 +351,18 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Do not require criteria check for early stop",
     )
+    parser.add_argument(
+        "--require-live-paramiko-session",
+        action="store_true",
+        default=True,
+        help="Require an already-authenticated Paramiko session in this process before running",
+    )
+    parser.add_argument(
+        "--no-live-paramiko-session",
+        dest="require_live_paramiko_session",
+        action="store_false",
+        help="Allow establishing a new Paramiko session if one is not already active",
+    )
     parser.add_argument("--verify-auth", action="store_true", help="Run auth probe in this process before starting")
     return parser.parse_args()
 
@@ -336,6 +384,7 @@ def main() -> None:
         min_target_contrast_log10=args.min_target_contrast_log10,
         max_control_score=args.max_control_score,
         require_criteria_for_early_stop=args.require_criteria_for_early_stop,
+        require_live_paramiko_session=args.require_live_paramiko_session,
         verify_auth=args.verify_auth,
     )
     print(json.dumps({"status": "done", "campaign_dir": str(campaign_dir)}, indent=2))
