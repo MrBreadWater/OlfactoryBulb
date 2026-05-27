@@ -59,3 +59,12 @@ Second correction during monitoring:
   - `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q obgpu_experiment_helpers.py test_config_helpers.py`
   - `source tools/setup/activate_obgpu.sh OBGPU; python test_config_helpers.py`
   - `source tools/setup/activate_obgpu.sh OBGPU; python test_hfo_optimizer.py`
+
+Next campaign launch plan:
+
+- Campaign dir: `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/hfo_epli_big_singlewrapper_120cpu_20260527_082225`
+- Runtime log: `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/codex_big_hfo_logs/big_hfo_optimizer_20260527_082225.log`
+- Status JSON: `/home/michael/OlfactoryBulb/results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json`
+- Code fix commit included in launch lineage: `8c5c78c`
+- Launch git ref will be resolved from local `HEAD` immediately before the campaign starts.
+- The live kernel must reload `obgpu_experiment_helpers` and `olfactorybulb.hfo_optimizer` before launching because an earlier diagnostic monkey-patched `score_hfo_batch` to stop the stale worker.
