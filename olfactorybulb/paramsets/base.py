@@ -93,6 +93,14 @@ class SilentNetwork:
     kar_osn_weight_scale = 1.0
     kar_gc_weight_scale = 1.0
 
+    # Direction-specific reciprocal synapse weight scales. These defaults are
+    # identity values; they let HFO searches tune the optional EPLI loop
+    # separately from the GC dendrodendritic loop without changing legacy runs.
+    gc_gaba_weight_scale = 1.0
+    gc_ampa_weight_scale = 1.0
+    epli_gaba_weight_scale = 1.0
+    epli_ampa_weight_scale = 1.0
+
     # Granule-cell A-type potassium intervention. 1.0 preserves fitted cells;
     # 0.0 removes GC I_A for sensitivity tests.
     gc_ka_gbar_scale = 1.0

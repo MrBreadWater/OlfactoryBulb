@@ -155,6 +155,10 @@ CONTROL_HELP = {
     "ampa_block": "AMPA current multiplier on AmpaNmdaSyn AMPA current.",
     "gaba_gmax": "Global GabaSyn gmax.",
     "gaba_tau2_ms": "Global GabaSyn tau2.",
+    "gc_gaba_weight_scale": "Multiplier applied to GC->MC/TC reciprocal GABA NetCon weights.",
+    "gc_ampa_weight_scale": "Multiplier applied to MC/TC->GC reciprocal AMPA/NMDA NetCon weights.",
+    "epli_gaba_weight_scale": "Multiplier applied to EPLI->MC/TC reciprocal GABA NetCon weights.",
+    "epli_ampa_weight_scale": "Multiplier applied to MC/TC->EPLI reciprocal AMPA/NMDA NetCon weights.",
     "kar_mt_gmax": "Slow OSN-glutamate KAR conductance on MC/TC tuft inputs.",
     "enable_gc_kar": "Enable optional MC/TC->GC KAR conductance at reciprocal excitation sites.",
     "kar_gc_gmax": "Optional slow MC/TC-glutamate KAR conductance on GCs.",
@@ -798,6 +802,10 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "ampa_block": None,
         "gaba_gmax": None,
         "gaba_tau2_ms": None,
+        "gc_gaba_weight_scale": None,
+        "gc_ampa_weight_scale": None,
+        "epli_gaba_weight_scale": None,
+        "epli_ampa_weight_scale": None,
         "kar_mt_gmax": None,
         "enable_gc_kar": None,
         "kar_gc_gmax": None,
@@ -1310,6 +1318,10 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         if config.get("gaba_tau2_ms") is not None:
             overrides["synapse_properties"]["GabaSyn"]["tau2"] = float(config["gaba_tau2_ms"])
     scalar_param_map = {
+        "gc_gaba_weight_scale": "gc_gaba_weight_scale",
+        "gc_ampa_weight_scale": "gc_ampa_weight_scale",
+        "epli_gaba_weight_scale": "epli_gaba_weight_scale",
+        "epli_ampa_weight_scale": "epli_ampa_weight_scale",
         "kar_mt_gmax": "kar_mt_gmax",
         "kar_gc_gmax": "kar_gc_gmax",
         "kar_tau1_ms": "kar_tau1",

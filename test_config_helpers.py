@@ -139,11 +139,19 @@ with tempfile.TemporaryDirectory() as tmp:
     cfg_epli = build_run_config(
         enable_epl_interneurons=True,
         max_epl_interneurons=12,
+        epli_gaba_weight_scale=2.5,
+        epli_ampa_weight_scale=1.75,
+        gc_gaba_weight_scale=0.8,
+        gc_ampa_weight_scale=1.2,
     )
     epli_overrides = build_param_overrides(cfg_epli)
     assert "legacy_parallel_dt" not in epli_overrides
     assert epli_overrides["enable_epl_interneurons"] is True
     assert epli_overrides["max_epl_interneurons"] == 12
+    assert epli_overrides["epli_gaba_weight_scale"] == 2.5
+    assert epli_overrides["epli_ampa_weight_scale"] == 1.75
+    assert epli_overrides["gc_gaba_weight_scale"] == 0.8
+    assert epli_overrides["gc_ampa_weight_scale"] == 1.2
     assert "EPLI" in epli_overrides["record_from_somas"]
 
     cfg_custom_epli = build_run_config(

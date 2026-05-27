@@ -1700,6 +1700,35 @@ class OlfactoryBulb:
         self._source_gid_alias_maps[set_name] = dict(merged_aliases or {})
         return self._source_gid_alias_maps[set_name]
 
+    def reciprocal_weight_scales_for_set(self, synapse_set_name):
+        """Return forward and reciprocal NetCon weight scales for a synapse set."""
+
+        set_name = str(synapse_set_name)
+        if set_name.startswith("GCs__"):
+            return (
+                float(getattr(self.params, "gc_gaba_weight_scale", 1.0)),
+                float(getattr(self.params, "gc_ampa_weight_scale", 1.0)),
+            )
+        if set_name.startswith("EPLIs__"):
+            return (
+                float(getattr(self.params, "epli_gaba_weight_scale", 1.0)),
+                float(getattr(self.params, "epli_ampa_weight_scale", 1.0)),
+            )
+        return 1.0, 1.0
+
+    def apply_reciprocal_weight_scales(self, synapse_set_name, synapses):
+        forward_scale, reciprocal_scale = self.reciprocal_weight_scales_for_set(synapse_set_name)
+        if forward_scale == 1.0 and reciprocal_scale == 1.0:
+            return
+
+        for synapse_parts in synapses:
+            netcon = synapse_parts[0]
+            netcon_recip = synapse_parts[4]
+            if netcon is not None:
+                netcon.weight[0] = float(netcon.weight[0]) * forward_scale
+            if netcon_recip is not None:
+                netcon_recip.weight[0] = float(netcon_recip.weight[0]) * reciprocal_scale
+
     def load_synapse_set(self, synapse_set):
         """
         Uses BlenderNEURON to load a previously saved set of synapses between a population of cells
@@ -1742,7 +1771,8 @@ class OlfactoryBulb:
                     dest_gid,
                 )
 
-        self.bn_server.create_synapses(synapse_set_dict)
+        synapses = self.bn_server.create_synapses(synapse_set_dict)
+        self.apply_reciprocal_weight_scales(synapse_set, synapses)
 
     def add_gc_kar_synapse_set(self, synapse_set):
         """
@@ -1828,6 +1858,9 @@ class OlfactoryBulb:
             synapses = self.bn_server.synapse_sets.get(synapse_set_name, [])
             if not synapses:
                 continue
+            forward_weight_scale, _reciprocal_weight_scale = self.reciprocal_weight_scales_for_set(
+                synapse_set_name
+            )
 
             path = os.path.join(self.slice_dir, synapse_set_name + '.json')
             with open(path, 'r') as f:
@@ -1850,7 +1883,7 @@ class OlfactoryBulb:
                         "dest_section": entry["dest_section"],
                         "source_x": float(entry.get("source_x", 0.5)),
                         "dest_x": float(entry.get("dest_x", 0.5)),
-                        "weight": float(entry.get("weight", 0.0)),
+                        "weight": float(entry.get("weight", 0.0)) * forward_weight_scale,
                         "delay": float(entry.get("delay", 0.0)),
                         "threshold": float(entry.get("threshold", 0.0)),
                     },

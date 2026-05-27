@@ -54,6 +54,7 @@ class ParameterSpec:
     scale: str = "log"
     dtype: str = "float"
     description: str = ""
+    default: float | None = None
 
     def clamp(self, value: float) -> float:
         return min(max(float(value), float(self.low)), float(self.high))
@@ -83,6 +84,13 @@ class ParameterSpec:
 
     def high_encoded(self) -> float:
         return self.encode(self.high)
+
+    def default_value(self) -> float:
+        if self.default is not None:
+            return self.clamp(float(self.default))
+        if self.scale == "log":
+            return self.decode(0.5 * (self.low_encoded() + self.high_encoded()))
+        return self.decode(0.5 * (float(self.low) + float(self.high)))
 
 
 def default_hfo_search_space() -> list[ParameterSpec]:
@@ -120,6 +128,22 @@ def default_hfo_search_space() -> list[ParameterSpec]:
             high=128.0,
             scale="log",
             description="Dendrodendritic AMPA/NMDA max conductance",
+        ),
+        ParameterSpec(
+            path="epli_ampa_weight_scale",
+            low=0.1,
+            high=8.0,
+            scale="log",
+            default=1.0,
+            description="MC/TC->EPLI reciprocal excitation weight scale",
+        ),
+        ParameterSpec(
+            path="epli_gaba_weight_scale",
+            low=0.1,
+            high=8.0,
+            scale="log",
+            default=1.0,
+            description="EPLI->MC/TC reciprocal inhibition weight scale",
         ),
         ParameterSpec(
             path="gap_tc",
@@ -393,7 +417,11 @@ def _random_unit_samples(n: int, d: int, *, seed: int | None = None) -> np.ndarr
 
 
 def _candidate_vector(candidate: dict[str, Any], search_space: Sequence[ParameterSpec]) -> np.ndarray:
-    return np.asarray([spec.encode(float(candidate[spec.path])) for spec in search_space], dtype=float)
+    values = []
+    for spec in search_space:
+        raw_value = candidate.get(spec.path, spec.default_value())
+        values.append(spec.encode(float(raw_value)))
+    return np.asarray(values, dtype=float)
 
 
 def _candidate_metric(row: dict[str, Any], condition: str, field: str, default: float = 0.0) -> float:
@@ -458,6 +486,8 @@ def _targeted_elite_probe_rows(
 
     priority_paths = [
         "gaba_gmax",
+        "epli_ampa_weight_scale",
+        "epli_gaba_weight_scale",
         "kar_gc_gmax",
         "kar_mt_gmax",
         "tc_input_weight",
@@ -713,6 +743,100 @@ def _targeted_elite_probe_rows(
                 row[dim] += float(step_fraction) * encoded_span[dim]
             rows.append(np.clip(row, encoded_lo, encoded_hi))
 
+    if mode == "frontier":
+        archive = list(archive_rows or [])
+
+        def row_vector(row: dict[str, Any] | None) -> np.ndarray | None:
+            if row is None:
+                return None
+            try:
+                return _candidate_vector(row["parameters"], search_space)
+            except (KeyError, TypeError, ValueError):
+                return None
+
+        def target_rel(row: dict[str, Any], condition: str) -> float:
+            return _candidate_metric(row, condition, "target_hfo")
+
+        def target_delta(row: dict[str, Any]) -> float:
+            return target_rel(row, "ketamine") - target_rel(row, "control")
+
+        def ketamine_peak(row: dict[str, Any]) -> float:
+            return _candidate_metric(row, "ketamine", "peak_hz", math.nan)
+
+        def in_target(row: dict[str, Any]) -> bool:
+            peak = ketamine_peak(row)
+            return math.isfinite(peak) and 160.0 <= peak <= 200.0
+
+        target_rows = [row for row in archive if in_target(row)]
+        exact_rows = [
+            row for row in target_rows
+            if 172.0 <= ketamine_peak(row) <= 188.0 and target_rel(row, "control") <= 0.11
+        ]
+        contrast_rows = [
+            row for row in target_rows
+            if target_rel(row, "ketamine") >= 0.12 and target_rel(row, "control") <= 0.11
+        ]
+        power_rows = [
+            row for row in target_rows
+            if 170.0 <= ketamine_peak(row) <= 190.0 and target_rel(row, "control") <= 0.16
+        ]
+        low_control_rows = [
+            row for row in target_rows
+            if target_rel(row, "ketamine") >= 0.12
+        ]
+
+        exact_row = max(exact_rows, key=lambda row: target_rel(row, "ketamine"), default=None)
+        contrast_row = max(contrast_rows, key=target_delta, default=None)
+        power_row = max(power_rows, key=lambda row: target_rel(row, "ketamine"), default=None)
+        low_control_row = min(low_control_rows, key=lambda row: target_rel(row, "control"), default=None)
+
+        exact_vector = row_vector(exact_row)
+        contrast_vector = row_vector(contrast_row)
+        power_vector = row_vector(power_row)
+        low_control_vector = row_vector(low_control_row)
+        exact = exact_vector if exact_vector is not None else top
+        contrast = contrast_vector if contrast_vector is not None else second
+        power = power_vector if power_vector is not None else (elite_vectors[2] if len(elite_vectors) > 2 else second)
+        low_control = (
+            low_control_vector
+            if low_control_vector is not None
+            else (elite_vectors[3] if len(elite_vectors) > 3 else top)
+        )
+
+        frontier_centers = {
+            "top": top,
+            "exact": exact,
+            "contrast25": np.clip(0.75 * top + 0.25 * contrast, encoded_lo, encoded_hi),
+            "contrast50": np.clip(0.50 * top + 0.50 * contrast, encoded_lo, encoded_hi),
+            "power": power,
+            "low_control": low_control,
+        }
+        frontier_plan = [
+            ("top", (("epli_ampa_weight_scale", 0.16),)),
+            ("top", (("epli_gaba_weight_scale", 0.16),)),
+            ("top", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16))),
+            ("top", (("epli_ampa_weight_scale", 0.32), ("epli_gaba_weight_scale", 0.16))),
+            ("top", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.32))),
+            ("exact", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16), ("gaba_gmax", 0.004))),
+            ("low_control", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16), ("ampa_nmda_gmax", -0.004))),
+            ("power", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.08), ("gaba_gmax", 0.006))),
+            ("contrast25", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16))),
+            ("contrast25", (("epli_ampa_weight_scale", 0.24), ("epli_gaba_weight_scale", 0.16), ("gap_tc", -0.006))),
+            ("contrast50", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.16), ("ampa_nmda_gmax", 0.006))),
+            ("contrast50", (("epli_ampa_weight_scale", 0.24), ("epli_gaba_weight_scale", 0.24), ("gap_tc", -0.010))),
+        ]
+        path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
+        for center_name, moves in frontier_plan:
+            if len(rows) >= n:
+                break
+            row = np.array(frontier_centers[center_name], copy=True)
+            for path, step_fraction in moves:
+                if path not in path_to_index:
+                    continue
+                dim = path_to_index[path]
+                row[dim] += float(step_fraction) * encoded_span[dim]
+            rows.append(np.clip(row, encoded_lo, encoded_hi))
+
     # Fill any remaining slots with small one-coordinate probes around the top two points.
     while len(rows) < n:
         center = top if (mode in {"stencil", "ridge"} or len(rows) % 2 == 0) else second
@@ -858,7 +982,11 @@ def propose_elite_batch(
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     targeted_n = 0
     targeted_mode = "none"
-    if len(valid) >= 416 and len(elite) >= 2 and total_n >= 8:
+    if len(valid) >= 448 and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
+        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_mode = "frontier"
+    elif len(valid) >= 416 and len(elite) >= 2 and total_n >= 8:
         explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
         targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
         targeted_mode = "basin"
