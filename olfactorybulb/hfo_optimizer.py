@@ -896,6 +896,89 @@ def _rows_to_candidates(
     return candidates
 
 
+def _encoded_row_signature(row: Sequence[float], *, digits: int = 10) -> tuple[float, ...]:
+    return tuple(round(float(value), int(digits)) for value in np.asarray(row, dtype=float))
+
+
+def _archive_encoded_signatures(
+    archive_rows: Sequence[dict[str, Any]],
+    search_space: Sequence[ParameterSpec],
+) -> set[tuple[float, ...]]:
+    signatures: set[tuple[float, ...]] = set()
+    for row in archive_rows:
+        params = row.get("parameters")
+        if not isinstance(params, dict):
+            continue
+        try:
+            signatures.add(_encoded_row_signature(_candidate_vector(params, search_space)))
+        except Exception:
+            continue
+    return signatures
+
+
+def _deduplicate_candidate_rows(
+    rows: np.ndarray,
+    *,
+    used_signatures: set[tuple[float, ...]],
+    n_candidates: int,
+    rng: np.random.Generator,
+    search_space: Sequence[ParameterSpec],
+    fallback_centers: np.ndarray,
+) -> tuple[np.ndarray, int]:
+    encoded_lo = np.asarray([spec.low_encoded() for spec in search_space], dtype=float)
+    encoded_hi = np.asarray([spec.high_encoded() for spec in search_space], dtype=float)
+    encoded_span = encoded_hi - encoded_lo
+    selected: list[np.ndarray] = []
+    selected_signatures: set[tuple[float, ...]] = set()
+    dropped = 0
+
+    def add_row(row: np.ndarray, *, count_drop: bool = False) -> bool:
+        nonlocal dropped
+        clipped = np.clip(np.asarray(row, dtype=float), encoded_lo, encoded_hi)
+        signature = _encoded_row_signature(clipped)
+        if signature in used_signatures or signature in selected_signatures:
+            if count_drop:
+                dropped += 1
+            return False
+        selected.append(clipped)
+        selected_signatures.add(signature)
+        return True
+
+    for row in np.asarray(rows, dtype=float):
+        if len(selected) >= int(n_candidates):
+            break
+        add_row(row, count_drop=True)
+
+    centers = np.asarray(fallback_centers, dtype=float)
+    if centers.ndim != 2 or centers.shape[0] == 0:
+        centers = np.empty((0, len(search_space)), dtype=float)
+    attempts = 0
+    max_attempts = max(256, int(n_candidates) * 256)
+    local_sigma = np.maximum(0.06 * encoded_span, 1e-6)
+    while len(selected) < int(n_candidates) and attempts < max_attempts:
+        attempts += 1
+        if centers.size and float(rng.random()) < 0.75:
+            center = centers[int(rng.integers(0, centers.shape[0]))]
+            scale = local_sigma * (1.0 + 0.2 * (attempts // max(1, int(n_candidates))))
+            row = rng.normal(loc=center, scale=scale)
+        else:
+            row = rng.uniform(encoded_lo, encoded_hi)
+        add_row(row)
+
+    # The parameter spaces used here are continuous, so this should almost never
+    # trigger. Keep a last-resort path so campaign planning cannot fail because a
+    # narrow local basin was already fully sampled.
+    while len(selected) < int(n_candidates):
+        row = rng.uniform(encoded_lo, encoded_hi)
+        signature = _encoded_row_signature(row, digits=14)
+        if signature in selected_signatures:
+            continue
+        selected.append(np.clip(row, encoded_lo, encoded_hi))
+        selected_signatures.add(signature)
+
+    return np.asarray(selected[: int(n_candidates)], dtype=float), int(dropped)
+
+
 def _next_candidate_ids(state: dict[str, Any], n: int) -> list[str]:
     start = int(state["next_candidate_index"])
     return [f"C{index:05d}" for index in range(start, start + int(n))]
@@ -1097,6 +1180,15 @@ def propose_elite_batch(
         all_rows = np.vstack([targeted_rows, local_rows, covariance_rows, explore_rows])
     else:
         all_rows = np.vstack([targeted_rows, local_rows, covariance_rows])
+    used_signatures = _archive_encoded_signatures(ranked, search_space)
+    all_rows, duplicate_rows_dropped = _deduplicate_candidate_rows(
+        all_rows,
+        used_signatures=used_signatures,
+        n_candidates=total_n,
+        rng=rng,
+        search_space=search_space,
+        fallback_centers=elite_vectors[: min(6, len(elite_vectors))],
+    )
 
     state = load_campaign_state(campaign_dir)
     batch_name = _batch_name(state)
@@ -1133,6 +1225,7 @@ def propose_elite_batch(
             "mode": targeted_mode,
             "line_probe_count": int(min(targeted_n, 3) if targeted_mode == "line" else 0),
             "coordinate_probe_count": int(max(targeted_n - 3, 0) if targeted_mode == "line" else targeted_n),
+            "archive_duplicate_rows_dropped": int(duplicate_rows_dropped),
         },
     }
     _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)
