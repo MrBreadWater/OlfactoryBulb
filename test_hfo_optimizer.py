@@ -106,4 +106,45 @@ with TemporaryDirectory() as tmpdir:
     assert batch["local_detail_counts"]["tight_top"] + batch["local_detail_counts"]["broad_weighted"] == batch["proposal_counts"]["local"]
     assert len(batch["candidates"]) == 8
 
+with TemporaryDirectory() as tmpdir:
+    search_space = [
+        ParameterSpec(path="kar_mt_gmax", low=0.01, high=100.0, scale="log"),
+        ParameterSpec(path="kar_gc_gmax", low=0.001, high=10.0, scale="log"),
+        ParameterSpec(path="gaba_gmax", low=0.1, high=10.0, scale="log"),
+        ParameterSpec(path="tc_input_weight", low=0.4, high=1.2, scale="linear"),
+    ]
+    state_path = f"{tmpdir}/state.json"
+    with open(state_path, "w") as handle:
+        json.dump({"next_batch_index": 0, "next_candidate_index": 0, "completed_batches": []}, handle)
+    rows = []
+    for index in range(200):
+        rows.append(
+            {
+                "candidate_id": f"C{index:05d}",
+                "pair_score": float(200 - index),
+                "parameters": {
+                    "kar_mt_gmax": 0.02 + 0.01 * index,
+                    "kar_gc_gmax": 0.002 + 0.001 * index,
+                    "gaba_gmax": 0.2 + 0.02 * index,
+                    "tc_input_weight": 0.5 + 0.001 * index,
+                },
+            }
+        )
+    with open(f"{tmpdir}/candidate_archive.jsonl", "w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+    batch = propose_elite_batch(
+        tmpdir,
+        search_space=search_space,
+        n_candidates=16,
+        seed=11,
+        method="elite_truncated_gaussian_plus_lhs",
+    )
+    assert batch["proposal_counts"]["targeted"] == 4
+    assert batch["proposal_counts"]["explore"] == 2
+    assert batch["targeted_detail"]["top_pair"] == ["C00000", "C00001"]
+    assert sum(batch["proposal_counts"].values()) == 16
+    assert len(batch["candidates"]) == 16
+
 print("hfo optimizer scoring: OK")

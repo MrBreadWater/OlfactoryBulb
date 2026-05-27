@@ -414,6 +414,67 @@ def _sample_truncated_gaussian(
     return np.asarray(rows, dtype=float)
 
 
+def _targeted_elite_probe_rows(
+    elite_vectors: np.ndarray,
+    search_space: Sequence[ParameterSpec],
+    n: int,
+    *,
+    seed: int | None = None,
+) -> np.ndarray:
+    """Return deterministic local probes around the top two elite candidates."""
+    n = int(n)
+    if n <= 0 or len(elite_vectors) < 2:
+        return np.empty((0, len(search_space)), dtype=float)
+
+    rng = np.random.default_rng(seed)
+    encoded_lo = np.asarray([spec.low_encoded() for spec in search_space], dtype=float)
+    encoded_hi = np.asarray([spec.high_encoded() for spec in search_space], dtype=float)
+    encoded_span = encoded_hi - encoded_lo
+    top = np.asarray(elite_vectors[0], dtype=float)
+    second = np.asarray(elite_vectors[1], dtype=float)
+    rows: list[np.ndarray] = []
+
+    # First walk the line between the current best and the strongest near miss.
+    for alpha in (0.25, 0.50, 0.75):
+        if len(rows) >= n:
+            break
+        rows.append(np.clip((1.0 - alpha) * top + alpha * second, encoded_lo, encoded_hi))
+
+    priority_paths = [
+        "gaba_gmax",
+        "kar_gc_gmax",
+        "kar_mt_gmax",
+        "tc_input_weight",
+        "gap_tc",
+        "ampa_nmda_gmax",
+        "kar_gc_weight_scale",
+        "gc_ka_gbar_scale",
+        "gap_mc",
+        "mc_input_weight",
+        "kar_osn_weight_scale",
+    ]
+    priority_indices = [
+        index
+        for path in priority_paths
+        for index, spec in enumerate(search_space)
+        if spec.path == path
+    ]
+    if not priority_indices:
+        priority_indices = list(range(len(search_space)))
+
+    # Then do small one-coordinate probes around the top two points.
+    while len(rows) < n:
+        center = top if (len(rows) % 2 == 0) else second
+        row = np.array(center, copy=True)
+        dim = priority_indices[int(rng.integers(0, len(priority_indices)))]
+        step_fraction = 0.018 if len(rows) % 3 else 0.035
+        sign = -1.0 if int(rng.integers(0, 2)) == 0 else 1.0
+        row[dim] += sign * step_fraction * encoded_span[dim]
+        rows.append(np.clip(row, encoded_lo, encoded_hi))
+
+    return np.asarray(rows, dtype=float)
+
+
 def _rows_to_candidates(
     rows: np.ndarray,
     search_space: Sequence[ParameterSpec],
@@ -544,9 +605,14 @@ def propose_elite_batch(
     explore_n = min(max(0, int(round(float(explore_frac) * total_n))), max(total_n - 1, 0))
     if len(valid) >= 128:
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
-    remaining_n = total_n - explore_n
-    local_n = min(max(1, int(round(0.55 * remaining_n))), remaining_n) if remaining_n > 0 else 0
-    covariance_n = max(0, total_n - explore_n - local_n)
+    targeted_n = 0
+    if len(valid) >= 192 and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.125 * total_n))))
+        targeted_n = min(max(2, int(round(0.25 * total_n))), max(total_n - explore_n - 2, 0))
+    remaining_n = total_n - explore_n - targeted_n
+    local_fraction = 0.70 if targeted_n > 0 else 0.55
+    local_n = min(max(1, int(round(local_fraction * remaining_n))), remaining_n) if remaining_n > 0 else 0
+    covariance_n = max(0, total_n - explore_n - targeted_n - local_n)
 
     local_source_count = min(4, len(elite))
     local_centers = elite_vectors[:local_source_count]
@@ -586,14 +652,20 @@ def propose_elite_batch(
         covariance_n,
         seed=seed,
     ) if covariance_n > 0 else np.empty((0, len(search_space)), dtype=float)
+    targeted_rows = _targeted_elite_probe_rows(
+        elite_vectors,
+        search_space,
+        targeted_n,
+        seed=None if seed is None else seed + 2,
+    )
 
     if explore_n > 0:
         explore_rows = np.vstack(
             [_candidate_vector(row, search_space) for row in _decode_unit_samples(_sample_unit_lhs(explore_n, len(search_space), seed=None if seed is None else seed + 1), search_space)]
         )
-        all_rows = np.vstack([local_rows, covariance_rows, explore_rows])
+        all_rows = np.vstack([targeted_rows, local_rows, covariance_rows, explore_rows])
     else:
-        all_rows = np.vstack([local_rows, covariance_rows])
+        all_rows = np.vstack([targeted_rows, local_rows, covariance_rows])
 
     state = load_campaign_state(campaign_dir)
     batch_name = _batch_name(state)
@@ -616,6 +688,7 @@ def propose_elite_batch(
         "elite_source_ids": [row["candidate_id"] for row in elite],
         "local_source_ids": [row["candidate_id"] for row in elite[:local_source_count]],
         "proposal_counts": {
+            "targeted": int(targeted_n),
             "local": int(local_n),
             "covariance": int(covariance_n),
             "explore": int(explore_n),
@@ -623,6 +696,11 @@ def propose_elite_batch(
         "local_detail_counts": {
             "tight_top": int(tight_local_n),
             "broad_weighted": int(broad_local_n),
+        },
+        "targeted_detail": {
+            "top_pair": [row["candidate_id"] for row in elite[:2]],
+            "line_probe_count": int(min(targeted_n, 3)),
+            "coordinate_probe_count": int(max(targeted_n - 3, 0)),
         },
     }
     _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)

@@ -134,3 +134,14 @@ Elite rebalancing after batch 10:
 - Implementation commit: `7b2fddf`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
 - Reloaded `olfactorybulb.hfo_optimizer` in the live authenticated notebook kernel; batch 12 and later should use `local_detail_counts = {"tight_top": ..., "broad_weighted": ...}`.
+
+Targeted probe refinement after batch 11:
+
+- Batch 11 completed cleanly but did not improve on `C00053`; its best new candidate was `C00184` with score `0.8822`.
+- Batch 12 is the first batch generated from commit `7b2fddf`; its plan records the top-two local mix: `proposal_counts = {"local": 7, "covariance": 5, "explore": 4}` and `local_detail_counts = {"tight_top": 4, "broad_weighted": 3}`.
+- Added a next-stage targeted-probe component for campaigns with at least 192 valid candidates:
+  - seeded line probes between the current best and the strongest near-miss
+  - small one-coordinate probes around the top two candidates
+  - reduced exploration tail to keep the batch concentrated on the promising `C00053`/`C00144` neighborhood while preserving covariance proposals
+- Intended batch-13 shape for 16 candidates: `targeted=4`, `local=7`, `covariance=3`, `explore=2`.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
