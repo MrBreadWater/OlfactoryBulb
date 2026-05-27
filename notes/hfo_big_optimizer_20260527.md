@@ -291,3 +291,16 @@ Scoring/objective consistency correction:
   - `target_hfo_hz = [160.0, 230.0]`
 - Live-kernel smoke check confirmed that a 220 Hz synthetic signal still scores inside `target_band_hz = [160.0, 230.0]` even when stale `target_hz=180.0, target_half_width_hz=20.0` arguments are passed.
 - Implementation commit: `13488a8`.
+
+Iteration-speed audit:
+
+- Completed GC-excluded batches sync about `98 MB` of compact artifacts for 32 paired items.
+- Largest synced artifacts in batch 52:
+  - `lfp.pkl`: about `52 MB`
+  - `gc_output_events.pkl`: about `39 MB`
+  - `soma_spikes.npz`: about `3.7 MB`
+  - `input_times.pkl`: about `1.4 MB`
+- HFO optimizer scoring uses LFP, soma spikes, input times, and summaries. It does not use GC output events.
+- Changed `default_campaign_run_config()` for optimizer campaigns to set `record_gc_output_events=False`. Future batches launched from this config should stop generating/syncing `gc_output_events.pkl`, cutting roughly `40%` of the compact sync payload.
+- Reloaded the live kernel and patched `CODEX_HFO_BIG_BASE_CONFIG["record_gc_output_events"] = False`; current batch 53 was already launched, so this should take effect from batch 54 onward.
+- Implementation commit: `f35747c`.
