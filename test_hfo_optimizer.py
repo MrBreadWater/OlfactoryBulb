@@ -4,16 +4,23 @@ from __future__ import annotations
 
 import math
 import json
+from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import numpy as np
 
 from olfactorybulb.hfo_optimizer import (
+    DEFAULT_CAMPAIGNS_BASE,
     ParameterSpec,
     propose_elite_batch,
     score_candidate_pair,
     score_condition_result,
 )
+
+
+home_checkout = Path.home() / "OlfactoryBulb"
+if home_checkout.exists():
+    assert DEFAULT_CAMPAIGNS_BASE == home_checkout / "results" / "notebook_runs" / "optimization"
 
 
 def synthetic_result(

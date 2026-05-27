@@ -27,7 +27,15 @@ from scipy.stats import qmc
 import obgpu_experiment_helpers as hlp
 
 
-DEFAULT_CAMPAIGNS_BASE = Path("/home/alek/OlfactoryBulb/results/notebook_runs/optimization")
+def _default_repo_root() -> Path:
+    """Prefer the user's visible checkout path over a resolved symlink target."""
+    home_checkout = Path.home() / "OlfactoryBulb"
+    if home_checkout.exists():
+        return home_checkout
+    return Path(__file__).resolve().parents[1]
+
+
+DEFAULT_CAMPAIGNS_BASE = _default_repo_root() / "results" / "notebook_runs" / "optimization"
 DEFAULT_SCORE_BANDS = {
     "beta": (15.0, 35.0),
     "low_gamma": (35.0, 65.0),
@@ -153,7 +161,7 @@ def infer_remote_template_from_recent_runs(
     results_base: str | Path | None = None,
 ) -> dict[str, Any] | None:
     """Return the newest remote run config we can recover from saved run_info."""
-    results_base = Path(results_base or "/home/alek/OlfactoryBulb/results/notebook_runs")
+    results_base = Path(results_base or (_default_repo_root() / "results" / "notebook_runs"))
     candidates = sorted(results_base.glob("**/run_info.json"), key=lambda path: path.stat().st_mtime, reverse=True)
     for path in candidates:
         try:
