@@ -58,7 +58,12 @@ class _SyntheticEPLCell(IsolatedCell):
             self.y = 0.0
             self.z = 0.0
             self.instance_index = type(self)._instance_counter
-            type(self)._instance_counter += 1
+            # The maintained Birgiolas templates increment exported instance
+            # indices by 2 (0, 2, 4, ...) and the slice/runtime mpimap logic
+            # still assumes that convention when remapping exported root names
+            # onto freshly instantiated cells. Keep the synthetic EPL surrogate
+            # compatible with that runtime path.
+            type(self)._instance_counter += 2
             self.instance_name = f"{type(self).__name__}[{self.instance_index}]"
 
             self._create_sections()

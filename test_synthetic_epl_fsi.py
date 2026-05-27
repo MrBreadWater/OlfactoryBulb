@@ -23,6 +23,9 @@ assert str(cell.primary_dendrites[0]) == "PVCRH_FSI1[0].dend_primary_0"
 assert str(cell.branch_dendrites[0]) == "PVCRH_FSI1[0].dend_branch_0"
 assert not hasattr(cell.soma, "gbar_Ih")
 
+second_cell = PVCRH_FSI1()
+assert str(second_cell.soma) == "PVCRH_FSI1[2].soma"
+
 rest = simulate_soma_step_response(cell, amp_nA=0.0)
 assert not rest.has_nan
 assert len(rest.step_spike_times_ms) == 0

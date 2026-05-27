@@ -157,6 +157,32 @@ class GammaSignature_ContactScaled(GammaSignature):
     }
 
 
+class GammaSignature_EPLI_Provisional_TCOnly(GammaSignature):
+
+    description = (
+        "GammaSignature plus one provisional synthetic EPL fast interneuron per TC; "
+        "loads only the exploratory reciprocal EPLI<->TC synapse set."
+    )
+
+    slice_name = "DorsalColumnSliceEPLIProvisional"
+    enable_epl_interneurons = True
+    max_epl_interneurons = 24
+    epl_interneuron_model = "SyntheticEPL2026.PVCRH_FSI1"
+    epl_interneuron_family = "PV/CRH-overlap axonless EPL fast interneuron surrogate"
+    epl_interneuron_synapse_sets = ["EPLIs__TCs"]
+    record_from_somas = ['MC', 'TC', 'GC', 'EPLI']
+
+
+class GammaSignature_EPLI_Provisional_MTC(GammaSignature_EPLI_Provisional_TCOnly):
+
+    description = (
+        "GammaSignature plus one provisional synthetic EPL fast interneuron per TC; "
+        "loads exploratory reciprocal EPLI<->TC and EPLI<->MC synapse sets."
+    )
+
+    epl_interneuron_synapse_sets = ["EPLIs__TCs", "EPLIs__MCs"]
+
+
 # Experiments
 
 class GammaSignature_NoInhibition(GammaSignature):
