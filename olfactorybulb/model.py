@@ -1720,6 +1720,8 @@ class OlfactoryBulb:
         forward_scale, reciprocal_scale = self.reciprocal_weight_scales_for_set(synapse_set_name)
         if forward_scale == 1.0 and reciprocal_scale == 1.0:
             return
+        if synapses is None:
+            return
 
         for synapse_parts in synapses:
             netcon = synapse_parts[0]
