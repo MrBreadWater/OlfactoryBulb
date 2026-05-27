@@ -211,3 +211,9 @@ Ridge steering for the next stage:
 - Added a `ridge` proposal mode for campaigns with at least 320 valid candidates. It keeps the top candidate as the main anchor but deliberately proposes small moves around the stronger-power and lower-control-leak near-misses too, instead of repeatedly perturbing only `C00261`.
 - For 16-candidate batches the intended post-320 mix is `targeted=11`, `local=3`, `covariance=1`, and `explore=1`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+- Reloaded `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel before batch 19 finished.
+- Batch 19 completed cleanly but did not improve the archive. Its best new candidate was `C00310`, score `2.7377`, matching the same score class as `C00294` with ketamine peak `166.016 Hz` and control peak `195.312 Hz`.
+- Batch 20 launched on Phoenix step `14537854.3231` from commit `ccb7535`.
+- Batch 20 plan verified the ridge policy:
+  - `proposal_counts = {"targeted": 11, "local": 3, "covariance": 1, "explore": 1}`
+  - `targeted_detail.mode = "ridge"`
