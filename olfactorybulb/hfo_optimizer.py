@@ -592,18 +592,18 @@ def _targeted_elite_probe_rows(
             "fourth": elite_vectors[3] if len(elite_vectors) > 3 else second,
         }
         needle_plan = [
-            ("top", (("gaba_gmax", 0.003),)),
-            ("top", (("gaba_gmax", 0.009),)),
-            ("top", (("gaba_gmax", 0.003), ("ampa_nmda_gmax", -0.004))),
-            ("top", (("gaba_gmax", 0.009), ("ampa_nmda_gmax", -0.004))),
-            ("top", (("gap_tc", -0.004),)),
-            ("top", (("gaba_gmax", 0.006), ("gap_tc", -0.004))),
+            ("top", (("gaba_gmax", -0.003),)),
+            ("top", (("gaba_gmax", -0.006),)),
+            ("top", (("gaba_gmax", -0.003), ("ampa_nmda_gmax", -0.004))),
+            ("top", (("gaba_gmax", -0.006), ("gap_tc", 0.004))),
+            ("top", (("gap_tc", 0.004),)),
+            ("top", (("ampa_nmda_gmax", -0.004),)),
             ("top", (("ampa_nmda_gmax", -0.004), ("gap_tc", 0.004))),
-            ("top", (("tc_input_weight", -0.004), ("gaba_gmax", 0.004))),
-            ("second", (("gaba_gmax", 0.018), ("gap_tc", -0.010), ("ampa_nmda_gmax", -0.010))),
-            ("third", (("gaba_gmax", 0.012), ("gap_tc", -0.012), ("ampa_nmda_gmax", -0.008))),
-            ("third", (("gaba_gmax", 0.006), ("gap_tc", -0.018), ("tc_input_weight", -0.006))),
-            ("fourth", (("gaba_gmax", 0.012), ("gap_tc", -0.012), ("ampa_nmda_gmax", -0.006))),
+            ("top", (("tc_input_weight", 0.004), ("gaba_gmax", -0.003))),
+            ("second", (("gaba_gmax", 0.010), ("ampa_nmda_gmax", -0.010))),
+            ("second", (("gaba_gmax", 0.014), ("gap_tc", 0.004), ("ampa_nmda_gmax", -0.014))),
+            ("third", (("gaba_gmax", 0.006), ("gap_tc", -0.006), ("ampa_nmda_gmax", -0.010))),
+            ("fourth", (("gaba_gmax", 0.006), ("gap_tc", -0.006), ("ampa_nmda_gmax", -0.006))),
         ]
         path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
         for center_name, moves in needle_plan:

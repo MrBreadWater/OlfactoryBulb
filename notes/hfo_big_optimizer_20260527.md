@@ -237,3 +237,6 @@ Late trust-region steering:
 - For 16-candidate batches the intended post-368 mix is `targeted=12`, `local=2`, `covariance=1`, and `explore=1`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
 - The next step is to reload `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel before batch 22 finishes, so batch 23 and later can use `targeted_detail.mode = "needle"` once the archive reaches 368 valid candidates.
+- Reloaded the live kernel and confirmed batch 23 launched from commit `8f2fcc0` with `targeted_detail.mode = "needle"`.
+- Batch 22 completed cleanly but did not improve the archive. Its best new candidate was `C00359`, score `-0.8908`; the important diagnostic is that many upward-GABA / downward-TC-gap ridge probes shifted both ketamine and control to a same-peak `195.312 Hz` solution.
+- Revised the `needle` proposal plan to bracket `C00327` more conservatively: test slight GABA reductions, slight AMPA reductions, slight TC-gap increases, and only smaller moves from `C00261`/`C00343` back toward the current best. Validation was repeated with the same compile/test command above.
