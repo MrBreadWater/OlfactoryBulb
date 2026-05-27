@@ -802,7 +802,7 @@ def _targeted_elite_probe_rows(
         ]
         power_rows = [
             row for row in target_rows
-            if 170.0 <= ketamine_peak(row) <= 190.0 and target_rel(row, "control") <= 0.16
+            if 170.0 <= ketamine_peak(row) <= 190.0 and target_rel(row, "control") <= 0.20
         ]
         low_control_rows = [
             row for row in target_rows
