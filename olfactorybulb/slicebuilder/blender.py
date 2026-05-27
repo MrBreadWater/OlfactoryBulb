@@ -5,14 +5,17 @@ Synapse locations are identified and saved into synapse set files.
 """
 
 import bpy, sys, os, time, re
+import mathutils
 import random
 import os, sys
 import bpy
 import numpy as np
 from collections import OrderedDict
-from mathutils import Vector
+from mathutils import Euler, Vector
 import random
-from math import pi, acos
+from math import floor, pi, acos
+from fnmatch import fnmatch
+from heapq import heappop, heappush
 import json
 sys.path.append(os.getcwd())
 from olfactorybulb import slices
@@ -28,7 +31,8 @@ from olfactorybulb.epli import (
 from olfactorybulb.slicebuilder.config import slice_builder_env_kwargs
 from blenderneuron.blender.utils import fast_get, make_safe_filename
 from blenderneuron.blender.views.vectorconfinerview import VectorConfinerView
-from blenderneuron.blender.views.synapseformerview import SynapseFormerView
+from blenderneuron.blender.views.synapseformerview import SynapseFormerView, SynapsePair, SynapseTerminal
+import blenderneuron
 import blenderneuron.blender
 
 '''
@@ -37,16 +41,816 @@ Kikuta et. al. 2013 - TC soma distance from Glom center ~200 um
 Witman and Greer 2007 - GC spine reach - from digitized figure 5.5 um
 '''
 
-def auto_start(scene):
+def _auto_start_handler_list():
+    """
+    Return the best available Blender app-handler list for deferred startup.
+
+    Older code used ``scene_update_post`` directly, but newer/other builds only
+    expose ``depsgraph_update_post``. We keep the deferred-start behavior so the
+    BlenderNEURON addon has time to finish registering types before the slice
+    builder touches them.
+    """
+    handlers = bpy.app.handlers
+    for name in ("scene_update_post", "depsgraph_update_post"):
+        handler_list = getattr(handlers, name, None)
+        if handler_list is not None:
+            return handler_list
+    raise AttributeError("No compatible Blender app handler list found for slice-builder auto-start.")
+
+
+def _matmul(left, right):
+    """Compatibility wrapper for Blender matrix/vector multiplication."""
+    try:
+        return left @ right
+    except TypeError:
+        return left * right
+
+
+def _evaluated_mesh_obj(mesh_obj):
+    """Return the depsgraph-evaluated form of a mesh-like object when available."""
+    if bpy.app.background:
+        return mesh_obj
+    try:
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        return mesh_obj.evaluated_get(depsgraph)
+    except Exception:
+        return mesh_obj
+
+
+def _object_vertex_points_global(mesh_obj):
+    """Approximate one object surface by its global-space vertex cloud."""
+    matrix_world = mesh_obj.matrix_world
+    return np.array([
+        np.array(_matmul(matrix_world, vertex.co))
+        for vertex in getattr(mesh_obj.data, "vertices", [])
+    ])
+
+
+def _select_object(obj, select=True):
+    """Compatibility wrapper for selecting Blender objects across API versions."""
+    if hasattr(obj, "select_set"):
+        obj.select_set(select)
+    else:
+        obj.select = select
+
+
+def _selected_objects():
+    """Return the current Blender selection in a version-tolerant way."""
+    try:
+        return list(bpy.context.selected_objects)
+    except Exception:
+        scene_objects = getattr(bpy.context.scene, "objects", [])
+        return [obj for obj in scene_objects if getattr(obj, "select", False)]
+
+
+def _set_active_object(obj):
+    """Compatibility wrapper for making one object active."""
+    try:
+        bpy.context.view_layer.objects.active = obj
+        return
+    except Exception:
+        pass
+
+    try:
+        bpy.context.scene.objects.active = obj
+    except Exception:
+        pass
+
+
+def _scene_link_object(obj):
+    """Link an object into the active scene using the supported collection API."""
+    try:
+        bpy.context.scene.collection.objects.link(obj)
+        return
+    except Exception:
+        pass
+
+    try:
+        bpy.context.scene.objects.link(obj)
+    except Exception:
+        pass
+
+
+def _scene_unlink_object(obj):
+    """Unlink an object from the scene or its owning collections."""
+    collections = list(getattr(obj, "users_collection", []))
+    if collections:
+        for collection in collections:
+            try:
+                collection.objects.unlink(obj)
+            except Exception:
+                pass
+        return
+
+    try:
+        bpy.context.scene.objects.unlink(obj)
+    except Exception:
+        pass
+
+
+def _scene_update():
+    """Flush scene/view-layer transforms for whichever Blender API is present."""
+    try:
+        bpy.context.view_layer.update()
+        return
+    except Exception:
+        pass
+
+    try:
+        bpy.context.scene.update()
+    except Exception:
+        pass
+
+
+def _view3d_context_override(selected_object=None):
+    """
+    Build a 3D-view operator override for interactive operations when available.
+
+    Background exports often have no usable 3D window context; callers should be
+    prepared to receive ``None`` and skip view-only operators.
+    """
+    window_manager = getattr(bpy.context, "window_manager", None)
+    windows = list(getattr(window_manager, "windows", [])) if window_manager is not None else []
+    if not windows:
+        return None
+
+    window = windows[0]
+    screen = getattr(window, "screen", None)
+    if screen is None:
+        screen = bpy.data.screens[0] if len(bpy.data.screens) > 0 else None
+    if screen is None:
+        return None
+
+    area = None
+    region = None
+    for candidate_area in screen.areas:
+        if candidate_area.type != 'VIEW_3D':
+            continue
+        area = candidate_area
+        for candidate_region in candidate_area.regions:
+            if candidate_region.type == 'WINDOW':
+                region = candidate_region
+                break
+        if region is not None:
+            break
+
+    if area is None or region is None:
+        return None
+
+    override = {
+        "window": window,
+        "screen": screen,
+        "area": area,
+        "region": region,
+        "scene": bpy.context.scene,
+        "edit_object": None,
+        "gpencil_data": None,
+    }
+
+    if selected_object is not None:
+        override["object"] = selected_object
+        override["active_object"] = selected_object
+        override["edit_object"] = selected_object
+
+    return override
+
+
+def _align_object_towards(ob, pt_global, max_angle):
+    """Rotate one curve object incrementally toward a target point."""
+    max_angle = max_angle / 180.0 * 3.141592
+
+    ob_mw = ob.matrix_world
+    end = ob.data.splines[0].bezier_points[-1].co
+    start = ob.data.splines[0].bezier_points[0].co
+    desired = _matmul(ob_mw.inverted(), pt_global)
+    v_start = end - start
+    v_des = desired - start
+    q = v_start.rotation_difference(v_des).to_euler()
+    q = Euler(list(map(lambda angle: min(max(angle, -max_angle), max_angle), q))).to_quaternion()
+
+    ob.matrix_basis = _matmul(ob.matrix_basis.copy(), q.to_matrix().to_4x4())
+
+    if ob.parent is None:
+        ob.matrix_world = ob.matrix_basis
+    else:
+        ob.matrix_world = _matmul(_matmul(ob.parent.matrix_world, ob.matrix_parent_inverse), ob.matrix_basis)
+
+    _scene_update()
+
+
+def _confine_between_meshes(curve_obj, start_mesh, end_mesh, height_low, height_high, max_angle, iters=11):
+    """Compatibility implementation of BlenderNEURON's layer-confiner rotation step."""
+    height_fraction = height_low + (height_high - height_low) * random.random()
+    sec_start_loc = _matmul(curve_obj.matrix_world, curve_obj.data.splines[0].bezier_points[0].co)
+
+    for _ in range(iters):
+        tip_loc = _matmul(curve_obj.matrix_world, curve_obj.data.splines[0].bezier_points[-1].co)
+        closest_on_start, _dist_to_start = SliceBuilderBlender.closest_point_on_object(np.array(tip_loc), start_mesh)
+        closest_on_end, _dist_to_end = SliceBuilderBlender.closest_point_on_object(np.array(tip_loc), end_mesh)
+
+        closest_on_start = Vector(closest_on_start)
+        closest_on_end = Vector(closest_on_end)
+
+        vec_start2end = (closest_on_end - closest_on_start).normalized()
+        vec_start2tip = (tip_loc - closest_on_start).normalized()
+        angle = acos(min(max(vec_start2end.dot(vec_start2tip), -1), 1)) * 180 / pi
+
+        above = angle < 90 - 0.02
+        if not above:
+            vec_start2tip *= -1
+
+        height = (closest_on_end - closest_on_start).length
+        align_target = closest_on_start + vec_start2end * height * height_fraction
+        _align_object_towards(curve_obj, align_target, max_angle / iters)
+
+
+def _confine_curve(curve_obj, mesh, outer_mesh, name_pattern, height_range, max_angle):
+    """Recursively confine a curve-object tree between two layer meshes."""
+    if name_pattern is None or fnmatch(curve_obj.name, name_pattern):
+        _confine_between_meshes(curve_obj, mesh, outer_mesh, height_range[0], height_range[1], max_angle)
+
+    for child in curve_obj.children:
+        _confine_curve(child, mesh, outer_mesh, name_pattern, height_range, max_angle)
+
+
+def _synapse_build_tree(group_view, pattern):
+    """Compatibility implementation of SynapseFormerView.build_tree()."""
+    size = 0
+    for container in group_view.containers.values():
+        splines = container.object.data.splines
+        for spline_index, spline in enumerate(splines):
+            section_name = container.spline_index2section[spline_index].name
+            if fnmatch(section_name, pattern):
+                size += len(spline.bezier_points)
+
+    tree = mathutils.kdtree.KDTree(size)
+    node2terminal = {}
+    max_radius = 0
+    node_id = 0
+
+    for container in group_view.containers.values():
+        cell_obj = container.object
+        splines = cell_obj.data.splines
+        mw = cell_obj.matrix_world
+
+        for spline_id, spline in enumerate(splines):
+            section = container.spline_index2section[spline_id]
+            section_name = section.name
+            if not fnmatch(section_name, pattern):
+                continue
+
+            arc_lengths = section.arc_lengths()
+            tot_length = arc_lengths[-1]
+
+            for pt_id, pt in enumerate(spline.bezier_points):
+                loc = Vector(_matmul(mw, pt.co)).copy().freeze()
+                x = arc_lengths[pt_id] / tot_length
+                seg_i = min(floor(section.nseg * x), section.nseg - 1)
+                tree.insert(loc, node_id)
+                node2terminal[node_id] = SynapseTerminal(loc, pt.radius, section_name, pt_id, x, seg_i)
+                if pt.radius > max_radius:
+                    max_radius = pt.radius
+                node_id += 1
+
+    tree.balance()
+    return tree, node2terminal, max_radius
+
+
+def _synapse_find_pairs(group_view1, view1_pattern, group_view2, group2_tree, group2_node2synterm,
+                        max_dist, use_radii, max_radius, max_syns_per_pt):
+    """Compatibility implementation of SynapseFormerView.find_pairs()."""
+    pair_heap = []
+    search_dist = max_dist + max_radius if use_radii else max_dist
+
+    for container1 in group_view1.containers.values():
+        cell_obj = container1.object
+        mw = cell_obj.matrix_world
+
+        for spline1_id, spline1 in enumerate(cell_obj.data.splines):
+            section = container1.spline_index2section[spline1_id]
+            section_name = section.name
+
+            if not fnmatch(section_name, view1_pattern):
+                continue
+
+            arc_lengths = section.arc_lengths()
+            tot_length = arc_lengths[-1]
+
+            for pt1_id, pt1 in enumerate(spline1.bezier_points):
+                pt_glob = Vector(_matmul(mw, pt1.co.copy())).freeze()
+                matches = group2_tree.find_range(
+                    pt_glob,
+                    search_dist + (pt1.radius if use_radii else 0),
+                )
+
+                if len(matches) > 0:
+                    x = arc_lengths[pt1_id] / tot_length
+                    seg_i = min(floor(section.nseg * x), section.nseg - 1)
+
+                for _pt2_glob, node2_id, dist in matches:
+                    term1 = SynapseTerminal(pt_glob, pt1.radius, section_name, pt1_id, x, seg_i)
+                    term2 = group2_node2synterm[node2_id]
+                    pair = SynapsePair(term1, term2, dist)
+
+                    if use_radii:
+                        true_dist = dist - pt1.radius - term2.radius
+                        if true_dist <= max_dist:
+                            pair.length = true_dist
+                            heappush(pair_heap, (true_dist, pair))
+                    else:
+                        heappush(pair_heap, (dist, pair))
+
+    used_pt_counts = {}
+    result_pairs = []
+
+    while len(pair_heap) > 0:
+        _dist, pair = heappop(pair_heap)
+        pt1, pt2 = pair.source.loc, pair.dest.loc
+
+        pt1_count = used_pt_counts.get(pt1, 0)
+        pt2_count = used_pt_counts.get(pt2, 0)
+
+        if pt1_count >= max_syns_per_pt or pt2_count >= max_syns_per_pt:
+            continue
+
+        used_pt_counts[pt1] = pt1_count + 1
+        used_pt_counts[pt2] = pt2_count + 1
+        result_pairs.append(pair)
+
+    return result_pairs
+
+
+def _ensure_blenderneuron_ready():
+    """
+    Register BlenderNEURON classes/properties and create a live Blender node.
+
+    The upstream addon startup path assumes interactive UI startup and a modal
+    operator lifecycle. For one-shot background slice exports we only need the
+    registered operators/properties plus a connected ``BlenderNode`` instance.
+    """
+    scene = bpy.context.scene
+
+    from blenderneuron.blender.blenderrootgroup import BlenderRootGroup
+    from blenderneuron.blender.views.objectview import ObjectViewAbstract
+    from blenderneuron.blender.views.curvecontainer import CurveContainer
+    from blenderneuron.blender.views.synapseformerview import SynapseFormerView
+    from blenderneuron.blender.views.vectorconfinerview import VectorConfinerView
+    import blenderneuron.blender.utils as blenderneuron_utils
+
+    if not getattr(BlenderRootGroup, "_obgpu_blender28_compat", False):
+        def _default_color_get(self):
+            material = self.color_ramp_material
+            if material is None:
+                return [1.0, 1.0, 1.0]
+            if hasattr(material, "diffuse_ramp"):
+                return material.diffuse_ramp.elements[0].color[0:3]
+            return list(material.diffuse_color[0:3])
+
+        def _default_color_set(self, value):
+            material = self.color_ramp_material
+            if material is None:
+                return
+            if hasattr(material, "diffuse_ramp"):
+                material.diffuse_ramp.elements[0].color = list(value) + [1]
+            else:
+                material.diffuse_color = list(value) + [1]
+
+        def _create_color_ramp_material(self, default_color):
+            name = self.name + '_color_ramp'
+            mat = bpy.data.materials.get(name) or bpy.data.materials.new(name)
+            if hasattr(mat, "use_diffuse_ramp"):
+                mat.use_diffuse_ramp = True
+                mat.diffuse_ramp.elements[0].color = list(default_color) + [1]
+                mat.diffuse_ramp.elements[-1].color = [1] * 4
+            else:
+                mat.diffuse_color = list(default_color) + [1]
+            return name
+
+        BlenderRootGroup.default_color = property(_default_color_get, _default_color_set)
+        BlenderRootGroup.create_color_ramp_material = _create_color_ramp_material
+        BlenderRootGroup._obgpu_blender28_compat = True
+
+    if not getattr(ObjectViewAbstract, "_obgpu_blender28_compat", False):
+        def _objectview_make_curve_template(self):
+            curve_template = bpy.data.curves.new(self.group.name + "_bezier", type='CURVE')
+            curve_template.dimensions = '3D'
+            curve_template.resolution_u = self.group.segment_subdivisions
+            curve_template.fill_mode = 'FULL'
+            curve_template.bevel_depth = 0.0 if self.group.as_lines else 1.0
+            curve_template.bevel_resolution = int((self.group.circular_subdivisions - 4) / 2.0)
+            for attr in ("show_normal_face", "show_handles"):
+                if hasattr(curve_template, attr):
+                    setattr(curve_template, attr, False)
+            self.curve_template_name = curve_template.name
+
+        def _objectview_on_first_link(self):
+            for screen in bpy.data.screens:
+                for area in screen.areas:
+                    if area.type != 'VIEW_3D':
+                        continue
+                    for space in area.spaces:
+                        if space.type != 'VIEW_3D':
+                            continue
+                        if hasattr(space, "grid_scale"):
+                            space.grid_scale = 100.0
+                        elif hasattr(space, "overlay") and hasattr(space.overlay, "grid_scale"):
+                            space.overlay.grid_scale = 100.0
+                        if hasattr(space, "clip_end"):
+                            space.clip_end = 99999
+                        if hasattr(space, "show_relationship_lines"):
+                            space.show_relationship_lines = False
+
+            if not bpy.app.background:
+                try:
+                    lights = bpy.data.lights if hasattr(bpy.data, "lights") else bpy.data.lamps
+                    sun_exists = any(light.type == 'SUN' for light in lights)
+                    if not sun_exists:
+                        if hasattr(bpy.ops.object, "light_add"):
+                            bpy.ops.object.light_add(type="SUN", location=[500] * 3)
+                        elif hasattr(bpy.ops.object, "lamp_add"):
+                            bpy.ops.object.lamp_add(type="SUN", location=[500] * 3)
+                except Exception:
+                    pass
+
+            for camera in bpy.data.cameras:
+                camera.clip_end = 99999
+
+        def _objectview_select_containers(self, select=True, pattern=None, pattern_inverse=False):
+            bpy.ops.object.select_all(action='DESELECT')
+
+            for container in self.containers.values():
+                if pattern is not None:
+                    matches = fnmatch(container.name, pattern)
+                    if (not pattern_inverse and not matches) or (pattern_inverse and matches):
+                        continue
+                _select_object(container.get_object(), select)
+
+        def _objectview_zoom_to_containers(self):
+            if bpy.app.background:
+                return
+
+            self.select_containers(True)
+            selected = _selected_objects()
+            active_object = selected[0] if selected else None
+            override = _view3d_context_override(active_object)
+            if override is not None:
+                try:
+                    bpy.ops.view3d.view_selected(override, use_all_regions=False)
+                except TypeError:
+                    bpy.ops.view3d.view_selected(override)
+            self.select_containers(False)
+
+        def _objectview_containers_to_mesh(self):
+            self.select_containers()
+            selected = _selected_objects()
+            if not selected:
+                return
+            active_ob = selected[0]
+            _set_active_object(active_ob)
+            override = _view3d_context_override(active_ob)
+            if override is not None:
+                bpy.ops.object.convert(override, target='MESH', keep_original=False)
+            else:
+                bpy.ops.object.convert(target='MESH', keep_original=False)
+
+        def _objectview_mesh_containers_to_curves(self):
+            self.select_containers()
+            selected = _selected_objects()
+            if not selected:
+                return
+            active_ob = selected[0]
+            _set_active_object(active_ob)
+            override = _view3d_context_override(active_ob)
+            if override is not None:
+                bpy.ops.object.convert(override, target='CURVE', keep_original=False)
+            else:
+                bpy.ops.object.convert(target='CURVE', keep_original=False)
+
+        ObjectViewAbstract.make_curve_template = _objectview_make_curve_template
+        ObjectViewAbstract.on_first_link = _objectview_on_first_link
+        ObjectViewAbstract.select_containers = _objectview_select_containers
+        ObjectViewAbstract.zoom_to_containers = _objectview_zoom_to_containers
+        ObjectViewAbstract.containers_to_mesh = _objectview_containers_to_mesh
+        ObjectViewAbstract.mesh_containers_to_curves = _objectview_mesh_containers_to_curves
+        ObjectViewAbstract._obgpu_blender28_compat = True
+
+    if not getattr(CurveContainer, "_obgpu_blender28_compat", False):
+        @staticmethod
+        def _curvecontainer_create_material(name, color, brightness):
+            mat = bpy.data.materials.new(name)
+            rgba = list(color) + ([1.0] if len(color) == 3 else [])
+            if hasattr(mat, "diffuse_color"):
+                mat.diffuse_color = rgba
+            mat.use_nodes = True
+
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            links.clear()
+            nodes.clear()
+
+            out_node = nodes.new('ShaderNodeOutputMaterial')
+            emit_node = nodes.new('ShaderNodeEmission')
+            emit_node.location = [-200, 0]
+            emit_node.inputs['Strength'].default_value = brightness
+            emit_node.inputs['Color'].default_value = rgba
+            links.new(emit_node.outputs['Emission'], out_node.inputs['Surface'])
+
+            return mat
+
+        def _curvecontainer_link(self):
+            _scene_link_object(self.get_object())
+            self.linked = True
+
+        def _curvecontainer_unlink(self):
+            try:
+                _scene_unlink_object(self.get_object())
+            except RuntimeError:
+                pass
+            self.linked = False
+
+        CurveContainer.create_material = _curvecontainer_create_material
+        CurveContainer.link = _curvecontainer_link
+        CurveContainer.unlink = _curvecontainer_unlink
+        CurveContainer._obgpu_blender28_compat = True
+
+    if not getattr(VectorConfinerView, "_obgpu_blender28_compat", False):
+        @staticmethod
+        def _vectorconfiner_closest_point_on_object(global_pt, mesh_obj):
+            return SliceBuilderBlender.closest_point_on_object(np.array(global_pt), mesh_obj)
+
+        @staticmethod
+        def _vectorconfiner_align_object_towards(ob, pt_global, max_angle):
+            max_angle = max_angle / 180.0 * 3.141592
+
+            ob_mw = ob.matrix_world
+            end = ob.data.splines[0].bezier_points[-1].co
+            start = ob.data.splines[0].bezier_points[0].co
+            desired = _matmul(ob_mw.inverted(), pt_global)
+            v_start = end - start
+            v_des = desired - start
+            q = v_start.rotation_difference(v_des).to_euler()
+            q = Euler(list(map(lambda angle: min(max(angle, -max_angle), max_angle), q))).to_quaternion()
+
+            ob.matrix_basis = _matmul(ob.matrix_basis.copy(), q.to_matrix().to_4x4())
+
+            if ob.parent is None:
+                ob.matrix_world = ob.matrix_basis
+            else:
+                ob.matrix_world = _matmul(_matmul(ob.parent.matrix_world, ob.matrix_parent_inverse), ob.matrix_basis)
+
+            _scene_update()
+
+        @staticmethod
+        def _vectorconfiner_confine_between_meshes(obj, start_mesh, end_mesh, height_low, height_high, max_angle, iters=11):
+            height_fraction = height_low + (height_high - height_low) * random.random()
+            sec_start_loc = _matmul(obj.matrix_world, obj.data.splines[0].bezier_points[0].co)
+
+            for _ in range(iters):
+                tip_loc = _matmul(obj.matrix_world, obj.data.splines[0].bezier_points[-1].co)
+                vec_sec_dir = (tip_loc - sec_start_loc).normalized()
+                del vec_sec_dir
+
+                closest_on_start, _dist_to_start = VectorConfinerView.closest_point_on_object(tip_loc, start_mesh)
+                closest_on_end, _dist_to_end = VectorConfinerView.closest_point_on_object(tip_loc, end_mesh)
+
+                closest_on_start = Vector(closest_on_start)
+                closest_on_end = Vector(closest_on_end)
+
+                vec_start2end = (closest_on_end - closest_on_start).normalized()
+                vec_start2tip = (tip_loc - closest_on_start).normalized()
+                angle = acos(min(max(vec_start2end.dot(vec_start2tip), -1), 1)) * 180 / pi
+
+                above = angle < 90 - 0.02
+                if not above:
+                    vec_start2tip *= -1
+
+                height = (closest_on_end - closest_on_start).length
+                align_target = closest_on_start + vec_start2end * height * height_fraction
+                VectorConfinerView.align_object_towards(obj, align_target, max_angle / iters)
+
+        VectorConfinerView.closest_point_on_object = _vectorconfiner_closest_point_on_object
+        VectorConfinerView.align_object_towards = _vectorconfiner_align_object_towards
+        VectorConfinerView.confine_between_meshes = _vectorconfiner_confine_between_meshes
+        VectorConfinerView._obgpu_blender28_compat = True
+
+    if not getattr(SynapseFormerView, "_obgpu_blender28_compat", False):
+        def _synapseformer_make_curve(self):
+            curve = bpy.data.curves.new("SynapsePreviewCurve", type='CURVE')
+            curve.dimensions = '3D'
+            curve.resolution_u = 0
+            curve.fill_mode = 'FULL'
+            curve.bevel_depth = 0.0
+            for attr in ("show_normal_face", "show_handles"):
+                if hasattr(curve, attr):
+                    setattr(curve, attr, False)
+            return curve
+
+        @staticmethod
+        def _synapseformer_build_tree(group_view, pattern):
+            size = 0
+            for container in group_view.containers.values():
+                splines = container.object.data.splines
+                for spline_index, spline in enumerate(splines):
+                    section_name = container.spline_index2section[spline_index].name
+                    if fnmatch(section_name, pattern):
+                        size += len(spline.bezier_points)
+
+            tree = mathutils.kdtree.KDTree(size)
+            node2terminal = {}
+            max_radius = 0
+            node_id = 0
+
+            for container in group_view.containers.values():
+                cell_obj = container.object
+                splines = cell_obj.data.splines
+                mw = cell_obj.matrix_world
+
+                for spline_id, spline in enumerate(splines):
+                    section = container.spline_index2section[spline_id]
+                    section_name = section.name
+                    if not fnmatch(section_name, pattern):
+                        continue
+
+                    arc_lengths = section.arc_lengths()
+                    tot_length = arc_lengths[-1]
+
+                    for pt_id, pt in enumerate(spline.bezier_points):
+                        loc = Vector(_matmul(mw, pt.co)).copy().freeze()
+                        x = arc_lengths[pt_id] / tot_length
+                        seg_i = min(floor(section.nseg * x), section.nseg - 1)
+                        tree.insert(loc, node_id)
+                        node2terminal[node_id] = SynapseTerminal(loc, pt.radius, section_name, pt_id, x, seg_i)
+                        radius = pt.radius
+                        if radius > max_radius:
+                            max_radius = radius
+                        node_id += 1
+
+            tree.balance()
+            return tree, node2terminal, max_radius
+
+        @staticmethod
+        def _synapseformer_find_pairs(group_view1, view1_pattern, group_view2, group2_tree, group2_node2synterm,
+                                      max_dist, use_radii, max_radius, max_syns_per_pt):
+            pair_heap = []
+            search_dist = max_dist + max_radius if use_radii else max_dist
+
+            for container1 in group_view1.containers.values():
+                cell_obj = container1.object
+                mw = cell_obj.matrix_world
+
+                for spline1_id, spline1 in enumerate(cell_obj.data.splines):
+                    section = container1.spline_index2section[spline1_id]
+                    section_name = section.name
+                    if not fnmatch(section_name, view1_pattern):
+                        continue
+
+                    arc_lengths = section.arc_lengths()
+                    tot_length = arc_lengths[-1]
+
+                    for pt1_id, pt1 in enumerate(spline1.bezier_points):
+                        pt_glob = Vector(_matmul(mw, pt1.co.copy())).freeze()
+                        matches = group2_tree.find_range(
+                            pt_glob,
+                            search_dist + (pt1.radius if use_radii else 0),
+                        )
+
+                        if len(matches) > 0:
+                            x = arc_lengths[pt1_id] / tot_length
+                            seg_i = min(floor(section.nseg * x), section.nseg - 1)
+
+                        for _pt2_glob, node2_id, dist in matches:
+                            term1 = SynapseTerminal(pt_glob, pt1.radius, section_name, pt1_id, x, seg_i)
+                            term2 = group2_node2synterm[node2_id]
+                            pair = SynapsePair(term1, term2, dist)
+
+                            if use_radii:
+                                true_dist = dist - pt1.radius - term2.radius
+                                if true_dist <= max_dist:
+                                    pair.length = true_dist
+                                    heappush(pair_heap, (true_dist, pair))
+                            else:
+                                heappush(pair_heap, (dist, pair))
+
+            used_pt_counts = {}
+            result_pairs = []
+
+            while len(pair_heap) > 0:
+                _dist, pair = heappop(pair_heap)
+                pt1, pt2 = pair.source.loc, pair.dest.loc
+
+                pt1_count = used_pt_counts.get(pt1, 0)
+                pt2_count = used_pt_counts.get(pt2, 0)
+
+                if pt1_count >= max_syns_per_pt or pt2_count >= max_syns_per_pt:
+                    continue
+
+                used_pt_counts[pt1] = pt1_count + 1
+                used_pt_counts[pt2] = pt2_count + 1
+                result_pairs.append(pair)
+
+            return result_pairs
+
+        def _synapseformer_get_synapse_locations(self, max_dist, use_radii, max_syns_per_pt,
+                                                 section_pattern_source, section_pattern_dest):
+            dest_group_tree, dest_node2synterm, dest_max_radius = self.build_tree(self.dest_group.view, section_pattern_dest)
+            syn_pairs = self.find_pairs(
+                self,
+                section_pattern_source,
+                self.dest_group.view,
+                dest_group_tree,
+                dest_node2synterm,
+                max_dist,
+                use_radii,
+                dest_max_radius,
+                max_syns_per_pt,
+            )
+
+            bez = bpy.data.objects.new("SynapsePreview", self.make_curve())
+            for pair in syn_pairs:
+                spline = bez.data.splines.new('BEZIER')
+                bez_pts = spline.bezier_points
+                bez_pts.add(1)
+                bez_pts[0].co = pair.source.loc
+                bez_pts[1].co = pair.dest.loc
+
+            bpy.ops.object.select_all(action='DESELECT')
+            _scene_link_object(bez)
+            _scene_update()
+            _select_object(bez, True)
+            _set_active_object(bez)
+
+            override = _view3d_context_override(bez)
+            if override is not None:
+                bpy.ops.object.mode_set(override, mode='EDIT')
+                bpy.ops.curve.select_all(override, action='SELECT')
+                bpy.ops.curve.handle_type_set(override, type='AUTOMATIC')
+                bpy.ops.object.mode_set(override, mode='OBJECT')
+
+            self.synapse_container_name = bez.name
+            self.synapse_pairs = syn_pairs
+            return syn_pairs
+
+        SynapseFormerView.make_curve = _synapseformer_make_curve
+        SynapseFormerView.build_tree = _synapseformer_build_tree
+        SynapseFormerView.find_pairs = _synapseformer_find_pairs
+        SynapseFormerView.get_synapse_locations = _synapseformer_get_synapse_locations
+        SynapseFormerView._obgpu_blender28_compat = True
+
+    if not getattr(blenderneuron_utils, "_obgpu_blender28_compat", False):
+        blenderneuron_utils.get_operator_context_override = _view3d_context_override
+        blenderneuron_utils._obgpu_blender28_compat = True
+
+    if not hasattr(bpy.types.Scene, "BlenderNEURON") or not hasattr(scene, "BlenderNEURON"):
+        from blenderneuron.blender.utils import register_module_classes
+        import blenderneuron.blender.operators.connection
+        import blenderneuron.blender.panels.connection
+        import blenderneuron.blender.properties.connection
+        import blenderneuron.blender.operators.rootgroup
+        import blenderneuron.blender.panels.rootgroup
+        import blenderneuron.blender.properties.rootgroup
+
+        register_module_classes(blenderneuron.blender.operators.rootgroup)
+        register_module_classes(blenderneuron.blender.panels.rootgroup)
+        register_module_classes(blenderneuron.blender.properties.rootgroup)
+        blenderneuron.blender.properties.rootgroup.register()
+
+        register_module_classes(blenderneuron.blender.operators.connection)
+        register_module_classes(blenderneuron.blender.panels.connection)
+        register_module_classes(blenderneuron.blender.properties.connection)
+        blenderneuron.blender.properties.connection.register()
+
+    node = getattr(bpy.types.Object, "BlenderNEURON_node", None)
+    if node is None:
+        from blenderneuron.blender.blendernode import BlenderNode
+
+        def on_client_connected(comm_node):
+            scene.BlenderNEURON.simulator_settings.from_neuron()
+
+        node = BlenderNode(on_client_connected=on_client_connected)
+        bpy.types.Object.BlenderNEURON_node = node
+        scene.BlenderNEURON.clear()
+
+        if node.client is not None:
+            node.add_group()
+            node.add_synapse_set()
+
+    return node
+
+
+def auto_start(*_args):
     """
     A Blender startup script that starts the SliceBuilder on Blender startup
     """
 
     # Remove auto-execute command after starting
-    bpy.app.handlers.scene_update_post.remove(auto_start)
+    handler_list = _auto_start_handler_list()
+    if auto_start in handler_list:
+        handler_list.remove(auto_start)
 
     # Assuming starting at repo root
     sys.path.append(os.getcwd())
+
+    _ensure_blenderneuron_ready()
 
     # Create a slice builder class
     sbb = bpy.types.Object.SliceBuilder = SliceBuilderBlender(**slice_builder_env_kwargs())
@@ -92,6 +896,7 @@ class SliceBuilderBlender:
     def __init__(self,
                  odors=['Apple'],
                  slice_object_name='DorsalColumnSlice',
+                 slice_output_name=None,
                  max_mcs=10, max_tcs=None, max_gcs=300,  # Uses mouse ratios if None
                  max_eplis=0,
                  mc_particles_object_name='2 ML Particles',
@@ -112,6 +917,7 @@ class SliceBuilderBlender:
 
         :param odors: A list of odors whose glomeruli to include (e.g. ['Apple', 'Mint']), use 'all' for all gloms.
         :param slice_object_name: The name of the Blender mesh that defines the shape of the virtual slice
+        :param slice_output_name: Optional output directory name for the generated slice assets.
         :param max_mcs: The maximum number of MCs to include in the model
         :param max_tcs: Maximum number of TCs. Use None to use mouse MC-TC ratio.
         :param max_gcs: Maximum number of GCs. Use None to use mouse MC-GC ratio.
@@ -140,7 +946,8 @@ class SliceBuilderBlender:
         self.odors = odors
         self.glom_cells = {}
 
-        self.slice_name = slice_object_name
+        self.slice_object_name = slice_object_name
+        self.slice_name = slice_output_name or slice_object_name
 
         self.max_mcs = max_mcs
         self.max_tcs = max_tcs
@@ -224,14 +1031,14 @@ class SliceBuilderBlender:
             file = os.path.join(self.slice_dir, make_safe_filename(syn_set.name)+'.json')
             print('Saving synapse set "'+syn_set.name+'" saved to: ' + file)
 
-            pairs = syn_set.get_synapse_locations()
+            pairs = self.get_synapse_locations_for_set(syn_set)
 
             # Track connected source-side interneurons for optional pruning.
             for pair in pairs:
                 source_cell = pair.source.section_name[:pair.source.section_name.find(']')+1]
                 connected_source_cells_by_group.setdefault(syn_set.group_source, set()).add(source_cell)
 
-            syn_set.save_synapses(file)
+            self.save_synapses_for_set(syn_set, file)
 
         # Remove unconnected source-side interneurons that would not contribute
         # to simulation output. Keep MCs/TCs untouched.
@@ -265,7 +1072,8 @@ class SliceBuilderBlender:
 
         # Show all group cells
         print('Creating blender scene...')
-        bpy.ops.blenderneuron.display_groups()
+        if not bpy.app.background:
+            bpy.ops.blenderneuron.display_groups()
         print('DONE')
 
     def add_synapse_sets(self):
@@ -333,6 +1141,70 @@ class SliceBuilderBlender:
         new_set.initial_weight = initial_weight
         new_set.threshold = threshold
 
+    def get_synapse_locations_for_set(self, syn_set):
+        """
+        Find synapse pairs for one synapse set using Blender 2.82-safe geometry code.
+        """
+        source_group = self.node.groups[syn_set.group_source]
+        dest_group = self.node.groups[syn_set.group_dest]
+
+        import_groups = [group for group in (source_group, dest_group) if group.state != 'imported']
+        if len(import_groups) > 0:
+            for group in import_groups:
+                group.interaction_granularity = 'Cell'
+                group.recording_granularity = 'Cell'
+                group.record_activity = False
+                group.import_synapses = False
+
+            self.node.import_groups_from_neuron(import_groups)
+
+        source_group.show(SynapseFormerView, dest_group)
+
+        dest_group_tree, dest_node2synterm, dest_max_radius = _synapse_build_tree(
+            source_group.view.dest_group.view,
+            syn_set.section_pattern_dest,
+        )
+
+        pairs = _synapse_find_pairs(
+            source_group.view,
+            syn_set.section_pattern_source,
+            source_group.view.dest_group.view,
+            dest_group_tree,
+            dest_node2synterm,
+            syn_set.max_distance,
+            syn_set.use_radius,
+            dest_max_radius,
+            syn_set.max_syns_per_pt,
+        )
+        source_group.view.synapse_pairs = pairs
+        return pairs
+
+    def save_synapses_for_set(self, syn_set, file_name):
+        """
+        Serialize one synapse set after ``get_synapse_locations_for_set`` populated the pair list.
+        """
+        source_group = self.node.groups[syn_set.group_source]
+        if type(source_group.view) is not SynapseFormerView:
+            raise RuntimeError("Synapse view is not initialized for save.")
+
+        source_group.view.save_synapses(
+            file_name,
+            syn_set.name,
+            syn_set.synapse_name_dest,
+            syn_set.synapse_params_dest,
+            syn_set.conduction_velocity,
+            syn_set.synaptic_delay,
+            syn_set.initial_weight,
+            syn_set.threshold,
+            syn_set.is_reciprocal,
+            syn_set.synapse_name_source,
+            syn_set.synapse_params_source,
+            syn_set.create_spines,
+            syn_set.spine_neck_diameter,
+            syn_set.spine_head_diameter,
+            syn_set.spine_name_prefix,
+        )
+
     def clear_slice_files(self):
         """
         Deletes previously saved virtual slice .json files from the slice directory
@@ -340,14 +1212,14 @@ class SliceBuilderBlender:
         """
 
         dir = self.slice_dir
+        os.makedirs(dir, exist_ok=True)
 
         # Match e.g. 'MCs.json'
         pattern = re.compile('.+json')
 
-        if os.path.exists(dir):
-            for file in os.listdir(dir):
-                if pattern.match(file) is not None:
-                    os.remove(os.path.abspath(os.path.join(dir, file)))
+        for file in os.listdir(dir):
+            if pattern.match(file) is not None:
+                os.remove(os.path.abspath(os.path.join(dir, file)))
 
     def get_cell_locations(self):
         """
@@ -357,14 +1229,14 @@ class SliceBuilderBlender:
         self.globalize_slice()
 
         odor_glom_ids = self.neuron.get_odor_gloms(self.odors)
-        self.glom_locs = self.get_locs_within_slice(self.glom_particles_name, self.slice_name, odor_glom_ids)
+        self.glom_locs = self.get_locs_within_slice(self.glom_particles_name, self.slice_object_name, odor_glom_ids)
 
-        self.inner_opl_locs = self.get_opl_locs(self.inner_opl_object_name, self.slice_name)
-        self.outer_opl_locs = self.get_opl_locs(self.outer_opl_object_name, self.slice_name)
+        self.inner_opl_locs = self.get_opl_locs(self.inner_opl_object_name, self.slice_object_name)
+        self.outer_opl_locs = self.get_opl_locs(self.outer_opl_object_name, self.slice_object_name)
 
-        self.mc_locs = self.get_locs_within_slice(self.mc_particles_name, self.slice_name, limit=self.max_mcs)
-        self.tc_locs = self.get_locs_within_slice(self.tc_particles_name, self.slice_name, limit=self.max_tcs)
-        self.gc_locs = self.get_locs_within_slice(self.gc_particles_name, self.slice_name, limit=self.max_gcs)
+        self.mc_locs = self.get_locs_within_slice(self.mc_particles_name, self.slice_object_name, limit=self.max_mcs)
+        self.tc_locs = self.get_locs_within_slice(self.tc_particles_name, self.slice_object_name, limit=self.max_tcs)
+        self.gc_locs = self.get_locs_within_slice(self.gc_particles_name, self.slice_object_name, limit=self.max_gcs)
         if self.enable_epl_interneurons:
             tc_particle_ids = {loc['id'] for loc in self.tc_locs} if self.epli_particles_name == self.tc_particles_name else set()
             self.epli_locs = self.get_epli_locs(
@@ -393,7 +1265,7 @@ class SliceBuilderBlender:
         locs = fast_get(obj.data.vertices, 'co', 3)
 
         def globalize(loc):
-            return np.array(wm * Vector(loc))
+            return np.array(_matmul(wm, Vector(loc)))
 
         # Globalize the coordinates
         locs = np.array(list(map(globalize, locs)))
@@ -414,18 +1286,15 @@ class SliceBuilderBlender:
         """
 
         exclude_particle_ids = set() if exclude_particle_ids is None else set(exclude_particle_ids)
-        candidates = self.get_locs_within_slice(particle_obj_name, self.slice_name)
+        candidates = self.get_locs_within_slice(particle_obj_name, self.slice_object_name)
         result = []
-
-        inner_opl = bpy.data.objects[self.inner_opl_object_name]
-        outer_opl = bpy.data.objects[self.outer_opl_object_name]
 
         for candidate in candidates:
             if candidate['id'] in exclude_particle_ids:
                 continue
 
-            _closest_iopl_loc, dist_to_iopl = self.closest_point_on_object(candidate['loc'], inner_opl)
-            _closest_oopl_loc, dist_to_oopl = self.closest_point_on_object(candidate['loc'], outer_opl)
+            _closest_iopl_loc, dist_to_iopl, _dists_iopl = self.get_opl_distance_info(candidate['loc'], self.inner_opl_locs)
+            _closest_oopl_loc, dist_to_oopl, _dists_oopl = self.get_opl_distance_info(candidate['loc'], self.outer_opl_locs)
             total_dist = dist_to_iopl + dist_to_oopl
             if total_dist <= 0:
                 continue
@@ -503,11 +1372,18 @@ class SliceBuilderBlender:
         """
 
         # Apply all/any transformations to the slice
-        slice = bpy.data.objects[self.slice_name]
-        slice.select = True
-        bpy.context.scene.objects.active = slice
+        slice = bpy.data.objects[self.slice_object_name]
+        if hasattr(slice, "select_set"):
+            slice.select_set(True)
+            bpy.context.view_layer.objects.active = slice
+        else:
+            slice.select = True
+            bpy.context.scene.objects.active = slice
         bpy.ops.object.transform_apply(location=True, scale=True, rotation=True)
-        slice.select = False
+        if hasattr(slice, "select_set"):
+            slice.select_set(False)
+        else:
+            slice.select = False
 
     def add_mc(self, mc_pt):
         """
@@ -734,16 +1610,34 @@ class SliceBuilderBlender:
         :param mesh_obj: A mesh object
         :return: A tuple with an xyz numpy array of the closest point and distance to it
         """
+        depsgraph = None
+        try:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+        except Exception:
+            pass
+        mesh_obj = _evaluated_mesh_obj(mesh_obj)
 
-        local_pt = mesh_obj.matrix_world.inverted() * Vector(global_pt)
+        local_pt = _matmul(mesh_obj.matrix_world.inverted(), Vector(global_pt))
 
-        _, mesh_pt, _, _ = mesh_obj.closest_point_on_mesh(local_pt)
+        try:
+            try:
+                if depsgraph is not None:
+                    _, mesh_pt, _, _ = mesh_obj.closest_point_on_mesh(local_pt, depsgraph=depsgraph)
+                else:
+                    _, mesh_pt, _, _ = mesh_obj.closest_point_on_mesh(local_pt)
+            except TypeError:
+                _, mesh_pt, _, _ = mesh_obj.closest_point_on_mesh(local_pt)
 
-        mesh_pt_global = mesh_obj.matrix_world * mesh_pt
-
-        dist = Vector(global_pt - mesh_pt_global).length
-
-        return np.array(mesh_pt_global), dist
+            mesh_pt_global = _matmul(mesh_obj.matrix_world, mesh_pt)
+            dist = Vector(global_pt - mesh_pt_global).length
+            return np.array(mesh_pt_global), dist
+        except RuntimeError:
+            pts = _object_vertex_points_global(mesh_obj)
+            if len(pts) == 0:
+                raise
+            dists = np.sqrt(np.sum(np.square(pts - np.asarray(global_pt, dtype=float)), axis=1))
+            idx = int(np.argmin(dists))
+            return pts[idx], float(dists[idx])
 
     def add_gc(self, gc_pt):
         """
@@ -758,12 +1652,12 @@ class SliceBuilderBlender:
         # glom_loc, glom_dist = self.find_closest_glom(gc_pt['loc'])
 
         # find the closest inner opl loc - apics must go beyond this
-        closest_iopl_loc, dist_to_iopl = \
-            self.closest_point_on_object(gc_pt['loc'], bpy.data.objects[self.inner_opl_object_name])
+        closest_iopl_loc, dist_to_iopl, _dists_iopl = \
+            self.get_opl_distance_info(gc_pt['loc'], self.inner_opl_locs)
 
         # find the closest outer opl loc - apics must stay under this
-        closest_oopl_loc, dist_to_oopl = \
-            self.closest_point_on_object(gc_pt['loc'], bpy.data.objects[self.outer_opl_object_name])
+        closest_oopl_loc, dist_to_oopl, _dists_oopl = \
+            self.get_opl_distance_info(gc_pt['loc'], self.outer_opl_locs)
 
         # Find such GC models whose apics are confined to the OPL
         # Specifically:
@@ -818,7 +1712,7 @@ class SliceBuilderBlender:
         soma = bpy.data.objects[instance_name]
         soma.rotation_euler[2] = random.randrange(360) / 180.0 * pi
         soma.location = epli_pt['loc']
-        bpy.context.scene.update()
+        _scene_update()
 
         bpy.ops.blenderneuron.update_groups_with_view_data()
         self.confine_dends(
@@ -869,7 +1763,21 @@ class SliceBuilderBlender:
         # Set the layers
         group.set_confiner_layers(start_layer_name, end_layer_name, max_angle, height_start, height_end)
         group.setup_confiner()
-        group.confine_between_layers()
+        settings = group.ui_group.layer_confiner_settings
+
+        for root in group.roots.values():
+            container_name = root.split_sections[0].name if root.was_split else root.name
+            container = group.view.containers.get(container_name)
+            if container is None:
+                continue
+            _confine_curve(
+                container.object,
+                settings.start_mesh,
+                settings.end_mesh,
+                settings.moveable_sections_pattern,
+                [settings.height_min, settings.height_max],
+                settings.max_bend_angle,
+            )
 
     def save_transform(self, group_name, instance_name):
         """
@@ -968,10 +1876,10 @@ class SliceBuilderBlender:
         particles_wm = particles_obj.matrix_world
         slice_obj = bpy.data.objects[slice_obj_name]
 
-        result = [{ 'id': pid, 'loc': np.array(particles_wm * ptc.location)}
+        result = [{ 'id': pid, 'loc': np.array(_matmul(particles_wm, ptc.location))}
                            for pid, ptc in enumerate(particles)
                            if (allowed_particles is None or pid in allowed_particles) and
-                           self.is_inside(particles_wm * ptc.location, slice_obj)]
+                           self.is_inside(_matmul(particles_wm, ptc.location), slice_obj)]
 
         if limit is not None:
             print('Selecting %s/%s %s locations inside slice'%(limit, len(result), particle_obj_name))
@@ -989,12 +1897,24 @@ class SliceBuilderBlender:
         :param tolerance: A tolerance in degrees to account for rounding error in detecting points inside. <=1 is generally sufficient.
         :return: True or False
         """
+        depsgraph = None
+        try:
+            depsgraph = bpy.context.evaluated_depsgraph_get()
+        except Exception:
+            pass
+        mesh_obj = _evaluated_mesh_obj(mesh_obj)
 
         # Convert the point from global space to mesh local space
-        target_pt_local = mesh_obj.matrix_world.inverted() * target_pt_global
+        target_pt_local = _matmul(mesh_obj.matrix_world.inverted(), target_pt_global)
 
         # Find the nearest point on the mesh and the nearest face normal
-        _, pt_closest, face_normal, _ = mesh_obj.closest_point_on_mesh(target_pt_local)
+        try:
+            if depsgraph is not None:
+                _, pt_closest, face_normal, _ = mesh_obj.closest_point_on_mesh(target_pt_local, depsgraph=depsgraph)
+            else:
+                _, pt_closest, face_normal, _ = mesh_obj.closest_point_on_mesh(target_pt_local)
+        except TypeError:
+            _, pt_closest, face_normal, _ = mesh_obj.closest_point_on_mesh(target_pt_local)
 
         # Get the target-closest pt vector
         target_closest_pt_vec = (pt_closest - target_pt_local).normalized()
@@ -1059,10 +1979,10 @@ class SliceBuilderBlender:
         # Compute the start and end alignment vectors (start apic->end apic TO start apic->glom)
         # Relative to apic_start
         apic_start_wmi = apic_start.matrix_world.inverted()
-        apic_end_loc = apic_start_wmi * apic_end.location
+        apic_end_loc = _matmul(apic_start_wmi, apic_end.location)
 
         startVec = Vector(apic_end_loc)
-        endVec = Vector(apic_start_wmi * Vector(apic_glom_loc))
+        endVec = Vector(_matmul(apic_start_wmi, Vector(apic_glom_loc)))
 
         # Reparent the apic end (so it rotates with the start apic)
         self.parent(apic_end, apic_end_parent)
@@ -1070,12 +1990,12 @@ class SliceBuilderBlender:
         # Compute rotation quaternion and rotate the start apic by it
         initMW = apic_start.matrix_world.copy()
         rotM = startVec.rotation_difference(endVec).to_matrix().to_4x4()
-        apic_start.matrix_world = initMW * rotM
+        apic_start.matrix_world = _matmul(initMW, rotM)
 
         # Reparent the apic end (so it rotates with the start apic)
         self.parent(apic_start, apic_start_parent)
 
-        bpy.context.scene.update()
+        _scene_update()
 
     def position_orient_cell(self, soma, apic_end, soma_loc, closest_glom_loc):
         """
@@ -1096,19 +2016,20 @@ class SliceBuilderBlender:
         soma.location = soma_loc
 
         # Update child matrices
-        bpy.context.scene.update()
+        _scene_update()
 
         # Align the soma to be orthogonal to the soma-closest glom vector
         soma_wmi = soma.matrix_world.inverted()
-        apic_end_loc = Vector(soma_wmi * apic_end.matrix_world * apic_end.location)
-        glom_loc = Vector(soma_wmi * Vector(closest_glom_loc))
+        apic_end_world = _matmul(apic_end.matrix_world, apic_end.location)
+        apic_end_loc = Vector(_matmul(soma_wmi, apic_end_world))
+        glom_loc = Vector(_matmul(soma_wmi, Vector(closest_glom_loc)))
 
         initMW = soma.matrix_world.copy()
         rotM = apic_end_loc.rotation_difference(glom_loc).to_matrix().to_4x4()
-        soma.matrix_world = initMW * rotM
+        soma.matrix_world = _matmul(initMW, rotM)
 
         # Update child matrices
-        bpy.context.scene.update()
+        _scene_update()
 
     def extend_apic(self, apic_start, apic_end, apic_glom_loc):
         """
@@ -1121,8 +2042,9 @@ class SliceBuilderBlender:
         """
 
         # Relative to apic_start
-        glom_loc = apic_start.matrix_world.inverted() * Vector(apic_glom_loc)
-        apic_end_loc = apic_start.matrix_world.inverted() * apic_end.matrix_world * apic_end.location
+        glom_loc = _matmul(apic_start.matrix_world.inverted(), Vector(apic_glom_loc))
+        apic_end_world = _matmul(apic_end.matrix_world, apic_end.location)
+        apic_end_loc = _matmul(apic_start.matrix_world.inverted(), apic_end_world)
 
         apic_glom_diff = Vector(glom_loc - apic_end_loc)
 
@@ -1131,4 +2053,7 @@ class SliceBuilderBlender:
 
 
 # This makes it so the slice builder automatically runs when Blender loads
-bpy.app.handlers.scene_update_post.append(auto_start)
+if bpy.app.background:
+    auto_start()
+else:
+    _auto_start_handler_list().append(auto_start)

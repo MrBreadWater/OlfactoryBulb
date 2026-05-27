@@ -62,6 +62,7 @@ def slice_builder_env_kwargs(environ: dict[str, str] | None = None) -> dict[str,
     kwargs: dict[str, Any] = {
         "odors": _parse_odors(raw("ODORS")),
         "slice_object_name": raw("NAME", "DorsalColumnSlice"),
+        "slice_output_name": raw("OUTPUT_NAME"),
         "max_mcs": int(raw("MAX_MCS", "10")),
         "max_tcs": _parse_int(raw("MAX_TCS")),
         "max_gcs": _parse_int(raw("MAX_GCS"), 300),
@@ -93,6 +94,7 @@ def slice_builder_env_overrides_from_cli(args: Any) -> dict[str, str]:
         overrides[_env_key(name)] = formatter(value)
 
     set_if("NAME", getattr(args, "slice_name", None))
+    set_if("OUTPUT_NAME", getattr(args, "slice_output_name", None))
     set_if("ODORS", getattr(args, "odors", None), lambda value: ",".join(value) if isinstance(value, (list, tuple)) else str(value))
     set_if("MAX_MCS", getattr(args, "max_mcs", None))
     set_if("MAX_TCS", getattr(args, "max_tcs", None))

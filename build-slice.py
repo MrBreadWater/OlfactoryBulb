@@ -10,13 +10,15 @@ from __future__ import annotations
 import argparse
 import os
 import subprocess
+from pathlib import Path
 
 from olfactorybulb.slicebuilder.config import slice_builder_env_overrides_from_cli
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--slice-name", default=None, help="Target slice export directory / Blender slice object name.")
+    parser.add_argument("--slice-name", default=None, help="Blender slice object name. Defaults to the canonical DorsalColumnSlice object.")
+    parser.add_argument("--slice-output-name", default=None, help="Optional output directory name for the generated slice assets.")
     parser.add_argument("--odors", nargs="+", default=None, help="Odor names to include, or 'all'.")
     parser.add_argument("--max-mcs", type=int, default=None)
     parser.add_argument("--max-tcs", type=int, default=None)
@@ -37,9 +39,31 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--inner-opl-object-name", default=None)
     parser.add_argument("--blender-executable", default="blender", help="Blender executable to run.")
     parser.add_argument("--blender-file", default="blender-files/ob-gloms-fast.blend", help="Blender scene file to use.")
+    parser.add_argument("--background", action="store_true", help="Run Blender in background mode.")
     parser.add_argument("--print-env", action="store_true", help="Print resolved OB_SLICE_* overrides before launching Blender.")
     parser.add_argument("--dry-run", action="store_true", help="Print the resolved environment and Blender command without launching NEURON or Blender.")
     return parser
+
+
+def _merge_pythonpath(env: dict[str, str]) -> str:
+    """Return a Blender-friendly PYTHONPATH that exposes the repo checkout."""
+    entries: list[str] = []
+    seen: set[str] = set()
+
+    def add(path_value: str | None) -> None:
+        if not path_value:
+            return
+        normalized = str(Path(path_value).resolve())
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        entries.append(normalized)
+
+    for path_value in str(env.get("PYTHONPATH", "")).split(os.pathsep):
+        add(path_value or None)
+
+    add(str(Path.cwd()))
+    return os.pathsep.join(entries)
 
 
 def build_slice(argv: list[str] | None = None):
@@ -69,12 +93,17 @@ def build_slice(argv: list[str] | None = None):
 
     env = os.environ.copy()
     env.update(slice_builder_env_overrides_from_cli(args))
+    env["PYTHONPATH"] = _merge_pythonpath(env)
     command = [
         args.blender_executable,
+    ]
+    if args.background:
+        command.append("-b")
+    command.extend([
         args.blender_file,
         "--python",
         "olfactorybulb/slicebuilder/blender.py",
-    ]
+    ])
     if args.print_env or args.dry_run:
         for key in sorted(name for name in env if name.startswith("OB_SLICE_")):
             print(f"{key}={env[key]}")

@@ -4,7 +4,10 @@ Run with:
     python test_slice_builder_config.py
 """
 
+import subprocess
+import sys
 from types import SimpleNamespace
+from pathlib import Path
 
 from olfactorybulb.slicebuilder.config import slice_builder_env_kwargs, slice_builder_env_overrides_from_cli
 
@@ -12,6 +15,7 @@ from olfactorybulb.slicebuilder.config import slice_builder_env_kwargs, slice_bu
 env_kwargs = slice_builder_env_kwargs(
     {
         "OB_SLICE_NAME": "DorsalColumnSliceEPLI",
+        "OB_SLICE_OUTPUT_NAME": "DorsalColumnSliceEPLI_smoke",
         "OB_SLICE_ODORS": "Apple,Mint",
         "OB_SLICE_MAX_MCS": "12",
         "OB_SLICE_MAX_TCS": "24",
@@ -26,6 +30,7 @@ env_kwargs = slice_builder_env_kwargs(
 )
 
 assert env_kwargs["slice_object_name"] == "DorsalColumnSliceEPLI"
+assert env_kwargs["slice_output_name"] == "DorsalColumnSliceEPLI_smoke"
 assert env_kwargs["odors"] == ["Apple", "Mint"]
 assert env_kwargs["max_mcs"] == 12
 assert env_kwargs["max_tcs"] == 24
@@ -39,6 +44,7 @@ assert abs(env_kwargs["epli_depth_max_fraction"] - 0.7) < 1e-9
 
 args = SimpleNamespace(
     slice_name="DorsalColumnSliceEPLI",
+    slice_output_name="DorsalColumnSliceEPLI_smoke",
     odors=["Apple", "Mint"],
     max_mcs=12,
     max_tcs=None,
@@ -60,8 +66,31 @@ args = SimpleNamespace(
 )
 overrides = slice_builder_env_overrides_from_cli(args)
 assert overrides["OB_SLICE_NAME"] == "DorsalColumnSliceEPLI"
+assert overrides["OB_SLICE_OUTPUT_NAME"] == "DorsalColumnSliceEPLI_smoke"
 assert overrides["OB_SLICE_ODORS"] == "Apple,Mint"
 assert overrides["OB_SLICE_ENABLE_EPLI"] == "1"
 assert overrides["OB_SLICE_MAX_EPLIS"] == "18"
+
+repo_root = Path(__file__).resolve().parent
+cli_completed = subprocess.run(
+    [
+        sys.executable,
+        "build-slice.py",
+        "--dry-run",
+        "--background",
+        "--slice-name",
+        "DorsalColumnSliceEPLI",
+        "--slice-output-name",
+        "DorsalColumnSliceEPLI_smoke",
+        "--enable-epl-interneurons",
+        "--max-eplis",
+        "18",
+    ],
+    cwd=repo_root,
+    check=True,
+    capture_output=True,
+    text=True,
+)
+assert "COMMAND: blender -b blender-files/ob-gloms-fast.blend --python olfactorybulb/slicebuilder/blender.py" in cli_completed.stdout
 
 print("slice-builder config smoke test: OK")

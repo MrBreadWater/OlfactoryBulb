@@ -96,7 +96,8 @@ class SliceBuilderNRN:
             cell_class = load_cell_class(class_name)
             cell = cell_class()
         else:
-            exec("cell = " + class_name + "()")
+            cell_class = globals()[class_name]
+            cell = cell_class()
 
         self.cells.setdefault(type, []).append(cell)
 
