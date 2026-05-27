@@ -310,3 +310,10 @@ Iteration-speed audit:
   - `save_voltage_summary`
 - Defaults remain `True` for ordinary notebook runs, but `default_campaign_run_config()` now sets both to `False` for optimizer batches. Spike detection is still saved before those optional writes are skipped.
 - Implementation commit: `979f1b8`.
+- LFP recording quality was left unchanged at the existing `recording_period_ms = 0.1`. A quick downsample/rescore probe showed that coarse LFP sampling can move peak-bin identity, so LFP decimation should only be considered after a dedicated A/B validation batch.
+- Batch 54 was verified in the live worker stack with:
+  - `record_gc_output_events = False`
+  - `save_soma_traces = False`
+  - `save_voltage_summary = False`
+  - `recording_period_ms = 0.1`
+  - `analysis_dt_ms = 0.1`
