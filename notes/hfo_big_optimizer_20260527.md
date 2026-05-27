@@ -161,3 +161,19 @@ Coordinate-stencil refinement after batch 13:
 - Batch 14 completed cleanly but did not improve on `C00053`; its best new candidate was `C00226` with score `1.2310`, ketamine peak `180.664 Hz`, ketamine target relative power `0.1533`, control peak `195.312 Hz`, and control target relative power `0.1455`.
 - Batch 15 launched from commit `45b33a8` on Phoenix step `14537854.3061`.
 - Batch 15 plan confirmed the coordinate-stencil policy: `proposal_counts = {"targeted": 8, "local": 5, "covariance": 2, "explore": 1}` and `targeted_detail.mode = "stencil"`.
+
+Visible-path and combo-stencil refinement after batch 15:
+
+- Fixed optimizer defaults to prefer the user-facing checkout path `~/OlfactoryBulb` when present. In Michael's live notebook kernel this resolves campaign defaults to `/home/michael/OlfactoryBulb/results/notebook_runs/optimization`, avoiding accidental `/home/alek/...` paths from the symlink target. Implementation commit: `79dd79f`.
+- Batch 15 completed cleanly. Its best new candidate was `C00247`, the single-axis AMPA-down probe around `C00053`:
+  - ketamine peak: `180.664 Hz`
+  - control peak: `195.312 Hz`
+  - ketamine target relative power: `0.1608`
+  - control target relative power: `0.0835`
+  - pair score: `2.9415`
+  - changed parameter: `ampa_nmda_gmax=112.468` versus `117.244` in `C00053`
+- `C00247` improves target-band delta and control leakage but has worse peak-ratio contrast, so it remains below `C00053`.
+- Added a next-stage combo-stencil policy for campaigns with at least 256 valid candidates. It concentrates 10 of 16 proposals on two-knob combinations around the current best, especially AMPA-down plus TC-input/GABA/gap/KAR-weight moves. Implementation commit: `716167e`.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+- Reloaded `olfactorybulb.hfo_optimizer` in Michael's authenticated live notebook kernel.
+- Batch 16 launched from commit `716167e` on Phoenix step `14537854.3095`. Its plan records `proposal_counts = {"targeted": 10, "local": 4, "covariance": 1, "explore": 1}` and `targeted_detail.mode = "combo"`.
