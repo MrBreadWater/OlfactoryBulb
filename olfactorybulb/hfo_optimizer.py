@@ -772,8 +772,12 @@ def score_candidate_pair(
 
     target_contrast = math.log10((ketamine_target + 1e-12) / (control_target + 1e-12))
     peak_contrast = math.log10((ketamine_ratio + 1e-12) / (control_ratio + 1e-12))
+    compound_contrast = math.log10(
+        ((ketamine_target * ketamine_ratio) + 1e-12)
+        / ((control_target * control_ratio) + 1e-12)
+    )
     target_delta = ketamine_target - control_target
-    control_leak_penalty = 5.0 * control_target + 0.75 * max(control_score, 0.0)
+    control_leak_penalty = 8.0 * control_target + 1.1 * max(control_score, 0.0)
     same_peak_penalty = 0.0
     if (
         math.isfinite(control_peak_hz)
@@ -781,22 +785,32 @@ def score_candidate_pair(
         and 160.0 <= control_peak_hz <= 200.0
         and abs(control_peak_hz - ketamine_peak_hz) <= 5.0
     ):
-        same_peak_penalty = 1.0
+        same_peak_penalty = 4.0 + 10.0 * control_target
+    negative_delta_penalty = 20.0 * max(-target_delta, 0.0)
+    ketamine_freq_match = (
+        math.exp(-0.5 * ((ketamine_peak_hz - 180.0) / 18.0) ** 2)
+        if math.isfinite(ketamine_peak_hz)
+        else 0.0
+    )
     pair_score = (
         ketamine_score
-        + 2.5 * target_contrast
-        + 1.5 * peak_contrast
-        + 4.0 * max(target_delta, 0.0)
+        + 3.5 * compound_contrast
+        + 12.0 * target_delta
+        + 1.5 * ketamine_freq_match
         - control_leak_penalty
         - same_peak_penalty
+        - negative_delta_penalty
     )
     return {
         "pair_score": float(pair_score),
         "target_contrast_log10": float(target_contrast),
         "peak_contrast_log10": float(peak_contrast),
+        "compound_contrast_log10": float(compound_contrast),
         "target_delta": float(target_delta),
         "control_leak_penalty": float(control_leak_penalty),
         "same_peak_penalty": float(same_peak_penalty),
+        "negative_delta_penalty": float(negative_delta_penalty),
+        "ketamine_freq_match": float(ketamine_freq_match),
         "control_score": float(control_score),
         "ketamine_score": float(ketamine_score),
     }

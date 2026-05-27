@@ -75,3 +75,14 @@ Scoring correction after batch 0:
 - Tightened `score_candidate_pair` so target-band power in control is treated as leakage, same target-band peak frequency in control/ketamine is penalized, and positive ketamine-control target-band delta is rewarded explicitly.
 - Rewrote the active campaign's batch-0 `candidate_archive.jsonl` and `batch_0000_scored.json` with the tightened formula so elite refinement will not inherit stale nonspecific scores. After rescoring, the top batch-0 candidates were ketamine-shifted cases rather than same-peak control/ketamine cases.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python test_hfo_optimizer.py`.
+
+Scoring correction after batch 2:
+
+- Batch 1 and batch 2 again showed that the objective could still overvalue nonspecific target-band activity, especially candidates with the same target-band peak in control and ketamine but a moderate ketamine increase.
+- Updated `score_candidate_pair` to score the paired phenotype more directly:
+  - reward compound ketamine/control contrast in `target_hfo relative power * target peak ratio`
+  - reward positive ketamine-control target-band delta and penalize negative delta
+  - penalize control target-band leakage more strongly
+  - penalize same-bin target peaks in control and ketamine as a function of control target-band power
+  - add an explicit ketamine peak frequency match centered at 180 Hz
+- This should keep the wide-seed batches useful while preventing the elite-refine stage from exploiting a rhythm that is already present in control.
