@@ -118,3 +118,11 @@ Focused-refine monitoring:
 - Implementation commit: `a03fc77`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
 - Reloaded `olfactorybulb.hfo_optimizer` in the live authenticated notebook kernel; future locally generated batch plans should include `local_detail_counts`.
+
+Tight-refine monitoring:
+
+- Batch 9 was the first batch generated after the tight-best local refinement update. Its plan recorded `local_detail_counts = {"tight_best": 3, "broad_weighted": 3}`.
+- Batch 9 completed cleanly on Phoenix step `14537854.2857`.
+- Best new candidate: `C00144`, score `2.9806`, ketamine peak `175.781 Hz`, control peak `161.133 Hz`, ketamine target relative power `0.1799`, control target relative power `0.1328`.
+- `C00144` is a strong near-miss: it increases ketamine target-band power relative to `C00053`, but the control target-band leakage remains higher than desired.
+- Batch 10 launched immediately on Phoenix step `14537854.2891`; its local sources are `["C00053", "C00144", "C00152", "C00147"]`.
