@@ -15,11 +15,13 @@ from olfactorybulb.hfo_optimizer import (
     ParameterSpec,
     default_campaign_run_config,
     default_hfo_search_space,
+    load_candidate_archive_rows,
     lfp_source_diagnostic_configs,
     propose_elite_batch,
     score_candidate_pair,
     score_condition_result,
     sustained_odor_schedule,
+    write_objective_filter,
 )
 
 
@@ -84,16 +86,20 @@ def synthetic_result(
 
 
 target = synthetic_result(freq_hz=180.0, amplitude=1.0, seed=1)
+upper_target = synthetic_result(freq_hz=220.0, amplitude=1.0, seed=4)
 off_target = synthetic_result(freq_hz=90.0, amplitude=1.0, seed=2)
 flat = synthetic_result(freq_hz=40.0, amplitude=0.25, noise_std=0.25, seed=3)
 
 target_metrics = score_condition_result(target)
+upper_target_metrics = score_condition_result(upper_target, target_hz=180.0, target_half_width_hz=20.0)
 off_target_metrics = score_condition_result(off_target)
 flat_metrics = score_condition_result(flat)
 
 assert math.isfinite(target_metrics["condition_score"])
 assert target_metrics["condition_score"] > off_target_metrics["condition_score"]
 assert target_metrics["peak_hz"] > 150.0 and target_metrics["peak_hz"] < 210.0
+assert upper_target_metrics["target_band_hz"] == [160.0, 230.0]
+assert upper_target_metrics["peak_hz"] > 210.0 and upper_target_metrics["peak_hz"] < 230.0
 
 good_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=target_metrics)
 bad_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=target_metrics)
@@ -163,6 +169,28 @@ with TemporaryDirectory() as tmpdir:
     assert batch["local_detail_counts"]["tight_top"] >= 1
     assert batch["local_detail_counts"]["tight_top"] + batch["local_detail_counts"]["broad_weighted"] == batch["proposal_counts"]["local"]
     assert len(batch["candidates"]) == 8
+
+with TemporaryDirectory() as tmpdir:
+    rows = [
+        {
+            "batch_name": "batch_0001",
+            "candidate_id": "C00001",
+            "pair_score": 10.0,
+            "parameters": {},
+        },
+        {
+            "batch_name": "batch_0052",
+            "candidate_id": "C00052",
+            "pair_score": 1.0,
+            "parameters": {},
+        },
+    ]
+    with open(f"{tmpdir}/candidate_archive.jsonl", "w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+    write_objective_filter(tmpdir, {"min_batch_index": 52})
+    filtered_rows = load_candidate_archive_rows(tmpdir)
+    assert [row["candidate_id"] for row in filtered_rows] == ["C00052"]
 
 with TemporaryDirectory() as tmpdir:
     search_space = [

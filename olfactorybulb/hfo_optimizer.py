@@ -4,7 +4,7 @@ The search strategy is intentionally batch-first:
 
 1. Seed with a Latin-hypercube design in transformed parameter space.
 2. Evaluate each candidate in paired control / ketamine-block conditions.
-3. Score candidates on differential HFO expression around 180 +/- 20 Hz.
+3. Score candidates on differential HFO expression in the configured target HFO band.
 4. Refine around elites with a truncated Gaussian proposal plus exploration.
 
 This is a better fit for Phoenix than Nelder-Mead because the objective is
@@ -47,6 +47,7 @@ DEFAULT_SCORE_BANDS = {
 }
 
 PAIR_SCORE_VERSION = 2
+ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 
 
 @dataclass(frozen=True)
@@ -428,6 +429,77 @@ def _state_path(campaign_dir: Path) -> Path:
 
 def _archive_path(campaign_dir: Path, *, kind: str) -> Path:
     return campaign_dir / f"{kind}_archive.jsonl"
+
+
+def _batch_index_from_name(batch_name: Any) -> int | None:
+    text = str(batch_name or "")
+    if "_" not in text:
+        return None
+    tail = text.rsplit("_", 1)[-1]
+    if not tail.isdigit():
+        return None
+    return int(tail)
+
+
+def _archive_filter_path(campaign_dir: Path) -> Path:
+    return campaign_dir / ARCHIVE_FILTER_FILENAME
+
+
+def load_objective_filter(campaign_dir: str | Path) -> dict[str, Any]:
+    """Load an optional campaign-local archive filter for objective pivots."""
+    path = _archive_filter_path(Path(campaign_dir))
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def write_objective_filter(campaign_dir: str | Path, payload: dict[str, Any]) -> Path:
+    """Write a campaign-local filter used when ranking/proposing candidates."""
+    path = _archive_filter_path(Path(campaign_dir))
+    path.write_text(json.dumps(hlp._json_ready(dict(payload)), indent=2, sort_keys=True) + "\n")
+    return path
+
+
+def _row_matches_objective_filter(row: dict[str, Any], objective_filter: dict[str, Any]) -> bool:
+    try:
+        min_batch_index = int(objective_filter.get("min_batch_index", 0))
+    except (TypeError, ValueError):
+        min_batch_index = 0
+    if min_batch_index > 0:
+        batch_index = _batch_index_from_name(row.get("batch_name"))
+        if batch_index is None or batch_index < min_batch_index:
+            return False
+    return True
+
+
+def _target_band_bounds(
+    bands: dict[str, tuple[float, float]],
+    *,
+    target_hz: float,
+    target_half_width_hz: float,
+) -> tuple[float, float, float, float]:
+    """Return authoritative target bounds.
+
+    The named ``target_hfo`` band is the scoring objective. The target
+    center/half-width arguments are retained for callers that provide custom
+    bands without ``target_hfo``; stale notebook arguments should not silently
+    narrow the objective after the default band changes.
+    """
+    target_band = bands.get("target_hfo")
+    if target_band is not None:
+        lo, hi = float(target_band[0]), float(target_band[1])
+        if hi < lo:
+            lo, hi = hi, lo
+        center = 0.5 * (lo + hi)
+        half_width = 0.5 * (hi - lo)
+        return lo, hi, center, half_width
+    center = float(target_hz)
+    half_width = float(target_half_width_hz)
+    return center - half_width, center + half_width, center, half_width
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -1165,14 +1237,19 @@ def propose_lhs_batch(
 
 
 def load_candidate_archive_rows(campaign_dir: str | Path) -> list[dict[str, Any]]:
-    path = _archive_path(Path(campaign_dir), kind="candidate")
+    campaign_path = Path(campaign_dir)
+    path = _archive_path(campaign_path, kind="candidate")
     if not path.exists():
         return []
-    return [
-        rescore_candidate_row(json.loads(line))
-        for line in path.read_text().splitlines()
-        if line.strip()
-    ]
+    objective_filter = load_objective_filter(campaign_path)
+    rows = []
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        row = rescore_candidate_row(json.loads(line))
+        if _row_matches_objective_filter(row, objective_filter):
+            rows.append(row)
+    return rows
 
 
 def load_item_archive_rows(campaign_dir: str | Path) -> list[dict[str, Any]]:
@@ -1480,8 +1557,11 @@ def score_condition_result(
     freqs = np.asarray(summary["freqs"], dtype=float)
     psd = np.asarray(summary["psd"], dtype=float)
 
-    target_lo = float(target_hz) - float(target_half_width_hz)
-    target_hi = float(target_hz) + float(target_half_width_hz)
+    target_lo, target_hi, target_hz, target_half_width_hz = _target_band_bounds(
+        bands,
+        target_hz=target_hz,
+        target_half_width_hz=target_half_width_hz,
+    )
     if len(freqs) == 0:
         return {
             "condition_score": float("-inf"),
@@ -1603,6 +1683,8 @@ def score_condition_result(
         "spike_support_penalty": float(spike_support_penalty),
         "input_coverage_fraction": float(input_coverage),
         "input_dropout_penalty": float(input_dropout_penalty),
+        "target_band_hz": [float(target_lo), float(target_hi)],
+        "target_center_hz": float(target_hz),
         "band_power": {key: float(value) for key, value in summary["band_power"].items()},
         "relative_band_power": {key: float(value) for key, value in summary["relative_band_power"].items()},
         "mean_firing_rate_by_type": {key: float(value) for key, value in mean_rates.items()},
@@ -1851,6 +1933,7 @@ __all__ = [
     "load_campaign_state",
     "load_candidate_archive_rows",
     "load_item_archive_rows",
+    "load_objective_filter",
     "lfp_source_diagnostic_configs",
     "maybe_dataframe",
     "mean_firing_rates_by_type",
@@ -1865,4 +1948,5 @@ __all__ = [
     "search_space_rows",
     "sustained_odor_schedule",
     "top_candidate_rows",
+    "write_objective_filter",
 ]
