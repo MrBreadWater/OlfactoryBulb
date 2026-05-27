@@ -396,6 +396,18 @@ def _candidate_vector(candidate: dict[str, Any], search_space: Sequence[Paramete
     return np.asarray([spec.encode(float(candidate[spec.path])) for spec in search_space], dtype=float)
 
 
+def _candidate_metric(row: dict[str, Any], condition: str, field: str, default: float = 0.0) -> float:
+    metrics = row.get(f"{condition}_metrics") or {}
+    if field == "target_hfo":
+        value = (metrics.get("relative_band_power") or {}).get("target_hfo", default)
+    else:
+        value = metrics.get(field, default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def _sample_truncated_gaussian(
     mean: np.ndarray,
     cov: np.ndarray,
@@ -429,6 +441,7 @@ def _targeted_elite_probe_rows(
     *,
     mode: str = "line",
     seed: int | None = None,
+    archive_rows: Sequence[dict[str, Any]] | None = None,
 ) -> np.ndarray:
     """Return deterministic local probes around the top two elite candidates."""
     n = int(n)
@@ -617,6 +630,89 @@ def _targeted_elite_probe_rows(
                 row[dim] += float(step_fraction) * encoded_span[dim]
             rows.append(np.clip(row, encoded_lo, encoded_hi))
 
+    if mode == "basin":
+        archive = list(archive_rows or [])
+
+        def row_vector(row: dict[str, Any] | None) -> np.ndarray | None:
+            if row is None:
+                return None
+            try:
+                return _candidate_vector(row["parameters"], search_space)
+            except (KeyError, TypeError, ValueError):
+                return None
+
+        def in_ketamine_target(row: dict[str, Any]) -> bool:
+            peak = _candidate_metric(row, "ketamine", "peak_hz", math.nan)
+            return math.isfinite(peak) and 160.0 <= peak <= 200.0
+
+        target_rows = [row for row in archive if in_ketamine_target(row)]
+        power_pool = [
+            row for row in target_rows
+            if _candidate_metric(row, "control", "target_hfo") <= 0.105
+        ]
+        leak_pool = [
+            row for row in target_rows
+            if _candidate_metric(row, "ketamine", "target_hfo") >= 0.120
+        ]
+        distance_pool: list[tuple[float, dict[str, Any]]] = []
+        for row in target_rows:
+            vector = row_vector(row)
+            if vector is None:
+                continue
+            distance = float(np.linalg.norm((vector - top) / np.maximum(encoded_span, 1e-9)))
+            if (
+                distance >= 0.18
+                and _candidate_metric(row, "ketamine", "target_hfo") >= 0.090
+                and _candidate_metric(row, "control", "target_hfo") <= 0.140
+            ):
+                distance_pool.append((distance, row))
+        distant_ranked = [
+            row for _distance, row in sorted(
+                distance_pool,
+                key=lambda item: float(item[1].get("pair_score", float("-inf"))),
+                reverse=True,
+            )
+        ]
+
+        power_row = max(power_pool, key=lambda row: _candidate_metric(row, "ketamine", "target_hfo"), default=None)
+        leak_row = min(leak_pool, key=lambda row: _candidate_metric(row, "control", "target_hfo"), default=None)
+        distant_one = distant_ranked[0] if len(distant_ranked) > 0 else None
+        distant_two = distant_ranked[1] if len(distant_ranked) > 1 else None
+
+        basin_centers = {
+            "top": top,
+            "second": second,
+            "power": row_vector(power_row) if row_vector(power_row) is not None else (elite_vectors[2] if len(elite_vectors) > 2 else top),
+            "leak": row_vector(leak_row) if row_vector(leak_row) is not None else second,
+            "distant_one": row_vector(distant_one) if row_vector(distant_one) is not None else (elite_vectors[3] if len(elite_vectors) > 3 else second),
+            "distant_two": row_vector(distant_two) if row_vector(distant_two) is not None else (elite_vectors[4] if len(elite_vectors) > 4 else top),
+        }
+        basin_plan = [
+            ("top", (("gaba_gmax", -0.003), ("ampa_nmda_gmax", -0.004))),
+            ("top", (("gap_tc", 0.004), ("ampa_nmda_gmax", -0.004))),
+            ("power", (("gaba_gmax", 0.008), ("ampa_nmda_gmax", -0.006))),
+            ("power", (("gaba_gmax", 0.012), ("gap_tc", -0.004))),
+            ("power", (("gaba_gmax", 0.008), ("gap_tc", 0.004), ("ampa_nmda_gmax", -0.006))),
+            ("leak", (("gaba_gmax", -0.006), ("ampa_nmda_gmax", -0.006))),
+            ("leak", (("gap_tc", 0.006), ("kar_gc_gmax", 0.006))),
+            ("second", (("gaba_gmax", 0.008), ("ampa_nmda_gmax", -0.012))),
+            ("distant_one", (("gaba_gmax", 0.012), ("ampa_nmda_gmax", -0.010))),
+            ("distant_one", (("kar_gc_gmax", 0.012), ("gaba_gmax", 0.006))),
+            ("distant_two", (("gaba_gmax", 0.010), ("gap_tc", -0.008))),
+            ("distant_two", (("ampa_nmda_gmax", -0.010), ("kar_gc_gmax", 0.010))),
+        ]
+        path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
+        for center_name, moves in basin_plan:
+            if len(rows) >= n:
+                break
+            row = np.array(basin_centers[center_name], copy=True)
+            for path, step_fraction in moves:
+                if path not in path_to_index:
+                    continue
+                dim = path_to_index[path]
+                row[dim] += float(step_fraction) * encoded_span[dim]
+            rows.append(np.clip(row, encoded_lo, encoded_hi))
+
     # Fill any remaining slots with small one-coordinate probes around the top two points.
     while len(rows) < n:
         center = top if (mode in {"stencil", "ridge"} or len(rows) % 2 == 0) else second
@@ -762,7 +858,11 @@ def propose_elite_batch(
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     targeted_n = 0
     targeted_mode = "none"
-    if len(valid) >= 368 and len(elite) >= 2 and total_n >= 8:
+    if len(valid) >= 416 and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
+        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_mode = "basin"
+    elif len(valid) >= 368 and len(elite) >= 2 and total_n >= 8:
         explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
         targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
         targeted_mode = "needle"
@@ -835,6 +935,7 @@ def propose_elite_batch(
         targeted_n,
         mode=targeted_mode,
         seed=None if seed is None else seed + 2,
+        archive_rows=ranked,
     )
 
     if explore_n > 0:
