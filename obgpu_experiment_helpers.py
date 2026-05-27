@@ -1454,6 +1454,8 @@ def build_run_command(
 
 def _safe_sweep_path_label(path_value: Any) -> str:
     """Return a compact label component for one sweep path or path mapping."""
+    import hashlib
+
     if isinstance(path_value, dict):
         raw = "_".join(str(key) for key in path_value.keys())
     elif isinstance(path_value, (list, tuple)):
@@ -1461,6 +1463,10 @@ def _safe_sweep_path_label(path_value: Any) -> str:
     else:
         raw = str(path_value)
     cleaned = _safe_name(raw.replace(".", "_"))
+    if len(cleaned) > 64:
+        digest = hashlib.sha1(raw.encode("utf-8")).hexdigest()[:12]
+        prefix = cleaned[:24] if cleaned else "sweep"
+        cleaned = f"{prefix}_{digest}"
     return cleaned or "sweep"
 
 

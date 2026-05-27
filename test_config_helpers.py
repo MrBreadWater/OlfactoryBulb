@@ -424,6 +424,26 @@ with tempfile.TemporaryDirectory() as tmp:
     parsed_manifest = json.loads(manifest_json)
     assert isinstance(parsed_manifest, list) and len(parsed_manifest) == len(manifest_items)
     assert parsed_manifest[0]["label"] == manifest_items[0]["label"]
+    long_joint_sweep_label = hlp._safe_sweep_path_label(
+        {
+            "kar_mt_gmax": [1.0],
+            "kar_gc_gmax": [1.0],
+            "gaba_gmax": [1.0],
+            "ampa_nmda_gmax": [1.0],
+            "gap_tc": [1.0],
+            "gap_mc": [1.0],
+            "tc_input_weight": [1.0],
+            "mc_input_weight": [1.0],
+            "optimizer_candidate_id": ["C00000"],
+            "optimizer_method": ["latin_hypercube"],
+            "optimizer_stage": ["wide_seed"],
+            "optimizer_batch_name": ["batch_0000"],
+            "ketamine_block": [0.0],
+            "optimizer_condition": ["ketamine"],
+            "optimizer_pair_id": ["C00000"],
+        }
+    )
+    assert len(long_joint_sweep_label) <= 64
     print("Remote sweep manifest upload path: OK")
 
     # --- Remote sweep should resolve the real timestamped payload dir after completion ---
@@ -584,7 +604,8 @@ with tempfile.TemporaryDirectory() as tmp:
     print("Remote helper cache command shrink: OK")
 
     submit_sol_run_source = Path(submit_sol_run.__file__).read_text()
-    assert "--nodes=1 --ntasks=1" in submit_sol_run_source
+    assert '--nodes=1 --ntasks="$step_ntasks"' in submit_sol_run_source
+    assert "--step-ntasks" in submit_sol_run_source
     print("Reusable allocation wrapper step launch: OK")
 
     # --- Bulky run overrides should stay out of process argv ---
