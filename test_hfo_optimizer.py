@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import math
+import json
+from tempfile import TemporaryDirectory
 
 import numpy as np
 
-from olfactorybulb.hfo_optimizer import score_candidate_pair, score_condition_result
+from olfactorybulb.hfo_optimizer import (
+    ParameterSpec,
+    propose_elite_batch,
+    score_candidate_pair,
+    score_condition_result,
+)
 
 
 def synthetic_result(
@@ -58,5 +65,43 @@ assert bad_pair["same_peak_penalty"] > 0.0
 assert bad_pair["target_delta"] == 0.0
 assert reversed_pair["negative_delta_penalty"] > 0.0
 assert missing_control_pair["pair_score"] == float("-inf")
+
+with TemporaryDirectory() as tmpdir:
+    search_space = [
+        ParameterSpec(path="kar_mt_gmax", low=0.01, high=100.0, scale="log"),
+        ParameterSpec(path="gaba_gmax", low=0.1, high=10.0, scale="log"),
+        ParameterSpec(path="tc_input_weight", low=0.4, high=1.2, scale="linear"),
+    ]
+    state_path = f"{tmpdir}/state.json"
+    with open(state_path, "w") as handle:
+        json.dump({"next_batch_index": 0, "next_candidate_index": 0, "completed_batches": []}, handle)
+    rows = []
+    for index in range(16):
+        rows.append(
+            {
+                "candidate_id": f"C{index:05d}",
+                "pair_score": float(16 - index),
+                "parameters": {
+                    "kar_mt_gmax": 0.02 + index,
+                    "gaba_gmax": 0.2 + 0.2 * index,
+                    "tc_input_weight": 0.5 + 0.02 * index,
+                },
+            }
+        )
+    with open(f"{tmpdir}/candidate_archive.jsonl", "w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+    batch = propose_elite_batch(
+        tmpdir,
+        search_space=search_space,
+        n_candidates=8,
+        seed=42,
+        method="elite_truncated_gaussian_plus_lhs",
+    )
+    assert batch["strategy"] == "elite_truncated_gaussian_plus_lhs"
+    assert batch["local_source_ids"] == ["C00000", "C00001", "C00002", "C00003"]
+    assert sum(batch["proposal_counts"].values()) == 8
+    assert len(batch["candidates"]) == 8
 
 print("hfo optimizer scoring: OK")

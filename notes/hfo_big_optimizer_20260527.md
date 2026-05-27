@@ -96,3 +96,14 @@ Scoring correction after batch 2:
   - pair score: `3.0511`
   - parameters: `kar_mt_gmax=0.0351`, `kar_gc_gmax=0.0853`, `gaba_gmax=1.544`, `ampa_nmda_gmax=117.244`, `gap_tc=11.781`, `gap_mc=31.640`, `tc_input_weight=0.427`, `mc_input_weight=0.344`
 - Batch 4 launched with remote commit `a8e70662c48a`, confirming the corrected scoring code is in the remote run lineage.
+
+Elite proposal correction after batch 5:
+
+- Batch 6 was the first elite-refine batch. The original elite proposal used the mean/covariance of the top 25% of all candidates; with 96 completed candidates this meant 24 elite sources, which was too broad and diluted `C00053`.
+- Updated `propose_elite_batch` to cap the covariance elite set at 12 and to allocate each elite-refine batch into:
+  - rank-weighted local proposals around the top 4 candidates
+  - a smaller covariance proposal across the capped elite set
+  - a retained Latin-hypercube exploration tail
+- Validation:
+  - `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py`
+  - `source tools/setup/activate_obgpu.sh OBGPU; python test_hfo_optimizer.py`

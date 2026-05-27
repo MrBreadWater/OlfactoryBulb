@@ -520,7 +520,7 @@ def propose_elite_batch(
         )
 
     ranked = sorted(valid, key=lambda row: float(row["pair_score"]), reverse=True)
-    elite_count = max(2, int(math.ceil(float(elite_frac) * len(ranked))))
+    elite_count = min(max(4, int(math.ceil(float(elite_frac) * len(ranked)))), 12, len(ranked))
     elite = ranked[:elite_count]
     elite_vectors = np.vstack([_candidate_vector(row["parameters"], search_space) for row in elite])
     mean = elite_vectors.mean(axis=0)
@@ -535,22 +535,51 @@ def propose_elite_batch(
     )
     cov = np.asarray(cov, dtype=float) + diag_jitter
 
-    exploit_n = max(1, int(round((1.0 - float(explore_frac)) * int(n_candidates))))
-    explore_n = max(0, int(n_candidates) - exploit_n)
-    exploit_rows = _sample_truncated_gaussian(
+    rng = np.random.default_rng(seed)
+    encoded_lo = np.asarray([spec.low_encoded() for spec in search_space], dtype=float)
+    encoded_hi = np.asarray([spec.high_encoded() for spec in search_space], dtype=float)
+    encoded_span = encoded_hi - encoded_lo
+
+    total_n = int(n_candidates)
+    explore_n = min(max(0, int(round(float(explore_frac) * total_n))), max(total_n - 1, 0))
+    remaining_n = total_n - explore_n
+    local_n = min(max(1, int(round(0.55 * remaining_n))), remaining_n) if remaining_n > 0 else 0
+    covariance_n = max(0, total_n - explore_n - local_n)
+
+    local_source_count = min(4, len(elite))
+    local_centers = elite_vectors[:local_source_count]
+    raw_weights = np.asarray(
+        [max(float(row.get("pair_score", 0.0)), 0.0) + 1e-6 for row in elite[:local_source_count]],
+        dtype=float,
+    )
+    local_weights = raw_weights / raw_weights.sum()
+    local_sigma = np.maximum(0.10 * encoded_span, 1e-6)
+    local_rows = []
+    for _ in range(local_n):
+        center = local_centers[int(rng.choice(local_source_count, p=local_weights))]
+        row = rng.normal(loc=center, scale=local_sigma)
+        local_rows.append(np.clip(row, encoded_lo, encoded_hi))
+    local_rows = (
+        np.asarray(local_rows, dtype=float)
+        if local_rows
+        else np.empty((0, len(search_space)), dtype=float)
+    )
+
+    covariance_rows = _sample_truncated_gaussian(
         mean,
         cov,
         search_space,
-        exploit_n,
+        covariance_n,
         seed=seed,
-    )
+    ) if covariance_n > 0 else np.empty((0, len(search_space)), dtype=float)
+
     if explore_n > 0:
         explore_rows = np.vstack(
             [_candidate_vector(row, search_space) for row in _decode_unit_samples(_sample_unit_lhs(explore_n, len(search_space), seed=None if seed is None else seed + 1), search_space)]
         )
-        all_rows = np.vstack([exploit_rows, explore_rows])
+        all_rows = np.vstack([local_rows, covariance_rows, explore_rows])
     else:
-        all_rows = exploit_rows
+        all_rows = np.vstack([local_rows, covariance_rows])
 
     state = load_campaign_state(campaign_dir)
     batch_name = _batch_name(state)
@@ -571,6 +600,12 @@ def propose_elite_batch(
         "candidate_ids": candidate_ids,
         "candidates": candidates,
         "elite_source_ids": [row["candidate_id"] for row in elite],
+        "local_source_ids": [row["candidate_id"] for row in elite[:local_source_count]],
+        "proposal_counts": {
+            "local": int(local_n),
+            "covariance": int(covariance_n),
+            "explore": int(explore_n),
+        },
     }
     _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)
 
