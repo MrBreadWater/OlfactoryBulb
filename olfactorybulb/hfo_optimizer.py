@@ -41,9 +41,12 @@ DEFAULT_SCORE_BANDS = {
     "low_gamma": (35.0, 65.0),
     "high_gamma": (65.0, 100.0),
     "hfo_80_130": (80.0, 130.0),
-    "target_hfo": (160.0, 200.0),
-    "hfo_200_250": (200.0, 250.0),
+    "hfo_130_160": (130.0, 160.0),
+    "target_hfo": (160.0, 230.0),
+    "supra_hfo": (230.0, 260.0),
 }
+
+PAIR_SCORE_VERSION = 2
 
 
 @dataclass(frozen=True)
@@ -286,6 +289,23 @@ def paramiko_auth_probe(
     }
 
 
+def sustained_odor_schedule(
+    tstop_ms: float,
+    *,
+    period_ms: float = 200.0,
+    odor_name: str = "Apple",
+    rel_conc: float = 0.2,
+) -> dict[int, dict[str, Any]]:
+    """Build a repeated odor schedule covering a long HFO optimization run."""
+    tstop_ms = float(tstop_ms)
+    period_ms = max(float(period_ms), 1e-9)
+    onsets = np.arange(0.0, max(tstop_ms, 0.0), period_ms)
+    return {
+        int(round(float(onset))): {"name": str(odor_name), "rel_conc": float(rel_conc)}
+        for onset in onsets
+    }
+
+
 def default_campaign_run_config(
     remote_config: dict[str, Any],
     *,
@@ -294,6 +314,9 @@ def default_campaign_run_config(
     total_tasks: int = 120,
     tstop_ms: float = 9000.0,
     cell_permute: int = 0,
+    odor_period_ms: float = 200.0,
+    odor_rel_conc: float = 0.2,
+    inhale_duration_ms: float = 125.0,
 ) -> dict[str, Any]:
     """Return the base notebook run config for one HFO search campaign."""
     config = hlp.build_run_config(
@@ -305,6 +328,12 @@ def default_campaign_run_config(
         use_gpu=False,
         cell_permute=int(cell_permute),
         tstop_ms=float(tstop_ms),
+        input_odors=sustained_odor_schedule(
+            tstop_ms,
+            period_ms=odor_period_ms,
+            rel_conc=odor_rel_conc,
+        ),
+        inhale_duration_ms=float(inhale_duration_ms),
         sim_dt_ms=0.1,
         recording_period_ms=0.1,
         analysis_dt_ms=0.1,
@@ -331,9 +360,49 @@ def default_campaign_run_config(
     config["use_gpu"] = False
     config["cell_permute"] = int(cell_permute)
     config["tstop_ms"] = float(tstop_ms)
+    config["input_odors"] = sustained_odor_schedule(
+        tstop_ms,
+        period_ms=odor_period_ms,
+        rel_conc=odor_rel_conc,
+    )
+    config["inhale_duration_ms"] = float(inhale_duration_ms)
     config["enable_gc_kar"] = True
     config["sweep_parallelism"] = max(int(total_tasks) // max(int(nranks), 1), 1)
     return config
+
+
+def lfp_source_diagnostic_configs(
+    base_config: dict[str, Any],
+    *,
+    shifted_locations: Sequence[Sequence[float]] | None = None,
+    non_gc_cell_types: Sequence[str] = ("MC", "TC", "EPLI", "PVCRH"),
+) -> dict[str, dict[str, Any]]:
+    """Build LFP-source diagnostic variants without changing circuit dynamics."""
+    base = dict(base_config)
+    base.setdefault("enable_lfp", True)
+    variants: dict[str, dict[str, Any]] = {
+        "all_sources": dict(base),
+        "exclude_gc_lfp": {
+            **base,
+            "lfp_include_cell_types": None,
+            "lfp_exclude_cell_types": ["GC"],
+        },
+        "non_gc_sources_lfp": {
+            **base,
+            "lfp_include_cell_types": list(non_gc_cell_types),
+            "lfp_exclude_cell_types": None,
+        },
+    }
+
+    for index, location in enumerate(shifted_locations or ()):
+        variants[f"probe_shift_{index:02d}"] = {
+            **base,
+            "lfp_electrode_location": [float(value) for value in location],
+            "lfp_include_cell_types": None,
+            "lfp_exclude_cell_types": None,
+        }
+
+    return variants
 
 
 def _safe_slug(text: str) -> str:
@@ -458,6 +527,68 @@ def _candidate_metric(row: dict[str, Any], condition: str, field: str, default: 
         return float(value)
     except (TypeError, ValueError):
         return float(default)
+
+
+def _relative_band(metrics: dict[str, Any], band: str, default: float = 0.0) -> float:
+    try:
+        return float((metrics.get("relative_band_power") or {}).get(band, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _band_power(metrics: dict[str, Any], band: str, default: float = 0.0) -> float:
+    try:
+        return float((metrics.get("band_power") or {}).get(band, default))
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _supra_hfo_relative(metrics: dict[str, Any]) -> float:
+    """Return undesirable above-target HFO power, with fallback for old archives."""
+    if "supra_hfo" in (metrics.get("relative_band_power") or {}):
+        return _relative_band(metrics, "supra_hfo")
+    # Old campaign rows used 160-200 Hz as target and 200-250 Hz as the
+    # above-target side band. Treat that side band as an artifact when
+    # re-ranking old archive rows under the broader 160-230 Hz objective.
+    return _relative_band(metrics, "hfo_200_250")
+
+
+def _target_density_ratio(metrics: dict[str, Any]) -> float:
+    """Return total target-band density over background density."""
+    for key in ("target_density_ratio", "peak_ratio"):
+        try:
+            value = float(metrics.get(key, 0.0))
+        except (TypeError, ValueError):
+            value = 0.0
+        if value > 0.0:
+            return value
+    return 0.0
+
+
+def _target_clean_fraction(metrics: dict[str, Any]) -> float:
+    target_power = _band_power(metrics, "target_hfo")
+    lower_side_power = _band_power(metrics, "hfo_80_130") + _band_power(metrics, "hfo_130_160")
+    supra_power = _band_power(metrics, "supra_hfo")
+    if supra_power <= 0.0:
+        supra_power = _band_power(metrics, "hfo_200_250")
+    denom = target_power + lower_side_power + supra_power
+    return target_power / denom if denom > 0.0 else 0.0
+
+
+def rescore_candidate_row(row: dict[str, Any]) -> dict[str, Any]:
+    """Recompute pair-level ranking fields for one archive row."""
+    control_metrics = row.get("control_metrics")
+    ketamine_metrics = row.get("ketamine_metrics")
+    if control_metrics is None or ketamine_metrics is None:
+        return row
+    rescored = dict(row)
+    rescored.update(
+        score_candidate_pair(
+            control_metrics=control_metrics,
+            ketamine_metrics=ketamine_metrics,
+        )
+    )
+    return rescored
 
 
 def _sample_truncated_gaussian(
@@ -697,7 +828,7 @@ def _targeted_elite_probe_rows(
 
         def in_ketamine_target(row: dict[str, Any]) -> bool:
             peak = _candidate_metric(row, "ketamine", "peak_hz", math.nan)
-            return math.isfinite(peak) and 160.0 <= peak <= 200.0
+            return math.isfinite(peak) and 160.0 <= peak <= 230.0
 
         target_rows = [row for row in archive if in_ketamine_target(row)]
         power_pool = [
@@ -789,12 +920,12 @@ def _targeted_elite_probe_rows(
 
         def in_target(row: dict[str, Any]) -> bool:
             peak = ketamine_peak(row)
-            return math.isfinite(peak) and 160.0 <= peak <= 200.0
+            return math.isfinite(peak) and 160.0 <= peak <= 230.0
 
         target_rows = [row for row in archive if in_target(row)]
         exact_rows = [
             row for row in target_rows
-            if 172.0 <= ketamine_peak(row) <= 188.0 and target_rel(row, "control") <= 0.11
+            if target_rel(row, "ketamine") >= 0.12 and target_rel(row, "control") <= 0.11
         ]
         contrast_rows = [
             row for row in target_rows
@@ -802,7 +933,7 @@ def _targeted_elite_probe_rows(
         ]
         power_rows = [
             row for row in target_rows
-            if 170.0 <= ketamine_peak(row) <= 190.0 and target_rel(row, "control") <= 0.20
+            if target_rel(row, "control") <= 0.20
         ]
         low_control_rows = [
             row for row in target_rows
@@ -1037,7 +1168,11 @@ def load_candidate_archive_rows(campaign_dir: str | Path) -> list[dict[str, Any]
     path = _archive_path(Path(campaign_dir), kind="candidate")
     if not path.exists():
         return []
-    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    return [
+        rescore_candidate_row(json.loads(line))
+        for line in path.read_text().splitlines()
+        if line.strip()
+    ]
 
 
 def load_item_archive_rows(campaign_dir: str | Path) -> list[dict[str, Any]]:
@@ -1305,13 +1440,33 @@ def mean_firing_rates_by_type(result: dict[str, Any]) -> dict[str, float]:
     }
 
 
+def input_coverage_fraction(result: dict[str, Any]) -> float:
+    """Estimate how much of the simulated interval has afferent input support."""
+    summary = result.get("summary") or {}
+    params = summary.get("params") or {}
+    tstop_ms = float(params.get("tstop") or 0.0)
+    if tstop_ms <= 0.0:
+        lfp_t = result.get("lfp_t")
+        if lfp_t is not None and len(lfp_t) > 0:
+            tstop_ms = float(np.max(lfp_t))
+    if tstop_ms <= 0.0:
+        return 0.0
+
+    max_event_ms = 0.0
+    for _label, times in result.get("input_times", []) or []:
+        values = np.asarray(times, dtype=float)
+        if len(values):
+            max_event_ms = max(max_event_ms, float(np.max(values)))
+    return min(max(max_event_ms / tstop_ms, 0.0), 1.0)
+
+
 def score_condition_result(
     result: dict[str, Any],
     *,
     signal: str = "lfp",
     dt_ms: float = 0.1,
-    target_hz: float = 180.0,
-    target_half_width_hz: float = 20.0,
+    target_hz: float = 195.0,
+    target_half_width_hz: float = 35.0,
     bands: dict[str, tuple[float, float]] | None = None,
 ) -> dict[str, Any]:
     bands = dict(bands or DEFAULT_SCORE_BANDS)
@@ -1332,9 +1487,16 @@ def score_condition_result(
             "condition_score": float("-inf"),
             "peak_hz": math.nan,
             "peak_ratio": 0.0,
+            "target_density_ratio": 0.0,
             "freq_match": 0.0,
+            "target_clean_fraction": 0.0,
+            "supra_hfo_relative": 0.0,
             "phase_lock": 0.0,
             "rate_penalty": 0.0,
+            "spike_support_rate_hz": 0.0,
+            "spike_support_penalty": 0.0,
+            "input_coverage_fraction": 0.0,
+            "input_dropout_penalty": 0.0,
             "band_power": summary["band_power"],
             "relative_band_power": summary["relative_band_power"],
             "mean_firing_rate_by_type": {},
@@ -1356,14 +1518,31 @@ def score_condition_result(
     shoulder_mask = ((freqs >= 100.0) & (freqs < target_lo)) | ((freqs > target_hi) & (freqs <= 240.0))
     background_floor = float(np.median(psd[background_mask])) if np.any(background_mask) else 0.0
     shoulder_floor = float(np.median(psd[shoulder_mask])) if np.any(shoulder_mask) else background_floor
-    denom = max(background_floor, shoulder_floor, 1e-18)
-    peak_ratio = peak_power / denom
+    target_power = float(summary["band_power"].get("target_hfo", 0.0))
+    target_width_hz = max(target_hi - target_lo, 1e-9)
+    target_density = target_power / target_width_hz
+    background_power = (
+        float(np.trapezoid(psd[background_mask], freqs[background_mask]))
+        if np.any(background_mask)
+        else 0.0
+    )
+    background_width_hz = float(np.ptp(freqs[background_mask])) if np.count_nonzero(background_mask) > 1 else 0.0
+    background_density = background_power / max(background_width_hz, 1e-9)
+    denom = max(background_density, background_floor, shoulder_floor, 1e-18)
+    target_density_ratio = target_density / denom
+    peak_ratio = target_density_ratio
 
     freq_match = math.exp(-0.5 * ((peak_hz - target_hz) / max(float(target_half_width_hz), 1e-9)) ** 2) if np.isfinite(peak_hz) else 0.0
     relative_target = float(summary["relative_band_power"].get("target_hfo", 0.0))
-    target_power = float(summary["band_power"].get("target_hfo", 0.0))
-    side_power = float(summary["band_power"].get("hfo_80_130", 0.0)) + float(summary["band_power"].get("hfo_200_250", 0.0))
+    lower_side_power = (
+        float(summary["band_power"].get("hfo_80_130", 0.0))
+        + float(summary["band_power"].get("hfo_130_160", 0.0))
+    )
+    supra_power = float(summary["band_power"].get("supra_hfo", 0.0))
+    side_power = lower_side_power + supra_power
     dominance = target_power / max(side_power, 1e-18)
+    target_clean_fraction = target_power / max(target_power + side_power, 1e-18)
+    supra_hfo_relative = float(summary["relative_band_power"].get("supra_hfo", 0.0))
     beta_gamma = (
         float(summary["relative_band_power"].get("beta", 0.0))
         + float(summary["relative_band_power"].get("low_gamma", 0.0))
@@ -1386,25 +1565,44 @@ def score_condition_result(
     rate_penalty += max(mean_rates.get("TC", 0.0) - 120.0, 0.0) / 60.0
     rate_penalty += max(mean_rates.get("MC", 0.0) - 80.0, 0.0) / 40.0
     rate_penalty += max(mean_rates.get("EPLI", 0.0) - 250.0, 0.0) / 100.0
+    spike_support_rate = (
+        mean_rates.get("MC", 0.0)
+        + mean_rates.get("TC", 0.0)
+        + mean_rates.get("EPLI", 0.0)
+        + mean_rates.get("PVCRH", 0.0)
+    )
+    spike_support_penalty = 2.0 * max(1.0 - min(spike_support_rate / 5.0, 1.0), 0.0)
+    input_coverage = input_coverage_fraction(result)
+    input_dropout_penalty = 3.0 * max(0.85 - input_coverage, 0.0)
 
     condition_score = (
-        2.5 * freq_match
-        + 2.0 * math.log10(1.0 + peak_ratio)
-        + 3.0 * relative_target
-        + 1.5 * math.log10(1.0 + dominance)
+        2.4 * math.log10(1.0 + target_density_ratio)
+        + 4.0 * relative_target
+        + 2.2 * math.log10(1.0 + dominance)
+        + 1.2 * target_clean_fraction
         + 0.5 * min(beta_gamma, 0.30)
         + 0.5 * phase_lock
+        - 1.5 * supra_hfo_relative
         - rate_penalty
+        - spike_support_penalty
+        - input_dropout_penalty
     )
     return {
         "condition_score": float(condition_score),
         "peak_hz": float(peak_hz),
         "peak_ratio": float(peak_ratio),
+        "target_density_ratio": float(target_density_ratio),
         "freq_match": float(freq_match),
         "dominance": float(dominance),
+        "target_clean_fraction": float(target_clean_fraction),
+        "supra_hfo_relative": float(supra_hfo_relative),
         "beta_gamma_support": float(beta_gamma),
         "phase_lock": float(phase_lock),
         "rate_penalty": float(rate_penalty),
+        "spike_support_rate_hz": float(spike_support_rate),
+        "spike_support_penalty": float(spike_support_penalty),
+        "input_coverage_fraction": float(input_coverage),
+        "input_dropout_penalty": float(input_dropout_penalty),
         "band_power": {key: float(value) for key, value in summary["band_power"].items()},
         "relative_band_power": {key: float(value) for key, value in summary["relative_band_power"].items()},
         "mean_firing_rate_by_type": {key: float(value) for key, value in mean_rates.items()},
@@ -1430,19 +1628,33 @@ def score_candidate_pair(
         }
     control_target = float((control_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
     ketamine_target = float((ketamine_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
-    control_ratio = float(control_metrics.get("peak_ratio", 0.0))
-    ketamine_ratio = float(ketamine_metrics.get("peak_ratio", 0.0))
+    control_ratio = _target_density_ratio(control_metrics)
+    ketamine_ratio = _target_density_ratio(ketamine_metrics)
+    control_supra = _supra_hfo_relative(control_metrics)
+    ketamine_supra = _supra_hfo_relative(ketamine_metrics)
+    control_clean = _target_clean_fraction(control_metrics)
+    ketamine_clean = _target_clean_fraction(ketamine_metrics)
+    control_input_dropout = float(control_metrics.get("input_dropout_penalty", 0.0))
+    ketamine_input_dropout = float(ketamine_metrics.get("input_dropout_penalty", 0.0))
     control_peak_hz = float(control_metrics.get("peak_hz", math.nan))
     ketamine_peak_hz = float(ketamine_metrics.get("peak_hz", math.nan))
 
     target_contrast = math.log10((ketamine_target + 1e-12) / (control_target + 1e-12))
-    peak_contrast = math.log10((ketamine_ratio + 1e-12) / (control_ratio + 1e-12))
+    density_contrast = math.log10((ketamine_ratio + 1e-12) / (control_ratio + 1e-12))
+    peak_contrast = density_contrast
     compound_contrast = math.log10(
         ((ketamine_target * ketamine_ratio) + 1e-12)
         / ((control_target * control_ratio) + 1e-12)
     )
     target_delta = ketamine_target - control_target
-    control_leak_penalty = 8.0 * control_target + 1.1 * max(control_score, 0.0)
+    supra_delta = ketamine_supra - control_supra
+    clean_delta = ketamine_clean - control_clean
+    control_leak_penalty = (
+        18.0 * control_target
+        + 12.0 * control_supra
+        + 0.8 * max(control_score, 0.0)
+        + control_input_dropout
+    )
     same_peak_penalty = 0.0
     if (
         math.isfinite(control_peak_hz)
@@ -1451,30 +1663,41 @@ def score_candidate_pair(
         and abs(control_peak_hz - ketamine_peak_hz) <= 5.0
     ):
         same_peak_penalty = 4.0 + 10.0 * control_target
-    negative_delta_penalty = 20.0 * max(-target_delta, 0.0)
-    ketamine_freq_match = (
-        math.exp(-0.5 * ((ketamine_peak_hz - 180.0) / 18.0) ** 2)
-        if math.isfinite(ketamine_peak_hz)
-        else 0.0
+    negative_delta_penalty = 25.0 * max(-target_delta, 0.0)
+    ketamine_wrong_band_penalty = (
+        8.0 * max(ketamine_supra - 0.45 * max(ketamine_target, 1e-12), 0.0)
+        + 3.0 * max(0.45 - ketamine_clean, 0.0)
+        + ketamine_input_dropout
     )
+    control_wrong_band_penalty = 3.0 * max(control_supra - control_target, 0.0)
+    ketamine_freq_match = 1.0 if ketamine_target > 0.0 else 0.0
     pair_score = (
         ketamine_score
-        + 3.5 * compound_contrast
-        + 12.0 * target_delta
-        + 1.5 * ketamine_freq_match
+        + 4.0 * compound_contrast
+        + 18.0 * target_delta
+        + 3.0 * clean_delta
+        + 1.5 * max(-supra_delta, 0.0)
         - control_leak_penalty
         - same_peak_penalty
         - negative_delta_penalty
+        - ketamine_wrong_band_penalty
+        - control_wrong_band_penalty
     )
     return {
         "pair_score": float(pair_score),
+        "pair_score_version": PAIR_SCORE_VERSION,
         "target_contrast_log10": float(target_contrast),
         "peak_contrast_log10": float(peak_contrast),
+        "density_contrast_log10": float(density_contrast),
         "compound_contrast_log10": float(compound_contrast),
         "target_delta": float(target_delta),
+        "supra_delta": float(supra_delta),
+        "target_clean_delta": float(clean_delta),
         "control_leak_penalty": float(control_leak_penalty),
         "same_peak_penalty": float(same_peak_penalty),
         "negative_delta_penalty": float(negative_delta_penalty),
+        "ketamine_wrong_band_penalty": float(ketamine_wrong_band_penalty),
+        "control_wrong_band_penalty": float(control_wrong_band_penalty),
         "ketamine_freq_match": float(ketamine_freq_match),
         "control_score": float(control_score),
         "ketamine_score": float(ketamine_score),
@@ -1495,8 +1718,8 @@ def score_hfo_batch(
     sweep: dict[str, Any],
     signal: str = "lfp",
     dt_ms: float = 0.1,
-    target_hz: float = 180.0,
-    target_half_width_hz: float = 20.0,
+    target_hz: float = 195.0,
+    target_half_width_hz: float = 35.0,
 ) -> dict[str, Any]:
     campaign_dir = Path(campaign_dir)
     items = sweep.get("items", [])
@@ -1517,11 +1740,18 @@ def score_hfo_batch(
                 "condition_score": float("-inf"),
                 "peak_hz": math.nan,
                 "peak_ratio": 0.0,
+                "target_density_ratio": 0.0,
                 "freq_match": 0.0,
                 "dominance": 0.0,
+                "target_clean_fraction": 0.0,
+                "supra_hfo_relative": 0.0,
                 "beta_gamma_support": 0.0,
                 "phase_lock": 0.0,
                 "rate_penalty": 0.0,
+                "spike_support_rate_hz": 0.0,
+                "spike_support_penalty": 0.0,
+                "input_coverage_fraction": 0.0,
+                "input_dropout_penalty": 0.0,
                 "band_power": {},
                 "relative_band_power": {},
                 "mean_firing_rate_by_type": {},
@@ -1621,15 +1851,18 @@ __all__ = [
     "load_campaign_state",
     "load_candidate_archive_rows",
     "load_item_archive_rows",
+    "lfp_source_diagnostic_configs",
     "maybe_dataframe",
     "mean_firing_rates_by_type",
     "paramiko_auth_probe",
     "propose_elite_batch",
     "propose_lhs_batch",
+    "rescore_candidate_row",
     "run_hfo_batch",
     "score_candidate_pair",
     "score_condition_result",
     "score_hfo_batch",
     "search_space_rows",
+    "sustained_odor_schedule",
     "top_candidate_rows",
 ]

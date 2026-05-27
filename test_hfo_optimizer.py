@@ -9,13 +9,17 @@ from tempfile import TemporaryDirectory
 
 import numpy as np
 
+import obgpu_experiment_helpers as hlp
 from olfactorybulb.hfo_optimizer import (
     DEFAULT_CAMPAIGNS_BASE,
     ParameterSpec,
+    default_campaign_run_config,
     default_hfo_search_space,
+    lfp_source_diagnostic_configs,
     propose_elite_batch,
     score_candidate_pair,
     score_condition_result,
+    sustained_odor_schedule,
 )
 
 
@@ -32,6 +36,29 @@ for required_path in (
     "gc_ka_gbar_scale",
 ):
     assert required_path in default_paths
+
+schedule = sustained_odor_schedule(9000.0)
+assert min(schedule) == 0
+assert max(schedule) == 8800
+assert len(schedule) == 45
+campaign_config = default_campaign_run_config({}, tstop_ms=9000.0)
+assert campaign_config["input_odors"] == schedule
+assert campaign_config["inhale_duration_ms"] == 125.0
+
+lfp_filter_config = hlp.build_run_config(
+    lfp_include_cell_types=["MC", "TC"],
+    lfp_exclude_cell_types=["GC"],
+)
+lfp_filter_overrides = hlp.build_param_overrides(lfp_filter_config)
+assert lfp_filter_overrides["lfp_include_cell_types"] == ["MC", "TC"]
+assert lfp_filter_overrides["lfp_exclude_cell_types"] == ["GC"]
+lfp_diagnostics = lfp_source_diagnostic_configs(
+    lfp_filter_config,
+    shifted_locations=([116, 900, -61], [116, 1250, -61]),
+)
+assert lfp_diagnostics["exclude_gc_lfp"]["lfp_exclude_cell_types"] == ["GC"]
+assert lfp_diagnostics["non_gc_sources_lfp"]["lfp_include_cell_types"][:2] == ["MC", "TC"]
+assert lfp_diagnostics["probe_shift_00"]["lfp_electrode_location"] == [116.0, 900.0, -61.0]
 
 
 def synthetic_result(
@@ -70,17 +97,29 @@ assert target_metrics["peak_hz"] > 150.0 and target_metrics["peak_hz"] < 210.0
 good_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=target_metrics)
 bad_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=target_metrics)
 reversed_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=flat_metrics)
+artifact_control_metrics = {
+    **flat_metrics,
+    "condition_score": 2.0,
+    "relative_band_power": {
+        **flat_metrics["relative_band_power"],
+        "target_hfo": 0.08,
+        "supra_hfo": 0.35,
+    },
+}
+artifact_pair = score_candidate_pair(control_metrics=artifact_control_metrics, ketamine_metrics=target_metrics)
 missing_control_pair = score_candidate_pair(
     control_metrics={"condition_score": float("-inf"), "relative_band_power": {}, "peak_ratio": 0.0},
     ketamine_metrics=target_metrics,
 )
 
 assert good_pair["pair_score"] > bad_pair["pair_score"]
+assert good_pair["pair_score"] > artifact_pair["pair_score"]
 assert bad_pair["pair_score"] > reversed_pair["pair_score"]
 assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert bad_pair["target_delta"] == 0.0
+assert artifact_pair["control_wrong_band_penalty"] > 0.0
 assert reversed_pair["negative_delta_penalty"] > 0.0
 assert missing_control_pair["pair_score"] == float("-inf")
 

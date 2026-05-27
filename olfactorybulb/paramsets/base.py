@@ -136,6 +136,8 @@ class SilentNetwork:
     # 1.3 mm lateral to the midline
     # 2.5 mm from the skull surface
     lfp_electrode_location = [116, 1078, -61]
+    lfp_include_cell_types = None
+    lfp_exclude_cell_types = []
 
     record_from_somas = ['MC', 'TC', 'GC']
 

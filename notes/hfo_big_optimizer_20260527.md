@@ -117,6 +117,14 @@ Focused-refine monitoring:
 - Because the first focused-refine batch still did not improve on `C00053`, the next proposal update splits local elite proposals into tight-best samples around the current best candidate and broader weighted samples around the top 4 candidates.
 - Implementation commit: `a03fc77`.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py test_hfo_optimizer.py && python test_hfo_optimizer.py`.
+
+Objective and LFP-source correction after visual audit:
+
+- The current best plot pack for `C00327` did not satisfy the visual criterion despite ranking highest under the old objective. The failure modes were: weak/ugly HFO separation, a visible control spectrogram line just above the old HFO band, and afferent input events ending near 1.9 s while the run continued to 9 s.
+- Changed the optimizer objective from a narrow peak-centered 180 +/- 20 Hz score to integrated power density across 160-230 Hz. The pair score now rewards ketamine/control total target-band contrast and clean target-band concentration, while penalizing control target power, control above-target power, ketamine above-target leakage, missing MC/TC/EPLI/PVCRH spike support, and input dropout.
+- `default_campaign_run_config()` now emits a sustained 200 ms odor schedule covering the full optimization `tstop`, with `inhale_duration_ms=125`. This prevents the optimizer from selecting late LFP artifacts that persist after the input has stopped.
+- Added `lfp_include_cell_types` and `lfp_exclude_cell_types` as model/runtime controls. These change LFP source registration without changing the circuit, so `lfp_exclude_cell_types=["GC"]` can test whether the apparent HFO is generated primarily by GC currents. Added `lfp_source_diagnostic_configs()` to build all-source, GC-excluded, non-GC-only, and shifted-probe run configs from the same candidate.
+- Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q olfactorybulb/hfo_optimizer.py obgpu_experiment_helpers.py olfactorybulb/model.py olfactorybulb/paramsets/base.py tools/benchmarks/benchmark_ob.py test_hfo_optimizer.py test_corenrn_native_lfp_gid_reuse.py && python test_hfo_optimizer.py && MPLCONFIGDIR=/tmp/mpl python test_corenrn_native_lfp_gid_reuse.py`.
 - Reloaded `olfactorybulb.hfo_optimizer` in the live authenticated notebook kernel; future locally generated batch plans should include `local_detail_counts`.
 
 Tight-refine monitoring:

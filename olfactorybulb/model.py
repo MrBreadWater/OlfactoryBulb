@@ -65,6 +65,28 @@ for spec in list_cell_models():
     REGISTERED_CELL_SPECS_BY_CLASS_NAME[spec.class_name].append(spec)
 
 
+def section_cell_type(section_name):
+    """Infer the configured cell-type prefix from a NEURON section name."""
+    prefix = []
+    for char in str(section_name):
+        if char.isalpha():
+            prefix.append(char)
+        else:
+            break
+    return "".join(prefix)
+
+
+def normalize_lfp_cell_type_filter(value):
+    if value is None:
+        return None
+    if isinstance(value, str):
+        values = [value]
+    else:
+        values = list(value)
+    normalized = {str(item).strip() for item in values if str(item).strip()}
+    return normalized or None
+
+
 def resolve_cell_factory(model_name):
     factory = CELL_MODEL_FACTORIES.get(model_name)
     if factory is not None:
@@ -228,6 +250,19 @@ class OBNeuronNode(NeuronNode):
 class ParallelSafeLfpElectrode(LfpElectrode):
     """LFPsimpy wrapper that avoids per-sample Python gathers under MPI."""
 
+    def __init__(self, *args, include_cell_types=None, exclude_cell_types=None, **kwargs):
+        self.include_cell_types = normalize_lfp_cell_type_filter(include_cell_types)
+        self.exclude_cell_types = normalize_lfp_cell_type_filter(exclude_cell_types) or set()
+        super().__init__(*args, **kwargs)
+
+    def is_lfp_section(self, sec_name):
+        if not super().is_lfp_section(sec_name):
+            return False
+        cell_type = section_cell_type(sec_name)
+        if self.include_cell_types is not None and cell_type not in self.include_cell_types:
+            return False
+        return cell_type not in self.exclude_cell_types
+
     def compute(self):
         if self.h.t == 0:
             return 0
@@ -260,6 +295,7 @@ class OlfactoryBulb:
 
         self.slice_dir = os.path.abspath(os.path.join(params.slice_dir, params.slice_name))
         self.cells = {}
+        self._cell_type_by_model_id = {}
         self.inputs = []
         self.kar_inputs = []
         self.gc_kar_synapses = []
@@ -739,6 +775,9 @@ class OlfactoryBulb:
                 "recording_period": float(self.params.recording_period),
                 "sim_dt": float(self.params.sim_dt),
                 "runtime_mode": getattr(self.params, "runtime_mode", "scientific"),
+                "lfp_electrode_location": list(getattr(self.params, "lfp_electrode_location", [])),
+                "lfp_include_cell_types": getattr(self.params, "lfp_include_cell_types", None),
+                "lfp_exclude_cell_types": getattr(self.params, "lfp_exclude_cell_types", None),
                 "coreneuron": {
                     "enable": bool(getattr(getattr(self.params, "coreneuron", None), "enable", False)),
                     "gpu": bool(getattr(getattr(self.params, "coreneuron", None), "gpu", False)),
@@ -753,6 +792,25 @@ class OlfactoryBulb:
     def iter_cell_models(self):
         for cells in self.cells.values():
             for cell_model in cells:
+                yield cell_model
+
+    def cell_type_for_model(self, cell_model):
+        cell_type = self._cell_type_by_model_id.get(id(cell_model))
+        if cell_type is not None:
+            return cell_type
+        return section_cell_type(cell_model.soma.name())
+
+    def should_include_cell_in_lfp(self, cell_model):
+        include_types = normalize_lfp_cell_type_filter(getattr(self.params, "lfp_include_cell_types", None))
+        exclude_types = normalize_lfp_cell_type_filter(getattr(self.params, "lfp_exclude_cell_types", None)) or set()
+        cell_type = self.cell_type_for_model(cell_model)
+        if include_types is not None and cell_type not in include_types:
+            return False
+        return cell_type not in exclude_types
+
+    def iter_lfp_cell_models(self):
+        for cell_model in self.iter_cell_models():
+            if self.should_include_cell_in_lfp(cell_model):
                 yield cell_model
 
     def get_cell_sections(self, cell_model):
@@ -832,7 +890,7 @@ class OlfactoryBulb:
         if self._native_lfp_mappings_registered or not self.use_corenrn_native_lfp():
             return
 
-        for cell_model in self.iter_cell_models():
+        for cell_model in self.iter_lfp_cell_models():
             gid = self.get_cell_report_gid(cell_model)
             if gid is None:
                 gid = self._next_lfp_report_gid
@@ -883,7 +941,7 @@ class OlfactoryBulb:
 
         self.register_corenrn_native_lfp_mappings()
         local_gids = []
-        for cell_model in self.iter_cell_models():
+        for cell_model in self.iter_lfp_cell_models():
             gid = self.get_cell_report_gid(cell_model)
             if gid is None:
                 gid = self._next_lfp_report_gid
@@ -1070,7 +1128,15 @@ class OlfactoryBulb:
         :return: an LFPsimpy LfpElectrode object
         """
 
-        return ParallelSafeLfpElectrode(x, y, z, sampling_period, method)
+        return ParallelSafeLfpElectrode(
+            x,
+            y,
+            z,
+            sampling_period,
+            method,
+            include_cell_types=getattr(self.params, "lfp_include_cell_types", None),
+            exclude_cell_types=getattr(self.params, "lfp_exclude_cell_types", None),
+        )
 
     def get_lfp(self):
         """
@@ -1463,6 +1529,8 @@ class OlfactoryBulb:
             cell_factory = resolve_cell_factory(cell_model_name)
             cell_models = [cell_factory() for _ in range(count)]
             self.cells[cell_type].extend(cell_models)
+            for cell_model in cell_models:
+                self._cell_type_by_model_id[id(cell_model)] = cell_type
 
         return group_dict
 

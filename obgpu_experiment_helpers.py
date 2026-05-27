@@ -122,6 +122,8 @@ CONTROL_HELP = {
     "soma_spike_min_prominence_mv": "Minimum peak prominence in mV for runtime soma spike detection.",
     "soma_spike_refractory_ms": "Minimum inter-peak spacing in ms for runtime soma spike detection.",
     "lfp_electrode_location": "Probe location as [x, y, z] in microns.",
+    "lfp_include_cell_types": "Optional LFP source filter. When set, compute LFP only from these cell types.",
+    "lfp_exclude_cell_types": "Optional LFP source filter. Cell types to exclude from LFP without changing the circuit.",
     "rnd_seed": "Random seed for odor input generation.",
     "record_from_somas": "Which cell types to record from, e.g. ['MC', 'TC', 'GC']. When EPLIs are enabled their configured cell type is appended automatically unless already present.",
     "enable_epl_interneurons": "Enable the opt-in EPLI slice population when the slice export and paramset support it.",
@@ -784,6 +786,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "input_max_segments": 120,
         "input_rate_normalization": "per_target_cell",
         "lfp_electrode_location": [116, 1078, -61],
+        "lfp_include_cell_types": None,
+        "lfp_exclude_cell_types": None,
         "input_odors": None,
         "input_stimuli": None,
         "max_firing_rate_hz": None,
@@ -1228,6 +1232,12 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         "keep_native_lfp_debug_files": bool(config.get("keep_native_lfp_debug_files", False)),
         "lfp_electrode_location": list(config.get("lfp_electrode_location", [116, 1078, -61])),
     }
+    if config.get("lfp_include_cell_types") is not None:
+        value = config["lfp_include_cell_types"]
+        overrides["lfp_include_cell_types"] = [value] if isinstance(value, str) else list(value)
+    if config.get("lfp_exclude_cell_types") is not None:
+        value = config["lfp_exclude_cell_types"]
+        overrides["lfp_exclude_cell_types"] = [value] if isinstance(value, str) else list(value)
     if "enable_lfp" in config:
         overrides["enable_lfp"] = bool(config["enable_lfp"])
     if config.get("rnd_seed") is not None:
@@ -7591,6 +7601,8 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "results_base",
         "disable_status_report",
         "parallel_timeout",
+        "lfp_include_cell_types",
+        "lfp_exclude_cell_types",
         "analysis_dt_ms",
         "spectrogram_signal",
         "wavelet_signal",
