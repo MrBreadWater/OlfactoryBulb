@@ -282,6 +282,7 @@ class OlfactoryBulb:
         self._native_lfp_sim_conf_path = None
         self._native_lfp_cell_gids = {}
         self._native_lfp_gid_source = {}
+        self._registered_source_section_gids = {}
         self._native_lfp_mappings_registered = False
         self._status_is_tty = sys.stdout.isatty()
         self._status_mode = os.environ.get("OBGPU_STATUS_MODE", "auto").strip().lower()
@@ -765,11 +766,25 @@ class OlfactoryBulb:
         cell_name = section_name.split(".", 1)[0]
         self._native_lfp_gid_source.setdefault(cell_name, int(gid))
 
+    def remember_source_handle_gid(self, section_name, section_x, gid):
+        rank_section_name = self.rank_section_name(section_name)
+        if rank_section_name is None:
+            return
+
+        gid = int(gid)
+        previous_gid = self._registered_source_section_gids.get(rank_section_name)
+        if previous_gid is None:
+            self._registered_source_section_gids[rank_section_name] = gid
+        else:
+            self._registered_source_section_gids[rank_section_name] = min(int(previous_gid), gid)
+
+    def lookup_source_handle_gid(self, section, section_x):
+        return self._registered_source_section_gids.get(section.name())
+
     def get_cell_report_gid(self, cell_model):
         gid = self._native_lfp_cell_gids.get(id(cell_model))
         if gid is None:
-            cell_name = self.get_cell_name(cell_model)
-            gid = self._native_lfp_gid_source.get(cell_name)
+            gid = self.lookup_source_handle_gid(cell_model.soma, 0.5)
             if gid is None:
                 gid = int(self._next_lfp_report_gid)
                 self._next_lfp_report_gid += 1
@@ -1294,6 +1309,7 @@ class OlfactoryBulb:
             if seg_1_gid not in self.gj_source_gids:
                 self.pc.source_var(seg1._ref_v, seg_1_gid, sec=seg1.sec)
                 self.gj_source_gids.add(seg_1_gid)
+                self.remember_source_handle_gid(seg_1_name.replace("h.", ""), float(seg1.x), seg_1_gid)
 
             gap1 = h.GapJunction(seg1.x, sec=seg1.sec)
             gap1.g = g_gap
@@ -1307,6 +1323,7 @@ class OlfactoryBulb:
             if seg_2_gid not in self.gj_source_gids:
                 self.pc.source_var(seg2._ref_v, seg_2_gid, sec=seg2.sec)
                 self.gj_source_gids.add(seg_2_gid)
+                self.remember_source_handle_gid(seg_2_name.replace("h.", ""), float(seg2.x), seg_2_gid)
 
             gap2 = h.GapJunction(seg2.x, sec=seg2.sec)
             gap2.g = g_gap
@@ -1695,7 +1712,36 @@ class OlfactoryBulb:
         with open(path, 'r') as f:
             synapse_set_dict = json.load(f)
 
-        self.bn_server.source_gid_alias_map = self.get_source_gid_alias_map(synapse_set_dict)
+        alias_map = self.get_source_gid_alias_map(synapse_set_dict)
+        self.bn_server.source_gid_alias_map = alias_map
+
+        for entry in synapse_set_dict["entries"]:
+            if self.rank_section_name(entry["source_section"]) is not None:
+                source_gid = int(self.bn_server.segment_gid(
+                    entry["source_section"],
+                    entry["source_seg_i"],
+                    entry["create_spine"],
+                ))
+                source_gid = int(alias_map.get(source_gid, source_gid))
+                self.remember_source_handle_gid(
+                    entry["source_section"],
+                    float(entry["source_x"]),
+                    source_gid,
+                )
+
+            if entry.get("is_reciprocal", False) and self.rank_section_name(entry["dest_section"]) is not None:
+                dest_gid = int(self.bn_server.segment_gid(
+                    entry["dest_section"],
+                    entry["dest_seg_i"],
+                    False,
+                ))
+                dest_gid = int(alias_map.get(dest_gid, dest_gid))
+                self.remember_source_handle_gid(
+                    entry["dest_section"],
+                    float(entry["dest_x"]),
+                    dest_gid,
+                )
+
         self.bn_server.create_synapses(synapse_set_dict)
 
     def add_gc_kar_synapse_set(self, synapse_set):
@@ -1752,6 +1798,11 @@ class OlfactoryBulb:
                         float(entry.get("threshold", 0.0)),
                         source_gid,
                     )
+                self.remember_source_handle_gid(
+                    entry["dest_section"],
+                    float(entry.get("dest_x", 0.5)),
+                    source_gid,
+                )
                 self.bn_server.remember_cell_source_gid(source_section_name, source_gid)
 
             if not syn_on_rank:
