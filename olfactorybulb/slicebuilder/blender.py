@@ -912,7 +912,10 @@ class SliceBuilderBlender:
                  epl_interneuron_model=DEFAULT_EPLI_MODEL_KEY,
                  epl_interneuron_family=None,
                  epli_depth_min_fraction=0.2,
-                 epli_depth_max_fraction=0.8):
+                 epli_depth_max_fraction=0.8,
+                 epli_dend_depth_min_fraction=0.0,
+                 epli_dend_depth_max_fraction=1.0,
+                 epli_selection_strategy='slice_order'):
         """
         Prepares the slice builder
 
@@ -970,6 +973,9 @@ class SliceBuilderBlender:
         )
         self.epli_depth_min_fraction = float(epli_depth_min_fraction)
         self.epli_depth_max_fraction = float(epli_depth_max_fraction)
+        self.epli_dend_depth_min_fraction = float(epli_dend_depth_min_fraction)
+        self.epli_dend_depth_max_fraction = float(epli_dend_depth_max_fraction)
+        self.epli_selection_strategy = str(epli_selection_strategy or 'slice_order')
         self.epli_model_spec = (
             resolve_epli_model_spec(model=epl_interneuron_model, family=epl_interneuron_family)
             if self.enable_epl_interneurons
@@ -1308,6 +1314,23 @@ class SliceBuilderBlender:
                 candidate = dict(candidate)
                 candidate['depth_fraction'] = depth_fraction
                 result.append(candidate)
+
+        if self.epli_selection_strategy == 'principal_proximity' and len(result) > 0:
+            principal_locs = [loc['loc'] for loc in (self.mc_locs + self.tc_locs)]
+            if len(principal_locs) > 0:
+                principal_pts = np.asarray(principal_locs, dtype=float)
+                for candidate in result:
+                    principal_dists = self.dist_to(principal_pts, candidate['loc'])
+                    candidate['nearest_principal_um'] = float(np.min(principal_dists))
+                    candidate['mean_principal_um'] = float(np.mean(principal_dists))
+                result.sort(
+                    key=lambda candidate: (
+                        candidate['nearest_principal_um'],
+                        candidate['mean_principal_um'],
+                        candidate['id'],
+                    )
+                )
+                print('Ranking %s EPLI candidates by principal proximity' % len(result))
 
         if limit is not None:
             print('Selecting %s/%s %s EPLI locations inside slice' % (limit, len(result), particle_obj_name))
@@ -1724,8 +1747,8 @@ class SliceBuilderBlender:
             self.inner_opl_object_name,
             self.outer_opl_object_name,
             max_angle=self.max_alignment_angle,
-            height_start=self.epli_depth_min_fraction,
-            height_end=self.epli_depth_max_fraction,
+            height_start=self.epli_dend_depth_min_fraction,
+            height_end=self.epli_dend_depth_max_fraction,
         )
         bpy.ops.blenderneuron.update_groups_with_view_data()
 

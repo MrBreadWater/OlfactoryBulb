@@ -152,3 +152,126 @@ likely be the biological synapse geometry:
   misleading false positives
 - so the next pass should optimize for plausible dendritic or perisomatic
   contact structure, not raw proximity alone
+
+## Step 4: check whether smoke-slice candidate ordering is biased
+
+The next suspicion was that the small mixed slices were choosing poor `EPLI`
+locations simply because they truncated the filtered candidate list in raw
+particle order.
+
+Using the `DorsalColumnSlice` smoke-slice configuration with:
+
+- `max_mcs=2`
+- `max_tcs=4`
+- `max_gcs=20`
+- `max_eplis=5`
+- `epli_depth_min_fraction=0.25`
+- `epli_depth_max_fraction=0.75`
+
+the filtered candidate pool contained `437` valid `EPLI` soma locations.
+
+For the first five locations chosen by plain slice order, nearest selected
+principal-cell soma distances were about:
+
+- `54–116 µm`
+
+But the same pool contained candidates with nearest principal distances of:
+
+- `9.7–23.5 µm`
+
+Conclusion:
+
+- the smoke slices were indeed suffering from **candidate-order bias**
+- choosing the first `N` filtered candidates is a poor strategy for debugging
+  local EPL inhibitory geometry
+
+## Step 5: add opt-in principal-proximity selection
+
+An opt-in `epli_selection_strategy='principal_proximity'` path was added.
+
+Behavior:
+
+- keep the default `slice_order` behavior unchanged
+- when enabled, rank filtered `EPLI` soma candidates by:
+  1. nearest selected `MC/TC` soma distance
+  2. mean selected `MC/TC` soma distance
+  3. particle id as a stable tie-break
+
+This does not claim biological optimality. It is a deterministic debugging and
+smoke-test strategy for finding whether the geometry can produce local contacts
+at all.
+
+## Step 6: inspect resulting contact geometry
+
+With `principal_proximity` enabled on the same small mixed slice:
+
+- exported default synapse files were still all zero
+- but the offline optimizer now found robust nonzero `EPLI -> TC` local
+  dendritic overlaps
+
+Best recovered `EPLI -> TC` candidate family on the smoke slice:
+
+- `source_pattern = *dend*`
+- `target_pattern = *dend*`
+- `max_distance_um = 10`
+- `use_radius = True`
+- `max_syns_per_pt = 2`
+
+Representative metrics:
+
+- `entries = 27`
+- `source_coverage = 1.0`
+- `target_coverage = 0.75`
+- `median_distance_um ≈ 6.1`
+
+Interpretation:
+
+- the current synthetic `EPLI` geometry can support **local dendritic overlap
+  with TCs**
+- the current default exported rule (`*dend* -> *soma*`, `20 µm`) is too
+  restrictive / mismatched for these smoke slices
+
+## Step 7: inspect MC failure mode
+
+Even after:
+
+- fixing root selection,
+- enabling principal-proximity candidate ranking, and
+- widening `EPLI` dendrite confinement to the full EPL corridor,
+
+the same small smoke slices still produced:
+
+- **no nonzero `EPLI -> MC` contacts** under a broad search across
+  `*dend*`, `*apic*`, `*soma*`, and `*axon*` targets, with distances up to
+  `120 µm`
+
+That is useful negative evidence.
+
+Current interpretation:
+
+- `MC` emptiness is **not** caused by the original root-selection bug
+- `MC` emptiness is **not** fixed simply by better `EPLI` soma candidate
+  ranking
+- `MC` emptiness is **not** fixed simply by letting `EPLI` dendrites span the
+  whole EPL corridor
+
+So the next likely bottleneck is deeper:
+
+- either the synthetic `EPLI` morphology is too compact or too shallow for
+  `MC` reach,
+- or the placement objective needs to target `MC` dendritic / proximal-apical
+  geometry rather than principal-cell soma proximity,
+- or both
+
+## Current state after this round
+
+The evidence now supports these narrower conclusions:
+
+1. The `EPLI` exporter bug is fixed.
+2. The offline optimizer is working and recovering meaningful smoke-slice
+   `EPLI -> TC` geometry.
+3. The default placeholder `EPLI` synapse rule is currently unsupported by the
+   small-slice geometry.
+4. The present surrogate still does **not** produce `MC` overlap in these small
+   tests, so any future default should remain provisional until `MC` reach is
+   improved or explained.

@@ -74,6 +74,27 @@ plausible_dendritic = ConnectivityMetrics(
     source_family_fraction={"dend": 1.0},
     target_family_fraction={"dend": 1.0},
 )
+plausible_split_dendritic = ConnectivityMetrics(
+    label="plausible_split",
+    source_group="EPLIs",
+    target_group="TCs",
+    entry_count=10,
+    total_source_cells=2,
+    total_target_cells=4,
+    connected_source_cells=2,
+    connected_target_cells=2,
+    source_coverage=1.0,
+    target_coverage=0.5,
+    mean_entries_per_source_total=5.0,
+    mean_entries_per_source_connected=5.0,
+    mean_entries_per_target_total=2.5,
+    mean_entries_per_target_connected=5.0,
+    median_distance_um=4.0,
+    mean_distance_um=4.2,
+    p90_distance_um=6.0,
+    source_family_fraction={"dend_primary": 0.8, "dend_branch": 0.2},
+    target_family_fraction={"dend": 1.0},
+)
 implausible_somatic = ConnectivityMetrics(
     label="implausible",
     source_group="EPLIs",
@@ -96,9 +117,12 @@ implausible_somatic = ConnectivityMetrics(
     target_family_fraction={"soma": 1.0},
 )
 plausible_score, _ = score_epli_candidate(plausible_dendritic, reference=reference)
+plausible_split_score, _ = score_epli_candidate(plausible_split_dendritic, reference=reference)
 implausible_score, _ = score_epli_candidate(implausible_somatic, reference=reference)
 assert plausible_score > 1.0
+assert plausible_split_score > 0.5
 assert implausible_score == 0.0
 assert plausible_score > implausible_score
+assert plausible_split_score > implausible_score
 
 print("slice connectivity optimizer positive control: OK")

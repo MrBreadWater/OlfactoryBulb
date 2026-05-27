@@ -30,6 +30,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--epl-interneuron-family", default=None, help="Registry family name when selecting by family/role instead of explicit model key.")
     parser.add_argument("--epli-depth-min-fraction", type=float, default=None, help="Lower depth bound within the EPL corridor.")
     parser.add_argument("--epli-depth-max-fraction", type=float, default=None, help="Upper depth bound within the EPL corridor.")
+    parser.add_argument("--epli-dend-depth-min-fraction", type=float, default=None, help="Lower dendrite-confiner bound for EPLIs within the EPL corridor.")
+    parser.add_argument("--epli-dend-depth-max-fraction", type=float, default=None, help="Upper dendrite-confiner bound for EPLIs within the EPL corridor.")
+    parser.add_argument(
+        "--epli-selection-strategy",
+        choices=["slice_order", "principal_proximity"],
+        default=None,
+        help="Optional strategy for ranking EPLI soma candidates before truncating to max_eplis.",
+    )
     parser.add_argument("--mc-particles-object-name", default=None)
     parser.add_argument("--tc-particles-object-name", default=None)
     parser.add_argument("--gc-particles-object-name", default=None)

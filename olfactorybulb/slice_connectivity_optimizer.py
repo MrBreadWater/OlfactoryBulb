@@ -57,6 +57,14 @@ def _hist_l1(a: dict[str, float], b: dict[str, float]) -> float:
     return sum(abs(a.get(key, 0.0) - b.get(key, 0.0)) for key in keys) * 0.5
 
 
+def _family_fraction(hist: dict[str, float], preferred_family: str) -> float:
+    total = 0.0
+    for family, fraction in hist.items():
+        if family == preferred_family or family.startswith(f"{preferred_family}_"):
+            total += float(fraction)
+    return total
+
+
 def _log_count_penalty(a: float, b: float) -> float:
     return abs(math.log1p(max(0.0, a)) - math.log1p(max(0.0, b)))
 
@@ -733,10 +741,10 @@ def score_epli_candidate(
     preferred_source_family: str = "dend",
     preferred_target_family: str = "dend",
 ) -> tuple[float, dict[str, float]]:
-    source_family_bonus = candidate.source_family_fraction.get(preferred_source_family, 0.0)
-    target_family_bonus = candidate.target_family_fraction.get(preferred_target_family, 0.0)
-    source_soma_fraction = candidate.source_family_fraction.get("soma", 0.0)
-    target_soma_fraction = candidate.target_family_fraction.get("soma", 0.0)
+    source_family_bonus = _family_fraction(candidate.source_family_fraction, preferred_source_family)
+    target_family_bonus = _family_fraction(candidate.target_family_fraction, preferred_target_family)
+    source_soma_fraction = _family_fraction(candidate.source_family_fraction, "soma")
+    target_soma_fraction = _family_fraction(candidate.target_family_fraction, "soma")
     structural_fit = source_family_bonus * target_family_bonus
     local_scale = max(_safe_float(reference.median_distance_um, 10.0), 1.0)
     locality_bonus = 1.0 / (1.0 + (_safe_float(candidate.median_distance_um, local_scale) / local_scale))

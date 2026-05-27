@@ -80,6 +80,9 @@ def slice_builder_env_kwargs(environ: dict[str, str] | None = None) -> dict[str,
         "epl_interneuron_family": raw("EPLI_FAMILY"),
         "epli_depth_min_fraction": _parse_float(raw("EPLI_DEPTH_MIN"), 0.2),
         "epli_depth_max_fraction": _parse_float(raw("EPLI_DEPTH_MAX"), 0.8),
+        "epli_dend_depth_min_fraction": _parse_float(raw("EPLI_DEND_DEPTH_MIN"), 0.0),
+        "epli_dend_depth_max_fraction": _parse_float(raw("EPLI_DEND_DEPTH_MAX"), 1.0),
+        "epli_selection_strategy": raw("EPLI_SELECTION", "slice_order"),
     }
     return kwargs
 
@@ -114,6 +117,9 @@ def slice_builder_env_overrides_from_cli(args: Any) -> dict[str, str]:
     set_if("EPLI_FAMILY", getattr(args, "epl_interneuron_family", None))
     set_if("EPLI_DEPTH_MIN", getattr(args, "epli_depth_min_fraction", None))
     set_if("EPLI_DEPTH_MAX", getattr(args, "epli_depth_max_fraction", None))
+    set_if("EPLI_DEND_DEPTH_MIN", getattr(args, "epli_dend_depth_min_fraction", None))
+    set_if("EPLI_DEND_DEPTH_MAX", getattr(args, "epli_dend_depth_max_fraction", None))
+    set_if("EPLI_SELECTION", getattr(args, "epli_selection_strategy", None))
     return overrides
 
 

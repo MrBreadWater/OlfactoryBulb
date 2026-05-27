@@ -26,6 +26,9 @@ env_kwargs = slice_builder_env_kwargs(
         "OB_SLICE_EPLI_MODEL": "SyntheticEPL2026.PVCRH_FSI1",
         "OB_SLICE_EPLI_DEPTH_MIN": "0.3",
         "OB_SLICE_EPLI_DEPTH_MAX": "0.7",
+        "OB_SLICE_EPLI_DEND_DEPTH_MIN": "0.0",
+        "OB_SLICE_EPLI_DEND_DEPTH_MAX": "1.0",
+        "OB_SLICE_EPLI_SELECTION": "principal_proximity",
     }
 )
 
@@ -41,6 +44,9 @@ assert env_kwargs["epli_particles_object_name"] == "1 OPL Particles"
 assert env_kwargs["epl_interneuron_model"] == "SyntheticEPL2026.PVCRH_FSI1"
 assert abs(env_kwargs["epli_depth_min_fraction"] - 0.3) < 1e-9
 assert abs(env_kwargs["epli_depth_max_fraction"] - 0.7) < 1e-9
+assert abs(env_kwargs["epli_dend_depth_min_fraction"] - 0.0) < 1e-9
+assert abs(env_kwargs["epli_dend_depth_max_fraction"] - 1.0) < 1e-9
+assert env_kwargs["epli_selection_strategy"] == "principal_proximity"
 
 args = SimpleNamespace(
     slice_name="DorsalColumnSliceEPLI",
@@ -63,6 +69,9 @@ args = SimpleNamespace(
     epl_interneuron_family=None,
     epli_depth_min_fraction=0.3,
     epli_depth_max_fraction=0.7,
+    epli_dend_depth_min_fraction=0.0,
+    epli_dend_depth_max_fraction=1.0,
+    epli_selection_strategy="principal_proximity",
 )
 overrides = slice_builder_env_overrides_from_cli(args)
 assert overrides["OB_SLICE_NAME"] == "DorsalColumnSliceEPLI"
@@ -70,6 +79,9 @@ assert overrides["OB_SLICE_OUTPUT_NAME"] == "DorsalColumnSliceEPLI_smoke"
 assert overrides["OB_SLICE_ODORS"] == "Apple,Mint"
 assert overrides["OB_SLICE_ENABLE_EPLI"] == "1"
 assert overrides["OB_SLICE_MAX_EPLIS"] == "18"
+assert overrides["OB_SLICE_EPLI_DEND_DEPTH_MIN"] == "0.0"
+assert overrides["OB_SLICE_EPLI_DEND_DEPTH_MAX"] == "1.0"
+assert overrides["OB_SLICE_EPLI_SELECTION"] == "principal_proximity"
 
 repo_root = Path(__file__).resolve().parent
 cli_completed = subprocess.run(
@@ -85,6 +97,12 @@ cli_completed = subprocess.run(
         "--enable-epl-interneurons",
         "--max-eplis",
         "18",
+        "--epli-dend-depth-min-fraction",
+        "0.0",
+        "--epli-dend-depth-max-fraction",
+        "1.0",
+        "--epli-selection-strategy",
+        "principal_proximity",
     ],
     cwd=repo_root,
     check=True,
@@ -92,5 +110,8 @@ cli_completed = subprocess.run(
     text=True,
 )
 assert "COMMAND: blender -b blender-files/ob-gloms-fast.blend --python olfactorybulb/slicebuilder/blender.py" in cli_completed.stdout
+assert "OB_SLICE_EPLI_DEND_DEPTH_MIN=0.0" in cli_completed.stdout
+assert "OB_SLICE_EPLI_DEND_DEPTH_MAX=1.0" in cli_completed.stdout
+assert "OB_SLICE_EPLI_SELECTION=principal_proximity" in cli_completed.stdout
 
 print("slice-builder config smoke test: OK")
