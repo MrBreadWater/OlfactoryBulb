@@ -52,6 +52,7 @@ lfp_filter_config = hlp.build_run_config(
 lfp_filter_overrides = hlp.build_param_overrides(lfp_filter_config)
 assert lfp_filter_overrides["lfp_include_cell_types"] == ["MC", "TC"]
 assert lfp_filter_overrides["lfp_exclude_cell_types"] == ["GC"]
+assert hlp.cell_type_of("PVCRH_FSI1[0].soma") == "EPLI"
 lfp_diagnostics = lfp_source_diagnostic_configs(
     lfp_filter_config,
     shifted_locations=([116, 900, -61], [116, 1250, -61]),

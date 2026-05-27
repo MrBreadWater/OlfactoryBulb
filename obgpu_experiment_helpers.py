@@ -102,7 +102,13 @@ REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
 DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
-PRIMARY_CELL_TYPE_ORDER = ("MC", "TC", "GC")
+PRIMARY_CELL_TYPE_ORDER = ("MC", "TC", "GC", "EPLI")
+CELL_TYPE_ALIASES = {
+    # The optional EPLI population currently uses the synthetic PVCRH_FSI1
+    # model class. Saved section labels expose that class name, but notebook
+    # summaries should report the runtime population, not a second cell type.
+    "PVCRH": "EPLI",
+}
 CELL_TYPE_COLORS = {
     "MC": "tab:blue",
     "TC": "tab:red",
@@ -7258,7 +7264,8 @@ def cell_type_of(name: Any) -> str:
     match = re.match(r"([A-Z]+)", normalize_cell_name(name))
     if not match:
         raise ValueError(f"Could not infer cell type from {name!r}")
-    return match.group(1)
+    cell_type = match.group(1)
+    return CELL_TYPE_ALIASES.get(cell_type, cell_type)
 
 
 def _ordered_cell_types(cell_types: list[str] | tuple[str, ...] | set[str]) -> list[str]:

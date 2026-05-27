@@ -448,13 +448,21 @@ def load_soma_spike_artifact(path_or_dir: str | Path) -> dict[str, Any]:
         }
 
 
+CELL_TYPE_ALIASES = {
+    "PVCRH": "EPLI",
+}
+
+
 def _cell_type_for_label(label: str) -> str:
     match = re.match(r"([A-Z]+)", str(label))
-    return match.group(1) if match else "other"
+    if not match:
+        return "other"
+    cell_type = match.group(1)
+    return CELL_TYPE_ALIASES.get(cell_type, cell_type)
 
 
 def _cell_type_sort_key(cell_type: str) -> tuple[int, str]:
-    preferred = ("MC", "TC", "GC")
+    preferred = ("MC", "TC", "GC", "EPLI")
     if cell_type in preferred:
         return (preferred.index(cell_type), cell_type)
     if cell_type == "other":
