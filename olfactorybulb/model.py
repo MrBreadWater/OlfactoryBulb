@@ -134,6 +134,9 @@ class OBNeuronNode(NeuronNode):
 
         netcon, syn = None, None
 
+        if self.parallel_ctx is not None and self.mpimap is not None:
+            source_gid = self.apply_source_gid_alias(source_gid)
+
         if syn_on_rank:
             syn_class = getattr(h, syn_class_name)
             syn = syn_class(syn_sec(syn_sec_x))
@@ -181,6 +184,17 @@ class OBNeuronNode(NeuronNode):
 
         return netcon, syn
 
+    def source_handle_key(self, section, x):
+        """Return the NEURON voltage-source handle at ``section(x)``."""
+        return section(float(x))._ref_v
+
+    def apply_source_gid_alias(self, gid):
+        alias_map = getattr(self, "source_gid_alias_map", None)
+        gid = int(gid)
+        if not alias_map:
+            return gid
+        return int(alias_map.get(gid, gid))
+
     def remember_cell_source_gid(self, section_name, gid):
         if not hasattr(self, "cell_source_gids"):
             self.cell_source_gids = {}
@@ -194,15 +208,17 @@ class OBNeuronNode(NeuronNode):
         for entry in syn_set["entries"]:
             rank_source_section = self.rank_section_name(entry["source_section"])
             if rank_source_section is not None:
-                source_gid = self.segment_gid(
+                source_gid = self.apply_source_gid_alias(self.segment_gid(
                     entry["source_section"], entry["source_seg_i"], entry["create_spine"]
-                )
+                ))
                 self.remember_cell_source_gid(rank_source_section, source_gid)
 
             if entry["is_reciprocal"]:
                 rank_dest_section = self.rank_section_name(entry["dest_section"])
                 if rank_dest_section is not None:
-                    dest_gid = self.segment_gid(entry["dest_section"], entry["dest_seg_i"], False)
+                    dest_gid = self.apply_source_gid_alias(
+                        self.segment_gid(entry["dest_section"], entry["dest_seg_i"], False)
+                    )
                     self.remember_cell_source_gid(rank_dest_section, dest_gid)
 
         return synapses
@@ -257,6 +273,7 @@ class OlfactoryBulb:
         self._odor_glom_intensities_cache = {}
         self._glom_input_seg_cache = None
         self._gap_junction_seg_cache = {}
+        self._source_gid_alias_maps = {}
         self._native_lfp_objects = []
         self._next_lfp_report_gid = 1500000000
         self._native_lfp_prepared = False
@@ -1578,6 +1595,94 @@ class OlfactoryBulb:
 
         return count
 
+    def _resolve_local_source_handle_gid_groups(self, synapse_set_dict):
+        """Group requested gids by the actual local NEURON source handle they address."""
+
+        local_groups = []
+
+        def remember_handle_gid(handle_ref, requested_gid):
+            requested_gid = int(requested_gid)
+            for known_ref, known_gids in local_groups:
+                try:
+                    same_handle = bool(handle_ref == known_ref)
+                except Exception:
+                    same_handle = False
+                if same_handle:
+                    known_gids.add(requested_gid)
+                    return
+            local_groups.append([handle_ref, {requested_gid}])
+
+        def add_source(section_name, section_x, seg_i, create_spine):
+            if create_spine:
+                return
+            rank_section = self.rank_section_name(section_name)
+            if rank_section is None:
+                return
+            section = self.bn_server.section_index[rank_section]
+            clamped_x = self.bn_server.clamp_section_x(section_x)
+            handle_key = self.bn_server.source_handle_key(section, clamped_x)
+            requested_gid = int(self.bn_server.segment_gid(section_name, seg_i, False))
+            remember_handle_gid(handle_key, requested_gid)
+
+        for entry in synapse_set_dict["entries"]:
+            add_source(
+                entry["source_section"],
+                entry["source_x"],
+                entry["source_seg_i"],
+                bool(entry.get("create_spine", False)),
+            )
+
+            if entry.get("is_reciprocal", False):
+                add_source(
+                    entry["dest_section"],
+                    entry["dest_x"],
+                    entry["dest_seg_i"],
+                    False,
+                )
+
+        return local_groups
+
+    def get_source_gid_alias_map(self, synapse_set_dict):
+        """Return canonical gid aliases for synapse sources that share one NEURON handle."""
+
+        set_name = str(synapse_set_dict["name"])
+        cached = self._source_gid_alias_maps.get(set_name)
+        if cached is not None:
+            return cached
+
+        local_groups = self._resolve_local_source_handle_gid_groups(synapse_set_dict)
+        local_aliases = {}
+        for _handle_ref, gids in local_groups:
+            if len(gids) <= 1:
+                continue
+            canonical_gid = int(min(gids))
+            for gid in gids:
+                local_aliases[int(gid)] = canonical_gid
+
+        gathered_aliases = self.pc.py_gather(local_aliases, 0)
+        if self.mpirank == 0:
+            merged_aliases = {}
+            for alias_chunk in gathered_aliases:
+                for gid, canonical_gid in alias_chunk.items():
+                    gid = int(gid)
+                    canonical_gid = int(canonical_gid)
+                    previous = merged_aliases.get(gid)
+                    if previous is None:
+                        merged_aliases[gid] = canonical_gid
+                    else:
+                        merged_aliases[gid] = min(int(previous), canonical_gid)
+            merged_aliases = {
+                int(gid): int(canonical_gid)
+                for gid, canonical_gid in merged_aliases.items()
+                if int(gid) != int(canonical_gid)
+            }
+        else:
+            merged_aliases = None
+
+        merged_aliases = self.pc.py_broadcast(merged_aliases, 0)
+        self._source_gid_alias_maps[set_name] = dict(merged_aliases or {})
+        return self._source_gid_alias_maps[set_name]
+
     def load_synapse_set(self, synapse_set):
         """
         Uses BlenderNEURON to load a previously saved set of synapses between a population of cells
@@ -1590,6 +1695,7 @@ class OlfactoryBulb:
         with open(path, 'r') as f:
             synapse_set_dict = json.load(f)
 
+        self.bn_server.source_gid_alias_map = self.get_source_gid_alias_map(synapse_set_dict)
         self.bn_server.create_synapses(synapse_set_dict)
 
     def add_gc_kar_synapse_set(self, synapse_set):
@@ -1612,7 +1718,9 @@ class OlfactoryBulb:
 
         path = os.path.join(self.slice_dir, synapse_set + '.json')
         with open(path, 'r') as f:
-            entries = json.load(f)["entries"]
+            synapse_set_dict = json.load(f)
+        entries = synapse_set_dict["entries"]
+        alias_map = self.get_source_gid_alias_map(synapse_set_dict)
 
         for entry in entries:
             if not entry.get("is_reciprocal", False):
@@ -1631,6 +1739,7 @@ class OlfactoryBulb:
                 entry["dest_seg_i"],
                 False,
             )
+            source_gid = int(alias_map.get(int(source_gid), int(source_gid)))
 
             if source_on_rank:
                 source_seg = self.resolve_segment(
