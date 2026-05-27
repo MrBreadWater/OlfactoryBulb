@@ -14,6 +14,8 @@ The goal is stricter than "looks plausible." The implementation should satisfy:
 The corresponding machine-checkable script is:
 
 - `tools/audit_epli_correctness.py`
+- generic audit entrypoint: `tools/run_audit.py`
+- reusable package: `olfactorybulb/audit/`
 
 ## Source constraints
 

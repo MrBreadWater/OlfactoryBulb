@@ -1,9 +1,9 @@
-"""Compatibility wrapper for the EPLI correctness audit."""
+"""Compatibility wrapper for the repository audit CLI."""
 
 from __future__ import annotations
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
@@ -13,4 +13,4 @@ from olfactorybulb.audit.cli import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(["epli_correctness", *sys.argv[1:]]))
+    raise SystemExit(main())
