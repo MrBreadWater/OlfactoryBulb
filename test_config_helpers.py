@@ -199,6 +199,8 @@ with tempfile.TemporaryDirectory() as tmp:
     assert len(freq_samples["freqs"]) == 2
     t_mean, v_mean = hlp.get_named_signal(loaded_result, signal="mean_MC_voltage")
     assert len(t_mean) == len(v_mean) == 7
+    assert "MC" in hlp.list_available_cell_types(loaded_result)
+    assert "mean_MC_voltage" in hlp.list_available_named_signals(loaded_result)
     assert "soma_vs" not in loaded_result._lazy_loaders
     print("Compact soma spike / voltage-summary artifacts: OK")
 

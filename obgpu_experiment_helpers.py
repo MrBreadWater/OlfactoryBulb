@@ -102,6 +102,14 @@ REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
 DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+PRIMARY_CELL_TYPE_ORDER = ("MC", "TC", "GC")
+CELL_TYPE_COLORS = {
+    "MC": "tab:blue",
+    "TC": "tab:red",
+    "GC": "tab:orange",
+    "EPLI": "tab:green",
+    "other": "tab:gray",
+}
 CONTROL_HELP = {
     "mode": "Use 'fast' for 1-rank exploration or 'parity' for exact match to a previous version.",
     "nranks": "MPI rank count for the run. 1 is faster on this machine",
@@ -1678,7 +1686,7 @@ def _sweep_signal_requires_voltage_summary(signal: Any) -> bool:
     if not isinstance(signal, str):
         return False
     normalized = signal.strip()
-    return normalized in {"mean_MC_voltage", "mean_TC_voltage", "mean_GC_voltage"}
+    return re.fullmatch(r"mean_[A-Z]+_voltage", normalized) is not None
 
 
 def _should_sync_sweep_voltage_summary(config: dict[str, Any] | None = None) -> bool:
@@ -7184,38 +7192,91 @@ def cell_type_of(name: Any) -> str:
     return match.group(1)
 
 
+def _ordered_cell_types(cell_types: list[str] | tuple[str, ...] | set[str]) -> list[str]:
+    """Return cell types in stable notebook display order."""
+    seen = {str(cell_type) for cell_type in cell_types}
+    ordered = [cell_type for cell_type in PRIMARY_CELL_TYPE_ORDER if cell_type in seen]
+    ordered.extend(sorted(cell_type for cell_type in seen if cell_type not in set(PRIMARY_CELL_TYPE_ORDER) and cell_type != "other"))
+    if "other" in seen:
+        ordered.append("other")
+    return ordered
+
+
+def _infer_grouped_cell_types_from_labels(labels: list[str] | tuple[str, ...]) -> list[str]:
+    """Infer ordered cell-family buckets from one list of saved labels."""
+    inferred = []
+    for label in labels:
+        try:
+            inferred.append(cell_type_of(label))
+        except ValueError:
+            inferred.append("other")
+    return _ordered_cell_types(inferred)
+
+
+def _cell_color(cell_type: str) -> str:
+    """Return a stable plotting color for one cell family."""
+    return CELL_TYPE_COLORS.get(str(cell_type), "tab:purple")
+
+
 def get_slice_dir(slice_name: str = "DorsalColumnSlice") -> Path:
     """Return the on-disk directory for a named slice export."""
     return REPO_ROOT / "olfactorybulb" / "slices" / str(slice_name)
 
 
 def load_slice_connectivity(slice_name: str = "DorsalColumnSlice") -> dict[str, Any]:
-    """Load the static glomerular and reciprocal connectivity JSON for a slice."""
+    """Load static group, glomerular, and synapse-set JSON for a slice."""
     slice_dir = get_slice_dir(slice_name)
     with open(slice_dir / "glom_cells.json") as f:
         glom_cells = json.load(f)
 
+    cell_groups = {}
+    for path in sorted(slice_dir.glob("*.json")):
+        if path.name in {"glom_cells.json"} or "__" in path.stem:
+            continue
+        with open(path) as f:
+            payload = json.load(f)
+        cell_groups[path.stem] = payload
+
     synapse_sets = {}
-    for synapse_set_name in ("GCs__MCs", "GCs__TCs"):
-        path = slice_dir / f"{synapse_set_name}.json"
-        if path.exists():
-            with open(path) as f:
-                synapse_sets[synapse_set_name] = json.load(f)["entries"]
+    for path in sorted(slice_dir.glob("*__*.json")):
+        with open(path) as f:
+            synapse_sets[path.stem] = json.load(f)["entries"]
 
     return {
         "slice_name": slice_name,
         "slice_dir": slice_dir,
         "glom_cells": glom_cells,
+        "cell_groups": cell_groups,
         "synapse_sets": synapse_sets,
     }
 
 
+def summarize_slice_connectivity(slice_name: str = "DorsalColumnSlice") -> dict[str, Any]:
+    """Return compact root-count and synapse-count summaries for one slice export."""
+    connectivity = load_slice_connectivity(slice_name=slice_name)
+    cell_groups = connectivity["cell_groups"]
+    synapse_sets = connectivity["synapse_sets"]
+    return {
+        "slice_name": slice_name,
+        "slice_dir": connectivity["slice_dir"],
+        "cell_group_counts": {
+            group_name: len(group_payload.get("roots", []))
+            for group_name, group_payload in sorted(cell_groups.items())
+        },
+        "synapse_set_counts": {
+            set_name: len(entries)
+            for set_name, entries in sorted(synapse_sets.items())
+        },
+    }
+
+
 def find_cell_drivers(cell_name: str, slice_name: str = "DorsalColumnSlice") -> dict[str, Any]:
-    """Summarize glomerular peers and reciprocal GC inputs for one cell."""
+    """Summarize glomerular peers and static synaptic connectivity for one cell."""
     target = normalize_cell_name(cell_name)
     target_type = cell_type_of(target)
     connectivity = load_slice_connectivity(slice_name=slice_name)
     glom_cells = connectivity["glom_cells"]
+    synapse_sets = connectivity["synapse_sets"]
 
     glomeruli = sorted(glom for glom, cells in glom_cells.items() if target in cells)
     glomerulus_members = {glom: list(glom_cells[glom]) for glom in glomeruli}
@@ -7243,12 +7304,22 @@ def find_cell_drivers(cell_name: str, slice_name: str = "DorsalColumnSlice") -> 
     source_counts = Counter()
     dest_section_counts = Counter()
     if reciprocal_set is not None:
-        entries = connectivity["synapse_sets"].get(reciprocal_set, [])
+        entries = synapse_sets.get(reciprocal_set, [])
         reciprocal_inputs = [
             row for row in entries if normalize_cell_name(row["dest_section"]) == target
         ]
         source_counts = Counter(normalize_cell_name(row["source_section"]) for row in reciprocal_inputs)
         dest_section_counts = Counter(row["dest_section"].split(".", 1)[1] for row in reciprocal_inputs)
+
+    incoming_by_set = {}
+    outgoing_by_set = {}
+    for set_name, entries in synapse_sets.items():
+        incoming = [row for row in entries if normalize_cell_name(row["dest_section"]) == target]
+        outgoing = [row for row in entries if normalize_cell_name(row["source_section"]) == target]
+        if incoming:
+            incoming_by_set[set_name] = incoming
+        if outgoing:
+            outgoing_by_set[set_name] = outgoing
 
     return {
         "target_cell": target,
@@ -7262,6 +7333,8 @@ def find_cell_drivers(cell_name: str, slice_name: str = "DorsalColumnSlice") -> 
         "reciprocal_inputs": reciprocal_inputs,
         "reciprocal_source_counts": dict(source_counts),
         "reciprocal_dest_section_counts": dict(dest_section_counts),
+        "incoming_synapses_by_set": incoming_by_set,
+        "outgoing_synapses_by_set": outgoing_by_set,
     }
 
 
@@ -8309,23 +8382,22 @@ def _saved_soma_spike_rows_by_type(
     max_cells_per_type: int,
     threshold: float | None = None,
 ) -> list[tuple[str, np.ndarray]] | None:
-    """Return saved spike rows grouped in MC/TC/GC order for raster plots."""
+    """Return saved spike rows grouped in stable cell-family order for rasters."""
     rows = _saved_soma_spike_rows(result, threshold=threshold)
     if rows is None:
         return None
 
-    grouped = {"MC": [], "TC": [], "GC": [], "other": []}
+    grouped: dict[str, list[tuple[str, np.ndarray]]] = {}
     for label, spikes in rows:
-        bucket = "other"
-        for candidate in ("MC", "TC", "GC"):
-            if label.startswith(candidate):
-                bucket = candidate
-                break
-        grouped[bucket].append((label, spikes))
+        try:
+            bucket = cell_type_of(label)
+        except ValueError:
+            bucket = "other"
+        grouped.setdefault(bucket, []).append((label, spikes))
 
     ordered = []
-    for cell_type in ("MC", "TC", "GC"):
-        ordered.extend(grouped[cell_type][:max_cells_per_type])
+    for cell_type in _ordered_cell_types(grouped.keys()):
+        ordered.extend(grouped.get(cell_type, [])[:max_cells_per_type])
     return ordered
 
 
@@ -8646,44 +8718,95 @@ def _plot_frequency_time_binned_from_samples(
     return ax
 
 
-def plot_spiking_frequencies(
-    result: dict[str, Any],
-    indices: list[int] | range | None = None,
-    ax: Any = None,
-    threshold: float | None = None,
-) -> Any:
-    """Plot instantaneous firing-rate traces for selected saved soma voltages."""
-    ax = ax or plt.subplots(figsize=(10, 6))[1]
-    soma_vs = result["soma_vs"]
-    if indices is None:
-        indices = range(len(soma_vs))
-
-    for i in indices:
-        label, t, v = soma_vs[i]
-        t_freq, spiking_hz = calculate_instantaneous_frequency(t, v, threshold=threshold)
-        if len(t_freq) > 0:
-            ax.plot(t_freq, spiking_hz, label=label)
-
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Frequency (Hz)")
-    ax.set_title("Instantaneous Spiking Frequencies")
-    if ax.lines:
-        ax.legend(loc="upper right", fontsize=8)
-    return ax
-
-
-
 def split_traces_by_type(result: dict[str, Any]) -> dict[str, list[tuple[str, np.ndarray, np.ndarray]]]:
     """Group saved soma traces by cell family prefix."""
-    grouped = {"MC": [], "TC": [], "GC": [], "other": []}
+    grouped: dict[str, list[tuple[str, np.ndarray, np.ndarray]]] = {}
     for label, t, v in result["soma_vs"]:
-        bucket = "other"
-        for candidate in ("MC", "TC", "GC"):
-            if label.startswith(candidate):
-                bucket = candidate
-                break
-        grouped[bucket].append((label, np.asarray(t, dtype=float), np.asarray(v, dtype=float)))
+        try:
+            bucket = cell_type_of(label)
+        except ValueError:
+            bucket = "other"
+        grouped.setdefault(bucket, []).append((label, np.asarray(t, dtype=float), np.asarray(v, dtype=float)))
     return grouped
+
+
+def list_available_cell_types(result: dict[str, Any]) -> list[str]:
+    """List saved cell families available for analysis in stable display order."""
+    inferred: list[str] = []
+
+    for label, _t, _v in result.get("soma_vs", []):
+        try:
+            inferred.append(cell_type_of(label))
+        except ValueError:
+            inferred.append("other")
+
+    voltage_summary = dict.get(result, "voltage_summary") or {}
+    for cell_type in voltage_summary.get("cell_types", []) or []:
+        inferred.append(str(cell_type))
+
+    soma_spikes = dict.get(result, "soma_spikes") or {}
+    for label in soma_spikes.get("labels", []) or []:
+        try:
+            inferred.append(cell_type_of(label))
+        except ValueError:
+            inferred.append("other")
+
+    return _ordered_cell_types(inferred)
+
+
+def list_available_soma_labels(result: dict[str, Any]) -> list[str]:
+    """List saved soma labels from raw traces or compact spike artifacts."""
+    labels: list[str] = []
+    seen: set[str] = set()
+
+    for label, _t, _v in result.get("soma_vs", []):
+        label = str(label)
+        if label not in seen:
+            seen.add(label)
+            labels.append(label)
+
+    soma_spikes = dict.get(result, "soma_spikes") or {}
+    for label in soma_spikes.get("labels", []) or []:
+        label = str(label)
+        if label not in seen:
+            seen.add(label)
+            labels.append(label)
+
+    return labels
+
+
+def list_available_named_signals(
+    result: dict[str, Any],
+    *,
+    include_soma_labels: bool = False,
+) -> list[str]:
+    """List named analysis signals currently resolvable for one loaded result."""
+    signals: list[str] = []
+
+    lfp_t = result.get("lfp_t")
+    lfp = result.get("lfp")
+    if lfp_t is not None and lfp is not None:
+        try:
+            if len(lfp_t) > 0 and len(lfp) > 0:
+                signals.append("lfp")
+        except TypeError:
+            pass
+
+    input_times = result.get("input_times") or []
+    if len(input_times) > 0:
+        signals.extend(["input_rate", "input_rate_MC", "input_rate_TC"])
+
+    gc_output_events = result.get("gc_output_events") or []
+    if len(gc_output_events) > 0:
+        signals.extend(["gc_output_rate", "gc_output_rate_MC", "gc_output_rate_TC"])
+
+    for cell_type in list_available_cell_types(result):
+        signals.append(f"mean_{cell_type}_voltage")
+
+    if include_soma_labels:
+        signals.extend(list_available_soma_labels(result))
+
+    return signals
 
 
 def filter_gc_output_events(
@@ -9148,8 +9271,9 @@ def get_named_signal(
             normalization="per_target_cell",
         )
 
-    if signal in {"mean_MC_voltage", "mean_TC_voltage", "mean_GC_voltage"}:
-        cell_type = signal.split("_", 1)[1].split("_", 1)[0]
+    mean_voltage_match = re.fullmatch(r"mean_([A-Z]+)_voltage", signal)
+    if mean_voltage_match is not None:
+        cell_type = mean_voltage_match.group(1)
         saved_signal = _saved_voltage_summary_signal(
             result,
             cell_type=cell_type,
@@ -9367,12 +9491,12 @@ def plot_voltage_traces(result: dict[str, Any], max_per_type: int = 4, ax: Any =
     """Plot a small representative subset of saved soma voltages."""
     ax = ax or plt.subplots(figsize=(14, 8))[1]
     grouped = split_traces_by_type(result)
+    ordered_cell_types = _ordered_cell_types(grouped.keys())
     offset = 0.0
-    colors = {"MC": "tab:blue", "TC": "tab:red", "GC": "tab:orange", "other": "tab:gray"}
-    for cell_type in ("MC", "TC", "GC"):
-        for label, t, v in grouped[cell_type][:max_per_type]:
-            ax.plot(t, v + offset, color=colors[cell_type], linewidth=1.0, label=label)
-            offset += 120.0 if cell_type != "GC" else 40.0
+    for cell_type in ordered_cell_types:
+        for label, t, v in grouped.get(cell_type, [])[:max_per_type]:
+            ax.plot(t, v + offset, color=_cell_color(cell_type), linewidth=1.0, label=label)
+            offset += 40.0 if cell_type == "GC" else 120.0
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Offset Voltage")
     ax.set_title("Sample Soma Voltages")
@@ -9397,8 +9521,8 @@ def plot_spike_raster(
     if saved_rows is None:
         grouped = split_traces_by_type(result)
         raw_rows = []
-        for cell_type in ("MC", "TC", "GC"):
-            raw_rows.extend(grouped[cell_type][:max_cells_per_type])
+        for cell_type in _ordered_cell_types(grouped.keys()):
+            raw_rows.extend(grouped.get(cell_type, [])[:max_cells_per_type])
         rows = [(label, detect_spikes(t, v, threshold=threshold)) for label, t, v in raw_rows]
     else:
         rows = saved_rows
@@ -9412,7 +9536,7 @@ def plot_spike_raster(
         for _label, spikes in rows
     ]
     colors = [
-        "tab:blue" if label.startswith("MC") else "tab:red" if label.startswith("TC") else "tab:orange"
+        _cell_color(cell_type_of(label) if re.match(r"([A-Z]+)", normalize_cell_name(label)) else "other")
         for label, _spikes in rows
     ]
     offsets = _style_raster_axis(

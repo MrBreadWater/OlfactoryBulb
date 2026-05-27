@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pickle
+import re
 from pathlib import Path
 from typing import Any
 
@@ -448,10 +449,17 @@ def load_soma_spike_artifact(path_or_dir: str | Path) -> dict[str, Any]:
 
 
 def _cell_type_for_label(label: str) -> str:
-    for candidate in ("MC", "TC", "GC"):
-        if str(label).startswith(candidate):
-            return candidate
-    return "other"
+    match = re.match(r"([A-Z]+)", str(label))
+    return match.group(1) if match else "other"
+
+
+def _cell_type_sort_key(cell_type: str) -> tuple[int, str]:
+    preferred = ("MC", "TC", "GC")
+    if cell_type in preferred:
+        return (preferred.index(cell_type), cell_type)
+    if cell_type == "other":
+        return (999, cell_type)
+    return (100, cell_type)
 
 
 def save_voltage_summary_artifact(
@@ -466,14 +474,14 @@ def save_voltage_summary_artifact(
         result_path = result_path / VOLTAGE_SUMMARY_FILENAME_NPZ
     result_path.parent.mkdir(parents=True, exist_ok=True)
 
-    grouped: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {key: [] for key in ("MC", "TC", "GC", "other")}
+    grouped: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {}
     for label, times, values in traces:
         t = np.asarray(times, dtype=np.float64)
         v = np.asarray(values, dtype=np.float64)
         count = min(len(t), len(v))
         if count <= 0:
             continue
-        grouped[_cell_type_for_label(str(label))].append((t[:count], v[:count]))
+        grouped.setdefault(_cell_type_for_label(str(label)), []).append((t[:count], v[:count]))
 
     dtype = np.dtype(dtype)
     cell_types: list[str] = []
@@ -492,7 +500,7 @@ def save_voltage_summary_artifact(
         "kurtosis": [],
     }
 
-    for cell_type in ("MC", "TC", "GC", "other"):
+    for cell_type in sorted(grouped.keys(), key=_cell_type_sort_key):
         rows = grouped[cell_type]
         if not rows:
             continue

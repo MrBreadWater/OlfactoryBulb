@@ -25,6 +25,7 @@ from olfactorybulb.epli import (
     epli_population_enabled,
     resolve_epli_model_spec,
 )
+from olfactorybulb.slicebuilder.config import slice_builder_env_kwargs
 from blenderneuron.blender.utils import fast_get, make_safe_filename
 from blenderneuron.blender.views.vectorconfinerview import VectorConfinerView
 from blenderneuron.blender.views.synapseformerview import SynapseFormerView
@@ -48,7 +49,7 @@ def auto_start(scene):
     sys.path.append(os.getcwd())
 
     # Create a slice builder class
-    sbb = bpy.types.Object.SliceBuilder = SliceBuilderBlender()
+    sbb = bpy.types.Object.SliceBuilder = SliceBuilderBlender(**slice_builder_env_kwargs())
 
     # from line_profiler import LineProfiler
     # lp = LineProfiler()
