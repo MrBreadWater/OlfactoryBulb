@@ -22,6 +22,15 @@ class AuditSpec:
 AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
     [
         (
+            "burton_urban_fi",
+            AuditSpec(
+                audit_id="burton_urban_fi",
+                title="Burton & Urban f-I validation audit",
+                description="Audit MC/TC f-I, AP-shape, and spike-train metrics against Burton & Urban 2014.",
+                module_path="olfactorybulb.audit.burton_urban_fi",
+            ),
+        ),
+        (
             "epli_correctness",
             AuditSpec(
                 audit_id="epli_correctness",
@@ -44,4 +53,3 @@ def get_audit_spec(audit_id: str) -> AuditSpec:
 
 def iter_audit_specs() -> Iterable[AuditSpec]:
     return AUDITS.values()
-
