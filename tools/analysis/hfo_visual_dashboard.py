@@ -753,10 +753,14 @@ def export_visual_dashboard(
     )
     index_path = output_path / "index.html"
     index_path.write_text(html_text)
+    server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
+    entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
     manifest = {
         "campaign_dir": str(campaign_path),
         "output_dir": str(output_path),
         "index_html": str(index_path),
+        "entrypoint_html": str(entrypoint_path),
+        "entrypoint_url_path": url_path,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "candidate_rows": len(rows),
         "packet_count": len(packets),
@@ -820,6 +824,34 @@ def _dashboard_server_root_and_url(output_path: Path, campaign_path: Path) -> tu
     return root, url_path
 
 
+def _write_dashboard_entrypoint(server_root: Path, dashboard_url_path: str) -> Path:
+    """Write a root index that opens the visual dashboard for static serving."""
+    index_path = server_root / "index.html"
+    index_path.parent.mkdir(parents=True, exist_ok=True)
+    href = dashboard_url_path if dashboard_url_path.startswith("/") else f"/{dashboard_url_path}"
+    index_path.write_text(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HFO Campaign Visual Dashboard</title>
+  <style>
+    html, body {{ margin: 0; width: 100%; height: 100%; overflow: hidden; }}
+    iframe {{ display: block; width: 100%; height: 100%; border: 0; }}
+    a {{ font: 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+  </style>
+</head>
+<body>
+  <iframe src="{_esc(href)}" title="HFO Campaign Visual Dashboard"></iframe>
+  <noscript><a href="{_esc(href)}">Open HFO Campaign Visual Dashboard</a></noscript>
+</body>
+</html>
+"""
+    )
+    return index_path
+
+
 def serve_visual_dashboard(
     campaign_dir: str | Path,
     *,
@@ -840,6 +872,7 @@ def serve_visual_dashboard(
     output_path = Path(manifest["output_dir"])
     campaign_path = Path(manifest["campaign_dir"])
     server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
+    entrypoint_path = Path(manifest.get("entrypoint_html") or _write_dashboard_entrypoint(server_root, url_path))
     command = [
         sys.executable,
         "-m",
@@ -850,7 +883,11 @@ def serve_visual_dashboard(
         "--directory",
         str(server_root),
     ]
-    print(f"Serving {output_path / 'index.html'} at http://{host}:{int(port)}{url_path}", flush=True)
+    print(
+        f"Serving {entrypoint_path} at http://{host}:{int(port)}/ "
+        f"(dashboard: http://{host}:{int(port)}{url_path})",
+        flush=True,
+    )
     subprocess.run(command, check=True)
 
 

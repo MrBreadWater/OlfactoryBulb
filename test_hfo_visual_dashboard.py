@@ -10,6 +10,7 @@ from tools.analysis.hfo_visual_dashboard import (
     _dashboard_server_root_and_url,
     _primary_psd_image,
     _render_packet_card,
+    _write_dashboard_entrypoint,
 )
 
 
@@ -66,3 +67,7 @@ with TemporaryDirectory() as tmp:
     server_root, url_path = _dashboard_server_root_and_url(dashboard, campaign)
     assert server_root == campaign
     assert url_path == "/visual_dashboard/"
+    entrypoint = _write_dashboard_entrypoint(server_root, url_path)
+    entrypoint_html = entrypoint.read_text()
+    assert 'src="/visual_dashboard/"' in entrypoint_html
+    assert "Directory listing" not in entrypoint_html
