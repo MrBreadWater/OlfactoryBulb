@@ -19,6 +19,9 @@ import math
 import os
 import re
 import shutil
+import signal
+import socket
+import subprocess
 import sys
 import threading
 import time
@@ -50,6 +53,9 @@ DEFAULT_TOP_N = 20
 DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
 DEFAULT_CLEANUP_STALE_PACKETS = True
+DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N = 0
+DEFAULT_WATCHDOG_SUPERVISE_S = 20.0
+DEFAULT_STALE_AFTER_S = 180.0
 GENERATE_PACKET_ENDPOINT = "/__hfo_generate_packet__"
 EXPECTED_SPECTROGRAM_FILES = dict(hfo_visuals.SPECTROGRAM_FILE_BY_CONDITION)
 EXPECTED_SPECTROGRAM_PIPELINE = str(hfo_visuals.SPECTROGRAM_PIPELINE["generator"])
@@ -57,6 +63,7 @@ EXPECTED_SPECTROGRAM_WINDOW_MS = float(hfo_visuals.NOTEBOOK_SPECTROGRAM_VISUAL_W
 SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json")
 PRIMARY_PSD_NAME_ORDER = tuple(hfo_visuals.PRIMARY_PSD_NAME_ORDER)
 _STYLE_SOURCE_SIGNATURE: tuple[int, int, int] = (0, 0, 0)
+RUNTIME_SUBDIR = ".runtime"
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,16 @@ class PacketInfo:
     images: tuple[Path, ...]
     manifest: dict[str, Any]
     mtime: float
+
+
+@dataclass(frozen=True)
+class RuntimeProcessInfo:
+    kind: str
+    pid: int
+    pid_path: Path
+    stdout_path: Path
+    stderr_path: Path
+    meta: dict[str, Any]
 
 
 def _safe_float(value: Any) -> float | None:
@@ -104,6 +121,181 @@ def _read_json(path: Path) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError):
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+    os.replace(tmp, path)
+
+
+def _wait_with_stop(delay_s: float, stop_event: threading.Event | None) -> None:
+    if stop_event is None:
+        time.sleep(max(float(delay_s), 0.0))
+        return
+    stop_event.wait(timeout=max(float(delay_s), 0.0))
+
+
+def _runtime_dir(output_path: Path) -> Path:
+    return output_path / RUNTIME_SUBDIR
+
+
+def _runtime_process_paths(output_path: Path, kind: str) -> dict[str, Path]:
+    runtime_dir = _runtime_dir(output_path)
+    return {
+        "runtime_dir": runtime_dir,
+        "pid": runtime_dir / f"{kind}.pid.json",
+        "stdout": runtime_dir / f"{kind}.stdout.log",
+        "stderr": runtime_dir / f"{kind}.stderr.log",
+    }
+
+
+def _pid_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        os.kill(int(pid), 0)
+    except OSError:
+        return False
+    return True
+
+
+def _process_cmdline(pid: int) -> str:
+    try:
+        raw = Path(f"/proc/{int(pid)}/cmdline").read_bytes()
+    except OSError:
+        return ""
+    return raw.replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip()
+
+
+def _process_matches_tokens(pid: int, expected_tokens: list[str]) -> bool:
+    cmdline = _process_cmdline(pid)
+    if not cmdline:
+        return False
+    return all(token in cmdline for token in expected_tokens)
+
+
+def _matching_pids(expected_tokens: list[str]) -> list[int]:
+    matches: list[int] = []
+    for proc_dir in Path("/proc").iterdir():
+        if not proc_dir.name.isdigit():
+            continue
+        pid = int(proc_dir.name)
+        if _process_matches_tokens(pid, expected_tokens):
+            matches.append(pid)
+    return sorted(set(matches))
+
+
+def _read_runtime_process_info(output_path: Path, kind: str) -> RuntimeProcessInfo | None:
+    paths = _runtime_process_paths(output_path, kind)
+    payload = _read_json(paths["pid"])
+    pid = int(payload.get("pid") or 0)
+    if pid <= 0:
+        return None
+    return RuntimeProcessInfo(
+        kind=kind,
+        pid=pid,
+        pid_path=paths["pid"],
+        stdout_path=paths["stdout"],
+        stderr_path=paths["stderr"],
+        meta=payload,
+    )
+
+
+def _terminate_process(pid: int, *, grace_s: float = 5.0) -> None:
+    if pid <= 0 or not _pid_is_alive(pid):
+        return
+    try:
+        pgid = os.getpgid(int(pid))
+    except OSError:
+        pgid = None
+    try:
+        if pgid is not None and pgid > 0:
+            os.killpg(pgid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
+    except OSError:
+        return
+    deadline = time.time() + max(float(grace_s), 0.0)
+    while time.time() < deadline:
+        if not _pid_is_alive(pid):
+            return
+        time.sleep(0.1)
+    try:
+        if pgid is not None and pgid > 0:
+            os.killpg(pgid, signal.SIGKILL)
+        else:
+            os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return
+
+
+def _spawn_detached_process(
+    command: list[str],
+    *,
+    cwd: Path,
+    stdout_path: Path,
+    stderr_path: Path,
+    meta_path: Path,
+    meta: dict[str, Any],
+) -> RuntimeProcessInfo:
+    stdout_path.parent.mkdir(parents=True, exist_ok=True)
+    with stdout_path.open("ab") as stdout_handle, stderr_path.open("ab") as stderr_handle:
+        proc = subprocess.Popen(
+            command,
+            cwd=str(cwd),
+            stdin=subprocess.DEVNULL,
+            stdout=stdout_handle,
+            stderr=stderr_handle,
+            start_new_session=True,
+        )
+    payload = dict(meta)
+    payload.update(
+        {
+            "pid": int(proc.pid),
+            "command": list(command),
+            "cwd": str(cwd),
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+        }
+    )
+    _write_json_atomic(meta_path, payload)
+    return RuntimeProcessInfo(
+        kind=str(meta.get("kind") or ""),
+        pid=int(proc.pid),
+        pid_path=meta_path,
+        stdout_path=stdout_path,
+        stderr_path=stderr_path,
+        meta=payload,
+    )
+
+
+def _port_in_use(host: str, port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, int(port)))
+        except OSError:
+            return True
+    return False
+
+
+def _watch_sources_mtime(campaign_path: Path, status_path: Path) -> float:
+    paths = [
+        campaign_path / "candidate_archive.jsonl",
+        campaign_path / "figures",
+        status_path,
+    ]
+    return max((path.stat().st_mtime for path in paths if path.exists()), default=0.0)
+
+
+def _dashboard_outputs_mtime(output_path: Path) -> float:
+    paths = [
+        output_path / "index.html",
+        output_path / "manifest.json",
+        output_path / "live_packet_manifest.json",
+    ]
+    return max((path.stat().st_mtime for path in paths if path.exists()), default=0.0)
 
 
 def _candidate_id_from_path(path: Path) -> str | None:
@@ -1575,35 +1767,440 @@ def watch_visual_dashboard(
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
+    stop_event: threading.Event | None = None,
 ) -> None:
     campaign_path = Path(campaign_dir).expanduser().resolve()
     archive = campaign_path / "candidate_archive.jsonl"
     figures = campaign_path / "figures"
     last_signature: tuple[int, ...] | None = None
     while True:
+        if stop_event is not None and stop_event.is_set():
+            return
         archive_sig = int(archive.stat().st_mtime_ns if archive.exists() else 0) ^ int(archive.stat().st_size if archive.exists() else 0)
         figures_sig = int(figures.stat().st_mtime_ns if figures.exists() else 0)
         status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
         status_sig = int(status_path.stat().st_mtime_ns if status_path.exists() else 0)
         signature = (archive_sig, figures_sig, status_sig, *_style_source_signature())
-        if signature != last_signature:
-            manifest = export_visual_dashboard(
-                campaign_path,
-                output_dir=output_dir,
-                top_n=top_n,
-                refresh_s=refresh_s,
-                generate_packets_top_n=generate_packets_top_n,
-                generate_packet_workers=generate_packet_workers,
-                cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-                status_json=status_path,
-            )
+        try:
+            if signature != last_signature:
+                manifest = export_visual_dashboard(
+                    campaign_path,
+                    output_dir=output_dir,
+                    top_n=top_n,
+                    refresh_s=refresh_s,
+                    generate_packets_top_n=generate_packets_top_n,
+                    generate_packet_workers=generate_packet_workers,
+                    cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                    status_json=status_path,
+                )
+                print(
+                    "Wrote visual dashboard for {candidate_rows} candidates "
+                    "({packet_count} packets) to {index_html}".format(**manifest),
+                    flush=True,
+                )
+                last_signature = signature
+        except Exception as exc:  # pragma: no cover - retry behavior exercised through regression script
             print(
-                "Wrote visual dashboard for {candidate_rows} candidates "
-                "({packet_count} packets) to {index_html}".format(**manifest),
+                f"[HFO dashboard watch] export failed: {exc!r}. Will retry after {max(float(refresh_s), 1.0):.1f}s",
                 flush=True,
             )
-            last_signature = signature
-        time.sleep(max(float(refresh_s), 1.0))
+        _wait_with_stop(max(float(refresh_s), 1.0), stop_event)
+
+
+def _dashboard_runtime_command(
+    subcommand: str,
+    campaign_path: Path,
+    *,
+    output_path: Path,
+    top_n: int,
+    refresh_s: float,
+    generate_packets_top_n: int,
+    generate_packet_workers: int,
+    cleanup_stale_packets_before_render: bool,
+    status_path: Path,
+    host: str | None = None,
+    port: int | None = None,
+    supervise_s: float | None = None,
+    stale_after_s: float | None = None,
+) -> list[str]:
+    command = [
+        sys.executable,
+        str(Path(__file__).resolve()),
+        str(subcommand),
+        str(campaign_path),
+        "--output-dir",
+        str(output_path),
+        "--top-n",
+        str(int(top_n)),
+        "--refresh-s",
+        str(float(refresh_s)),
+        "--generate-packets-top-n",
+        str(int(generate_packets_top_n)),
+        "--generate-packet-workers",
+        str(int(generate_packet_workers)),
+        "--status-json",
+        str(status_path),
+    ]
+    if not cleanup_stale_packets_before_render:
+        command.append("--no-cleanup-stale-packets")
+    if host is not None:
+        command.extend(["--host", str(host)])
+    if port is not None:
+        command.extend(["--port", str(int(port))])
+    if supervise_s is not None:
+        command.extend(["--supervise-s", str(float(supervise_s))])
+    if stale_after_s is not None:
+        command.extend(["--stale-after-s", str(float(stale_after_s))])
+    return command
+
+
+def _watcher_is_stale(
+    campaign_path: Path,
+    output_path: Path,
+    *,
+    status_path: Path,
+    refresh_s: float,
+    stale_after_s: float,
+) -> bool:
+    sources_mtime = _watch_sources_mtime(campaign_path, status_path)
+    outputs_mtime = _dashboard_outputs_mtime(output_path)
+    if outputs_mtime <= 0.0:
+        return True
+    allowed_lag_s = max(float(stale_after_s), 2.5 * max(float(refresh_s), 1.0))
+    return (sources_mtime - outputs_mtime) > allowed_lag_s
+
+
+def _ensure_visual_dashboard_sidecars(
+    campaign_dir: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    top_n: int = DEFAULT_TOP_N,
+    refresh_s: float = DEFAULT_REFRESH_S,
+    generate_packets_top_n: int = DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
+    status_json: str | Path | None = None,
+    host: str = "127.0.0.1",
+    port: int = 6006,
+    stale_after_s: float = DEFAULT_STALE_AFTER_S,
+) -> dict[str, Any]:
+    campaign_path = Path(campaign_dir).expanduser().resolve()
+    output_path = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else campaign_path / DEFAULT_OUTPUT_SUBDIR
+    )
+    output_path.mkdir(parents=True, exist_ok=True)
+    status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
+    runtime_dir = _runtime_dir(output_path)
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+
+    result: dict[str, Any] = {
+        "campaign_dir": str(campaign_path),
+        "output_dir": str(output_path),
+        "runtime_dir": str(runtime_dir),
+        "status_json": str(status_path),
+        "host": str(host),
+        "port": int(port),
+    }
+
+    watcher_cmd = _dashboard_runtime_command(
+        "watch",
+        campaign_path,
+        output_path=output_path,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_path=status_path,
+    )
+    watcher_info = _read_runtime_process_info(output_path, "watcher")
+    watcher_expected_tokens = [str(Path(__file__).resolve()), " watch ", str(campaign_path)]
+    watcher_alive = (
+        watcher_info is not None
+        and _pid_is_alive(watcher_info.pid)
+        and _process_matches_tokens(watcher_info.pid, watcher_expected_tokens)
+    )
+    watcher_stale = _watcher_is_stale(
+        campaign_path,
+        output_path,
+        status_path=status_path,
+        refresh_s=refresh_s,
+        stale_after_s=stale_after_s,
+    )
+    if watcher_alive and watcher_stale and watcher_info is not None:
+        _terminate_process(watcher_info.pid)
+        watcher_alive = False
+    if not watcher_alive:
+        paths = _runtime_process_paths(output_path, "watcher")
+        watcher_info = _spawn_detached_process(
+            watcher_cmd,
+            cwd=REPO_ROOT,
+            stdout_path=paths["stdout"],
+            stderr_path=paths["stderr"],
+            meta_path=paths["pid"],
+            meta={
+                "kind": "watcher",
+                "campaign_dir": str(campaign_path),
+                "output_dir": str(output_path),
+            },
+        )
+        watcher_alive = True
+    result["watcher"] = {
+        "pid": watcher_info.pid if watcher_info is not None else None,
+        "alive": bool(watcher_alive),
+        "stale": bool(watcher_stale),
+        "stdout_log": str(_runtime_process_paths(output_path, "watcher")["stdout"]),
+        "stderr_log": str(_runtime_process_paths(output_path, "watcher")["stderr"]),
+    }
+
+    server_info = _read_runtime_process_info(output_path, "server")
+    server_expected_tokens = [str(Path(__file__).resolve()), " serve-static ", str(campaign_path)]
+    server_alive = (
+        server_info is not None
+        and _pid_is_alive(server_info.pid)
+        and _process_matches_tokens(server_info.pid, server_expected_tokens)
+    )
+    external_port_in_use = _port_in_use(host, port)
+    if not server_alive and not external_port_in_use:
+        paths = _runtime_process_paths(output_path, "server")
+        server_cmd = _dashboard_runtime_command(
+            "serve-static",
+            campaign_path,
+            output_path=output_path,
+            top_n=top_n,
+            refresh_s=refresh_s,
+            generate_packets_top_n=generate_packets_top_n,
+            generate_packet_workers=generate_packet_workers,
+            cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+            status_path=status_path,
+            host=host,
+            port=port,
+        )
+        server_info = _spawn_detached_process(
+            server_cmd,
+            cwd=REPO_ROOT,
+            stdout_path=paths["stdout"],
+            stderr_path=paths["stderr"],
+            meta_path=paths["pid"],
+            meta={
+                "kind": "server",
+                "campaign_dir": str(campaign_path),
+                "output_dir": str(output_path),
+                "host": str(host),
+                "port": int(port),
+            },
+        )
+        server_alive = True
+        external_port_in_use = True
+    result["server"] = {
+        "pid": server_info.pid if server_info is not None else None,
+        "alive": bool(server_alive),
+        "external_port_in_use": bool(external_port_in_use),
+        "stdout_log": str(_runtime_process_paths(output_path, "server")["stdout"]),
+        "stderr_log": str(_runtime_process_paths(output_path, "server")["stderr"]),
+    }
+    _write_json_atomic(runtime_dir / "sidecars.status.json", result)
+    return result
+
+
+def watch_visual_dashboard_runtime(
+    campaign_dir: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    top_n: int = DEFAULT_TOP_N,
+    refresh_s: float = DEFAULT_REFRESH_S,
+    generate_packets_top_n: int = DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
+    status_json: str | Path | None = None,
+    host: str = "127.0.0.1",
+    port: int = 6006,
+    supervise_s: float = DEFAULT_WATCHDOG_SUPERVISE_S,
+    stale_after_s: float = DEFAULT_STALE_AFTER_S,
+) -> None:
+    campaign_path = Path(campaign_dir).expanduser().resolve()
+    output_path = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else campaign_path / DEFAULT_OUTPUT_SUBDIR
+    )
+    runtime_dir = _runtime_dir(output_path)
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    pid_paths = _runtime_process_paths(output_path, "watchdog")
+    _write_json_atomic(
+        pid_paths["pid"],
+        {
+            "kind": "watchdog",
+            "campaign_dir": str(campaign_path),
+            "output_dir": str(output_path),
+            "pid": int(os.getpid()),
+            "command": list(sys.argv),
+            "started_at": datetime.now().isoformat(timespec="seconds"),
+        },
+    )
+    status_file = runtime_dir / "watchdog.status.json"
+    try:
+        while True:
+            status_payload: dict[str, Any]
+            try:
+                status_payload = _ensure_visual_dashboard_sidecars(
+                    campaign_path,
+                    output_dir=output_path,
+                    top_n=top_n,
+                    refresh_s=refresh_s,
+                    generate_packets_top_n=generate_packets_top_n,
+                    generate_packet_workers=generate_packet_workers,
+                    cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                    status_json=status_json,
+                    host=host,
+                    port=port,
+                    stale_after_s=stale_after_s,
+                )
+                status_payload["watchdog"] = {
+                    "pid": int(os.getpid()),
+                    "ok": True,
+                    "updated_at": datetime.now().isoformat(timespec="seconds"),
+                }
+            except Exception as exc:  # pragma: no cover - exercised through live runtime, not unit tests
+                status_payload = {
+                    "campaign_dir": str(campaign_path),
+                    "output_dir": str(output_path),
+                    "watchdog": {
+                        "pid": int(os.getpid()),
+                        "ok": False,
+                        "updated_at": datetime.now().isoformat(timespec="seconds"),
+                        "error": repr(exc),
+                    },
+                }
+                print(f"[HFO dashboard runtime] ensure failed: {exc!r}", flush=True)
+            _write_json_atomic(status_file, status_payload)
+            time.sleep(max(float(supervise_s), 1.0))
+    finally:
+        watcher_info = _read_runtime_process_info(output_path, "watcher")
+        if watcher_info is not None:
+            _terminate_process(watcher_info.pid)
+        server_info = _read_runtime_process_info(output_path, "server")
+        if server_info is not None:
+            _terminate_process(server_info.pid)
+
+
+def ensure_visual_dashboard_runtime(
+    campaign_dir: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    top_n: int = DEFAULT_TOP_N,
+    refresh_s: float = DEFAULT_REFRESH_S,
+    generate_packets_top_n: int = DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
+    status_json: str | Path | None = None,
+    host: str = "127.0.0.1",
+    port: int = 6006,
+    supervise_s: float = DEFAULT_WATCHDOG_SUPERVISE_S,
+    stale_after_s: float = DEFAULT_STALE_AFTER_S,
+) -> dict[str, Any]:
+    campaign_path = Path(campaign_dir).expanduser().resolve()
+    output_path = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else campaign_path / DEFAULT_OUTPUT_SUBDIR
+    )
+    runtime_dir = _runtime_dir(output_path)
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    watchdog_info = _read_runtime_process_info(output_path, "watchdog")
+    watchdog_expected_tokens = [str(Path(__file__).resolve()), " watchdog ", str(campaign_path)]
+    watchdog_alive = (
+        watchdog_info is not None
+        and _pid_is_alive(watchdog_info.pid)
+        and _process_matches_tokens(watchdog_info.pid, watchdog_expected_tokens)
+    )
+    if not watchdog_alive:
+        paths = _runtime_process_paths(output_path, "watchdog")
+        command = _dashboard_runtime_command(
+            "watchdog",
+            campaign_path,
+            output_path=output_path,
+            top_n=top_n,
+            refresh_s=refresh_s,
+            generate_packets_top_n=generate_packets_top_n,
+            generate_packet_workers=generate_packet_workers,
+            cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+            status_path=Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH),
+            host=host,
+            port=port,
+            supervise_s=supervise_s,
+            stale_after_s=stale_after_s,
+        )
+        watchdog_info = _spawn_detached_process(
+            command,
+            cwd=REPO_ROOT,
+            stdout_path=paths["stdout"],
+            stderr_path=paths["stderr"],
+            meta_path=paths["pid"],
+            meta={
+                "kind": "watchdog",
+                "campaign_dir": str(campaign_path),
+                "output_dir": str(output_path),
+                "host": str(host),
+                "port": int(port),
+            },
+        )
+        watchdog_alive = True
+    status_file = runtime_dir / "watchdog.status.json"
+    return {
+        "campaign_dir": str(campaign_path),
+        "output_dir": str(output_path),
+        "runtime_dir": str(runtime_dir),
+        "watchdog": {
+            "pid": watchdog_info.pid if watchdog_info is not None else None,
+            "alive": bool(watchdog_alive),
+            "stdout_log": str(_runtime_process_paths(output_path, "watchdog")["stdout"]),
+            "stderr_log": str(_runtime_process_paths(output_path, "watchdog")["stderr"]),
+            "status_file": str(status_file),
+        },
+        "sidecars": _read_json(status_file),
+    }
+
+
+def stop_visual_dashboard_runtime(
+    campaign_dir: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+) -> dict[str, Any]:
+    campaign_path = Path(campaign_dir).expanduser().resolve()
+    output_path = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else campaign_path / DEFAULT_OUTPUT_SUBDIR
+    )
+    stopped: dict[str, Any] = {"campaign_dir": str(campaign_path), "output_dir": str(output_path)}
+    token_map = {
+        "watchdog": [str(Path(__file__).resolve()), " watchdog ", str(campaign_path)],
+        "watcher": [str(Path(__file__).resolve()), " watch ", str(campaign_path)],
+        "server": [str(Path(__file__).resolve()), " serve-static ", str(campaign_path)],
+    }
+    for kind in ("watchdog", "watcher", "server"):
+        info = _read_runtime_process_info(output_path, kind)
+        killed_pids: list[int] = []
+        if info is None:
+            pid = None
+        else:
+            pid = info.pid
+            _terminate_process(info.pid)
+            killed_pids.append(int(info.pid))
+        for match_pid in _matching_pids(token_map[kind]):
+            if match_pid == os.getpid():
+                continue
+            _terminate_process(match_pid)
+            killed_pids.append(int(match_pid))
+        stopped[kind] = {
+            "pid": pid,
+            "stopped": bool(killed_pids),
+            "killed_pids": sorted(set(killed_pids)),
+        }
+    return stopped
 
 
 def _dashboard_server_root_and_url(output_path: Path, campaign_path: Path) -> tuple[Path, str]:
@@ -1674,8 +2271,46 @@ def serve_visual_dashboard(
     )
     output_path = Path(manifest["output_dir"])
     campaign_path = Path(manifest["campaign_dir"])
+    _serve_dashboard_server(
+        campaign_path,
+        output_path,
+        output_dir=output_dir,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
+        host=host,
+        port=port,
+        entrypoint_path=Path(manifest.get("entrypoint_html") or ""),
+    )
+
+
+def _serve_dashboard_server(
+    campaign_path: Path,
+    output_path: Path,
+    *,
+    output_dir: str | Path | None,
+    top_n: int,
+    refresh_s: float,
+    generate_packets_top_n: int,
+    generate_packet_workers: int,
+    cleanup_stale_packets_before_render: bool,
+    status_json: str | Path | None,
+    host: str,
+    port: int,
+    entrypoint_path: Path | None = None,
+) -> None:
+    output_path = Path(output_path).expanduser().resolve()
+    campaign_path = Path(campaign_path).expanduser().resolve()
     server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
-    entrypoint_path = Path(manifest.get("entrypoint_html") or _write_dashboard_entrypoint(server_root, url_path))
+    if entrypoint_path is None or not str(entrypoint_path):
+        entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
+    else:
+        entrypoint_path = Path(entrypoint_path)
+        if not entrypoint_path.exists():
+            entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
     generation_lock = threading.Lock()
 
     class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
@@ -1744,11 +2379,50 @@ def serve_visual_dashboard(
         server.server_close()
 
 
+def serve_existing_visual_dashboard(
+    campaign_dir: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    top_n: int = DEFAULT_TOP_N,
+    refresh_s: float = DEFAULT_REFRESH_S,
+    generate_packets_top_n: int = DEFAULT_GENERATE_PACKETS_TOP_N,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
+    status_json: str | Path | None = None,
+    host: str = "127.0.0.1",
+    port: int = 6006,
+) -> None:
+    campaign_path = Path(campaign_dir).expanduser().resolve()
+    output_path = (
+        Path(output_dir).expanduser().resolve()
+        if output_dir is not None
+        else campaign_path / DEFAULT_OUTPUT_SUBDIR
+    )
+    output_path.mkdir(parents=True, exist_ok=True)
+    _serve_dashboard_server(
+        campaign_path,
+        output_path,
+        output_dir=output_dir,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
+        host=host,
+        port=port,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    def add_common(subparser: argparse.ArgumentParser) -> None:
+    def add_common(
+        subparser: argparse.ArgumentParser,
+        *,
+        generate_packets_top_n_default: int = DEFAULT_GENERATE_PACKETS_TOP_N,
+    ) -> None:
         subparser.add_argument("campaign_dir", type=Path)
         subparser.add_argument("--output-dir", type=Path, default=None)
         subparser.add_argument("--top-n", type=int, default=DEFAULT_TOP_N)
@@ -1756,7 +2430,7 @@ def _build_parser() -> argparse.ArgumentParser:
         subparser.add_argument(
             "--generate-packets-top-n",
             type=int,
-            default=DEFAULT_GENERATE_PACKETS_TOP_N,
+            default=generate_packets_top_n_default,
             help=(
                 "Generate missing diagnostic packets for the current top N candidates before rendering."
                 " Use 0 to disable and rely on precomputed packets."
@@ -1775,6 +2449,12 @@ def _build_parser() -> argparse.ArgumentParser:
         )
         subparser.add_argument("--status-json", type=Path, default=None)
 
+    def add_runtime(subparser: argparse.ArgumentParser) -> None:
+        subparser.add_argument("--host", default="127.0.0.1")
+        subparser.add_argument("--port", type=int, default=6006)
+        subparser.add_argument("--supervise-s", type=float, default=DEFAULT_WATCHDOG_SUPERVISE_S)
+        subparser.add_argument("--stale-after-s", type=float, default=DEFAULT_STALE_AFTER_S)
+
     export_parser = subparsers.add_parser("export", help="Write the dashboard once.")
     add_common(export_parser)
 
@@ -1783,8 +2463,35 @@ def _build_parser() -> argparse.ArgumentParser:
 
     serve_parser = subparsers.add_parser("serve", help="Write once and serve the dashboard over HTTP.")
     add_common(serve_parser)
-    serve_parser.add_argument("--host", default="127.0.0.1")
-    serve_parser.add_argument("--port", type=int, default=6006)
+    add_runtime(serve_parser)
+
+    serve_static_parser = subparsers.add_parser(
+        "serve-static",
+        help="Serve the existing dashboard directory over HTTP without forcing a fresh export.",
+    )
+    add_common(serve_static_parser, generate_packets_top_n_default=DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N)
+    add_runtime(serve_static_parser)
+
+    watchdog_parser = subparsers.add_parser(
+        "watchdog",
+        help="Supervise the dashboard watcher/server sidecars and restart them if they die or go stale.",
+    )
+    add_common(watchdog_parser, generate_packets_top_n_default=DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N)
+    add_runtime(watchdog_parser)
+
+    ensure_parser = subparsers.add_parser(
+        "ensure-runtime",
+        help="Ensure the dashboard watchdog is running for this campaign.",
+    )
+    add_common(ensure_parser, generate_packets_top_n_default=DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N)
+    add_runtime(ensure_parser)
+
+    stop_parser = subparsers.add_parser(
+        "stop-runtime",
+        help="Stop the dashboard watchdog and its sidecars for this campaign.",
+    )
+    stop_parser.add_argument("campaign_dir", type=Path)
+    stop_parser.add_argument("--output-dir", type=Path, default=None)
     return parser
 
 
@@ -1827,6 +2534,56 @@ def main(argv: list[str] | None = None) -> None:
             host=args.host,
             port=args.port,
         )
+    elif args.command == "serve-static":
+        serve_existing_visual_dashboard(
+            args.campaign_dir,
+            output_dir=args.output_dir,
+            top_n=args.top_n,
+            refresh_s=args.refresh_s,
+            generate_packets_top_n=args.generate_packets_top_n,
+            generate_packet_workers=args.generate_packet_workers,
+            cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
+            status_json=args.status_json,
+            host=args.host,
+            port=args.port,
+        )
+    elif args.command == "watchdog":
+        watch_visual_dashboard_runtime(
+            args.campaign_dir,
+            output_dir=args.output_dir,
+            top_n=args.top_n,
+            refresh_s=args.refresh_s,
+            generate_packets_top_n=args.generate_packets_top_n,
+            generate_packet_workers=args.generate_packet_workers,
+            cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
+            status_json=args.status_json,
+            host=args.host,
+            port=args.port,
+            supervise_s=args.supervise_s,
+            stale_after_s=args.stale_after_s,
+        )
+    elif args.command == "ensure-runtime":
+        payload = ensure_visual_dashboard_runtime(
+            args.campaign_dir,
+            output_dir=args.output_dir,
+            top_n=args.top_n,
+            refresh_s=args.refresh_s,
+            generate_packets_top_n=args.generate_packets_top_n,
+            generate_packet_workers=args.generate_packet_workers,
+            cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
+            status_json=args.status_json,
+            host=args.host,
+            port=args.port,
+            supervise_s=args.supervise_s,
+            stale_after_s=args.stale_after_s,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    elif args.command == "stop-runtime":
+        payload = stop_visual_dashboard_runtime(
+            args.campaign_dir,
+            output_dir=args.output_dir,
+        )
+        print(json.dumps(payload, indent=2, sort_keys=True))
     else:
         parser.error(f"Unsupported command {args.command!r}")
 

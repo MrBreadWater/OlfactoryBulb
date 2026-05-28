@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import threading
 import types
 from unittest.mock import patch
 
@@ -26,6 +27,7 @@ from tools.analysis.generate_hfo_candidate_packet import (
 from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
     _dashboard_server_root_and_url,
+    _ensure_visual_dashboard_sidecars,
     _effective_packet_generation_workers,
     _generate_missing_packets,
     _load_ranked_rows,
@@ -35,6 +37,7 @@ from tools.analysis.hfo_visual_dashboard import (
     _render_html,
     _render_packet_card,
     _write_dashboard_entrypoint,
+    ensure_visual_dashboard_runtime,
     find_candidate_packets,
 )
 from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
@@ -499,3 +502,116 @@ with TemporaryDirectory() as tmp:
 
     assert sorted(captured) == ["C00001", "C00002", "C00003"]
     assert len(generated) == 3
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    (campaign / "figures").mkdir(parents=True)
+    (campaign / "candidate_archive.jsonl").write_text("{}\n")
+    status_json = campaign / "status.json"
+    status_json.write_text("{}\n")
+    stop_event = threading.Event()
+    calls: list[str] = []
+
+    def flaky_export(*args, **kwargs):
+        calls.append("export")
+        if len(calls) == 1:
+            raise RuntimeError("transient export failure")
+        stop_event.set()
+        return {
+            "campaign_dir": str(campaign),
+            "output_dir": str(campaign / "visual_dashboard"),
+            "index_html": str(campaign / "visual_dashboard" / "index.html"),
+            "entrypoint_html": str(campaign / "index.html"),
+            "entrypoint_url_path": "/visual_dashboard/",
+            "generated_at": "2026-05-28T16:20:00",
+            "candidate_rows": 1,
+            "packet_count": 0,
+            "generated_packets": [],
+            "generate_packet_workers": 1,
+            "cleanup_stale_packets_before_render": True,
+            "top_candidate_id": None,
+            "top_score": None,
+        }
+
+    with patch.object(hfo_vd, "export_visual_dashboard", side_effect=flaky_export):
+        hfo_vd.watch_visual_dashboard(
+            campaign,
+            output_dir=campaign / "visual_dashboard",
+            refresh_s=0.01,
+            generate_packets_top_n=0,
+            status_json=status_json,
+            stop_event=stop_event,
+        )
+
+    assert len(calls) == 2
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    status_json = campaign / "status.json"
+    output_dir.mkdir(parents=True)
+    status_json.write_text("{}\n")
+    spawned_kinds: list[str] = []
+
+    def fake_spawn(command, *, cwd, stdout_path, stderr_path, meta_path, meta):
+        kind = str(meta["kind"])
+        spawned_kinds.append(kind)
+        return hfo_vd.RuntimeProcessInfo(
+            kind=kind,
+            pid=1000 + len(spawned_kinds),
+            pid_path=meta_path,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            meta={**meta, "pid": 1000 + len(spawned_kinds), "command": list(command)},
+        )
+
+    with (
+        patch.object(hfo_vd, "export_visual_dashboard", return_value={"output_dir": str(output_dir)}),
+        patch.object(hfo_vd, "_read_runtime_process_info", return_value=None),
+        patch.object(hfo_vd, "_spawn_detached_process", side_effect=fake_spawn),
+        patch.object(hfo_vd, "_port_in_use", return_value=False),
+    ):
+        payload = _ensure_visual_dashboard_sidecars(
+            campaign,
+            output_dir=output_dir,
+            generate_packets_top_n=0,
+            status_json=status_json,
+        )
+
+    assert spawned_kinds == ["watcher", "server"]
+    assert payload["watcher"]["alive"] is True
+    assert payload["server"]["alive"] is True
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    status_file = output_dir / hfo_vd.RUNTIME_SUBDIR / "watchdog.status.json"
+    status_file.parent.mkdir(parents=True, exist_ok=True)
+    status_file.write_text(json.dumps({"watcher": {"alive": True}}))
+
+    with (
+        patch.object(hfo_vd, "_read_runtime_process_info", return_value=None),
+        patch.object(
+            hfo_vd,
+            "_spawn_detached_process",
+            return_value=hfo_vd.RuntimeProcessInfo(
+                kind="watchdog",
+                pid=4242,
+                pid_path=status_file.parent / "watchdog.pid.json",
+                stdout_path=status_file.parent / "watchdog.stdout.log",
+                stderr_path=status_file.parent / "watchdog.stderr.log",
+                meta={"kind": "watchdog", "pid": 4242},
+            ),
+        ) as spawn_mock,
+    ):
+        payload = ensure_visual_dashboard_runtime(
+            campaign,
+            output_dir=output_dir,
+            generate_packets_top_n=0,
+            status_json=campaign / "status.json",
+            port=6006,
+        )
+
+    spawn_mock.assert_called_once()
+    assert payload["watchdog"]["alive"] is True
+    assert payload["watchdog"]["pid"] == 4242
