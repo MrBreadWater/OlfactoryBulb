@@ -39,7 +39,7 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
-VISUAL_STYLE_VERSION = 7
+VISUAL_STYLE_VERSION = 10
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
@@ -55,27 +55,28 @@ SPECTROGRAM_PIPELINE = {
     "source_metric": "windowed.result['lfp']",
     "generator": SPECTROGRAM_GENERATOR_ID,
 }
-NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT = 12
+NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT = 16
 NOTEBOOK_SPECTROGRAM_MIN_NPERSEG = 128
 NOTEBOOK_SPECTROGRAM_MAX_NPERSEG = 1024
-NOTEBOOK_SPECTROGRAM_NPERSEG = NOTEBOOK_SPECTROGRAM_MAX_NPERSEG
-NOTEBOOK_SPECTROGRAM_NOVERLAP = int(NOTEBOOK_SPECTROGRAM_NPERSEG * 2 / 3)
+NOTEBOOK_SPECTROGRAM_OVERLAP_RATIO = 0.9
 
 
 def _spectrogram_window_geometry(windowed: dict[str, Any]) -> tuple[int, int]:
-    """Choose a dynamic spectrogram geometry that still gives multiple time bins on short runs."""
+    """Choose a dynamic spectrogram geometry that preserves time bins on 1 s slices."""
     t, y = _finite_lfp(windowed)
     n_samples = int(len(y))
     if n_samples <= 1:
         return NOTEBOOK_SPECTROGRAM_MIN_NPERSEG, 0
 
-    # Keep ~12 time bins, capped by sane geometry bounds so high-HFO bands stay interpretable.
+    # Keep a moderately long window for frequency resolution, but use strong overlap
+    # so the 1 s visualization slice still yields many visible time bins.
     nperseg = max(
         NOTEBOOK_SPECTROGRAM_MIN_NPERSEG,
         min(NOTEBOOK_SPECTROGRAM_MAX_NPERSEG, max(1, n_samples // NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT)),
     )
-    # Ensure a valid overlap (about 2/3 for good time resolution).
-    noverlap = max(0, min(int(0.75 * nperseg), nperseg - 1))
+    # A high overlap makes the spectrogram readable over short 1 s windows without
+    # collapsing the result into a handful of coarse horizontal bands.
+    noverlap = max(0, min(int(NOTEBOOK_SPECTROGRAM_OVERLAP_RATIO * nperseg), nperseg - 1))
     return nperseg, noverlap
 NOTEBOOK_FREQ_CONFIG = hlp.FrequencyPlotConfig(
     modulus=NOTEBOOK_TIME_MODULUS_MS,
@@ -203,14 +204,7 @@ def _save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float
     plt.close(fig)
 
 
-def _save_spectrogram(
-    windowed: dict[str, Any],
-    condition: str,
-    out: Path,
-    *,
-    nperseg: int,
-    noverlap: int,
-) -> None:
+def _save_spectrogram(windowed: dict[str, Any], condition: str, out: Path, *, nperseg: int, noverlap: int) -> None:
     fig, ax = plt.subplots(figsize=(14, 5.0), constrained_layout=True)
     try:
         hlp.plot_spectrogram(
@@ -409,15 +403,15 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     ketamine_geom = _spectrogram_window_geometry(spectrogram_windowed["ketamine"])
     _save_spectrogram(
         spectrogram_windowed["control"],
-        "control",
-        packet_dir / files[0],
+        condition="control",
+        out=packet_dir / files[0],
         nperseg=control_geom[0],
         noverlap=control_geom[1],
     )
     _save_spectrogram(
         spectrogram_windowed["ketamine"],
-        "ketamine",
-        packet_dir / files[1],
+        condition="ketamine",
+        out=packet_dir / files[1],
         nperseg=ketamine_geom[0],
         noverlap=ketamine_geom[1],
     )
@@ -482,7 +476,7 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
             "control_file": SPECTROGRAM_FILE_CONTROL,
             "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "note": "lfp spectrograms produced from 1000 ms visualization windows using hlp.plot_spectrogram",
+            "note": "lfp spectrograms produced from 1000 ms visualization windows using dense overlap and the existing helper renderer",
         },
         "parameters": row.get("parameters"),
         "control_metrics": row.get("control_metrics"),

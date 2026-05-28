@@ -6,12 +6,15 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import numpy as np
 import olfactorybulb.hfo_optimizer as hfo
 from tools.analysis.generate_hfo_candidate_packet import (
     VISUAL_STYLE_VERSION,
     SPECTROGRAM_FILE_CONTROL,
     SPECTROGRAM_FILE_KETAMINE,
     SPECTROGRAM_PIPELINE,
+    _save_spectrogram,
+    _spectrogram_window_geometry,
 )
 from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
@@ -33,6 +36,16 @@ assert _effective_packet_generation_workers(1, 8) == 1
 assert _effective_packet_generation_workers(2, 8) == 2
 assert _effective_packet_generation_workers(999, 3) == 3
 
+window_t = np.arange(0.0, 1000.0, 0.1, dtype=float)
+windowed = {
+    "lfp_t": window_t,
+    "lfp": np.sin(2.0 * np.pi * 180.0 * window_t / 1000.0),
+}
+nperseg, noverlap = _spectrogram_window_geometry(windowed)
+assert nperseg >= 128
+assert noverlap >= int(0.85 * nperseg)
+assert 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap)) >= 100
+
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -40,6 +53,7 @@ with TemporaryDirectory() as tmp:
     figures_dir = root / "figures"
     packet_dir = figures_dir / "packet_C00042"
     packet_dir.mkdir(parents=True)
+    helper_spec = packet_dir / "helper_spectrogram.png"
     psd_overlay = packet_dir / "03_psd_overlay.png"
     psd_control = packet_dir / "01_psd_control.png"
     raster = packet_dir / "07_raster_control.png"
@@ -57,6 +71,7 @@ with TemporaryDirectory() as tmp:
     legacy_kde = packet_dir / "kde_control_MC.png"
     contact = packet_dir / "contact_sheet.png"
     for path in (
+        helper_spec,
         psd_overlay,
         psd_control,
         raster,
@@ -77,6 +92,8 @@ with TemporaryDirectory() as tmp:
         path.write_bytes(b"placeholder")
     stale_population_rates = packet_dir / "09_population_rates.png"
     stale_population_rates.write_bytes(b"placeholder")
+    _save_spectrogram(windowed, "control", helper_spec, nperseg=nperseg, noverlap=noverlap)
+    assert helper_spec.exists()
     row_score_version = int(hfo.PAIR_SCORE_VERSION)
     packet_overlay = {
         "render_version": PSD_PACKET_RENDER_VERSION,
