@@ -37,6 +37,7 @@ def _default_repo_root() -> Path:
 
 
 DEFAULT_CAMPAIGNS_BASE = _default_repo_root() / "results" / "notebook_runs" / "optimization"
+DEFAULT_OPTIMIZER_TSTOP_MS = 1000.0
 DEFAULT_SCORE_BANDS = {
     "beta": (15.0, 35.0),
     "low_gamma": (35.0, 65.0),
@@ -316,13 +317,47 @@ def sustained_odor_schedule(
     }
 
 
+def default_switch_washout_ms(tstop_ms: float) -> float:
+    """Return a transition washout that preserves usable control/ketamine windows."""
+    return min(500.0, max(50.0, float(tstop_ms) * 0.10))
+
+
+def short_hfo_runtime_overrides(
+    *,
+    tstop_ms: float = DEFAULT_OPTIMIZER_TSTOP_MS,
+    odor_period_ms: float = 200.0,
+    odor_rel_conc: float = 0.2,
+    switch_fraction: float = 0.5,
+    switch_washout_ms: float | None = None,
+) -> dict[str, Any]:
+    """Return runtime overrides for fast HFO optimizer batches."""
+    tstop_ms = float(tstop_ms)
+    switch_time_ms = max(0.0, tstop_ms * float(switch_fraction))
+    washout_ms = (
+        default_switch_washout_ms(tstop_ms)
+        if switch_washout_ms is None
+        else float(switch_washout_ms)
+    )
+    return {
+        "tstop_ms": tstop_ms,
+        "input_odors": sustained_odor_schedule(
+            tstop_ms,
+            period_ms=odor_period_ms,
+            rel_conc=odor_rel_conc,
+        ),
+        "hfo_condition_mode": "switch",
+        "hfo_ketamine_switch_time_ms": switch_time_ms,
+        "hfo_ketamine_switch_washout_ms": washout_ms,
+    }
+
+
 def default_campaign_run_config(
     remote_config: dict[str, Any],
     *,
     paramset: str = "GammaSignature_EPLI_Provisional_TCOnly",
     nranks: int = 15,
     total_tasks: int = 120,
-    tstop_ms: float = 9000.0,
+    tstop_ms: float = DEFAULT_OPTIMIZER_TSTOP_MS,
     cell_permute: int = 0,
     odor_period_ms: float = 200.0,
     odor_rel_conc: float = 0.2,
@@ -1873,7 +1908,7 @@ def run_hfo_batch(
     ketamine_block_values: dict[str, float] | None = None,
     condition_mode: str = "separate",
     ketamine_switch_time_ms: float | None = None,
-    ketamine_switch_washout_ms: float = 500.0,
+    ketamine_switch_washout_ms: float | None = None,
 ) -> dict[str, Any]:
     campaign_dir = Path(campaign_dir)
     configured_condition_mode = base_config.get(
@@ -1904,10 +1939,15 @@ def run_hfo_batch(
             if ketamine_switch_time_ms is not None
             else max(tstop_ms * 0.5, 0.0)
         )
+        switch_washout_ms = float(
+            ketamine_switch_washout_ms
+            if ketamine_switch_washout_ms is not None
+            else default_switch_washout_ms(tstop_ms)
+        )
         sweep_path = _switch_sweep_paths_for_batch(
             batch_plan,
             switch_time_ms=switch_time_ms,
-            switch_washout_ms=float(ketamine_switch_washout_ms),
+            switch_washout_ms=switch_washout_ms,
             ketamine_block_values=ketamine_block_values,
         )
     else:
@@ -2667,10 +2707,12 @@ def maybe_dataframe(rows: list[dict[str, Any]]) -> Any:
 
 __all__ = [
     "DEFAULT_CAMPAIGNS_BASE",
+    "DEFAULT_OPTIMIZER_TSTOP_MS",
     "DEFAULT_SCORE_BANDS",
     "ParameterSpec",
     "build_manual_allocation_remote_config",
     "candidate_status_summary",
+    "default_switch_washout_ms",
     "default_campaign_run_config",
     "default_hfo_search_space",
     "ensure_campaign_dir",
@@ -2695,6 +2737,7 @@ __all__ = [
     "score_hfo_batch",
     "scaled_psd_template_curve",
     "search_space_rows",
+    "short_hfo_runtime_overrides",
     "sustained_odor_schedule",
     "top_candidate_summaries",
     "top_candidate_rows",

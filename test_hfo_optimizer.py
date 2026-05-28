@@ -16,6 +16,7 @@ from olfactorybulb.hfo_optimizer import (
     PAIR_SCORE_VERSION,
     ParameterSpec,
     candidate_status_summary,
+    default_switch_washout_ms,
     default_campaign_run_config,
     default_hfo_search_space,
     load_candidate_archive_rows,
@@ -28,6 +29,7 @@ from olfactorybulb.hfo_optimizer import (
     score_condition_result,
     score_hfo_batch,
     scaled_psd_template_curve,
+    short_hfo_runtime_overrides,
     sustained_odor_schedule,
     window_result_for_condition,
     write_objective_filter,
@@ -53,6 +55,7 @@ assert default_specs["kar_gc_gmax"].high == 0.025
 assert default_specs["kar_osn_weight_scale"].high == 2.0
 assert default_specs["kar_gc_weight_scale"].high == 4.0
 assert hfo_module.DEFAULT_SCORE_BANDS["high_gamma"] == (65.0, 100.0)
+assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 1000.0
 
 template_freqs, ketamine_template = psd_template_curve("ketamine")
 assert template_freqs.shape == ketamine_template.shape
@@ -79,6 +82,16 @@ assert campaign_config["inhale_duration_ms"] == 125.0
 assert campaign_config["record_gc_output_events"] is False
 assert campaign_config["save_soma_traces"] is False
 assert campaign_config["save_voltage_summary"] is False
+short_campaign_config = default_campaign_run_config({})
+assert short_campaign_config["tstop_ms"] == 1000.0
+assert max(short_campaign_config["input_odors"]) == 800
+short_overrides = short_hfo_runtime_overrides()
+assert short_overrides["tstop_ms"] == 1000.0
+assert short_overrides["hfo_ketamine_switch_time_ms"] == 500.0
+assert short_overrides["hfo_ketamine_switch_washout_ms"] == 100.0
+assert max(short_overrides["input_odors"]) == 800
+assert default_switch_washout_ms(9000.0) == 500.0
+assert default_switch_washout_ms(1000.0) == 100.0
 assert hlp.build_run_config()["remote_ssh_command_timeout_s"] == 300
 assert hlp.build_run_config()["remote_ssh_exec_timeout_s"] == 30
 assert hlp.build_run_config()["remote_ssh_upload_timeout_s"] == 120
@@ -231,10 +244,8 @@ with TemporaryDirectory() as tmpdir:
         run_hfo_batch(
             tmpdir,
             base_config={
-                "tstop_ms": 4000.0,
+                "tstop_ms": 1000.0,
                 "hfo_condition_mode": "switch",
-                "hfo_ketamine_switch_time_ms": 1500.0,
-                "hfo_ketamine_switch_washout_ms": 250.0,
             },
             batch_plan=switch_batch_plan,
             ketamine_block_values={"control": 1.0, "ketamine": 0.0},
@@ -242,8 +253,8 @@ with TemporaryDirectory() as tmpdir:
     finally:
         hfo_module.hlp.run_parameter_sweep = original_run_parameter_sweep
     assert captured_sweep["sweep_path"]["optimizer_condition"] == ["switch"]
-    assert captured_sweep["sweep_path"]["ketamine_switch_time_ms"] == [1500.0]
-    assert captured_sweep["sweep_path"]["ketamine_switch_washout_ms"] == [250.0]
+    assert captured_sweep["sweep_path"]["ketamine_switch_time_ms"] == [500.0]
+    assert captured_sweep["sweep_path"]["ketamine_switch_washout_ms"] == [100.0]
 
 target_metrics = score_condition_result(target)
 upper_target_metrics = score_condition_result(upper_target, target_hz=180.0, target_half_width_hz=20.0)
