@@ -599,21 +599,25 @@ with TemporaryDirectory() as tmp:
     status_file = output_dir / hfo_vd.RUNTIME_SUBDIR / "watchdog.status.json"
     status_file.parent.mkdir(parents=True, exist_ok=True)
     status_file.write_text(json.dumps({"watcher": {"alive": True}}))
+    spawned_kinds: list[str] = []
+
+    def fake_spawn(command, *, cwd, stdout_path, stderr_path, meta_path, meta):
+        kind = str(meta["kind"])
+        spawned_kinds.append(kind)
+        pid = 4242 + len(spawned_kinds)
+        return hfo_vd.RuntimeProcessInfo(
+            kind=kind,
+            pid=pid,
+            pid_path=meta_path,
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            meta={**meta, "pid": pid, "command": list(command)},
+        )
 
     with (
         patch.object(hfo_vd, "_read_runtime_process_info", return_value=None),
-        patch.object(
-            hfo_vd,
-            "_spawn_detached_process",
-            return_value=hfo_vd.RuntimeProcessInfo(
-                kind="watchdog",
-                pid=4242,
-                pid_path=status_file.parent / "watchdog.pid.json",
-                stdout_path=status_file.parent / "watchdog.stdout.log",
-                stderr_path=status_file.parent / "watchdog.stderr.log",
-                meta={"kind": "watchdog", "pid": 4242},
-            ),
-        ) as spawn_mock,
+        patch.object(hfo_vd, "_spawn_detached_process", side_effect=fake_spawn) as spawn_mock,
+        patch.object(hfo_vd, "_port_in_use", return_value=False),
     ):
         payload = ensure_visual_dashboard_runtime(
             campaign,
@@ -623,6 +627,9 @@ with TemporaryDirectory() as tmp:
             port=6006,
         )
 
-    spawn_mock.assert_called_once()
+    assert spawned_kinds == ["watchdog", "watcher", "server"]
+    assert spawn_mock.call_count == 3
     assert payload["watchdog"]["alive"] is True
-    assert payload["watchdog"]["pid"] == 4242
+    assert payload["watchdog"]["pid"] == 4243
+    assert payload["sidecars"]["watcher"]["alive"] is True
+    assert payload["sidecars"]["server"]["alive"] is True

@@ -5,7 +5,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import shutil
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -62,89 +65,99 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     control_geom = hv.spectrogram_window_geometry(spectrogram_windowed["control"])
     ketamine_geom = hv.spectrogram_window_geometry(spectrogram_windowed["ketamine"])
 
-    hv.save_spectrogram(
-        spectrogram_windowed["control"],
-        condition="control",
-        out=packet_dir / SPECTROGRAM_FILE_CONTROL,
-        nperseg=control_geom[0],
-        noverlap=control_geom[1],
-    )
-    hv.save_spectrogram(
-        spectrogram_windowed["ketamine"],
-        condition="ketamine",
-        out=packet_dir / SPECTROGRAM_FILE_KETAMINE,
-        nperseg=ketamine_geom[0],
-        noverlap=ketamine_geom[1],
-    )
-    hv.save_lfp_zoom(result, windows, packet_dir / "06_lfp_windows.png")
-    hv.save_raster(windowed["control"], "control", packet_dir / "07_raster_control.png")
-    hv.save_raster(windowed["ketamine"], "ketamine", packet_dir / "08_raster_ketamine.png")
-    hv.save_input_overview(result, windows, packet_dir / "10_inputs.png")
-    hv.save_phase_hist(windowed["control"], "control", packet_dir / "11_phase_control.png")
-    hv.save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / "12_phase_ketamine.png")
+    final_packet_dir = packet_dir
+    tmp_packet_dir = final_packet_dir.parent / f".{final_packet_dir.name}.tmp-{os.getpid()}-{time.time_ns()}"
+    tmp_packet_dir.mkdir(parents=True, exist_ok=False)
+    try:
+        hv.save_spectrogram(
+            spectrogram_windowed["control"],
+            condition="control",
+            out=tmp_packet_dir / SPECTROGRAM_FILE_CONTROL,
+            nperseg=control_geom[0],
+            noverlap=control_geom[1],
+        )
+        hv.save_spectrogram(
+            spectrogram_windowed["ketamine"],
+            condition="ketamine",
+            out=tmp_packet_dir / SPECTROGRAM_FILE_KETAMINE,
+            nperseg=ketamine_geom[0],
+            noverlap=ketamine_geom[1],
+        )
+        hv.save_lfp_zoom(result, windows, tmp_packet_dir / "06_lfp_windows.png")
+        hv.save_raster(windowed["control"], "control", tmp_packet_dir / "07_raster_control.png")
+        hv.save_raster(windowed["ketamine"], "ketamine", tmp_packet_dir / "08_raster_ketamine.png")
+        hv.save_input_overview(result, windows, tmp_packet_dir / "10_inputs.png")
+        hv.save_phase_hist(windowed["control"], "control", tmp_packet_dir / "11_phase_control.png")
+        hv.save_phase_hist(windowed["ketamine"], "ketamine", tmp_packet_dir / "12_phase_ketamine.png")
 
-    for condition in ("control", "ketamine"):
-        for group in hv.frequency_group_specs():
-            kde_1d = hv.kde_filename("1d", condition, group.label)
-            hv.save_spike_frequency_kde_1d(
-                windowed[condition],
-                condition,
-                group.label,
-                group.cell_types,
-                packet_dir / kde_1d,
-            )
-            kde_2d = hv.kde_filename("2d", condition, group.label)
-            hv.save_spike_frequency_kde_2d(
-                windowed[condition],
-                condition,
-                group.label,
-                group.cell_types,
-                packet_dir / kde_2d,
-            )
+        for condition in ("control", "ketamine"):
+            for group in hv.frequency_group_specs():
+                kde_1d = hv.kde_filename("1d", condition, group.label)
+                hv.save_spike_frequency_kde_1d(
+                    windowed[condition],
+                    condition,
+                    group.label,
+                    group.cell_types,
+                    tmp_packet_dir / kde_1d,
+                )
+                kde_2d = hv.kde_filename("2d", condition, group.label)
+                hv.save_spike_frequency_kde_2d(
+                    windowed[condition],
+                    condition,
+                    group.label,
+                    group.cell_types,
+                    tmp_packet_dir / kde_2d,
+                )
 
-    created_at = datetime.now().isoformat(timespec="seconds")
-    manifest = {
-        "candidate_id": candidate_id,
-        "created_at": created_at,
-        "visual_style_version": VISUAL_STYLE_VERSION,
-        "visual_contract": hv.visual_contract_snapshot(),
-        "parameter_contract": parameter_contract_snapshot(campaign_dir=campaign_dir),
-        "campaign_dir": str(campaign_dir),
-        "result_dir": str(result_dir),
-        "pair_score": row.get("pair_score"),
-        "pair_score_version": row.get("pair_score_version"),
-        "control_peak_hz": (row.get("control_metrics") or {}).get("peak_hz"),
-        "ketamine_peak_hz": (row.get("ketamine_metrics") or {}).get("peak_hz"),
-        "control_window_ms": list(windows["control"]),
-        "ketamine_window_ms": list(windows["ketamine"]),
-        "spectrogram_window_ms": hv.NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
-        "spectrogram_switch_time_ms": spectrogram_switch_time,
-        "spectrogram_window_ms_by_condition": {
-            "control": list(spectrogram_windows["control"]),
-            "ketamine": list(spectrogram_windows["ketamine"]),
-        },
-        "spectrogram_geometry": {
-            "control": {"nperseg": control_geom[0], "noverlap": control_geom[1]},
-            "ketamine": {"nperseg": ketamine_geom[0], "noverlap": ketamine_geom[1]},
-            "dt_ms": hv.NOTEBOOK_ANALYSIS_DT_MS,
-            "max_freq_hz": hv.notebook_spectrogram_max_freq_hz(),
-        },
-        "spectrogram_generation": {
-            "pipeline": SPECTROGRAM_PIPELINE,
-            "control_file": SPECTROGRAM_FILE_CONTROL,
-            "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
-            "generated_at": created_at,
-            "note": "lfp spectrograms produced from 1000 ms visualization windows using dense overlap and the existing helper renderer",
-        },
-        "parameters": row.get("parameters"),
-        "control_metrics": row.get("control_metrics"),
-        "ketamine_metrics": row.get("ketamine_metrics"),
-        "files": hv.packet_manifest_files(),
-    }
-    (packet_dir / "manifest.json").write_text(json.dumps(hlp._json_ready(manifest), indent=2, sort_keys=True))
-    regenerate_packet_psd(packet_dir)
-    hv.refresh_contact_sheet(packet_dir, manifest["files"])
-    return packet_dir
+        created_at = datetime.now().isoformat(timespec="seconds")
+        manifest = {
+            "candidate_id": candidate_id,
+            "created_at": created_at,
+            "visual_style_version": VISUAL_STYLE_VERSION,
+            "visual_contract": hv.visual_contract_snapshot(),
+            "parameter_contract": parameter_contract_snapshot(campaign_dir=campaign_dir),
+            "campaign_dir": str(campaign_dir),
+            "result_dir": str(result_dir),
+            "pair_score": row.get("pair_score"),
+            "pair_score_version": row.get("pair_score_version"),
+            "control_peak_hz": (row.get("control_metrics") or {}).get("peak_hz"),
+            "ketamine_peak_hz": (row.get("ketamine_metrics") or {}).get("peak_hz"),
+            "control_window_ms": list(windows["control"]),
+            "ketamine_window_ms": list(windows["ketamine"]),
+            "spectrogram_window_ms": hv.NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
+            "spectrogram_switch_time_ms": spectrogram_switch_time,
+            "spectrogram_window_ms_by_condition": {
+                "control": list(spectrogram_windows["control"]),
+                "ketamine": list(spectrogram_windows["ketamine"]),
+            },
+            "spectrogram_geometry": {
+                "control": {"nperseg": control_geom[0], "noverlap": control_geom[1]},
+                "ketamine": {"nperseg": ketamine_geom[0], "noverlap": ketamine_geom[1]},
+                "dt_ms": hv.NOTEBOOK_ANALYSIS_DT_MS,
+                "max_freq_hz": hv.notebook_spectrogram_max_freq_hz(),
+            },
+            "spectrogram_generation": {
+                "pipeline": SPECTROGRAM_PIPELINE,
+                "control_file": SPECTROGRAM_FILE_CONTROL,
+                "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
+                "generated_at": created_at,
+                "note": "lfp spectrograms produced from 1000 ms visualization windows using dense overlap and the existing helper renderer",
+            },
+            "parameters": row.get("parameters"),
+            "control_metrics": row.get("control_metrics"),
+            "ketamine_metrics": row.get("ketamine_metrics"),
+            "files": hv.packet_manifest_files(),
+        }
+        (tmp_packet_dir / "manifest.json").write_text(json.dumps(hlp._json_ready(manifest), indent=2, sort_keys=True))
+        regenerate_packet_psd(tmp_packet_dir)
+        hv.refresh_contact_sheet(tmp_packet_dir, manifest["files"])
+        if final_packet_dir.exists():
+            shutil.rmtree(final_packet_dir)
+        tmp_packet_dir.rename(final_packet_dir)
+        return final_packet_dir
+    except Exception:
+        shutil.rmtree(tmp_packet_dir, ignore_errors=True)
+        raise
 
 
 def main() -> None:

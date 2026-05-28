@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import contextlib
+import fcntl
 import http.server
 import html
 import importlib
@@ -64,6 +66,7 @@ SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_log
 PRIMARY_PSD_NAME_ORDER = tuple(hfo_visuals.PRIMARY_PSD_NAME_ORDER)
 _STYLE_SOURCE_SIGNATURE: tuple[int, int, int] = (0, 0, 0)
 RUNTIME_SUBDIR = ".runtime"
+EXPORT_LOCK_NAME = "export.lock"
 
 
 @dataclass(frozen=True)
@@ -139,6 +142,10 @@ def _wait_with_stop(delay_s: float, stop_event: threading.Event | None) -> None:
 
 def _runtime_dir(output_path: Path) -> Path:
     return output_path / RUNTIME_SUBDIR
+
+
+def _export_lock_path(output_path: Path) -> Path:
+    return _runtime_dir(output_path) / EXPORT_LOCK_NAME
 
 
 def _runtime_process_paths(output_path: Path, kind: str) -> dict[str, Path]:
@@ -502,8 +509,23 @@ def cleanup_stale_packets(
         removed.append(packet_dir.name)
         if dry_run:
             continue
-        shutil.rmtree(packet_dir)
+        try:
+            shutil.rmtree(packet_dir)
+        except FileNotFoundError:
+            continue
     return len(removed), removed
+
+
+@contextlib.contextmanager
+def _dashboard_export_lock(output_path: Path) -> Any:
+    lock_path = _export_lock_path(output_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
 
 
 def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> bool:
@@ -1700,69 +1722,70 @@ def export_visual_dashboard(
         else campaign_path / DEFAULT_OUTPUT_SUBDIR
     )
     output_path.mkdir(parents=True, exist_ok=True)
-    if cleanup_stale_packets_before_render:
-        cleanup_stale_packets(campaign_path, dry_run=False)
+    with _dashboard_export_lock(output_path):
+        if cleanup_stale_packets_before_render:
+            cleanup_stale_packets(campaign_path, dry_run=False)
 
-    rows = _load_ranked_rows(campaign_path)
-    packet_candidate_count = len(
-        {
-            str(row.get("candidate_id") or "")
-            for row in [*rows[: int(generate_packets_top_n)], *_recent_rows(rows, limit=int(generate_packets_top_n))]
-            if str(row.get("candidate_id") or "")
-        }
-    )
-    generated_packets = _generate_missing_packets(
-        campaign_path,
-        rows,
-        top_n=int(generate_packets_top_n),
-        workers=int(generate_packet_workers),
-    )
-    packets = find_candidate_packets(campaign_path)
-    status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
-    payload = _status_payload(campaign_path, status_path)
-    generated_at = datetime.now().isoformat(timespec="seconds")
-    html_text = _render_html(
-        campaign_dir=campaign_path,
-        output_dir=output_path,
-        rows=rows,
-        packets=packets,
-        top_n=int(top_n),
-        refresh_s=refresh_s,
-        generated_packets=generated_packets,
-        status_payload=payload,
-        generated_at=generated_at,
-    )
-    index_path = output_path / "index.html"
-    index_tmp = index_path.with_name(f".{index_path.name}.tmp")
-    index_tmp.write_text(html_text)
-    os.replace(index_tmp, index_path)
-    server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
-    entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
-    manifest = {
-        "campaign_dir": str(campaign_path),
-        "output_dir": str(output_path),
-        "index_html": str(index_path),
-        "entrypoint_html": str(entrypoint_path),
-        "entrypoint_url_path": url_path,
-        "generated_at": generated_at,
-        "candidate_rows": len(rows),
-        "packet_count": len(packets),
-        "generated_packets": [str(path) for path in generated_packets],
-        "generate_packet_workers": _effective_packet_generation_workers(
-            int(generate_packet_workers),
-            packet_candidate_count,
+        rows = _load_ranked_rows(campaign_path)
+        packet_candidate_count = len(
+            {
+                str(row.get("candidate_id") or "")
+                for row in [*rows[: int(generate_packets_top_n)], *_recent_rows(rows, limit=int(generate_packets_top_n))]
+                if str(row.get("candidate_id") or "")
+            }
         )
-        if int(generate_packets_top_n) > 0
-        else 0,
-        "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
-        "top_candidate_id": rows[0].get("candidate_id") if rows else None,
-        "top_score": rows[0].get("pair_score") if rows else None,
-    }
-    manifest_path = output_path / "manifest.json"
-    manifest_tmp = manifest_path.with_name(f".{manifest_path.name}.tmp")
-    manifest_tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-    os.replace(manifest_tmp, manifest_path)
-    return manifest
+        generated_packets = _generate_missing_packets(
+            campaign_path,
+            rows,
+            top_n=int(generate_packets_top_n),
+            workers=int(generate_packet_workers),
+        )
+        packets = find_candidate_packets(campaign_path)
+        status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
+        payload = _status_payload(campaign_path, status_path)
+        generated_at = datetime.now().isoformat(timespec="seconds")
+        html_text = _render_html(
+            campaign_dir=campaign_path,
+            output_dir=output_path,
+            rows=rows,
+            packets=packets,
+            top_n=int(top_n),
+            refresh_s=refresh_s,
+            generated_packets=generated_packets,
+            status_payload=payload,
+            generated_at=generated_at,
+        )
+        index_path = output_path / "index.html"
+        index_tmp = index_path.with_name(f".{index_path.name}.tmp")
+        index_tmp.write_text(html_text)
+        os.replace(index_tmp, index_path)
+        server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
+        entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
+        manifest = {
+            "campaign_dir": str(campaign_path),
+            "output_dir": str(output_path),
+            "index_html": str(index_path),
+            "entrypoint_html": str(entrypoint_path),
+            "entrypoint_url_path": url_path,
+            "generated_at": generated_at,
+            "candidate_rows": len(rows),
+            "packet_count": len(packets),
+            "generated_packets": [str(path) for path in generated_packets],
+            "generate_packet_workers": _effective_packet_generation_workers(
+                int(generate_packet_workers),
+                packet_candidate_count,
+            )
+            if int(generate_packets_top_n) > 0
+            else 0,
+            "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
+            "top_candidate_id": rows[0].get("candidate_id") if rows else None,
+            "top_score": rows[0].get("pair_score") if rows else None,
+        }
+        manifest_path = output_path / "manifest.json"
+        manifest_tmp = manifest_path.with_name(f".{manifest_path.name}.tmp")
+        manifest_tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+        os.replace(manifest_tmp, manifest_path)
+        return manifest
 
 
 def watch_visual_dashboard(
@@ -2156,6 +2179,19 @@ def ensure_visual_dashboard_runtime(
             },
         )
         watchdog_alive = True
+    sidecars = _ensure_visual_dashboard_sidecars(
+        campaign_path,
+        output_dir=output_path,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
+        host=host,
+        port=port,
+        stale_after_s=stale_after_s,
+    )
     status_file = runtime_dir / "watchdog.status.json"
     return {
         "campaign_dir": str(campaign_path),
@@ -2168,7 +2204,7 @@ def ensure_visual_dashboard_runtime(
             "stderr_log": str(_runtime_process_paths(output_path, "watchdog")["stderr"]),
             "status_file": str(status_file),
         },
-        "sidecars": _read_json(status_file),
+        "sidecars": sidecars,
     }
 
 
