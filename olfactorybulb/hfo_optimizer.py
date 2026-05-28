@@ -45,8 +45,9 @@ DEFAULT_SCORE_BANDS = {
     "target_hfo": (160.0, 230.0),
     "supra_hfo": (230.0, 260.0),
 }
+PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
 
-PAIR_SCORE_VERSION = 5
+PAIR_SCORE_VERSION = 6
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 PLAUSIBILITY_SOFT_LIMITS = {
     "kar_mt_gmax": 0.05,
@@ -654,6 +655,152 @@ def _target_clean_fraction(metrics: dict[str, Any]) -> float:
         supra_power = _band_power(metrics, "hfo_200_250")
     denom = target_power + lower_side_power + supra_power
     return target_power / denom if denom > 0.0 else 0.0
+
+
+def _normalize_psd_shape(values: Sequence[float]) -> np.ndarray:
+    shape = np.asarray(values, dtype=float)
+    shape = np.where(np.isfinite(shape) & (shape > 0.0), shape, 0.0)
+    total = float(np.sum(shape))
+    if total <= 0.0:
+        return np.zeros_like(shape, dtype=float)
+    return shape / total
+
+
+def _gaussian_on_psd_grid(center_hz: float, sigma_hz: float, weight: float) -> np.ndarray:
+    grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    return float(weight) * np.exp(-0.5 * ((grid - float(center_hz)) / max(float(sigma_hz), 1e-9)) ** 2)
+
+
+def _theoretical_psd_template(kind: str) -> np.ndarray:
+    """Return normalized PSD-shape targets for template-loss scoring."""
+    grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    baseline = np.full_like(grid, 0.010, dtype=float)
+    if kind == "ketamine":
+        shape = (
+            baseline
+            + _gaussian_on_psd_grid(24.0, 7.0, 0.055)
+            + _gaussian_on_psd_grid(55.0, 13.0, 0.070)
+            + _gaussian_on_psd_grid(85.0, 18.0, 0.100)
+            + _gaussian_on_psd_grid(195.0, 18.0, 0.520)
+        )
+        shape = np.where(grid > 240.0, shape * 0.35, shape)
+        return _normalize_psd_shape(shape)
+    if kind == "control":
+        shape = (
+            baseline
+            + _gaussian_on_psd_grid(24.0, 8.0, 0.110)
+            + _gaussian_on_psd_grid(55.0, 16.0, 0.130)
+            + _gaussian_on_psd_grid(90.0, 24.0, 0.120)
+            + _gaussian_on_psd_grid(150.0, 55.0, 0.035)
+        )
+        shape = np.where((grid >= 160.0) & (grid <= 230.0), shape * 0.55, shape)
+        return _normalize_psd_shape(shape)
+    if kind == "contrast":
+        shape = (
+            _gaussian_on_psd_grid(195.0, 17.0, 1.0)
+            + _gaussian_on_psd_grid(85.0, 22.0, 0.08)
+        )
+        shape = np.where(grid > 235.0, shape * 0.20, shape)
+        return _normalize_psd_shape(shape)
+    raise ValueError(f"Unknown PSD template kind {kind!r}")
+
+
+def _psd_shape_from_arrays(freqs: np.ndarray, psd: np.ndarray) -> np.ndarray:
+    freqs = np.asarray(freqs, dtype=float)
+    psd = np.asarray(psd, dtype=float)
+    mask = np.isfinite(freqs) & np.isfinite(psd) & (psd > 0.0)
+    if np.count_nonzero(mask) < 2:
+        return np.zeros(len(PSD_TEMPLATE_FREQS_HZ), dtype=float)
+    grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    interpolated = np.interp(grid, freqs[mask], psd[mask], left=0.0, right=0.0)
+    return _normalize_psd_shape(np.sqrt(np.maximum(interpolated, 0.0)))
+
+
+def _coarse_psd_shape_from_band_metrics(metrics: dict[str, Any]) -> np.ndarray:
+    grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    shape = np.zeros_like(grid, dtype=float)
+    relative = metrics.get("relative_band_power") or {}
+    band_bounds = dict(DEFAULT_SCORE_BANDS)
+    target_band = metrics.get("target_band_hz")
+    if isinstance(target_band, (list, tuple)) and len(target_band) == 2:
+        try:
+            target_lo = float(target_band[0])
+            target_hi = float(target_band[1])
+        except (TypeError, ValueError):
+            target_lo, target_hi = DEFAULT_SCORE_BANDS["target_hfo"]
+        band_bounds["target_hfo"] = (target_lo, target_hi)
+    for band_name, (lo_hz, hi_hz) in band_bounds.items():
+        try:
+            power = float(relative.get(band_name, 0.0))
+        except (TypeError, ValueError):
+            power = 0.0
+        if power <= 0.0 or hi_hz <= lo_hz:
+            continue
+        mask = (grid >= lo_hz) & (grid <= hi_hz)
+        if np.any(mask):
+            shape[mask] += power / max(float(np.count_nonzero(mask)), 1.0)
+    return _normalize_psd_shape(shape)
+
+
+def _psd_shape_from_metrics(metrics: dict[str, Any]) -> np.ndarray:
+    raw = metrics.get("psd_shape_power")
+    if isinstance(raw, (list, tuple)) and len(raw) == len(PSD_TEMPLATE_FREQS_HZ):
+        return _normalize_psd_shape(raw)
+    return _coarse_psd_shape_from_band_metrics(metrics)
+
+
+def _cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
+    left = np.asarray(left, dtype=float)
+    right = np.asarray(right, dtype=float)
+    denom = float(np.linalg.norm(left) * np.linalg.norm(right))
+    if denom <= 1e-18:
+        return 0.0
+    value = float(np.dot(left, right) / denom)
+    return min(max(value, 0.0), 1.0)
+
+
+def _psd_template_pair_metrics(
+    control_metrics: dict[str, Any],
+    ketamine_metrics: dict[str, Any],
+) -> dict[str, float]:
+    control_shape = _psd_shape_from_metrics(control_metrics)
+    ketamine_shape = _psd_shape_from_metrics(ketamine_metrics)
+    ketamine_template = _theoretical_psd_template("ketamine")
+    control_template = _theoretical_psd_template("control")
+    contrast_template = _theoretical_psd_template("contrast")
+    positive_contrast_shape = _normalize_psd_shape(np.maximum(ketamine_shape - control_shape, 0.0))
+
+    ketamine_similarity = _cosine_similarity(ketamine_shape, ketamine_template)
+    control_similarity = _cosine_similarity(control_shape, control_template)
+    contrast_similarity = _cosine_similarity(positive_contrast_shape, contrast_template)
+    control_hfo_similarity = _cosine_similarity(control_shape, ketamine_template)
+
+    ketamine_loss = 1.0 - ketamine_similarity
+    control_loss = 1.0 - control_similarity
+    contrast_loss = 1.0 - contrast_similarity
+    template_loss = (
+        1.20 * ketamine_loss
+        + 0.75 * control_loss
+        + 1.60 * contrast_loss
+        + 0.80 * control_hfo_similarity
+    )
+    template_score = (
+        1.20 * ketamine_similarity
+        + 0.75 * control_similarity
+        + 1.60 * contrast_similarity
+        - 0.80 * control_hfo_similarity
+    )
+    return {
+        "psd_template_loss": float(template_loss),
+        "psd_template_score": float(template_score),
+        "ketamine_psd_template_loss": float(ketamine_loss),
+        "control_psd_template_loss": float(control_loss),
+        "psd_contrast_template_loss": float(contrast_loss),
+        "ketamine_psd_template_similarity": float(ketamine_similarity),
+        "control_psd_template_similarity": float(control_similarity),
+        "psd_contrast_template_similarity": float(contrast_similarity),
+        "control_hfo_template_similarity": float(control_hfo_similarity),
+    }
 
 
 def parameter_plausibility_penalty(parameters: dict[str, Any] | None) -> tuple[float, dict[str, float]]:
@@ -1730,6 +1877,8 @@ def score_condition_result(
             "spike_support_penalty": 0.0,
             "input_coverage_fraction": 0.0,
             "input_dropout_penalty": 0.0,
+            "psd_shape_freqs_hz": list(PSD_TEMPLATE_FREQS_HZ),
+            "psd_shape_power": [0.0 for _ in PSD_TEMPLATE_FREQS_HZ],
             "band_power": summary["band_power"],
             "relative_band_power": summary["relative_band_power"],
             "mean_firing_rate_by_type": {},
@@ -1862,6 +2011,8 @@ def score_condition_result(
         "input_dropout_penalty": float(input_dropout_penalty),
         "target_band_hz": [float(target_lo), float(target_hi)],
         "target_center_hz": float(target_hz),
+        "psd_shape_freqs_hz": list(PSD_TEMPLATE_FREQS_HZ),
+        "psd_shape_power": [float(value) for value in _psd_shape_from_arrays(freqs, psd)],
         "band_power": {key: float(value) for key, value in summary["band_power"].items()},
         "relative_band_power": {key: float(value) for key, value in summary["relative_band_power"].items()},
         "mean_firing_rate_by_type": {key: float(value) for key, value in mean_rates.items()},
@@ -1904,6 +2055,7 @@ def score_candidate_pair(
     control_epli_rate = float(control_metrics.get("epli_rate_hz", (control_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
     ketamine_epli_rate = float(ketamine_metrics.get("epli_rate_hz", (ketamine_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
     target_lo_hz, target_hi_hz = _target_band_for_pair(control_metrics, ketamine_metrics)
+    psd_template_metrics = _psd_template_pair_metrics(control_metrics, ketamine_metrics)
 
     target_contrast = math.log10((ketamine_target + 1e-12) / (control_target + 1e-12))
     density_contrast = math.log10((ketamine_ratio + 1e-12) / (control_ratio + 1e-12))
@@ -1954,6 +2106,7 @@ def score_candidate_pair(
         - 0.8 * math.log10(1.0 + control_peak_contrast)
         + 1.5 * max(-supra_delta, 0.0)
         + 0.8 * (ketamine_center_match - control_center_match)
+        + 2.0 * psd_template_metrics["psd_template_score"]
         - control_leak_penalty
         - control_target_excess_penalty
         - same_peak_penalty
@@ -1964,6 +2117,7 @@ def score_candidate_pair(
         - control_peak_contrast_penalty
         - ketamine_epli_silence_penalty
         - epli_dropout_penalty
+        - 1.5 * psd_template_metrics["psd_template_loss"]
         - ketamine_wrong_band_penalty
         - control_wrong_band_penalty
     )
@@ -1995,6 +2149,7 @@ def score_candidate_pair(
         "control_epli_rate_hz": float(control_epli_rate),
         "ketamine_wrong_band_penalty": float(ketamine_wrong_band_penalty),
         "control_wrong_band_penalty": float(control_wrong_band_penalty),
+        **psd_template_metrics,
         "ketamine_freq_match": float(ketamine_freq_match),
         "control_score": float(control_score),
         "ketamine_score": float(ketamine_score),
@@ -2053,6 +2208,8 @@ def score_hfo_batch(
                 "spike_support_penalty": 0.0,
                 "input_coverage_fraction": 0.0,
                 "input_dropout_penalty": 0.0,
+                "psd_shape_freqs_hz": list(PSD_TEMPLATE_FREQS_HZ),
+                "psd_shape_power": [0.0 for _ in PSD_TEMPLATE_FREQS_HZ],
                 "band_power": {},
                 "relative_band_power": {},
                 "mean_firing_rate_by_type": {},

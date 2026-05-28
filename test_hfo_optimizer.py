@@ -12,6 +12,7 @@ import numpy as np
 import obgpu_experiment_helpers as hlp
 from olfactorybulb.hfo_optimizer import (
     DEFAULT_CAMPAIGNS_BASE,
+    PAIR_SCORE_VERSION,
     ParameterSpec,
     default_campaign_run_config,
     default_hfo_search_space,
@@ -162,7 +163,13 @@ assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
-assert upper_bad_pair["pair_score_version"] == 5
+assert upper_bad_pair["pair_score_version"] == 6
+assert PAIR_SCORE_VERSION == 6
+assert "psd_shape_power" in target_metrics
+assert len(target_metrics["psd_shape_power"]) > 10
+assert good_pair["psd_template_loss"] < bad_pair["psd_template_loss"]
+assert good_pair["psd_contrast_template_loss"] < bad_pair["psd_contrast_template_loss"]
+assert bad_pair["control_hfo_template_similarity"] > good_pair["control_hfo_template_similarity"]
 assert leaky_pair["control_target_excess_penalty"] > 0.0
 assert edge_pair["ketamine_center_penalty"] > 0.0
 assert silent_pair["ketamine_epli_silence_penalty"] > 0.0
