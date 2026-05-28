@@ -39,12 +39,32 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
-VISUAL_STYLE_VERSION = 4
+VISUAL_STYLE_VERSION = 5
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
-NOTEBOOK_SPECTROGRAM_NPERSEG = 1000
-NOTEBOOK_SPECTROGRAM_NOVERLAP = 1000 // 3
+NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT = 12
+NOTEBOOK_SPECTROGRAM_MIN_NPERSEG = 128
+NOTEBOOK_SPECTROGRAM_MAX_NPERSEG = 1024
+NOTEBOOK_SPECTROGRAM_NPERSEG = NOTEBOOK_SPECTROGRAM_MAX_NPERSEG
+NOTEBOOK_SPECTROGRAM_NOVERLAP = int(NOTEBOOK_SPECTROGRAM_NPERSEG * 2 / 3)
+
+
+def _spectrogram_window_geometry(windowed: dict[str, Any]) -> tuple[int, int]:
+    """Choose a dynamic spectrogram geometry that still gives multiple time bins on short runs."""
+    t, y = _finite_lfp(windowed)
+    n_samples = int(len(y))
+    if n_samples <= 1:
+        return NOTEBOOK_SPECTROGRAM_MIN_NPERSEG, 0
+
+    # Keep ~12 time bins, capped by sane geometry bounds so high-HFO bands stay interpretable.
+    nperseg = max(
+        NOTEBOOK_SPECTROGRAM_MIN_NPERSEG,
+        min(NOTEBOOK_SPECTROGRAM_MAX_NPERSEG, max(1, n_samples // NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT)),
+    )
+    # Ensure a valid overlap (about 2/3 for good time resolution).
+    noverlap = max(0, min(int(0.75 * nperseg), nperseg - 1))
+    return nperseg, noverlap
 NOTEBOOK_FREQ_CONFIG = hlp.FrequencyPlotConfig(
     modulus=NOTEBOOK_TIME_MODULUS_MS,
     max_freq_hz=hfo.DEFAULT_SCORE_BANDS["target_hfo"][1],
@@ -124,7 +144,14 @@ def _save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float
     plt.close(fig)
 
 
-def _save_spectrogram(windowed: dict[str, Any], condition: str, out: Path) -> None:
+def _save_spectrogram(
+    windowed: dict[str, Any],
+    condition: str,
+    out: Path,
+    *,
+    nperseg: int,
+    noverlap: int,
+) -> None:
     fig, ax = plt.subplots(figsize=(14, 5.0), constrained_layout=True)
     try:
         hlp.plot_spectrogram(
@@ -132,8 +159,8 @@ def _save_spectrogram(windowed: dict[str, Any], condition: str, out: Path) -> No
             signal="lfp",
             dt_ms=NOTEBOOK_ANALYSIS_DT_MS,
             max_freq_hz=NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
-            nperseg=NOTEBOOK_SPECTROGRAM_NPERSEG,
-            noverlap=NOTEBOOK_SPECTROGRAM_NOVERLAP,
+            nperseg=nperseg,
+            noverlap=noverlap,
             modulus=NOTEBOOK_TIME_MODULUS_MS,
             ax=ax,
         )
@@ -313,8 +340,22 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "11_phase_control.png",
         "12_phase_ketamine.png",
     ]
-    _save_spectrogram(windowed["control"], "control", packet_dir / files[0])
-    _save_spectrogram(windowed["ketamine"], "ketamine", packet_dir / files[1])
+    control_geom = _spectrogram_window_geometry(windowed["control"])
+    ketamine_geom = _spectrogram_window_geometry(windowed["ketamine"])
+    _save_spectrogram(
+        windowed["control"],
+        "control",
+        packet_dir / files[0],
+        nperseg=control_geom[0],
+        noverlap=control_geom[1],
+    )
+    _save_spectrogram(
+        windowed["ketamine"],
+        "ketamine",
+        packet_dir / files[1],
+        nperseg=ketamine_geom[0],
+        noverlap=ketamine_geom[1],
+    )
     _save_lfp_zoom(result, windows, packet_dir / files[2])
     _save_raster(windowed["control"], "control", packet_dir / files[3])
     _save_raster(windowed["ketamine"], "ketamine", packet_dir / files[4])
@@ -359,6 +400,12 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "ketamine_peak_hz": (row.get("ketamine_metrics") or {}).get("peak_hz"),
         "control_window_ms": list(windows["control"]),
         "ketamine_window_ms": list(windows["ketamine"]),
+        "spectrogram_geometry": {
+            "control": {"nperseg": control_geom[0], "noverlap": control_geom[1]},
+            "ketamine": {"nperseg": ketamine_geom[0], "noverlap": ketamine_geom[1]},
+            "dt_ms": NOTEBOOK_ANALYSIS_DT_MS,
+            "max_freq_hz": NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
+        },
         "parameters": row.get("parameters"),
         "control_metrics": row.get("control_metrics"),
         "ketamine_metrics": row.get("ketamine_metrics"),
