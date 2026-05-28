@@ -52,13 +52,13 @@ DEFAULT_SCORE_BANDS = {
     "high_gamma": (65.0, 100.0),
     "hfo_80_130": (80.0, 130.0),
     "hfo_130_160": (130.0, 160.0),
-    "target_hfo": (160.0, 230.0),
+    "target_hfo": (130.0, 230.0),
     "supra_hfo": (230.0, 260.0),
 }
 PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
-PSD_TEMPLATE_VISUAL_FLOOR = 10 ** -7.5
+PSD_TEMPLATE_VISUAL_FLOOR = 1e-7
 
-PAIR_SCORE_VERSION = 8
+PAIR_SCORE_VERSION = 9
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 PSD_TEMPLATE_HFO_WEIGHT = 4.0
 PSD_TEMPLATE_BROAD_WEIGHT = 1.0
@@ -630,7 +630,7 @@ def _supra_hfo_relative(metrics: dict[str, Any]) -> float:
         return _relative_band(metrics, "supra_hfo")
     # Old campaign rows used 160-200 Hz as target and 200-250 Hz as the
     # above-target side band. Treat that side band as an artifact when
-    # re-ranking old archive rows under the broader 160-230 Hz objective.
+    # re-ranking old archive rows under the broader 130-230 Hz objective.
     return _relative_band(metrics, "hfo_200_250")
 
 
@@ -648,7 +648,7 @@ def _target_density_ratio(metrics: dict[str, Any]) -> float:
 
 def _target_clean_fraction(metrics: dict[str, Any]) -> float:
     target_power = _band_power(metrics, "target_hfo")
-    lower_side_power = _band_power(metrics, "hfo_80_130") + _band_power(metrics, "hfo_130_160")
+    lower_side_power = _band_power(metrics, "hfo_80_130")
     supra_power = _band_power(metrics, "supra_hfo")
     if supra_power <= 0.0:
         supra_power = _band_power(metrics, "hfo_200_250")
@@ -695,12 +695,16 @@ def _theoretical_psd_template(kind: str) -> np.ndarray:
             + _gaussian_on_psd_grid(85.0, 18.0, 0.100)
             + _stepwise_on_psd_grid(
                 (
-                    (150.0, 160.0, 0.080),
-                    (160.0, 175.0, 0.320),
-                    (175.0, 230.0, 0.520),
-                    (230.0, 245.0, 0.140),
+                    (130.0, 145.0, 0.075),
+                    (145.0, 160.0, 0.185),
+                    (160.0, 175.0, 0.330),
+                    (175.0, 190.0, 0.520),
+                    (190.0, 205.0, 0.680),
+                    (205.0, 230.0, 0.430),
+                    (230.0, 245.0, 0.130),
                 )
             )
+            + _gaussian_on_psd_grid(192.0, 15.0, 0.115)
         )
         shape = np.where(grid >= 245.0, shape * 0.35, shape)
         return _normalize_psd_shape(shape)
@@ -711,20 +715,34 @@ def _theoretical_psd_template(kind: str) -> np.ndarray:
             + _gaussian_on_psd_grid(55.0, 16.0, 0.130)
             + _gaussian_on_psd_grid(90.0, 24.0, 0.120)
             + _gaussian_on_psd_grid(150.0, 55.0, 0.035)
+            + _stepwise_on_psd_grid(
+                (
+                    (130.0, 145.0, 0.030),
+                    (145.0, 160.0, 0.055),
+                    (160.0, 175.0, 0.070),
+                    (175.0, 190.0, 0.065),
+                    (190.0, 205.0, 0.050),
+                    (205.0, 230.0, 0.035),
+                )
+            )
         )
-        shape = np.where((grid >= 160.0) & (grid <= 230.0), shape * 0.55, shape)
+        shape = np.where((grid >= 130.0) & (grid <= 230.0), shape * 0.58, shape)
         return _normalize_psd_shape(shape)
     if kind == "contrast":
         shape = (
             _stepwise_on_psd_grid(
                 (
-                    (150.0, 160.0, 0.100),
-                    (160.0, 175.0, 0.450),
-                    (175.0, 230.0, 1.000),
-                    (230.0, 245.0, 0.200),
+                    (130.0, 145.0, 0.070),
+                    (145.0, 160.0, 0.220),
+                    (160.0, 175.0, 0.420),
+                    (175.0, 190.0, 0.640),
+                    (190.0, 205.0, 0.820),
+                    (205.0, 230.0, 0.560),
+                    (230.0, 245.0, 0.180),
                 )
             )
             + _gaussian_on_psd_grid(85.0, 22.0, 0.08)
+            + _gaussian_on_psd_grid(192.0, 18.0, 0.10)
         )
         shape = np.where(grid >= 245.0, shape * 0.20, shape)
         return _normalize_psd_shape(shape)
@@ -2130,6 +2148,8 @@ def score_condition_result(
             "peak_hz": math.nan,
             "peak_ratio": 0.0,
             "target_peak_contrast": 0.0,
+            "peak_height_sharpness": 0.0,
+            "peak_height_score": 0.0,
             "target_density_ratio": 0.0,
             "freq_match": 0.0,
             "target_clean_fraction": 0.0,
@@ -2178,6 +2198,8 @@ def score_condition_result(
     target_density_ratio = target_density / denom
     peak_ratio = peak_power / max(background_floor, shoulder_floor, 1e-18)
     target_peak_contrast = peak_power / max(target_floor, shoulder_floor, background_floor, 1e-18)
+    peak_height_sharpness = peak_power / max(target_density, 1e-18) if target_density > 0.0 else 0.0
+    peak_height_score = math.log10(1.0 + peak_height_sharpness)
 
     freq_match = math.exp(-0.5 * ((peak_hz - target_hz) / max(float(target_half_width_hz), 1e-9)) ** 2) if np.isfinite(peak_hz) else 0.0
     if np.any(target_mask):
@@ -2242,6 +2264,7 @@ def score_condition_result(
         2.4 * math.log10(1.0 + target_density_ratio)
         + 4.0 * relative_target
         + 1.0 * math.log10(1.0 + target_peak_contrast)
+        + 0.8 * peak_height_score
         + 2.2 * math.log10(1.0 + dominance)
         + 1.2 * target_clean_fraction
         + 0.8 * target_centroid_match
@@ -2257,6 +2280,8 @@ def score_condition_result(
         "peak_hz": float(peak_hz),
         "peak_ratio": float(peak_ratio),
         "target_peak_contrast": float(target_peak_contrast),
+        "peak_height_sharpness": float(peak_height_sharpness),
+        "peak_height_score": float(peak_height_score),
         "target_density_ratio": float(target_density_ratio),
         "freq_match": float(freq_match),
         "target_centroid_hz": float(target_centroid_hz),
@@ -2298,6 +2323,9 @@ def score_candidate_pair(
             "peak_contrast_log10": float("-inf"),
             "control_score": float(control_score),
             "ketamine_score": float(ketamine_score),
+            "peak_height_delta": 0.0,
+            "control_peak_height_score": 0.0,
+            "ketamine_peak_height_score": 0.0,
         }
     control_target = float((control_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
     ketamine_target = float((ketamine_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
@@ -2317,6 +2345,9 @@ def score_candidate_pair(
     ketamine_center_match = float(ketamine_metrics.get("target_centroid_match", ketamine_metrics.get("freq_match", 0.0)))
     control_epli_rate = float(control_metrics.get("epli_rate_hz", (control_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
     ketamine_epli_rate = float(ketamine_metrics.get("epli_rate_hz", (ketamine_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
+    control_peak_height_score = float(control_metrics.get("peak_height_score", 0.0))
+    ketamine_peak_height_score = float(ketamine_metrics.get("peak_height_score", 0.0))
+    peak_height_delta = ketamine_peak_height_score - control_peak_height_score
     target_lo_hz, target_hi_hz = _target_band_for_pair(control_metrics, ketamine_metrics)
     psd_template_metrics = _psd_template_pair_metrics(control_metrics, ketamine_metrics)
 
@@ -2370,6 +2401,7 @@ def score_candidate_pair(
         - 0.8 * math.log10(1.0 + control_peak_contrast)
         + 1.5 * max(-supra_delta, 0.0)
         + 0.8 * (ketamine_center_match - control_center_match)
+        + 1.0 * peak_height_delta
         + 2.0 * psd_template_metrics["psd_template_score"]
         - control_leak_penalty
         - control_target_excess_penalty
@@ -2408,6 +2440,9 @@ def score_candidate_pair(
         "control_peak_contrast_penalty": float(control_peak_contrast_penalty),
         "ketamine_peak_contrast": float(ketamine_peak_contrast),
         "control_peak_contrast": float(control_peak_contrast),
+        "peak_height_delta": float(peak_height_delta),
+        "ketamine_peak_height_score": float(ketamine_peak_height_score),
+        "control_peak_height_score": float(control_peak_height_score),
         "ketamine_epli_silence_penalty": float(ketamine_epli_silence_penalty),
         "ketamine_epli_low_support_penalty": float(ketamine_epli_low_support_penalty),
         "epli_dropout_penalty": float(epli_dropout_penalty),
@@ -2768,6 +2803,8 @@ def candidate_status_summary(row: dict[str, Any]) -> dict[str, Any]:
         "pair_score": row.get("pair_score"),
         "ketamine_peak_hz": ketamine.get("peak_hz"),
         "control_peak_hz": control.get("peak_hz"),
+        "ketamine_peak_height_score": ketamine.get("peak_height_score"),
+        "control_peak_height_score": control.get("peak_height_score"),
         "ketamine_target_rel": _metrics_relative_band(ketamine, "target_hfo"),
         "control_target_rel": _metrics_relative_band(control, "target_hfo"),
         "ketamine_high_gamma_rel": _metrics_relative_band(ketamine, "high_gamma"),

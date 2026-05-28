@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import fcntl
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import threading
+import time
 import types
 from unittest.mock import patch
 
@@ -21,6 +23,7 @@ from tools.analysis.generate_hfo_candidate_packet import (
     SPECTROGRAM_FILE_CONTROL,
     SPECTROGRAM_FILE_KETAMINE,
     SPECTROGRAM_PIPELINE,
+    packet_build_lock_path,
     _save_spectrogram,
     _spectrogram_window_geometry,
 )
@@ -30,6 +33,7 @@ from tools.analysis.hfo_visual_dashboard import (
     _ensure_visual_dashboard_sidecars,
     _effective_packet_generation_workers,
     _generate_missing_packets,
+    _queue_dashboard_packet_generation,
     _load_ranked_rows,
     _packet_needs_refresh,
     _primary_psd_image,
@@ -531,6 +535,7 @@ with TemporaryDirectory() as tmp:
         payload = hfo_vd._generate_dashboard_packet(
             campaign,
             "C00042",
+            packet_output_dir=packet_dir,
             output_dir=campaign / "visual_dashboard",
             top_n=1,
             refresh_s=60.0,
