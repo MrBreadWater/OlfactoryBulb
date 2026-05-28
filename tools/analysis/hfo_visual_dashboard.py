@@ -174,6 +174,27 @@ def _load_ranked_rows(campaign_dir: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _batch_index(row: dict[str, Any]) -> int:
+    batch_name = str(row.get("batch_name") or "")
+    try:
+        return int(batch_name.rsplit("_", 1)[-1])
+    except (TypeError, ValueError):
+        return -1
+
+
+def _recent_rows(rows: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+    ranked = sorted(
+        rows,
+        key=lambda row: (
+            _batch_index(row),
+            float(row.get("pair_score", float("-inf"))),
+            str(row.get("candidate_id") or ""),
+        ),
+        reverse=True,
+    )
+    return ranked[: int(limit)]
+
+
 def _packet_mtime(paths: list[Path]) -> float:
     mtimes = [path.stat().st_mtime for path in paths if path.exists()]
     return max(mtimes) if mtimes else 0.0
@@ -428,8 +449,17 @@ def _generate_missing_packets(
         return []
 
     packets = find_candidate_packets(campaign_dir)
+    selected_rows: list[dict[str, Any]] = []
+    seen_candidate_ids: set[str] = set()
+    for source_rows in (rows[: int(top_n)], _recent_rows(rows, limit=int(top_n))):
+        for row in source_rows:
+            candidate_id = str(row.get("candidate_id") or "")
+            if not candidate_id or candidate_id in seen_candidate_ids:
+                continue
+            seen_candidate_ids.add(candidate_id)
+            selected_rows.append(row)
     missing_candidate_ids: list[str] = []
-    for row in rows[: int(top_n)]:
+    for row in selected_rows:
         candidate_id = str(row.get("candidate_id") or "")
         if not candidate_id:
             continue
@@ -738,11 +768,68 @@ def _render_top_table(rows: list[dict[str, Any]], *, top_n: int) -> str:
     )
 
 
-def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, output_dir: Path, rank: int) -> str:
+def _render_recent_table(rows: list[dict[str, Any]], *, top_n: int) -> str:
+    headers = [
+        "order",
+        "candidate",
+        "batch",
+        "score",
+        "K target",
+        "C target",
+        "K peak",
+        "C peak",
+        "K high-gamma",
+        "C high-gamma",
+        "K EPLI",
+        "C EPLI",
+        "K TC",
+        "C TC",
+    ]
+    body = []
+    for index, row in enumerate(_recent_rows(rows, limit=int(top_n)), start=1):
+        s = _metric_summary(row)
+        cells = [
+            index,
+            s["candidate_id"],
+            s["batch_name"],
+            _fmt(s["score"]),
+            _fmt(s["ketamine_target"], 4),
+            _fmt(s["control_target"], 4),
+            _fmt(s["ketamine_peak"], 1),
+            _fmt(s["control_peak"], 1),
+            _fmt(s["ketamine_high_gamma"], 4),
+            _fmt(s["control_high_gamma"], 4),
+            _fmt(s["ketamine_epli"], 2),
+            _fmt(s["control_epli"], 2),
+            _fmt(s["ketamine_tc"], 2),
+            _fmt(s["control_tc"], 2),
+        ]
+        body.append("<tr>" + "".join(f"<td>{_esc(cell)}</td>" for cell in cells) + "</tr>")
+    return (
+        "<table><thead><tr>"
+        + "".join(f"<th>{_esc(header)}</th>" for header in headers)
+        + "</tr></thead><tbody>"
+        + "\n".join(body)
+        + "</tbody></table>"
+    )
+
+
+def _render_packet_card(
+    row: dict[str, Any],
+    packet: PacketInfo | None,
+    *,
+    output_dir: Path,
+    rank: int,
+    dom_prefix: str = "best",
+) -> str:
     s = _metric_summary(row)
     candidate_id = str(s["candidate_id"] or "")
     open_attr = " open" if rank <= 3 else ""
-    candidate_dom_id = f"candidate-{candidate_id}" if candidate_id else f"candidate-rank-{rank}"
+    candidate_dom_id = (
+        f"{dom_prefix}-candidate-{candidate_id}"
+        if candidate_id
+        else f"{dom_prefix}-candidate-rank-{rank}"
+    )
     packet_meta = ""
     primary_psd_html = "<div class='missing'>No PSD packet has been generated for this candidate yet.</div>"
     secondary_psd_html = ""
@@ -844,9 +931,27 @@ def _render_html(
     status_payload: dict[str, Any],
     generated_at: str,
 ) -> str:
-    packet_cards = "\n".join(
-        _render_packet_card(row, packets.get(str(row.get("candidate_id"))), output_dir=output_dir, rank=index)
-        for index, row in enumerate(rows[: int(top_n)], start=1)
+    best_rows = rows[: int(top_n)]
+    recent_rows = _recent_rows(rows, limit=int(top_n))
+    best_packet_cards = "\n".join(
+        _render_packet_card(
+            row,
+            packets.get(str(row.get("candidate_id"))),
+            output_dir=output_dir,
+            rank=index,
+            dom_prefix="best",
+        )
+        for index, row in enumerate(best_rows, start=1)
+    )
+    recent_packet_cards = "\n".join(
+        _render_packet_card(
+            row,
+            packets.get(str(row.get("candidate_id"))),
+            output_dir=output_dir,
+            rank=index,
+            dom_prefix="recent",
+        )
+        for index, row in enumerate(recent_rows, start=1)
     )
     generated_html = ""
     if generated_packets:
@@ -907,6 +1012,40 @@ def _render_html(
     }}
     .stat span {{ display: block; color: var(--muted); font-size: 12px; }}
     .stat strong {{ display: block; margin-top: 3px; font-size: 15px; overflow-wrap: anywhere; }}
+    .tab-shell {{
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      margin-top: 18px;
+    }}
+    .tab-bar {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      position: sticky;
+      top: 76px;
+      z-index: 9;
+      padding: 8px 0 2px;
+      background: rgba(247, 248, 251, 0.96);
+      backdrop-filter: blur(8px);
+    }}
+    .tab-button {{
+      appearance: none;
+      border: 1px solid #dbe3ef;
+      background: #ffffff;
+      color: #334155;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .tab-button[aria-selected="true"] {{
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }}
+    .tab-panel[hidden] {{ display: none !important; }}
     section {{
       margin: 20px 0;
       background: var(--panel);
@@ -1102,17 +1241,37 @@ def _render_html(
     <h1>HFO Campaign Visual Dashboard</h1>
     <div class="subtle">{_esc(campaign_dir)}{f" | updates in place every {int(refresh_s)} s" if refresh_s and refresh_s > 0 else ""}</div>
   </header>
-  <main id="dashboard-main">
+  <main id="dashboard-main" data-active-tab="tab-best">
     <div class="stats">{_render_status(campaign_dir, rows, status_payload)}</div>
     {generated_html}
-    <section>
-      <h2>Top Candidates</h2>
-      <div class="table-wrap">{_render_top_table(rows, top_n=top_n)}</div>
-    </section>
-    <section>
-      <h2>Visual Packets</h2>
-      <div style="padding: 0 14px 14px;">{packet_cards}</div>
-    </section>
+    <div class="tab-shell">
+      <nav class="tab-bar" aria-label="Dashboard sections" role="tablist">
+        <button class="tab-button" type="button" role="tab" data-tab-button data-tab-target="tab-best" aria-controls="tab-best" aria-selected="true">Best</button>
+        <button class="tab-button" type="button" role="tab" data-tab-button data-tab-target="tab-recent" aria-controls="tab-recent" aria-selected="false">Recent</button>
+      </nav>
+
+      <div id="tab-best" class="tab-panel" role="tabpanel">
+        <section>
+          <h2>Top Candidates</h2>
+          <div class="table-wrap">{_render_top_table(best_rows, top_n=top_n)}</div>
+        </section>
+        <section>
+          <h2>Best Visual Packets</h2>
+          <div style="padding: 0 14px 14px;">{best_packet_cards}</div>
+        </section>
+      </div>
+
+      <div id="tab-recent" class="tab-panel" role="tabpanel" hidden>
+        <section>
+          <h2>Most Recent Candidates</h2>
+          <div class="table-wrap">{_render_recent_table(rows, top_n=top_n)}</div>
+        </section>
+        <section>
+          <h2>Recent Visual Packets</h2>
+          <div style="padding: 0 14px 14px;">{recent_packet_cards}</div>
+        </section>
+      </div>
+    </div>
   </main>
   <div id="refresh-indicator" class="refresh-indicator" aria-live="polite"></div>
   <script>
@@ -1131,13 +1290,40 @@ def _render_html(
         window.setTimeout(() => indicator.classList.remove("visible"), 1800);
       }}
 
+      function setActiveTab(tabId) {{
+        const main = document.getElementById("dashboard-main");
+        if (!main) return;
+        const buttons = main.querySelectorAll("[data-tab-button]");
+        const panels = main.querySelectorAll(".tab-panel");
+        let resolved = tabId;
+        if (!resolved || !document.getElementById(resolved)) {{
+          resolved = "tab-best";
+        }}
+        main.dataset.activeTab = resolved;
+        buttons.forEach((button) => {{
+          const selected = button.dataset.tabTarget === resolved;
+          button.setAttribute("aria-selected", selected ? "true" : "false");
+        }});
+        panels.forEach((panel) => {{
+          panel.hidden = panel.id !== resolved;
+        }});
+      }}
+
+      document.addEventListener("click", (event) => {{
+        const button = event.target.closest("[data-tab-button]");
+        if (!button) return;
+        setActiveTab(button.dataset.tabTarget || "tab-best");
+      }});
+
       function captureState() {{
         const openDetails = Array.from(document.querySelectorAll("details[id][open]")).map((node) => node.id);
         const active = document.activeElement && document.activeElement.id ? document.activeElement.id : null;
-        return {{ scrollX: window.scrollX, scrollY: window.scrollY, openDetails, active }};
+        const activeTab = document.getElementById("dashboard-main")?.dataset.activeTab || "tab-best";
+        return {{ scrollX: window.scrollX, scrollY: window.scrollY, openDetails, active, activeTab }};
       }}
 
       function restoreState(state) {{
+        setActiveTab(state.activeTab || "tab-best");
         for (const id of state.openDetails || []) {{
           const node = document.getElementById(id);
           if (node && node.tagName.toLowerCase() === "details") {{
@@ -1150,6 +1336,8 @@ def _render_html(
         }}
         requestAnimationFrame(() => window.scrollTo(state.scrollX || 0, state.scrollY || 0));
       }}
+
+      setActiveTab(document.getElementById("dashboard-main")?.dataset.activeTab || "tab-best");
 
       async function refreshIfChanged() {{
         if (refreshing) return;
@@ -1212,6 +1400,13 @@ def export_visual_dashboard(
         cleanup_stale_packets(campaign_path, dry_run=False)
 
     rows = _load_ranked_rows(campaign_path)
+    packet_candidate_count = len(
+        {
+            str(row.get("candidate_id") or "")
+            for row in [*rows[: int(generate_packets_top_n)], *_recent_rows(rows, limit=int(generate_packets_top_n))]
+            if str(row.get("candidate_id") or "")
+        }
+    )
     generated_packets = _generate_missing_packets(
         campaign_path,
         rows,
@@ -1251,7 +1446,7 @@ def export_visual_dashboard(
         "generated_packets": [str(path) for path in generated_packets],
         "generate_packet_workers": _effective_packet_generation_workers(
             int(generate_packet_workers),
-            min(int(generate_packets_top_n), len(rows)),
+            packet_candidate_count,
         )
         if int(generate_packets_top_n) > 0
         else 0,

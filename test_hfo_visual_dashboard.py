@@ -25,9 +25,11 @@ from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
     _dashboard_server_root_and_url,
     _effective_packet_generation_workers,
+    _generate_missing_packets,
     _load_ranked_rows,
     _packet_needs_refresh,
     _primary_psd_image,
+    _recent_rows,
     _render_html,
     _render_packet_card,
     _write_dashboard_entrypoint,
@@ -40,6 +42,14 @@ assert _effective_packet_generation_workers(0, 1) == 1
 assert _effective_packet_generation_workers(1, 8) == 1
 assert _effective_packet_generation_workers(2, 8) == 2
 assert _effective_packet_generation_workers(999, 3) == 3
+
+recent_fixture_rows = [
+    {"batch_name": "batch_0007", "candidate_id": "C00007", "pair_score": 1.0},
+    {"batch_name": "batch_0009", "candidate_id": "C00009", "pair_score": 2.0},
+    {"batch_name": "batch_0009", "candidate_id": "C00008", "pair_score": 3.0},
+    {"batch_name": "batch_0008", "candidate_id": "C00004", "pair_score": 9.0},
+]
+assert [row["candidate_id"] for row in _recent_rows(recent_fixture_rows, limit=3)] == ["C00008", "C00009", "C00004"]
 
 window_t = np.arange(0.0, 1000.0, 0.1, dtype=float)
 windowed = {
@@ -353,6 +363,12 @@ with TemporaryDirectory() as tmp:
     assert "fetch(\"manifest.json?cache=\" + Date.now()" in dashboard_html
     assert "dashboard-main" in dashboard_html
     assert "scrollTo(state.scrollX" in dashboard_html
+    assert "data-tab-target=\"tab-best\"" in dashboard_html
+    assert "data-tab-target=\"tab-recent\"" in dashboard_html
+    assert "Most Recent Candidates" in dashboard_html
+    assert "Recent Visual Packets" in dashboard_html
+    assert "Best Visual Packets" in dashboard_html
+    assert "setActiveTab(" in dashboard_html
 
     dashboard = campaign / "visual_dashboard"
     server_root, url_path = _dashboard_server_root_and_url(dashboard, campaign)
@@ -388,3 +404,29 @@ with TemporaryDirectory() as tmp:
 
     ranked_rows = _load_ranked_rows(campaign)
     assert [row["candidate_id"] for row in ranked_rows] == ["C02815"]
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    rows = [
+        {"batch_name": "batch_0001", "candidate_id": "C00001", "pair_score": 10.0},
+        {"batch_name": "batch_0002", "candidate_id": "C00002", "pair_score": 9.0},
+        {"batch_name": "batch_0003", "candidate_id": "C00003", "pair_score": 1.0},
+    ]
+    captured: list[str] = []
+
+    def fake_generate(task):
+        _, candidate_id = task
+        captured.append(candidate_id)
+        path = campaign / "figures" / f"packet_{candidate_id}"
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
+    with (
+        patch.object(hfo_vd, "find_candidate_packets", return_value={}),
+        patch.object(hfo_vd, "_packet_needs_refresh", return_value=True),
+        patch.object(hfo_vd, "_generate_one_packet", side_effect=fake_generate),
+    ):
+        generated = _generate_missing_packets(campaign, rows, top_n=2, workers=1)
+
+    assert sorted(captured) == ["C00001", "C00002", "C00003"]
+    assert len(generated) == 3
