@@ -39,7 +39,7 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
-VISUAL_STYLE_VERSION = 2
+VISUAL_STYLE_VERSION = 3
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
@@ -171,34 +171,6 @@ def _save_raster(windowed: dict[str, Any], condition: str, out: Path) -> None:
     ax.set_ylabel("Recorded soma index")
     ax.set_title(f"{condition} soma spike raster")
     ax.grid(True, axis="x", alpha=0.15)
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _save_population_rates(windows_by_condition: dict[str, dict[str, Any]], out: Path) -> None:
-    fig, axes = plt.subplots(2, 1, figsize=(12, 7.0), sharex=False, constrained_layout=True)
-    for ax, (condition, windowed) in zip(axes, windows_by_condition.items()):
-        rows = _spike_rows(windowed)
-        t, _lfp = _finite_lfp(windowed)
-        stop = float(np.max(t)) if len(t) else max([float(np.max(times)) for _label, times in rows if times.size] or [0.0])
-        bins = np.arange(0.0, max(stop + 25.0, 50.0), 25.0)
-        for cell_type in ("MC", "TC", "EPLI", "GC"):
-            merged = [
-                times
-                for label, times in rows
-                if hlp.cell_type_of(label) == cell_type and times.size
-            ]
-            if not merged:
-                continue
-            counts, edges = np.histogram(np.concatenate(merged), bins=bins)
-            n_cells = max(sum(1 for label, _times in rows if hlp.cell_type_of(label) == cell_type), 1)
-            rate = counts / n_cells / (np.diff(edges) / 1000.0)
-            ax.plot(edges[:-1] + np.diff(edges) / 2, rate, label=cell_type, color=CELL_COLORS.get(cell_type, "#111827"))
-        ax.set_title(f"{condition} population rates")
-        ax.set_ylabel("Hz / cell")
-        ax.grid(True, alpha=0.16)
-        ax.legend(frameon=False, ncol=4)
-    axes[-1].set_xlabel("Time in window (ms)")
     fig.savefig(out, dpi=160)
     plt.close(fig)
 
@@ -337,7 +309,6 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "06_lfp_windows.png",
         "07_raster_control.png",
         "08_raster_ketamine.png",
-        "09_population_rates.png",
         "10_inputs.png",
         "11_phase_control.png",
         "12_phase_ketamine.png",
@@ -347,10 +318,9 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     _save_lfp_zoom(result, windows, packet_dir / files[2])
     _save_raster(windowed["control"], "control", packet_dir / files[3])
     _save_raster(windowed["ketamine"], "ketamine", packet_dir / files[4])
-    _save_population_rates(windowed, packet_dir / files[5])
-    _save_input_overview(result, windows, packet_dir / files[6])
-    _save_phase_hist(windowed["control"], "control", packet_dir / files[7])
-    _save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / files[8])
+    _save_input_overview(result, windows, packet_dir / files[5])
+    _save_phase_hist(windowed["control"], "control", packet_dir / files[6])
+    _save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / files[7])
     frequency_groups = [
         ("MT_EPLI", ("MC", "TC", "EPLI", "PVCRH")),
         ("GC", ("GC",)),

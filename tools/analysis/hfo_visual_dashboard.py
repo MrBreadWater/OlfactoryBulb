@@ -105,6 +105,10 @@ def _is_legacy_ad_hoc_kde_image(path: Path) -> bool:
     return bool(re.match(r"kde_(control|ketamine)_[A-Za-z0-9]+\.png$", path.name))
 
 
+def _is_hidden_packet_image(path: Path) -> bool:
+    return path.name in {"contact_sheet.png", "00_contact_sheet.png", "09_population_rates.png"}
+
+
 def _condition_metrics(row: dict[str, Any], condition: str) -> dict[str, Any]:
     payload = row.get(f"{condition}_metrics") or {}
     return payload if isinstance(payload, dict) else {}
@@ -160,8 +164,7 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
             sorted(
                 path
                 for path in packet_dir.glob("*.png")
-                if path.name not in {"contact_sheet.png", "00_contact_sheet.png"}
-                and not _is_legacy_ad_hoc_kde_image(path)
+                if not _is_hidden_packet_image(path) and not _is_legacy_ad_hoc_kde_image(path)
             )
         )
         mtime = _packet_mtime([manifest_path, contact_sheet or packet_dir, *images])
