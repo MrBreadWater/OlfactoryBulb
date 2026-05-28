@@ -16,6 +16,7 @@ import pickle
 import re
 import shlex
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -222,6 +223,8 @@ CONTROL_HELP = {
     "remote_live_status": "When True, print live remote Slurm state updates in the notebook while polling.",
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
+    "remote_ssh_command_timeout_s": "Timeout in seconds for one notebook-managed Paramiko shell command. None or <=0 disables the timeout.",
+    "remote_poll_command_timeout_s": "Timeout in seconds for lightweight remote status-poll shell commands. Keeps a stale SSH channel from freezing an active notebook worker.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
     "remote_defer_soma_vs_sync": "Deprecated. Raw soma traces are synced and loaded with the main result payload; stale True values are ignored.",
@@ -694,6 +697,10 @@ _LIVE_REMOTE_PREFLIGHTS: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_preflight"]
 _LIVE_REMOTE_STALE_CLEANUPS: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_stale_cleanup"]
 
 
+class _SSHCommandTimeoutError(TimeoutError):
+    """Raised when one notebook-managed remote shell command exceeds its budget."""
+
+
 def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
     """Return the SSH/runtime subset needed to rediscover or cancel one allocation."""
     keys = (
@@ -875,6 +882,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_live_status": True,
         "remote_live_logs": True,
         "remote_heartbeat_timeout_s": 120,
+        "remote_ssh_command_timeout_s": 300,
+        "remote_poll_command_timeout_s": 60,
         "remote_cleanup_stale_allocations": True,
         "remote_defer_soma_vs_sync": False,
         "remote_preserve_paramiko_session": True,
@@ -2161,6 +2170,34 @@ def _remote_heartbeat_timeout_s(config: dict[str, Any]) -> int:
         return 120
 
 
+def _remote_ssh_command_timeout_s(config: dict[str, Any]) -> float | None:
+    """Return the per-command Paramiko shell timeout, or None when disabled."""
+    value = config.get("remote_ssh_command_timeout_s", 300)
+    if value is None:
+        return None
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return 300.0
+    if timeout <= 0:
+        return None
+    return timeout
+
+
+def _remote_poll_command_timeout_s(config: dict[str, Any]) -> float | None:
+    """Return the tighter timeout for lightweight remote polling commands."""
+    value = config.get("remote_poll_command_timeout_s", 60)
+    if value is None:
+        return _remote_ssh_command_timeout_s(config)
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return 60.0
+    if timeout <= 0:
+        return None
+    return timeout
+
+
 def _slurm_allocation_signature(config: dict[str, Any]) -> dict[str, Any]:
     """Return the cache signature for one reusable remote Slurm allocation."""
     hostname, port, username = _remote_endpoint(config)
@@ -2379,21 +2416,56 @@ def _run_paramiko_shell(
 ) -> subprocess.CompletedProcess[str]:
     """Run one shell command over a persistent Paramiko transport."""
     last_exc: Exception | None = None
+    command_timeout_s = _remote_ssh_command_timeout_s(config)
     for attempt in range(2):
         connection = _connect_paramiko(config)
         transport = connection["transport"]
         channel = None
         try:
             channel = transport.open_session()
+            channel.settimeout(1.0)
             channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
-            stdout_data = channel.makefile("rb").read().decode("utf-8", errors="replace")
-            stderr_data = channel.makefile_stderr("rb").read().decode("utf-8", errors="replace")
+            stdout_chunks: list[bytes] = []
+            stderr_chunks: list[bytes] = []
+            deadline = None if command_timeout_s is None else time.monotonic() + command_timeout_s
+            while True:
+                while channel.recv_ready():
+                    stdout_chunks.append(channel.recv(65536))
+                while channel.recv_stderr_ready():
+                    stderr_chunks.append(channel.recv_stderr(65536))
+                if channel.exit_status_ready():
+                    while channel.recv_ready():
+                        stdout_chunks.append(channel.recv(65536))
+                    while channel.recv_stderr_ready():
+                        stderr_chunks.append(channel.recv_stderr(65536))
+                    returncode = channel.recv_exit_status()
+                    break
+                if deadline is not None and time.monotonic() >= deadline:
+                    stdout_data = b"".join(stdout_chunks).decode("utf-8", errors="replace")
+                    stderr_data = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+                    try:
+                        channel.close()
+                    except Exception:
+                        pass
+                    raise _SSHCommandTimeoutError(
+                        "Paramiko shell command timed out after "
+                        f"{command_timeout_s:.1f}s.\n"
+                        f"Command: {remote_shell_command}\n"
+                        f"Stdout tail:\n{stdout_data[-2000:]}\n\n"
+                        f"Stderr tail:\n{stderr_data[-2000:]}"
+                    )
+                time.sleep(0.05)
+            stdout_data = b"".join(stdout_chunks).decode("utf-8", errors="replace")
+            stderr_data = b"".join(stderr_chunks).decode("utf-8", errors="replace")
             return subprocess.CompletedProcess(
                 args=["paramiko", connection["hostname"], remote_shell_command],
-                returncode=channel.recv_exit_status(),
+                returncode=returncode,
                 stdout=stdout_data,
                 stderr=stderr_data,
             )
+        except _SSHCommandTimeoutError:
+            _close_paramiko_sftp(config)
+            raise
         except Exception as exc:
             last_exc = exc
             _close_paramiko_sftp(config)
@@ -2520,10 +2592,14 @@ def _run_ssh_shell(
     remote_shell_command: str,
     *,
     check: bool = False,
+    timeout_s: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run one shell command on the remote Slurm host over the cached Paramiko session."""
     _remote_transport(config)
-    completed = _run_paramiko_shell(config, remote_shell_command)
+    shell_config = config
+    if timeout_s is not None:
+        shell_config = {**config, "remote_ssh_command_timeout_s": timeout_s}
+    completed = _run_paramiko_shell(shell_config, remote_shell_command)
     if check and completed.returncode != 0:
         raise subprocess.CalledProcessError(
             completed.returncode,
@@ -6470,7 +6546,11 @@ def _run_remote_sweep(
             include_tails=False,
         )
         poll_started = time.perf_counter()
-        poll_completed = _run_ssh_shell(effective_config, poll_shell)
+        poll_completed = _run_ssh_shell(
+            effective_config,
+            poll_shell,
+            timeout_s=_remote_poll_command_timeout_s(effective_config),
+        )
         _record_timing(notebook_timings, "poll_s", poll_started)
         if poll_completed.returncode != 0:
             raise RuntimeError(
