@@ -7,7 +7,12 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 import olfactorybulb.hfo_optimizer as hfo
-from tools.analysis.generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
+from tools.analysis.generate_hfo_candidate_packet import (
+    VISUAL_STYLE_VERSION,
+    SPECTROGRAM_FILE_CONTROL,
+    SPECTROGRAM_FILE_KETAMINE,
+    SPECTROGRAM_PIPELINE,
+)
 from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
     _dashboard_server_root_and_url,
@@ -39,8 +44,8 @@ with TemporaryDirectory() as tmp:
     psd_control = packet_dir / "01_psd_control.png"
     raster = packet_dir / "07_raster_control.png"
     raster_k = packet_dir / "08_raster_ketamine.png"
-    spec_c = packet_dir / "04_spectrogram_control.png"
-    spec_k = packet_dir / "05_spectrogram_ketamine.png"
+    spec_c = packet_dir / SPECTROGRAM_FILE_CONTROL
+    spec_k = packet_dir / SPECTROGRAM_FILE_KETAMINE
     kde1d_mt_c = packet_dir / "13_spike_frequency_kde_1d_control_MT.png"
     kde1d_mt_k = packet_dir / "13_spike_frequency_kde_1d_ketamine_MT.png"
     kde2d_mt_c = packet_dir / "13_spike_frequency_kde_2d_control_MT.png"
@@ -85,6 +90,17 @@ with TemporaryDirectory() as tmp:
                 "visual_style_version": VISUAL_STYLE_VERSION,
                 "pair_score_version": row_score_version,
                 "psd_target_overlay": packet_overlay,
+                "spectrogram_geometry": {
+                    "control": {"nperseg": 256, "noverlap": 192},
+                    "ketamine": {"nperseg": 256, "noverlap": 192},
+                    "dt_ms": 0.1,
+                    "max_freq_hz": float(list(hfo.DEFAULT_SCORE_BANDS["target_hfo"])[1]),
+                },
+                "spectrogram_generation": {
+                    "pipeline": SPECTROGRAM_PIPELINE,
+                    "control_file": SPECTROGRAM_FILE_CONTROL,
+                    "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
+                },
             }
         )
     )
@@ -119,6 +135,17 @@ with TemporaryDirectory() as tmp:
             "visual_style_version": VISUAL_STYLE_VERSION,
             "pair_score_version": row_score_version,
             "psd_target_overlay": packet_overlay,
+            "spectrogram_geometry": {
+                "control": {"nperseg": 256, "noverlap": 192},
+                "ketamine": {"nperseg": 256, "noverlap": 192},
+                "dt_ms": 0.1,
+                "max_freq_hz": float(list(hfo.DEFAULT_SCORE_BANDS["target_hfo"])[1]),
+            },
+            "spectrogram_generation": {
+                "pipeline": SPECTROGRAM_PIPELINE,
+                "control_file": SPECTROGRAM_FILE_CONTROL,
+                "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
+            },
         },
         mtime=1.0,
     )
@@ -183,6 +210,51 @@ with TemporaryDirectory() as tmp:
         mtime=1.0,
     )
     assert _packet_needs_refresh(stale_packet_overlay, row) is True
+
+    missing_spectrogram_packet = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=contact,
+        images=packet.images[:2],  # omit spectrogram/other visuals intentionally
+        manifest=packet.manifest,
+        mtime=1.0,
+    )
+    assert _packet_needs_refresh(missing_spectrogram_packet, row) is True
+
+    malformed_spectrogram_packet = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=contact,
+        images=packet.images,
+        manifest={
+            **packet.manifest,
+            "spectrogram_geometry": {
+                "control": {"nperseg": 1, "noverlap": 0},
+                "ketamine": {"nperseg": 2, "noverlap": 2},
+                "dt_ms": 0.1,
+                "max_freq_hz": 250.0,
+            },
+        },
+        mtime=1.0,
+    )
+    assert _packet_needs_refresh(malformed_spectrogram_packet, row) is True
+
+    wrong_pipeline_packet = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=contact,
+        images=packet.images,
+        manifest={
+            **packet.manifest,
+            "spectrogram_generation": {
+                "pipeline": {"generator": "wrong.generator.path"},
+                "control_file": SPECTROGRAM_FILE_CONTROL,
+                "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
+            },
+        },
+        mtime=1.0,
+    )
+    assert _packet_needs_refresh(wrong_pipeline_packet, row) is True
 
     dashboard_html = _render_html(
         campaign_dir=campaign,

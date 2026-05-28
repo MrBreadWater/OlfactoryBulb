@@ -44,6 +44,11 @@ DEFAULT_TOP_N = 20
 DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
 DEFAULT_CLEANUP_STALE_PACKETS = True
+EXPECTED_SPECTROGRAM_FILES = {
+    "control": "04_spectrogram_control.png",
+    "ketamine": "05_spectrogram_ketamine.png",
+}
+EXPECTED_SPECTROGRAM_PIPELINE = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
 SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json")
 PRIMARY_PSD_NAME_ORDER = (
     "03_psd_overlay.png",
@@ -267,6 +272,44 @@ def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> boo
         return True
     if list(overlay.get("high_gamma_hz") or []) != list(hfo.DEFAULT_SCORE_BANDS["high_gamma"]):
         return True
+
+    required_spectrogram_files = (
+        packet.packet_dir / EXPECTED_SPECTROGRAM_FILES["control"],
+        packet.packet_dir / EXPECTED_SPECTROGRAM_FILES["ketamine"],
+    )
+    if any(not path.exists() for path in required_spectrogram_files):
+        return True
+    if any(not any(img == path for img in packet.images) for path in required_spectrogram_files):
+        return True
+
+    generation = packet.manifest.get("spectrogram_generation") or {}
+    if not isinstance(generation, dict):
+        return True
+    pipeline = generation.get("pipeline") or {}
+    if not isinstance(pipeline, dict):
+        return True
+    if str(pipeline.get("generator") or "") != EXPECTED_SPECTROGRAM_PIPELINE:
+        return True
+    if str(generation.get("control_file") or "") != EXPECTED_SPECTROGRAM_FILES["control"]:
+        return True
+    if str(generation.get("ketamine_file") or "") != EXPECTED_SPECTROGRAM_FILES["ketamine"]:
+        return True
+
+    geometry = packet.manifest.get("spectrogram_geometry") or {}
+    control = geometry.get("control") or {}
+    ketamine = geometry.get("ketamine") or {}
+    for name, state in (("control", control), ("ketamine", ketamine)):
+        try:
+            nperseg = int(state.get("nperseg", 0))
+            noverlap = int(state.get("noverlap", 0))
+        except (TypeError, ValueError):
+            return True
+        if nperseg < 2 or noverlap < 0 or noverlap >= nperseg:
+            return True
+    for key in ("dt_ms", "max_freq_hz"):
+        if key not in geometry:
+            return True
+
     all_pngs = tuple(packet.packet_dir.glob("*.png"))
     has_legacy_kde = any(_is_legacy_ad_hoc_kde_image(path) for path in all_pngs)
     has_pipeline_kde = any("spike_frequency_kde_2d" in path.name for path in all_pngs)

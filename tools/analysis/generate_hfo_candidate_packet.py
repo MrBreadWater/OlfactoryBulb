@@ -43,6 +43,17 @@ VISUAL_STYLE_VERSION = 5
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
+SPECTROGRAM_FILE_CONTROL = "04_spectrogram_control.png"
+SPECTROGRAM_FILE_KETAMINE = "05_spectrogram_ketamine.png"
+SPECTROGRAM_GENERATOR_ID = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
+SPECTROGRAM_PIPELINE = {
+    "module": "tools.analysis.generate_hfo_candidate_packet",
+    "function": "_save_spectrogram",
+    "helper": "obgpu_experiment_helpers.plot_spectrogram",
+    "source_signal": "lfp",
+    "source_metric": "windowed.result['lfp']",
+    "generator": SPECTROGRAM_GENERATOR_ID,
+}
 NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT = 12
 NOTEBOOK_SPECTROGRAM_MIN_NPERSEG = 128
 NOTEBOOK_SPECTROGRAM_MAX_NPERSEG = 1024
@@ -331,8 +342,8 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
 
     windowed = {condition: _window_result(result, windows, condition) for condition in ("control", "ketamine")}
     files = [
-        "04_spectrogram_control.png",
-        "05_spectrogram_ketamine.png",
+        SPECTROGRAM_FILE_CONTROL,
+        SPECTROGRAM_FILE_KETAMINE,
         "06_lfp_windows.png",
         "07_raster_control.png",
         "08_raster_ketamine.png",
@@ -405,6 +416,13 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
             "ketamine": {"nperseg": ketamine_geom[0], "noverlap": ketamine_geom[1]},
             "dt_ms": NOTEBOOK_ANALYSIS_DT_MS,
             "max_freq_hz": NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
+        },
+        "spectrogram_generation": {
+            "pipeline": SPECTROGRAM_PIPELINE,
+            "control_file": SPECTROGRAM_FILE_CONTROL,
+            "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "note": "lfp spectrograms produced from windowed condition traces using hlp.plot_spectrogram",
         },
         "parameters": row.get("parameters"),
         "control_metrics": row.get("control_metrics"),
