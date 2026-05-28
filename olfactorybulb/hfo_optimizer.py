@@ -377,6 +377,7 @@ def default_campaign_run_config(
     odor_period_ms: float = 200.0,
     odor_rel_conc: float = 0.2,
     inhale_duration_ms: float = 125.0,
+    use_corenrn: bool = False,
 ) -> dict[str, Any]:
     """Return the base notebook run config for one HFO search campaign."""
     config = hlp.build_run_config(
@@ -384,7 +385,7 @@ def default_campaign_run_config(
         paramset=paramset,
         label_prefix="hfo_optimizer",
         nranks=int(nranks),
-        use_corenrn=True,
+        use_corenrn=bool(use_corenrn),
         use_gpu=False,
         cell_permute=int(cell_permute),
         tstop_ms=float(tstop_ms),
@@ -418,7 +419,7 @@ def default_campaign_run_config(
     )
     config.update(dict(remote_config))
     config["nranks"] = int(nranks)
-    config["use_corenrn"] = True
+    config["use_corenrn"] = bool(use_corenrn)
     config["use_gpu"] = False
     config["cell_permute"] = int(cell_permute)
     config["tstop_ms"] = float(tstop_ms)

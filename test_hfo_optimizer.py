@@ -91,6 +91,7 @@ assert campaign_config["inhale_duration_ms"] == 125.0
 assert campaign_config["record_gc_output_events"] is False
 assert campaign_config["save_soma_traces"] is False
 assert campaign_config["save_voltage_summary"] is False
+assert campaign_config["use_corenrn"] is False
 profile = hfo_remote_throughput_profile(total_tasks=96, item_nranks=6, waves_per_batch=3)
 assert profile == {
     "total_tasks": 96,
