@@ -428,6 +428,72 @@ def default_campaign_run_config(
     return config
 
 
+def hfo_remote_throughput_profile(
+    *,
+    total_tasks: int = 120,
+    item_nranks: int = 15,
+    waves_per_batch: int = 2,
+    min_candidates: int | None = None,
+    max_candidates: int | None = None,
+) -> dict[str, int]:
+    """Return a candidate-batch shape for one remote HFO optimizer allocation.
+
+    ``item_nranks`` controls how many MPI ranks each candidate simulation gets.
+    ``sweep_parallelism`` is then the number of independent candidate
+    simulations launched concurrently inside one remote sweep.  ``n_candidates``
+    intentionally spans multiple waves so Slurm launch overhead and final sync
+    overhead are amortized across more completed candidates.
+    """
+    total_tasks = max(int(total_tasks), 1)
+    item_nranks = max(int(item_nranks), 1)
+    waves_per_batch = max(int(waves_per_batch), 1)
+    sweep_parallelism = max(total_tasks // item_nranks, 1)
+    n_candidates = sweep_parallelism * waves_per_batch
+    if min_candidates is not None:
+        n_candidates = max(n_candidates, int(min_candidates))
+    if max_candidates is not None:
+        n_candidates = min(n_candidates, int(max_candidates))
+    n_candidates = max(n_candidates, 1)
+    return {
+        "total_tasks": int(total_tasks),
+        "item_nranks": int(item_nranks),
+        "sweep_parallelism": int(sweep_parallelism),
+        "waves_per_batch": int(waves_per_batch),
+        "n_candidates": int(n_candidates),
+    }
+
+
+def apply_hfo_remote_throughput_profile(
+    config: dict[str, Any],
+    *,
+    total_tasks: int = 120,
+    item_nranks: int = 15,
+    waves_per_batch: int = 2,
+    min_candidates: int | None = None,
+    max_candidates: int | None = None,
+) -> tuple[dict[str, Any], int]:
+    """Return a config copy retuned for a remote HFO throughput profile.
+
+    The returned integer is the matching optimizer candidates-per-batch value.
+    Keeping this separate from the config is deliberate: candidate count belongs
+    to the optimizer loop, while ``nranks`` and ``sweep_parallelism`` belong to
+    the run configuration used by ``run_hfo_batch``.
+    """
+    profile = hfo_remote_throughput_profile(
+        total_tasks=total_tasks,
+        item_nranks=item_nranks,
+        waves_per_batch=waves_per_batch,
+        min_candidates=min_candidates,
+        max_candidates=max_candidates,
+    )
+    tuned = dict(config)
+    tuned["nranks"] = int(profile["item_nranks"])
+    tuned["optimizer_total_tasks"] = int(profile["total_tasks"])
+    tuned["sweep_parallelism"] = int(profile["sweep_parallelism"])
+    tuned["hfo_throughput_profile"] = dict(profile)
+    return tuned, int(profile["n_candidates"])
+
+
 def lfp_source_diagnostic_configs(
     base_config: dict[str, Any],
     *,
@@ -2723,12 +2789,14 @@ __all__ = [
     "DEFAULT_OPTIMIZER_TSTOP_MS",
     "DEFAULT_SCORE_BANDS",
     "ParameterSpec",
+    "apply_hfo_remote_throughput_profile",
     "build_manual_allocation_remote_config",
     "candidate_status_summary",
     "default_switch_washout_ms",
     "default_campaign_run_config",
     "default_hfo_search_space",
     "ensure_campaign_dir",
+    "hfo_remote_throughput_profile",
     "infer_remote_template_from_recent_runs",
     "initialize_campaign",
     "load_campaign_state",

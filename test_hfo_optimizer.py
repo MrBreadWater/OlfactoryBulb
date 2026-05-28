@@ -15,10 +15,12 @@ from olfactorybulb.hfo_optimizer import (
     DEFAULT_CAMPAIGNS_BASE,
     PAIR_SCORE_VERSION,
     ParameterSpec,
+    apply_hfo_remote_throughput_profile,
     candidate_status_summary,
     default_switch_washout_ms,
     default_campaign_run_config,
     default_hfo_search_space,
+    hfo_remote_throughput_profile,
     load_candidate_archive_rows,
     lfp_source_diagnostic_configs,
     parameter_plausibility_penalty,
@@ -83,6 +85,25 @@ assert campaign_config["inhale_duration_ms"] == 125.0
 assert campaign_config["record_gc_output_events"] is False
 assert campaign_config["save_soma_traces"] is False
 assert campaign_config["save_voltage_summary"] is False
+profile = hfo_remote_throughput_profile(total_tasks=96, item_nranks=6, waves_per_batch=3)
+assert profile == {
+    "total_tasks": 96,
+    "item_nranks": 6,
+    "sweep_parallelism": 16,
+    "waves_per_batch": 3,
+    "n_candidates": 48,
+}
+tuned_config, tuned_candidates = apply_hfo_remote_throughput_profile(
+    {"nranks": 15, "sweep_parallelism": 8, "optimizer_total_tasks": 120},
+    total_tasks=96,
+    item_nranks=6,
+    waves_per_batch=3,
+)
+assert tuned_candidates == 48
+assert tuned_config["nranks"] == 6
+assert tuned_config["sweep_parallelism"] == 16
+assert tuned_config["optimizer_total_tasks"] == 96
+assert tuned_config["hfo_throughput_profile"] == profile
 short_campaign_config = default_campaign_run_config({})
 assert short_campaign_config["tstop_ms"] == 1000.0
 assert max(short_campaign_config["input_odors"]) == 800
