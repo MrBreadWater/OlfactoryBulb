@@ -62,7 +62,9 @@ def _normalized_template_for_plot(kind: str, freqs: np.ndarray) -> np.ndarray:
     peak = float(np.nanmax(target))
     if peak <= 0.0:
         return np.zeros_like(target)
-    return target / peak
+    normalized = target / peak
+    domain = (freqs >= min(hfo.PSD_TEMPLATE_FREQS_HZ)) & (freqs <= max(hfo.PSD_TEMPLATE_FREQS_HZ))
+    return np.where(domain, normalized, np.nan)
 
 
 def _finish_dual_axis_legend(ax: Any, target_ax: Any) -> None:
@@ -106,16 +108,25 @@ def _plot_single_psd(
         lw=3.2,
         ls=(0, (6, 2)),
         alpha=0.95,
-        label=f"TARGET PSD shape ({target_kind}, right axis)",
+        label=f"scoring template ({target_kind}, 20-300 Hz)",
         zorder=6,
     )
-    target_ax.fill_between(freqs, 0.0, target_shape, color="#a21caf", alpha=0.08, lw=0)
+    valid_target = np.isfinite(target_shape)
+    target_ax.fill_between(
+        freqs,
+        0.0,
+        np.where(valid_target, target_shape, 0.0),
+        where=valid_target,
+        color="#a21caf",
+        alpha=0.08,
+        lw=0,
+    )
     target_ax.set_ylim(0.0, 1.05)
-    target_ax.set_ylabel("Target PSD shape, normalized")
+    target_ax.set_ylabel("Scoring template, normalized")
     target_ax.tick_params(axis="y", colors="#86198f")
     target_ax.spines["right"].set_color("#86198f")
 
-    ax.set_title(f"{manifest.get('candidate_id', 'candidate')} {condition} PSD with scoring target")
+    ax.set_title(f"{manifest.get('candidate_id', 'candidate')} {condition} PSD with scoring template")
     relative = (summary.get("relative_band_power") or {}).get("target_hfo")
     peak = manifest.get(f"{condition.lower()}_peak_hz")
     if relative is not None and peak is not None:
@@ -162,7 +173,7 @@ def _plot_overlay_psd(
         lw=2.8,
         ls=(0, (3, 2)),
         alpha=0.88,
-        label="TARGET PSD shape (control, right axis)",
+        label="scoring template (control, 20-300 Hz)",
         zorder=6,
     )
     target_ax.plot(
@@ -172,16 +183,25 @@ def _plot_overlay_psd(
         lw=3.2,
         ls=(0, (7, 2)),
         alpha=0.95,
-        label="TARGET PSD shape (ketamine, right axis)",
+        label="scoring template (ketamine, 20-300 Hz)",
         zorder=7,
     )
-    target_ax.fill_between(ketamine_freqs, 0.0, ketamine_target_shape, color="#a21caf", alpha=0.06, lw=0)
+    valid_ketamine_target = np.isfinite(ketamine_target_shape)
+    target_ax.fill_between(
+        ketamine_freqs,
+        0.0,
+        np.where(valid_ketamine_target, ketamine_target_shape, 0.0),
+        where=valid_ketamine_target,
+        color="#a21caf",
+        alpha=0.06,
+        lw=0,
+    )
     target_ax.set_ylim(0.0, 1.05)
-    target_ax.set_ylabel("Target PSD shape, normalized")
+    target_ax.set_ylabel("Scoring template, normalized")
     target_ax.tick_params(axis="y", colors="#86198f")
     target_ax.spines["right"].set_color("#86198f")
 
-    ax.set_title(f"{manifest.get('candidate_id', 'candidate')} PSD overlay with scoring targets")
+    ax.set_title(f"{manifest.get('candidate_id', 'candidate')} PSD overlay with scoring templates")
     ax.grid(True, which="both", alpha=0.18)
     _finish_dual_axis_legend(ax, target_ax)
     fig.savefig(output_path, dpi=160)
