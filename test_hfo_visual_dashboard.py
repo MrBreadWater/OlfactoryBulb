@@ -96,6 +96,12 @@ with TemporaryDirectory() as tmp:
                     "dt_ms": 0.1,
                     "max_freq_hz": float(list(hfo.DEFAULT_SCORE_BANDS["target_hfo"])[1]),
                 },
+                "spectrogram_window_ms": 1000.0,
+                "spectrogram_switch_time_ms": 1000.0,
+                "spectrogram_window_ms_by_condition": {
+                    "control": [0.0, 1000.0],
+                    "ketamine": [1000.0, 2000.0],
+                },
                 "spectrogram_generation": {
                     "pipeline": SPECTROGRAM_PIPELINE,
                     "control_file": SPECTROGRAM_FILE_CONTROL,
@@ -140,6 +146,12 @@ with TemporaryDirectory() as tmp:
                 "ketamine": {"nperseg": 256, "noverlap": 192},
                 "dt_ms": 0.1,
                 "max_freq_hz": float(list(hfo.DEFAULT_SCORE_BANDS["target_hfo"])[1]),
+            },
+            "spectrogram_window_ms": 1000.0,
+            "spectrogram_switch_time_ms": 1000.0,
+            "spectrogram_window_ms_by_condition": {
+                "control": [0.0, 1000.0],
+                "ketamine": [1000.0, 2000.0],
             },
             "spectrogram_generation": {
                 "pipeline": SPECTROGRAM_PIPELINE,
@@ -210,6 +222,24 @@ with TemporaryDirectory() as tmp:
         mtime=1.0,
     )
     assert _packet_needs_refresh(stale_packet_overlay, row) is True
+
+    stale_packet_spectrogram_window = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=contact,
+        images=packet.images,
+        manifest={
+            **packet.manifest,
+            "spectrogram_window_ms": 300.0,
+            "spectrogram_switch_time_ms": 300.0,
+            "spectrogram_window_ms_by_condition": {
+                "control": [0.0, 300.0],
+                "ketamine": [300.0, 1300.0],
+            },
+        },
+        mtime=1.0,
+    )
+    assert _packet_needs_refresh(stale_packet_spectrogram_window, row) is True
 
     missing_spectrogram_packet = PacketInfo(
         candidate_id="C00042",

@@ -39,10 +39,11 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
-VISUAL_STYLE_VERSION = 5
+VISUAL_STYLE_VERSION = 7
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
+NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS = 1000.0
 SPECTROGRAM_FILE_CONTROL = "04_spectrogram_control.png"
 SPECTROGRAM_FILE_KETAMINE = "05_spectrogram_ketamine.png"
 SPECTROGRAM_GENERATOR_ID = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
@@ -122,6 +123,53 @@ def _condition_windows(row: dict[str, Any]) -> dict[str, tuple[float, float]]:
             float(ketamine.get("window_start_ms", 0.0)),
             float(ketamine.get("window_stop_ms", 0.0)),
         ),
+    }
+
+
+def _spectrogram_switch_time(row: dict[str, Any], result: dict[str, Any]) -> float:
+    """Resolve the control-to-ketamine switch time used for spectrogram slicing."""
+    summary = result.get("summary") or {}
+    params = summary.get("params") or {}
+    switch = params.get("ketamine_switch")
+    if isinstance(switch, dict):
+        try:
+            switch_time = float(switch.get("time_ms"))
+        except (TypeError, ValueError):
+            switch_time = math.nan
+        if math.isfinite(switch_time) and switch_time > 0.0:
+            return switch_time
+
+    for container in (row.get("parameters") or {}, row.get("control_metrics") or {}, row.get("ketamine_metrics") or {}):
+        for key in ("ketamine_switch_time_ms", "hfo_ketamine_switch_time_ms", "switch_time_ms"):
+            try:
+                switch_time = float(container.get(key))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if math.isfinite(switch_time) and switch_time > 0.0:
+                return switch_time
+
+    t = np.asarray(result.get("lfp_t", []), dtype=float)
+    finite_t = t[np.isfinite(t)]
+    if finite_t.size:
+        return float(np.max(finite_t)) * 0.5
+    return float(NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS)
+
+
+def _spectrogram_windows(row: dict[str, Any], result: dict[str, Any]) -> dict[str, tuple[float, float]]:
+    """Return 1 s control/ketamine visualization windows anchored to the switch time."""
+    switch_time = _spectrogram_switch_time(row, result)
+    vis_window = float(NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS)
+    t = np.asarray(result.get("lfp_t", []), dtype=float)
+    finite_t = t[np.isfinite(t)]
+    result_start = float(np.min(finite_t)) if finite_t.size else 0.0
+    result_stop = float(np.max(finite_t)) if finite_t.size else max(switch_time + vis_window, vis_window)
+    control_start = max(result_start, switch_time - vis_window)
+    control_stop = min(result_stop, switch_time)
+    ketamine_start = max(result_start, switch_time)
+    ketamine_stop = min(result_stop, switch_time + vis_window)
+    return {
+        "control": (float(control_start), float(control_stop)),
+        "ketamine": (float(ketamine_start), float(ketamine_stop)),
     }
 
 
@@ -336,11 +384,17 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     result_dir = Path((row.get("ketamine_metrics") or {}).get("result_dir") or (row.get("control_metrics") or {})["result_dir"])
     result = hlp.load_result(result_dir, progress=False)
     windows = _condition_windows(row)
+    spectrogram_windows = _spectrogram_windows(row, result)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     packet_dir = output_dir or campaign_dir / "figures" / f"short_expected_{candidate_id}_{timestamp}"
     packet_dir.mkdir(parents=True, exist_ok=True)
 
     windowed = {condition: _window_result(result, windows, condition) for condition in ("control", "ketamine")}
+    spectrogram_windowed = {
+        condition: _window_result(result, spectrogram_windows, condition)
+        for condition in ("control", "ketamine")
+    }
+    spectrogram_switch_time = _spectrogram_switch_time(row, result)
     files = [
         SPECTROGRAM_FILE_CONTROL,
         SPECTROGRAM_FILE_KETAMINE,
@@ -351,17 +405,17 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "11_phase_control.png",
         "12_phase_ketamine.png",
     ]
-    control_geom = _spectrogram_window_geometry(windowed["control"])
-    ketamine_geom = _spectrogram_window_geometry(windowed["ketamine"])
+    control_geom = _spectrogram_window_geometry(spectrogram_windowed["control"])
+    ketamine_geom = _spectrogram_window_geometry(spectrogram_windowed["ketamine"])
     _save_spectrogram(
-        windowed["control"],
+        spectrogram_windowed["control"],
         "control",
         packet_dir / files[0],
         nperseg=control_geom[0],
         noverlap=control_geom[1],
     )
     _save_spectrogram(
-        windowed["ketamine"],
+        spectrogram_windowed["ketamine"],
         "ketamine",
         packet_dir / files[1],
         nperseg=ketamine_geom[0],
@@ -411,6 +465,12 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "ketamine_peak_hz": (row.get("ketamine_metrics") or {}).get("peak_hz"),
         "control_window_ms": list(windows["control"]),
         "ketamine_window_ms": list(windows["ketamine"]),
+        "spectrogram_window_ms": NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
+        "spectrogram_switch_time_ms": spectrogram_switch_time,
+        "spectrogram_window_ms_by_condition": {
+            "control": list(spectrogram_windows["control"]),
+            "ketamine": list(spectrogram_windows["ketamine"]),
+        },
         "spectrogram_geometry": {
             "control": {"nperseg": control_geom[0], "noverlap": control_geom[1]},
             "ketamine": {"nperseg": ketamine_geom[0], "noverlap": ketamine_geom[1]},
@@ -422,7 +482,7 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
             "control_file": SPECTROGRAM_FILE_CONTROL,
             "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
-            "note": "lfp spectrograms produced from windowed condition traces using hlp.plot_spectrogram",
+            "note": "lfp spectrograms produced from 1000 ms visualization windows using hlp.plot_spectrogram",
         },
         "parameters": row.get("parameters"),
         "control_metrics": row.get("control_metrics"),

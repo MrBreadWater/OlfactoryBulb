@@ -49,6 +49,7 @@ EXPECTED_SPECTROGRAM_FILES = {
     "ketamine": "05_spectrogram_ketamine.png",
 }
 EXPECTED_SPECTROGRAM_PIPELINE = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
+EXPECTED_SPECTROGRAM_WINDOW_MS = 1000.0
 SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json")
 PRIMARY_PSD_NAME_ORDER = (
     "03_psd_overlay.png",
@@ -293,6 +294,45 @@ def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> boo
     if str(generation.get("control_file") or "") != EXPECTED_SPECTROGRAM_FILES["control"]:
         return True
     if str(generation.get("ketamine_file") or "") != EXPECTED_SPECTROGRAM_FILES["ketamine"]:
+        return True
+    try:
+        spectrogram_window_ms = float(packet.manifest.get("spectrogram_window_ms", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return True
+    if abs(spectrogram_window_ms - EXPECTED_SPECTROGRAM_WINDOW_MS) > 1e-9:
+        return True
+    try:
+        spectrogram_switch_time_ms = float(packet.manifest.get("spectrogram_switch_time_ms", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return True
+    if spectrogram_switch_time_ms <= 0.0 or not math.isfinite(spectrogram_switch_time_ms):
+        return True
+    windows_by_condition = packet.manifest.get("spectrogram_window_ms_by_condition") or {}
+    if not isinstance(windows_by_condition, dict):
+        return True
+    for condition in ("control", "ketamine"):
+        window = windows_by_condition.get(condition)
+        if not isinstance(window, (list, tuple)) or len(window) != 2:
+            return True
+        try:
+            start_ms = float(window[0])
+            stop_ms = float(window[1])
+        except (TypeError, ValueError):
+            return True
+        if not math.isfinite(start_ms) or not math.isfinite(stop_ms) or stop_ms <= start_ms:
+            return True
+        if abs((stop_ms - start_ms) - EXPECTED_SPECTROGRAM_WINDOW_MS) > 1e-3:
+            return True
+    control_window = windows_by_condition.get("control")
+    ketamine_window = windows_by_condition.get("ketamine")
+    try:
+        control_stop = float(control_window[1])
+        ketamine_start = float(ketamine_window[0])
+    except (TypeError, ValueError, IndexError):
+        return True
+    if abs(control_stop - spectrogram_switch_time_ms) > 1e-3:
+        return True
+    if abs(ketamine_start - spectrogram_switch_time_ms) > 1e-3:
         return True
 
     geometry = packet.manifest.get("spectrogram_geometry") or {}
