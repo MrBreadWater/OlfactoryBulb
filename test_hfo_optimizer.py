@@ -100,21 +100,25 @@ def synthetic_result(
 
 target = synthetic_result(freq_hz=180.0, amplitude=1.0, seed=1)
 upper_target = synthetic_result(freq_hz=220.0, amplitude=1.0, seed=4)
+lower_edge_target = synthetic_result(freq_hz=161.0, amplitude=1.0, seed=5)
 off_target = synthetic_result(freq_hz=90.0, amplitude=1.0, seed=2)
 flat = synthetic_result(freq_hz=40.0, amplitude=0.25, noise_std=0.25, seed=3)
 
 target_metrics = score_condition_result(target)
 upper_target_metrics = score_condition_result(upper_target, target_hz=180.0, target_half_width_hz=20.0)
+lower_edge_metrics = score_condition_result(lower_edge_target)
 off_target_metrics = score_condition_result(off_target)
 flat_metrics = score_condition_result(flat)
 
 assert math.isfinite(target_metrics["condition_score"])
 assert target_metrics["condition_score"] > off_target_metrics["condition_score"]
 assert target_metrics["peak_hz"] > 150.0 and target_metrics["peak_hz"] < 210.0
+assert target_metrics["target_centroid_match"] > lower_edge_metrics["target_centroid_match"]
 assert upper_target_metrics["target_band_hz"] == [160.0, 230.0]
 assert upper_target_metrics["peak_hz"] > 210.0 and upper_target_metrics["peak_hz"] < 230.0
 
 good_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=target_metrics)
+edge_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=lower_edge_metrics)
 bad_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=target_metrics)
 upper_bad_pair = score_candidate_pair(control_metrics=upper_target_metrics, ketamine_metrics=upper_target_metrics)
 reversed_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=flat_metrics)
@@ -142,6 +146,7 @@ missing_control_pair = score_candidate_pair(
 )
 
 assert good_pair["pair_score"] > bad_pair["pair_score"]
+assert good_pair["pair_score"] > edge_pair["pair_score"]
 assert good_pair["pair_score"] > artifact_pair["pair_score"]
 assert good_pair["control_target_excess_penalty"] == 0.0
 assert bad_pair["pair_score"] > reversed_pair["pair_score"]
@@ -149,8 +154,9 @@ assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
-assert upper_bad_pair["pair_score_version"] == 3
+assert upper_bad_pair["pair_score_version"] == 4
 assert leaky_pair["control_target_excess_penalty"] > 0.0
+assert edge_pair["ketamine_center_penalty"] > 0.0
 assert bad_pair["target_delta"] == 0.0
 assert artifact_pair["control_wrong_band_penalty"] > 0.0
 assert reversed_pair["negative_delta_penalty"] > 0.0
