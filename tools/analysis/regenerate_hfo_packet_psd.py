@@ -55,6 +55,28 @@ def _set_psd_axis_limits(ax: Any, arrays: list[np.ndarray]) -> None:
     ax.set_yscale("log")
 
 
+def _normalized_template_for_plot(kind: str, freqs: np.ndarray) -> np.ndarray:
+    _target_freqs, target = hfo.psd_template_curve(kind, freqs)
+    if not target.size:
+        return target
+    peak = float(np.nanmax(target))
+    if peak <= 0.0:
+        return np.zeros_like(target)
+    return target / peak
+
+
+def _finish_dual_axis_legend(ax: Any, target_ax: Any) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    target_handles, target_labels = target_ax.get_legend_handles_labels()
+    ax.legend(
+        handles + target_handles,
+        labels + target_labels,
+        loc="upper right",
+        frameon=False,
+        ncol=2,
+    )
+
+
 def _plot_single_psd(
     *,
     manifest: dict[str, Any],
@@ -66,22 +88,33 @@ def _plot_single_psd(
     bands: dict[str, tuple[float, float]],
 ) -> None:
     freqs, psd = _finite_psd(summary)
-    _target_freqs, target = hfo.scaled_psd_template_curve(
-        target_kind,
-        freqs,
-        psd,
-        fit_band_hz=(20.0, 300.0),
-        method="area",
-    )
+    target_shape = _normalized_template_for_plot(target_kind, freqs)
 
     fig, ax = plt.subplots(figsize=(12, 6.6), constrained_layout=True)
     _target_band_patch(ax, bands)
     ax.plot(freqs, psd, color=color, lw=2.0, label=f"{condition} LFP PSD")
-    ax.plot(freqs, target, color="#111827", lw=2.2, ls="--", label=f"target PSD ({target_kind})")
     ax.set_xlim(0, 300)
-    _set_psd_axis_limits(ax, [psd, target])
+    _set_psd_axis_limits(ax, [psd])
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Power spectral density")
+
+    target_ax = ax.twinx()
+    target_ax.plot(
+        freqs,
+        target_shape,
+        color="#a21caf",
+        lw=3.2,
+        ls=(0, (6, 2)),
+        alpha=0.95,
+        label=f"TARGET PSD shape ({target_kind}, right axis)",
+        zorder=6,
+    )
+    target_ax.fill_between(freqs, 0.0, target_shape, color="#a21caf", alpha=0.08, lw=0)
+    target_ax.set_ylim(0.0, 1.05)
+    target_ax.set_ylabel("Target PSD shape, normalized")
+    target_ax.tick_params(axis="y", colors="#86198f")
+    target_ax.spines["right"].set_color("#86198f")
+
     ax.set_title(f"{manifest.get('candidate_id', 'candidate')} {condition} PSD with scoring target")
     relative = (summary.get("relative_band_power") or {}).get("target_hfo")
     peak = manifest.get(f"{condition.lower()}_peak_hz")
@@ -94,7 +127,7 @@ def _plot_single_psd(
             fontsize=10,
         )
     ax.grid(True, which="both", alpha=0.18)
-    ax.legend(loc="upper right", frameon=False, ncol=2)
+    _finish_dual_axis_legend(ax, target_ax)
     fig.savefig(output_path, dpi=160)
     plt.close(fig)
 
@@ -109,34 +142,48 @@ def _plot_overlay_psd(
 ) -> None:
     control_freqs, control_psd = _finite_psd(control_summary)
     ketamine_freqs, ketamine_psd = _finite_psd(ketamine_summary)
-    _cf, control_target = hfo.scaled_psd_template_curve(
-        "control",
-        control_freqs,
-        control_psd,
-        fit_band_hz=(20.0, 300.0),
-        method="area",
-    )
-    _kf, ketamine_target = hfo.scaled_psd_template_curve(
-        "ketamine",
-        ketamine_freqs,
-        ketamine_psd,
-        fit_band_hz=(20.0, 300.0),
-        method="area",
-    )
+    control_target_shape = _normalized_template_for_plot("control", control_freqs)
+    ketamine_target_shape = _normalized_template_for_plot("ketamine", ketamine_freqs)
 
     fig, ax = plt.subplots(figsize=(12, 6.8), constrained_layout=True)
     _target_band_patch(ax, bands)
     ax.plot(control_freqs, control_psd, color="#2563eb", lw=1.9, label="control LFP PSD")
     ax.plot(ketamine_freqs, ketamine_psd, color="#dc2626", lw=1.9, label="ketamine LFP PSD")
-    ax.plot(control_freqs, control_target, color="#1d4ed8", lw=2.0, ls="--", alpha=0.8, label="target PSD (control)")
-    ax.plot(ketamine_freqs, ketamine_target, color="#991b1b", lw=2.2, ls="--", alpha=0.85, label="target PSD (ketamine)")
     ax.set_xlim(0, 300)
-    _set_psd_axis_limits(ax, [control_psd, ketamine_psd, control_target, ketamine_target])
+    _set_psd_axis_limits(ax, [control_psd, ketamine_psd])
     ax.set_xlabel("Frequency (Hz)")
     ax.set_ylabel("Power spectral density")
+
+    target_ax = ax.twinx()
+    target_ax.plot(
+        control_freqs,
+        control_target_shape,
+        color="#7c3aed",
+        lw=2.8,
+        ls=(0, (3, 2)),
+        alpha=0.88,
+        label="TARGET PSD shape (control, right axis)",
+        zorder=6,
+    )
+    target_ax.plot(
+        ketamine_freqs,
+        ketamine_target_shape,
+        color="#a21caf",
+        lw=3.2,
+        ls=(0, (7, 2)),
+        alpha=0.95,
+        label="TARGET PSD shape (ketamine, right axis)",
+        zorder=7,
+    )
+    target_ax.fill_between(ketamine_freqs, 0.0, ketamine_target_shape, color="#a21caf", alpha=0.06, lw=0)
+    target_ax.set_ylim(0.0, 1.05)
+    target_ax.set_ylabel("Target PSD shape, normalized")
+    target_ax.tick_params(axis="y", colors="#86198f")
+    target_ax.spines["right"].set_color("#86198f")
+
     ax.set_title(f"{manifest.get('candidate_id', 'candidate')} PSD overlay with scoring targets")
     ax.grid(True, which="both", alpha=0.18)
-    ax.legend(loc="upper right", frameon=False, ncol=2)
+    _finish_dual_axis_legend(ax, target_ax)
     fig.savefig(output_path, dpi=160)
     plt.close(fig)
 
@@ -220,7 +267,7 @@ def regenerate_packet_psd(packet: Path) -> Path:
     manifest["psd_target_overlay"] = {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "templates": ["control", "ketamine"],
-        "scaling": "area over 20-300 Hz",
+        "scaling": "normalized target shape on right axis",
         "source": "tools/analysis/regenerate_hfo_packet_psd.py",
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))
