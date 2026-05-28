@@ -229,7 +229,13 @@ with TemporaryDirectory() as tmp:
         "pair_score": 5.0,
         "pair_score_version": row_score_version,
         "target_delta": 0.1,
-        "parameters": {"kar_mt_gmax": 0.02, "gaba_gmax": 1.5},
+        "parameters": {
+            "kar_mt_gmax": 0.02,
+            "gaba_gmax": 1.5,
+            "gaba_tau2_ms": 103.5,
+            "input_syn_tau1_ms": 6.2,
+            "kar_tau2_ms": 84.1,
+        },
         "control_metrics": {
             "peak_hz": 110.0,
             "relative_band_power": {"target_hfo": 0.02, "high_gamma": 0.11},
@@ -255,6 +261,9 @@ with TemporaryDirectory() as tmp:
     assert "Soma spike frequency 1D KDE: EPLI" in html
     assert "09_population_rates.png" not in html
     assert "Contact sheet" in html
+    assert "gaba_tau2_ms" in html
+    assert "input_syn_tau1_ms" in html
+    assert "kar_tau2_ms" in html
     assert html.index("Live PSD overlay with scoring template") < html.index("LFP spectrogram")
     assert html.index("Live PSD overlay with scoring template") < html.index("Contact sheet")
     assert _packet_needs_refresh(packet, row) is False

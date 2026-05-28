@@ -511,21 +511,14 @@ def _metric_summary(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _parameter_chips(parameters: dict[str, Any]) -> str:
-    preferred = [
-        "kar_mt_gmax",
-        "kar_gc_gmax",
-        "kar_osn_weight_scale",
-        "kar_gc_weight_scale",
-        "ampa_nmda_gmax",
-        "gaba_gmax",
-        "epli_ampa_weight_scale",
-        "epli_gaba_weight_scale",
-        "gc_ka_gbar_scale",
-        "tc_input_weight",
-        "mc_input_weight",
-    ]
+    preferred = [spec.path for spec in hfo.default_hfo_search_space()]
+    extras = sorted(
+        key
+        for key in parameters
+        if key not in preferred and not str(key).startswith("optimizer_")
+    )
     chunks = []
-    for name in preferred:
+    for name in [*preferred, *extras]:
         if name in parameters:
             chunks.append(f"<span><b>{_esc(name)}</b> {_esc(_fmt(parameters[name], 4))}</span>")
     return "\n".join(chunks)
