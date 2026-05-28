@@ -94,6 +94,43 @@ generic = subprocess.run(
 assert generic.returncode == 0, generic
 assert json.loads(generic.stdout)["audit_id"] == "burton_urban_fi"
 
+
+def _assert_new_sweep_payload(run: subprocess.CompletedProcess[str]) -> None:
+    assert run.returncode in (0, 1), run
+    payload = json.loads(run.stdout)
+    assert payload["audit_id"] == "new_sweep"
+    assert payload["title"] == "New sweep"
+    check_ids = {item["check_id"] for item in payload["items"]}
+    assert "burton_urban_fi.burton_urban_fi_skipped" in check_ids
+    assert any(check_id.startswith("epli_correctness.") for check_id in check_ids)
+    expected_code = 1 if payload["summary"]["FAIL"] else 0
+    assert run.returncode == expected_code
+
+
+default_new_sweep = subprocess.run(
+    [sys.executable, "tools/run_audit.py", "--skip-neuron", "--json"],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+_assert_new_sweep_payload(default_new_sweep)
+
+explicit_all = subprocess.run(
+    [sys.executable, "tools/run_audit.py", "all", "--skip-neuron", "--json"],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+_assert_new_sweep_payload(explicit_all)
+
+explicit_new_sweep = subprocess.run(
+    [sys.executable, "tools/run_audit.py", "new_sweep", "--skip-neuron", "--json"],
+    capture_output=True,
+    text=True,
+    check=False,
+)
+_assert_new_sweep_payload(explicit_new_sweep)
+
 listed = subprocess.run(
     [sys.executable, "tools/run_audit.py", "--list"],
     capture_output=True,
