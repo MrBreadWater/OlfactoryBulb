@@ -101,6 +101,7 @@ def _assert_new_sweep_payload(run: subprocess.CompletedProcess[str]) -> None:
     assert payload["audit_id"] == "new_sweep"
     assert payload["title"] == "New sweep"
     check_ids = {item["check_id"] for item in payload["items"]}
+    assert any(check_id.startswith("env_install.") for check_id in check_ids)
     assert "burton_urban_fi.burton_urban_fi_skipped" in check_ids
     assert any(check_id.startswith("epli_correctness.") for check_id in check_ids)
     expected_code = 1 if payload["summary"]["FAIL"] else 0

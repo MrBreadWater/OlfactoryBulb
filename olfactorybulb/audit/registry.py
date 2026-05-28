@@ -22,6 +22,15 @@ class AuditSpec:
 AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
     [
         (
+            "env_install",
+            AuditSpec(
+                audit_id="env_install",
+                title="Environment/install audit",
+                description="Audit whether the active machine environment can run the maintained OBGPU workflow.",
+                module_path="olfactorybulb.audit.env_install",
+            ),
+        ),
+        (
             "burton_urban_fi",
             AuditSpec(
                 audit_id="burton_urban_fi",
