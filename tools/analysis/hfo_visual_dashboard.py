@@ -67,6 +67,8 @@ PRIMARY_PSD_NAME_ORDER = tuple(hfo_visuals.PRIMARY_PSD_NAME_ORDER)
 _STYLE_SOURCE_SIGNATURE: tuple[int, int, int] = (0, 0, 0)
 RUNTIME_SUBDIR = ".runtime"
 EXPORT_LOCK_NAME = "export.lock"
+_PACKET_GENERATION_JOBS: dict[tuple[str, str], threading.Thread] = {}
+_PACKET_GENERATION_JOBS_LOCK = threading.Lock()
 
 
 @dataclass(frozen=True)
@@ -750,6 +752,23 @@ def _effective_packet_generation_workers(requested_workers: int | None, candidat
     return max(1, min(requested, int(candidate_count)))
 
 
+def _packet_generation_job_key(campaign_dir: Path, candidate_id: str) -> tuple[str, str]:
+    return (str(Path(campaign_dir).expanduser().resolve()), str(candidate_id))
+
+
+def _packet_generation_lock_is_active(campaign_dir: Path, candidate_id: str) -> bool:
+    lock_path = packet_generator_module.packet_build_lock_path(campaign_dir, candidate_id)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as lock_handle:
+        try:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        else:
+            fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+            return False
+
+
 def _generate_one_packet(task: tuple[str, str]) -> str:
     campaign_dir_str, candidate_id = task
     from generate_hfo_candidate_packet import generate_packet
@@ -787,6 +806,8 @@ def _generate_missing_packets(
         candidate_id = str(row.get("candidate_id") or "")
         if not candidate_id:
             continue
+        if _packet_generation_lock_is_active(campaign_dir, candidate_id):
+            continue
         if not _packet_needs_refresh(packets.get(candidate_id), row):
             continue
         missing_candidate_ids.append(candidate_id)
@@ -809,6 +830,54 @@ def _generate_dashboard_packet(
     campaign_dir: Path,
     candidate_id: str,
     *,
+    packet_output_dir: str | Path | None = None,
+    output_dir: str | Path | None,
+    top_n: int,
+    refresh_s: float | None,
+    generate_packets_top_n: int,
+    generate_packet_workers: int,
+    cleanup_stale_packets_before_render: bool,
+    status_json: str | Path | None,
+    export_generate_packets_top_n: int | None = None,
+    export_cleanup_stale_packets_before_render: bool | None = None,
+    reload_modules: bool = True,
+) -> dict[str, Any]:
+    if reload_modules:
+        _reload_visual_packet_modules_if_needed()
+    packet_dir = Path(packet_generator_module.generate_packet(campaign_dir, candidate_id, output_dir=packet_output_dir))
+    export_top_n = (
+        int(generate_packets_top_n)
+        if export_generate_packets_top_n is None
+        else int(export_generate_packets_top_n)
+    )
+    export_cleanup_stale_packets = (
+        bool(cleanup_stale_packets_before_render)
+        if export_cleanup_stale_packets_before_render is None
+        else bool(export_cleanup_stale_packets_before_render)
+    )
+    manifest = export_visual_dashboard(
+        campaign_dir,
+        output_dir=output_dir,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=export_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=export_cleanup_stale_packets,
+        status_json=status_json,
+    )
+    return {
+        "ok": True,
+        "candidate_id": candidate_id,
+        "packet_dir": str(packet_dir),
+        "manifest": manifest,
+    }
+
+
+def _queue_dashboard_packet_generation(
+    campaign_dir: Path,
+    candidate_id: str,
+    *,
+    packet_output_dir: str | Path | None,
     output_dir: str | Path | None,
     top_n: int,
     refresh_s: float | None,
@@ -818,24 +887,60 @@ def _generate_dashboard_packet(
     status_json: str | Path | None,
     reload_modules: bool = True,
 ) -> dict[str, Any]:
-    if reload_modules:
-        _reload_visual_packet_modules_if_needed()
-    packet_dir = Path(packet_generator_module.generate_packet(campaign_dir, candidate_id))
-    manifest = export_visual_dashboard(
-        campaign_dir,
-        output_dir=output_dir,
-        top_n=top_n,
-        refresh_s=refresh_s,
-        generate_packets_top_n=generate_packets_top_n,
-        generate_packet_workers=generate_packet_workers,
-        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-        status_json=status_json,
+    campaign_path = Path(campaign_dir).expanduser().resolve()
+    packet_output_path = (
+        Path(packet_output_dir).expanduser().resolve()
+        if packet_output_dir is not None
+        else campaign_path / "figures" / f"packet_{candidate_id}"
     )
+    job_key = _packet_generation_job_key(campaign_path, candidate_id)
+
+    def _worker() -> None:
+        try:
+            _generate_dashboard_packet(
+                campaign_path,
+                candidate_id,
+                packet_output_dir=packet_output_path,
+                output_dir=output_dir,
+                top_n=top_n,
+                refresh_s=refresh_s,
+                generate_packets_top_n=generate_packets_top_n,
+                generate_packet_workers=generate_packet_workers,
+                cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                status_json=status_json,
+                export_generate_packets_top_n=0,
+                export_cleanup_stale_packets_before_render=False,
+                reload_modules=reload_modules,
+            )
+        finally:
+            with _PACKET_GENERATION_JOBS_LOCK:
+                current = _PACKET_GENERATION_JOBS.get(job_key)
+                if current is threading.current_thread():
+                    _PACKET_GENERATION_JOBS.pop(job_key, None)
+
+    with _PACKET_GENERATION_JOBS_LOCK:
+        existing = _PACKET_GENERATION_JOBS.get(job_key)
+        if existing is not None and existing.is_alive():
+            return {
+                "ok": True,
+                "queued": False,
+                "running": True,
+                "candidate_id": candidate_id,
+                "packet_output_dir": str(packet_output_path),
+            }
+        thread = threading.Thread(
+            target=_worker,
+            name=f"hfo-packet-{candidate_id}",
+            daemon=True,
+        )
+        _PACKET_GENERATION_JOBS[job_key] = thread
+        thread.start()
     return {
         "ok": True,
+        "queued": True,
+        "running": True,
         "candidate_id": candidate_id,
-        "packet_dir": str(packet_dir),
-        "manifest": manifest,
+        "packet_output_dir": str(packet_output_path),
     }
 
 
@@ -1623,6 +1728,12 @@ def _render_html(
     .generate-packet-button:hover {{
       background: #dbeafe;
     }}
+    .generate-packet-button[data-pending="true"] {{
+      background: #dbeafe;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      cursor: progress;
+    }}
     .generate-packet-button:disabled {{
       opacity: 0.65;
       cursor: progress;
@@ -1680,6 +1791,7 @@ def _render_html(
     (() => {{
       const refreshSeconds = Number(document.body.dataset.refreshS || 0);
       const indicator = document.getElementById("refresh-indicator");
+      const pendingPacketRequests = new Set();
       let refreshing = false;
 
       function showIndicator(text) {{
@@ -1687,6 +1799,32 @@ def _render_html(
         indicator.textContent = text;
         indicator.classList.add("visible");
         window.setTimeout(() => indicator.classList.remove("visible"), 1800);
+      }}
+
+      function sleep(ms) {{
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }}
+
+      async function pollDashboardManifestUntilUpdated(candidateId, baselineGeneratedAt) {{
+        const deadline = Date.now() + 10 * 60 * 1000;
+        while (Date.now() < deadline) {{
+          try {{
+            const manifestResp = await fetch("manifest.json?cache=" + Date.now(), {{ cache: "no-store" }});
+            if (manifestResp.ok) {{
+              const manifest = await manifestResp.json();
+              const generatedAt = String(manifest.generated_at || "");
+              if (generatedAt && generatedAt !== baselineGeneratedAt) {{
+                showIndicator(`Packet ready for ${{candidateId}}. Reloading dashboard...`);
+                window.setTimeout(() => window.location.reload(), 350);
+                return true;
+              }}
+            }}
+          }} catch (exc) {{
+            console.warn("Packet generation poll failed", exc);
+          }}
+          await sleep(2000);
+        }}
+        return false;
       }}
 
       function setActiveTab(tabId) {{
@@ -1718,13 +1856,16 @@ def _render_html(
         const button = event.target.closest("[data-generate-packet]");
         if (!button) return;
         event.preventDefault();
-        if (button.disabled) return;
         const candidateId = String(button.dataset.candidateId || "").trim();
         if (!candidateId) return;
+        if (pendingPacketRequests.has(candidateId)) return;
+        pendingPacketRequests.add(candidateId);
         const originalText = button.textContent || "Generate packet";
-        button.disabled = true;
-        button.textContent = "Generating...";
-        showIndicator(`Generating packet for ${{candidateId}}...`);
+        const baselineGeneratedAt = String(document.body.dataset.generatedAt || "");
+        button.dataset.pending = "true";
+        button.setAttribute("aria-busy", "true");
+        button.textContent = "Queued...";
+        showIndicator(`Queued packet generation for ${{candidateId}}...`);
         try {{
           const response = await fetch("{GENERATE_PACKET_ENDPOINT}", {{
             method: "POST",
@@ -1736,12 +1877,25 @@ def _render_html(
           if (!response.ok || !payload.ok) {{
             throw new Error(String(payload.error || `Packet generation failed with status ${{response.status}}`));
           }}
-          showIndicator(`Generated packet for ${{candidateId}}. Reloading dashboard...`);
-          window.setTimeout(() => window.location.reload(), 350);
+          showIndicator(
+            payload.queued === false
+              ? `Packet already running for ${{candidateId}}. Watching for completion...`
+              : `Packet queued for ${{candidateId}}. Watching for completion...`
+          );
+          const updated = await pollDashboardManifestUntilUpdated(candidateId, baselineGeneratedAt);
+          if (!updated) {{
+            showIndicator(`Packet generation is still running for ${{candidateId}}.`);
+            pendingPacketRequests.delete(candidateId);
+            button.removeAttribute("aria-busy");
+            button.dataset.pending = "";
+            button.textContent = originalText;
+          }}
         }} catch (exc) {{
           console.warn("Packet generation failed", exc);
           showIndicator(`Packet generation failed for ${{candidateId}}.`);
-          button.disabled = false;
+          pendingPacketRequests.delete(candidateId);
+          button.removeAttribute("aria-busy");
+          button.dataset.pending = "";
           button.textContent = originalText;
         }}
       }});
@@ -2469,8 +2623,6 @@ def _serve_dashboard_server(
         entrypoint_path = Path(entrypoint_path)
         if not entrypoint_path.exists():
             entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
-    generation_lock = threading.Lock()
-
     class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             kwargs.setdefault("directory", str(server_root))
@@ -2506,22 +2658,22 @@ def _serve_dashboard_server(
                 self._send_json(400, {"ok": False, "error": "Missing candidate_id"})
                 return
             try:
-                with generation_lock:
-                    result = _generate_dashboard_packet(
-                        campaign_path,
-                        candidate_id,
-                        output_dir=output_dir,
-                        top_n=top_n,
-                        refresh_s=refresh_s,
-                        generate_packets_top_n=generate_packets_top_n,
-                        generate_packet_workers=generate_packet_workers,
-                        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-                        status_json=status_json,
-                    )
+                result = _queue_dashboard_packet_generation(
+                    campaign_path,
+                    candidate_id,
+                    packet_output_dir=campaign_path / "figures" / f"packet_{candidate_id}",
+                    output_dir=output_dir,
+                    top_n=top_n,
+                    refresh_s=refresh_s,
+                    generate_packets_top_n=generate_packets_top_n,
+                    generate_packet_workers=generate_packet_workers,
+                    cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                    status_json=status_json,
+                )
             except Exception as exc:  # pragma: no cover - exercised through integration, not unit tests
                 self._send_json(500, {"ok": False, "candidate_id": candidate_id, "error": str(exc)})
                 return
-            self._send_json(200, result)
+            self._send_json(202, result)
 
     server = http.server.ThreadingHTTPServer((host, int(port)), DashboardRequestHandler)
     print(

@@ -49,8 +49,12 @@ def _load_candidate(campaign_dir: Path, candidate_id: str) -> dict[str, Any]:
     raise ValueError(f"Candidate {candidate_id!r} not found under {campaign_dir}")
 
 
-def _packet_build_lock_path(campaign_dir: Path, candidate_id: str) -> Path:
+def packet_build_lock_path(campaign_dir: Path, candidate_id: str) -> Path:
     return campaign_dir / ".runtime" / "packet-build-locks" / f"{candidate_id}.lock"
+
+
+def _packet_build_lock_path(campaign_dir: Path, candidate_id: str) -> Path:
+    return packet_build_lock_path(campaign_dir, candidate_id)
 
 
 @contextlib.contextmanager

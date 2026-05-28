@@ -606,6 +606,87 @@ with TemporaryDirectory() as tmp:
 
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)
+    rows = [
+        {"batch_name": "batch_0001", "candidate_id": "C00011", "pair_score": 10.0},
+    ]
+    lock_path = packet_build_lock_path(campaign, "C00011")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as lock_handle:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX)
+        captured: list[str] = []
+
+        def fake_generate_locked(task):
+            _, candidate_id = task
+            captured.append(candidate_id)
+            path = campaign / "figures" / f"packet_{candidate_id}"
+            path.mkdir(parents=True, exist_ok=True)
+            return str(path)
+
+        with (
+            patch.object(hfo_vd, "find_candidate_packets", return_value={}),
+            patch.object(hfo_vd, "_packet_needs_refresh", return_value=True),
+            patch.object(hfo_vd, "_generate_one_packet", side_effect=fake_generate_locked),
+        ):
+            generated = _generate_missing_packets(campaign, rows, top_n=1, workers=1)
+
+        assert generated == []
+        assert captured == []
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    output_dir.mkdir(parents=True)
+    gate = threading.Event()
+    started = threading.Event()
+
+    def fake_generate_dashboard_packet(*args, **kwargs):
+        started.set()
+        gate.wait(timeout=1.0)
+        return {
+            "ok": True,
+            "candidate_id": "C00042",
+            "packet_dir": str(campaign / "figures" / "packet_C00042"),
+            "manifest": {"generated_at": "2026-05-28T12:00:00"},
+        }
+
+    with patch.object(hfo_vd, "_generate_dashboard_packet", side_effect=fake_generate_dashboard_packet):
+        payload = _queue_dashboard_packet_generation(
+            campaign,
+            "C00042",
+            packet_output_dir=campaign / "figures" / "packet_C00042",
+            output_dir=output_dir,
+            top_n=1,
+            refresh_s=60.0,
+            generate_packets_top_n=0,
+            generate_packet_workers=1,
+            cleanup_stale_packets_before_render=True,
+            status_json=None,
+            reload_modules=False,
+        )
+
+    assert payload["ok"] is True
+    assert payload["queued"] is True
+    assert payload["candidate_id"] == "C00042"
+    assert payload["packet_output_dir"].endswith("packet_C00042")
+    assert started.wait(1.0)
+    job_key = (str(campaign.resolve()), "C00042")
+    with hfo_vd._PACKET_GENERATION_JOBS_LOCK:
+        assert job_key in hfo_vd._PACKET_GENERATION_JOBS
+        job_thread = hfo_vd._PACKET_GENERATION_JOBS[job_key]
+    assert job_thread.is_alive()
+    gate.set()
+    job_thread.join(timeout=1.0)
+    assert not job_thread.is_alive()
+    for _ in range(20):
+        with hfo_vd._PACKET_GENERATION_JOBS_LOCK:
+            if job_key not in hfo_vd._PACKET_GENERATION_JOBS:
+                break
+        time.sleep(0.05)
+    else:
+        raise AssertionError("Queued packet generation job did not clean up")
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
     (campaign / "figures").mkdir(parents=True)
     (campaign / "candidate_archive.jsonl").write_text("{}\n")
     status_json = campaign / "status.json"
