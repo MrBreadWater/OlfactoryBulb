@@ -21,6 +21,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import builtins
 import warnings
@@ -224,6 +225,7 @@ CONTROL_HELP = {
     "remote_live_logs": "When True, stream remote bootstrap/stdout/stderr/slurm log updates into the notebook while polling.",
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
     "remote_ssh_command_timeout_s": "Timeout in seconds for one notebook-managed Paramiko shell command. None or <=0 disables the timeout.",
+    "remote_ssh_exec_timeout_s": "Timeout in seconds for Paramiko exec_command acknowledgement before the command output phase starts.",
     "remote_poll_command_timeout_s": "Timeout in seconds for lightweight remote status-poll shell commands. Keeps a stale SSH channel from freezing an active notebook worker.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
@@ -883,6 +885,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_live_logs": True,
         "remote_heartbeat_timeout_s": 120,
         "remote_ssh_command_timeout_s": 300,
+        "remote_ssh_exec_timeout_s": 30,
         "remote_poll_command_timeout_s": 60,
         "remote_cleanup_stale_allocations": True,
         "remote_defer_soma_vs_sync": False,
@@ -2184,6 +2187,20 @@ def _remote_ssh_command_timeout_s(config: dict[str, Any]) -> float | None:
     return timeout
 
 
+def _remote_ssh_exec_timeout_s(config: dict[str, Any]) -> float | None:
+    """Return the Paramiko exec request acknowledgement timeout."""
+    value = config.get("remote_ssh_exec_timeout_s", 30)
+    if value is None:
+        return None
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return 30.0
+    if timeout <= 0:
+        return None
+    return timeout
+
+
 def _remote_poll_command_timeout_s(config: dict[str, Any]) -> float | None:
     """Return the tighter timeout for lightweight remote polling commands."""
     value = config.get("remote_poll_command_timeout_s", 60)
@@ -2417,6 +2434,7 @@ def _run_paramiko_shell(
     """Run one shell command over a persistent Paramiko transport."""
     last_exc: Exception | None = None
     command_timeout_s = _remote_ssh_command_timeout_s(config)
+    exec_timeout_s = _remote_ssh_exec_timeout_s(config)
     for attempt in range(2):
         connection = _connect_paramiko(config)
         transport = connection["transport"]
@@ -2424,7 +2442,29 @@ def _run_paramiko_shell(
         try:
             channel = transport.open_session()
             channel.settimeout(1.0)
-            channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
+            exec_error: list[BaseException] = []
+
+            def exec_target() -> None:
+                try:
+                    channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
+                except BaseException as exc:  # pragma: no cover - defensive thread bridge
+                    exec_error.append(exc)
+
+            exec_thread = threading.Thread(target=exec_target, name="obgpu-paramiko-exec", daemon=True)
+            exec_thread.start()
+            exec_thread.join(exec_timeout_s)
+            if exec_thread.is_alive():
+                try:
+                    channel.close()
+                except Exception:
+                    pass
+                raise _SSHCommandTimeoutError(
+                    "Paramiko exec_command acknowledgement timed out after "
+                    f"{exec_timeout_s:.1f}s.\n"
+                    f"Command: {remote_shell_command}"
+                )
+            if exec_error:
+                raise exec_error[0]
             stdout_chunks: list[bytes] = []
             stderr_chunks: list[bytes] = []
             deadline = None if command_timeout_s is None else time.monotonic() + command_timeout_s

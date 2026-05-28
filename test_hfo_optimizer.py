@@ -59,8 +59,10 @@ assert campaign_config["record_gc_output_events"] is False
 assert campaign_config["save_soma_traces"] is False
 assert campaign_config["save_voltage_summary"] is False
 assert hlp.build_run_config()["remote_ssh_command_timeout_s"] == 300
+assert hlp.build_run_config()["remote_ssh_exec_timeout_s"] == 30
 assert hlp.build_run_config()["remote_poll_command_timeout_s"] == 60
 assert hlp._remote_ssh_command_timeout_s({"remote_ssh_command_timeout_s": 0}) is None
+assert hlp._remote_ssh_exec_timeout_s({"remote_ssh_exec_timeout_s": 0}) is None
 assert hlp._remote_poll_command_timeout_s({"remote_poll_command_timeout_s": None}) == 300.0
 
 lfp_filter_config = hlp.build_run_config(
