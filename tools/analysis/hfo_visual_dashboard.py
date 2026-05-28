@@ -32,6 +32,7 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import olfactorybulb.hfo_optimizer as hfo
+from generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
 
 
 DEFAULT_OUTPUT_SUBDIR = "visual_dashboard"
@@ -181,10 +182,13 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
 def _packet_needs_frequency_kde_refresh(packet: PacketInfo | None) -> bool:
     if packet is None:
         return True
+    if packet.manifest.get("visual_style_version") != VISUAL_STYLE_VERSION:
+        return True
     all_pngs = tuple(packet.packet_dir.glob("*.png"))
     has_legacy_kde = any(_is_legacy_ad_hoc_kde_image(path) for path in all_pngs)
     has_pipeline_kde = any("spike_frequency_kde_2d" in path.name for path in all_pngs)
-    return has_legacy_kde and not has_pipeline_kde
+    has_notebook_kde_1d = any("spike_frequency_kde_1d" in path.name for path in all_pngs)
+    return (has_legacy_kde and not has_pipeline_kde) or not has_notebook_kde_1d
 
 
 def _generate_missing_packets(campaign_dir: Path, rows: list[dict[str, Any]], *, top_n: int) -> list[Path]:
@@ -300,16 +304,113 @@ def _details_gallery(
     *,
     output_dir: Path,
     open_by_default: bool = False,
+    dom_id: str | None = None,
 ) -> str:
     if not images:
         return ""
     open_attr = " open" if open_by_default else ""
+    id_attr = f" id='{_esc(dom_id)}'" if dom_id else ""
     return (
-        f"<details class='figure-group'{open_attr}>"
+        f"<details class='figure-group'{id_attr}{open_attr}>"
         f"<summary>{_esc(title)} <span>{len(images)} plots</span></summary>"
         f"{_gallery_html(images, output_dir=output_dir)}"
         "</details>"
     )
+
+
+def _image_by_name(images: tuple[Path, ...]) -> dict[str, Path]:
+    return {image.name: image for image in images}
+
+
+def _condition_pair_html(
+    title: str,
+    control_image: Path | None,
+    ketamine_image: Path | None,
+    *,
+    output_dir: Path,
+    dom_id: str,
+    open_by_default: bool = False,
+) -> str:
+    if control_image is None and ketamine_image is None:
+        return ""
+    open_attr = " open" if open_by_default else ""
+
+    def column(condition: str, image: Path | None) -> str:
+        if image is None:
+            body = "<div class='missing'>No plot generated.</div>"
+        else:
+            body = _image_figure(image, output_dir=output_dir, caption=condition)
+        return f"<div class='condition-column {condition.lower()}'><h3>{_esc(condition)}</h3>{body}</div>"
+
+    return (
+        f"<details class='figure-group condition-group' id='{_esc(dom_id)}'{open_attr}>"
+        f"<summary>{_esc(title)} <span>control vs ketamine</span></summary>"
+        "<div class='condition-grid'>"
+        f"{column('Control', control_image)}"
+        f"{column('Ketamine', ketamine_image)}"
+        "</div></details>"
+    )
+
+
+def _frequency_kde_pairs(images: tuple[Path, ...], *, kind: str) -> dict[str, dict[str, Path]]:
+    pattern = re.compile(rf"spike_frequency_kde_{re.escape(kind)}_(control|ketamine)_(.+)\.png$")
+    pairs: dict[str, dict[str, Path]] = {}
+    for image in images:
+        match = pattern.search(image.name)
+        if not match:
+            continue
+        condition, group = match.groups()
+        pairs.setdefault(group, {})[condition] = image
+    return pairs
+
+
+def _condition_comparison_sections(
+    packet: PacketInfo,
+    *,
+    output_dir: Path,
+    rank: int,
+) -> tuple[str, set[Path]]:
+    by_name = _image_by_name(packet.images)
+    used: set[Path] = set()
+    sections: list[str] = []
+
+    fixed_pairs = [
+        ("LFP spectrogram", "04_spectrogram_control.png", "05_spectrogram_ketamine.png", True),
+        ("Soma spike raster", "07_raster_control.png", "08_raster_ketamine.png", False),
+        ("Target-HFO phase locking", "11_phase_control.png", "12_phase_ketamine.png", False),
+    ]
+    for title, control_name, ketamine_name, default_open in fixed_pairs:
+        control_image = by_name.get(control_name)
+        ketamine_image = by_name.get(ketamine_name)
+        used.update(path for path in (control_image, ketamine_image) if path is not None)
+        sections.append(
+            _condition_pair_html(
+                title,
+                control_image,
+                ketamine_image,
+                output_dir=output_dir,
+                dom_id=f"{packet.candidate_id}-{control_name.split('_', 1)[0]}",
+                open_by_default=default_open and rank == 1,
+            )
+        )
+
+    for kind, title in [("1d", "Soma spike frequency 1D KDE"), ("2d", "Soma spike time/frequency 2D KDE")]:
+        for group, pair in sorted(_frequency_kde_pairs(packet.images, kind=kind).items()):
+            control_image = pair.get("control")
+            ketamine_image = pair.get("ketamine")
+            used.update(path for path in (control_image, ketamine_image) if path is not None)
+            sections.append(
+                _condition_pair_html(
+                    f"{title}: {group}",
+                    control_image,
+                    ketamine_image,
+                    output_dir=output_dir,
+                    dom_id=f"{packet.candidate_id}-kde-{kind}-{group}",
+                    open_by_default=kind == "1d" and rank == 1,
+                )
+            )
+
+    return "\n".join(section for section in sections if section), used
 
 
 def _status_payload(campaign_dir: Path, status_json: Path | None) -> dict[str, Any]:
@@ -399,14 +500,21 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
     s = _metric_summary(row)
     candidate_id = str(s["candidate_id"] or "")
     open_attr = " open" if rank <= 3 else ""
+    candidate_dom_id = f"candidate-{candidate_id}" if candidate_id else f"candidate-rank-{rank}"
     packet_meta = ""
     primary_psd_html = "<div class='missing'>No PSD packet has been generated for this candidate yet.</div>"
     secondary_psd_html = ""
+    comparison_html = ""
     other_gallery_html = ""
     contact_html = ""
     if packet is not None:
         when = datetime.fromtimestamp(packet.mtime).isoformat(timespec="seconds") if packet.mtime else "-"
-        packet_meta = f"<span>Packet: {_esc(packet.packet_dir.name)}</span><span>Updated: {_esc(when)}</span>"
+        style = packet.manifest.get("visual_style_version", "legacy")
+        packet_meta = (
+            f"<span>Packet: {_esc(packet.packet_dir.name)}</span>"
+            f"<span>Updated: {_esc(when)}</span>"
+            f"<span>Visual style: {_esc(style)}</span>"
+        )
         primary_psd = _primary_psd_image(packet.images)
         if primary_psd is not None:
             primary_psd_html = _image_figure(
@@ -422,18 +530,23 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
             supporting_psd,
             output_dir=output_dir,
             open_by_default=rank == 1,
+            dom_id=f"{candidate_dom_id}-psd-details",
         )
         excluded = set(psd_images)
+        comparison_html, comparison_images = _condition_comparison_sections(packet, output_dir=output_dir, rank=rank)
+        excluded.update(comparison_images)
         other_images = [image for image in packet.images if image not in excluded]
         other_gallery_html = _details_gallery(
-            "Diagnostic packet",
+            "Additional diagnostics",
             other_images,
             output_dir=output_dir,
             open_by_default=False,
+            dom_id=f"{candidate_dom_id}-additional",
         )
         if packet.contact_sheet is not None:
             contact_html = (
-                "<details class='figure-group'><summary>Contact sheet <span>all plots</span></summary>"
+                f"<details class='figure-group' id='{_esc(candidate_dom_id)}-contact'>"
+                "<summary>Contact sheet <span>all plots</span></summary>"
                 "<a class='contact' href='{href}' target='_blank'>"
                 "<img loading='lazy' src='{href}' alt='{alt}'></a></details>"
             ).format(
@@ -456,7 +569,7 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
     ]
     penalty_html = "".join(f"<span><b>{_esc(name)}</b> {_esc(_fmt(value, 3))}</span>" for name, value in penalty_rows)
     return f"""
-<details class="candidate"{open_attr}>
+<details class="candidate" id="{_esc(candidate_dom_id)}"{open_attr}>
   <summary>
     <span class="rank">#{rank}</span>
     <span class="candidate-id">{_esc(candidate_id)}</span>
@@ -469,6 +582,7 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
     <div class="chips params">{_parameter_chips(s["params"])}</div>
     {primary_psd_html}
     {secondary_psd_html}
+    {comparison_html}
     {other_gallery_html}
     {contact_html}
   </div>
@@ -486,8 +600,8 @@ def _render_html(
     refresh_s: float | None,
     generated_packets: list[Path],
     status_payload: dict[str, Any],
+    generated_at: str,
 ) -> str:
-    refresh_meta = f"<meta http-equiv='refresh' content='{int(refresh_s)}'>" if refresh_s and refresh_s > 0 else ""
     packet_cards = "\n".join(
         _render_packet_card(row, packets.get(str(row.get("candidate_id"))), output_dir=output_dir, rank=index)
         for index, row in enumerate(rows[: int(top_n)], start=1)
@@ -504,7 +618,6 @@ def _render_html(
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  {refresh_meta}
   <title>HFO Campaign Visual Dashboard</title>
   <style>
     :root {{
@@ -658,6 +771,26 @@ def _render_html(
       gap: 14px;
       margin-top: 14px;
     }}
+    .condition-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      padding: 12px;
+      border-top: 1px solid #e3e8f2;
+    }}
+    .condition-column {{
+      min-width: 0;
+    }}
+    .condition-column h3 {{
+      margin: 0 0 8px;
+      font-size: 13px;
+      line-height: 1.2;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0;
+    }}
+    .condition-column.control h3 {{ color: var(--blue); }}
+    .condition-column.ketamine h3 {{ color: var(--red); }}
     figure {{
       margin: 0;
       border: 1px solid var(--line);
@@ -690,21 +823,44 @@ def _render_html(
       background: #fbfcfe;
     }}
     .generated {{ color: var(--green); }}
+    .refresh-indicator {{
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      z-index: 20;
+      max-width: min(420px, calc(100vw - 28px));
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.96);
+      color: var(--muted);
+      font-size: 12px;
+      box-shadow: 0 8px 22px rgba(15, 23, 42, 0.10);
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 160ms ease, transform 160ms ease;
+      pointer-events: none;
+    }}
+    .refresh-indicator.visible {{
+      opacity: 1;
+      transform: translateY(0);
+    }}
     @media (max-width: 760px) {{
       header {{ padding: 14px 16px; }}
       main {{ padding: 16px; }}
       details.candidate > summary {{ grid-template-columns: 40px 88px 1fr; }}
       .batch {{ display: none; }}
       .gallery {{ grid-template-columns: 1fr; }}
+      .condition-grid {{ grid-template-columns: 1fr; }}
     }}
   </style>
 </head>
-<body>
+<body data-generated-at="{_esc(generated_at)}" data-refresh-s="{_esc(refresh_s or 0)}">
   <header>
     <h1>HFO Campaign Visual Dashboard</h1>
-    <div class="subtle">{_esc(campaign_dir)}{f" | refreshes every {int(refresh_s)} s" if refresh_s and refresh_s > 0 else ""}</div>
+    <div class="subtle">{_esc(campaign_dir)}{f" | updates in place every {int(refresh_s)} s" if refresh_s and refresh_s > 0 else ""}</div>
   </header>
-  <main>
+  <main id="dashboard-main">
     <div class="stats">{_render_status(campaign_dir, rows, status_payload)}</div>
     {generated_html}
     <section>
@@ -716,6 +872,75 @@ def _render_html(
       <div style="padding: 0 14px 14px;">{packet_cards}</div>
     </section>
   </main>
+  <div id="refresh-indicator" class="refresh-indicator" aria-live="polite"></div>
+  <script>
+    (() => {{
+      const refreshSeconds = Number(document.body.dataset.refreshS || 0);
+      if (!Number.isFinite(refreshSeconds) || refreshSeconds <= 0) {{
+        return;
+      }}
+      const indicator = document.getElementById("refresh-indicator");
+      let refreshing = false;
+
+      function showIndicator(text) {{
+        if (!indicator) return;
+        indicator.textContent = text;
+        indicator.classList.add("visible");
+        window.setTimeout(() => indicator.classList.remove("visible"), 1800);
+      }}
+
+      function captureState() {{
+        const openDetails = Array.from(document.querySelectorAll("details[id][open]")).map((node) => node.id);
+        const active = document.activeElement && document.activeElement.id ? document.activeElement.id : null;
+        return {{ scrollX: window.scrollX, scrollY: window.scrollY, openDetails, active }};
+      }}
+
+      function restoreState(state) {{
+        for (const id of state.openDetails || []) {{
+          const node = document.getElementById(id);
+          if (node && node.tagName.toLowerCase() === "details") {{
+            node.open = true;
+          }}
+        }}
+        if (state.active) {{
+          const active = document.getElementById(state.active);
+          if (active && typeof active.focus === "function") active.focus({{ preventScroll: true }});
+        }}
+        requestAnimationFrame(() => window.scrollTo(state.scrollX || 0, state.scrollY || 0));
+      }}
+
+      async function refreshIfChanged() {{
+        if (refreshing) return;
+        refreshing = true;
+        try {{
+          const manifestResp = await fetch("manifest.json?cache=" + Date.now(), {{ cache: "no-store" }});
+          if (!manifestResp.ok) return;
+          const manifest = await manifestResp.json();
+          const generatedAt = String(manifest.generated_at || "");
+          if (!generatedAt || generatedAt === document.body.dataset.generatedAt) return;
+
+          const state = captureState();
+          const htmlResp = await fetch("index.html?cache=" + Date.now(), {{ cache: "no-store" }});
+          if (!htmlResp.ok) return;
+          const nextText = await htmlResp.text();
+          const nextDoc = new DOMParser().parseFromString(nextText, "text/html");
+          const nextMain = nextDoc.getElementById("dashboard-main");
+          const currentMain = document.getElementById("dashboard-main");
+          if (!nextMain || !currentMain) return;
+          currentMain.replaceWith(document.importNode(nextMain, true));
+          document.body.dataset.generatedAt = generatedAt;
+          restoreState(state);
+          showIndicator("Dashboard updated without changing scroll position.");
+        }} catch (exc) {{
+          console.warn("Dashboard refresh failed", exc);
+        }} finally {{
+          refreshing = false;
+        }}
+      }}
+
+      window.setInterval(refreshIfChanged, Math.max(refreshSeconds, 5) * 1000);
+    }})();
+  </script>
 </body>
 </html>
 """
@@ -744,6 +969,7 @@ def export_visual_dashboard(
     packets = find_candidate_packets(campaign_path)
     status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
     payload = _status_payload(campaign_path, status_path)
+    generated_at = datetime.now().isoformat(timespec="seconds")
     html_text = _render_html(
         campaign_dir=campaign_path,
         output_dir=output_path,
@@ -753,9 +979,12 @@ def export_visual_dashboard(
         refresh_s=refresh_s,
         generated_packets=generated_packets,
         status_payload=payload,
+        generated_at=generated_at,
     )
     index_path = output_path / "index.html"
-    index_path.write_text(html_text)
+    index_tmp = index_path.with_name(f".{index_path.name}.tmp")
+    index_tmp.write_text(html_text)
+    os.replace(index_tmp, index_path)
     server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
     entrypoint_path = _write_dashboard_entrypoint(server_root, url_path)
     manifest = {
@@ -764,14 +993,17 @@ def export_visual_dashboard(
         "index_html": str(index_path),
         "entrypoint_html": str(entrypoint_path),
         "entrypoint_url_path": url_path,
-        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "generated_at": generated_at,
         "candidate_rows": len(rows),
         "packet_count": len(packets),
         "generated_packets": [str(path) for path in generated_packets],
         "top_candidate_id": rows[0].get("candidate_id") if rows else None,
         "top_score": rows[0].get("pair_score") if rows else None,
     }
-    (output_path / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    manifest_path = output_path / "manifest.json"
+    manifest_tmp = manifest_path.with_name(f".{manifest_path.name}.tmp")
+    manifest_tmp.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    os.replace(manifest_tmp, manifest_path)
     return manifest
 
 

@@ -39,6 +39,31 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
+VISUAL_STYLE_VERSION = 2
+NOTEBOOK_ANALYSIS_DT_MS = 0.1
+NOTEBOOK_TIME_MODULUS_MS = 1e10
+NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
+NOTEBOOK_SPECTROGRAM_NPERSEG = 1000
+NOTEBOOK_SPECTROGRAM_NOVERLAP = 1000 // 3
+NOTEBOOK_FREQ_CONFIG = hlp.FrequencyPlotConfig(
+    modulus=NOTEBOOK_TIME_MODULUS_MS,
+    max_freq_hz=hfo.DEFAULT_SCORE_BANDS["target_hfo"][1],
+    kde_bw_method="scott",
+    kde1d_engine="exact",
+    kde_bw_x=0.125,
+    kde_bw_y=0.25,
+    kde2d_engine="histogram",
+    kde_resolution_t=100,
+    kde_resolution_f=100,
+    kde_f_resolution=1600,
+    num_time_bins=32,
+    bin_alpha=0.5,
+    kde_cmap="inferno",
+    dot_size=5,
+    dot_alpha=0.2,
+    strip_plot=True,
+    guide_line_spacing_ms=0.0,
+)
 
 
 def _load_candidate(campaign_dir: Path, candidate_id: str) -> dict[str, Any]:
@@ -100,35 +125,23 @@ def _save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float
 
 
 def _save_spectrogram(windowed: dict[str, Any], condition: str, out: Path) -> None:
-    t, y = _finite_lfp(windowed)
-    fig, ax = plt.subplots(figsize=(12, 5.0), constrained_layout=True)
-    if len(t) > 16:
-        dt_s = float(np.median(np.diff(t))) / 1000.0
-        fs = 1.0 / max(dt_s, 1e-9)
-        nperseg = min(1024, max(64, int(len(y) // 2)))
-        noverlap = int(nperseg * 0.75)
-        freqs, bins, spec = signal.spectrogram(
-            y - np.mean(y),
-            fs=fs,
-            nperseg=nperseg,
-            noverlap=noverlap,
-            scaling="density",
-            mode="psd",
+    fig, ax = plt.subplots(figsize=(14, 5.0), constrained_layout=True)
+    try:
+        hlp.plot_spectrogram(
+            windowed,
+            signal="lfp",
+            dt_ms=NOTEBOOK_ANALYSIS_DT_MS,
+            max_freq_hz=NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
+            nperseg=NOTEBOOK_SPECTROGRAM_NPERSEG,
+            noverlap=NOTEBOOK_SPECTROGRAM_NOVERLAP,
+            modulus=NOTEBOOK_TIME_MODULUS_MS,
+            ax=ax,
         )
-        mask = freqs <= 300.0
-        mesh = ax.pcolormesh(
-            bins * 1000.0 + float(t[0]),
-            freqs[mask],
-            np.log10(spec[mask] + 1e-18),
-            shading="auto",
-            cmap="magma",
-        )
-        fig.colorbar(mesh, ax=ax, label="log10 PSD")
+    except Exception as exc:
+        ax.text(0.5, 0.5, f"Could not render spectrogram: {exc}", ha="center", va="center", transform=ax.transAxes)
     ax.axhspan(*hfo.DEFAULT_SCORE_BANDS["high_gamma"], color="#16a34a", alpha=0.09, lw=0)
     ax.axhspan(*hfo.DEFAULT_SCORE_BANDS["target_hfo"], color="#d97706", alpha=0.10, lw=0)
-    ax.set_ylim(0, 300)
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Frequency (Hz)")
+    ax.set_ylim(0, NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ)
     ax.set_title(f"{condition} LFP spectrogram")
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -190,7 +203,28 @@ def _save_population_rates(windows_by_condition: dict[str, dict[str, Any]], out:
     plt.close(fig)
 
 
-def _save_spike_frequency_kde(
+def _save_spike_frequency_kde_1d(
+    windowed: dict[str, Any],
+    condition: str,
+    label: str,
+    cell_types: tuple[str, ...],
+    out: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(10.5, 5.0), constrained_layout=True)
+    hlp.plot_spike_frequency_kde_1d(
+        windowed,
+        cell_types=cell_types,
+        config=NOTEBOOK_FREQ_CONFIG,
+        ax=ax,
+        title=f"{condition} soma spike frequency 1D KDE ({label})",
+    )
+    ax.axvspan(*hfo.DEFAULT_SCORE_BANDS["high_gamma"], color="#16a34a", alpha=0.08, lw=0)
+    ax.axvspan(*hfo.DEFAULT_SCORE_BANDS["target_hfo"], color="#d97706", alpha=0.08, lw=0)
+    fig.savefig(out, dpi=160)
+    plt.close(fig)
+
+
+def _save_spike_frequency_kde_2d(
     windowed: dict[str, Any],
     condition: str,
     label: str,
@@ -198,18 +232,10 @@ def _save_spike_frequency_kde(
     out: Path,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10.5, 5.4), constrained_layout=True)
-    config = hlp.FrequencyPlotConfig(
-        modulus=None,
-        max_freq_hz=300.0,
-        kde2d_engine="histogram",
-        kde_resolution_t=120,
-        kde_resolution_f=120,
-        kde_cmap="inferno",
-    )
     hlp.plot_spike_frequency_kde_2d(
         windowed,
         cell_types=cell_types,
-        config=config,
+        config=NOTEBOOK_FREQ_CONFIG,
         ax=ax,
         title=f"{condition} soma spike frequency KDE ({label})",
     )
@@ -331,8 +357,17 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     ]
     for condition in ("control", "ketamine"):
         for group_label, cell_types in frequency_groups:
+            name = f"13_spike_frequency_kde_1d_{condition}_{group_label}.png"
+            _save_spike_frequency_kde_1d(
+                windowed[condition],
+                condition,
+                group_label,
+                cell_types,
+                packet_dir / name,
+            )
+            files.append(name)
             name = f"13_spike_frequency_kde_2d_{condition}_{group_label}.png"
-            _save_spike_frequency_kde(
+            _save_spike_frequency_kde_2d(
                 windowed[condition],
                 condition,
                 group_label,
@@ -344,6 +379,7 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     manifest = {
         "candidate_id": candidate_id,
         "created_at": datetime.now().isoformat(timespec="seconds"),
+        "visual_style_version": VISUAL_STYLE_VERSION,
         "campaign_dir": str(campaign_dir),
         "result_dir": str(result_dir),
         "pair_score": row.get("pair_score"),
