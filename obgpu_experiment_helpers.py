@@ -228,6 +228,7 @@ CONTROL_HELP = {
     "remote_ssh_exec_timeout_s": "Timeout in seconds for Paramiko exec_command acknowledgement before the command output phase starts.",
     "remote_ssh_upload_timeout_s": "Timeout in seconds for Paramiko shell-backed file upload send/write operations.",
     "remote_poll_command_timeout_s": "Timeout in seconds for lightweight remote status-poll shell commands. Keeps a stale SSH channel from freezing an active notebook worker.",
+    "remote_poll_json_retries": "Number of times to retry a successful remote status poll that returns empty or malformed JSON before failing the run.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
     "remote_defer_soma_vs_sync": "Deprecated. Raw soma traces are synced and loaded with the main result payload; stale True values are ignored.",
@@ -5384,6 +5385,7 @@ def _run_remote_simulation(
     )
     live_status = bool(effective_config.get("remote_live_status", True))
     live_logs = bool(effective_config.get("remote_live_logs", True))
+    poll_json_retries = max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1)
     poll_transcript: list[dict[str, Any]] = []
     final_status: dict[str, Any] | None = None
     missing_artifact_retries = 0
@@ -5438,22 +5440,32 @@ def _run_remote_simulation(
             include_sacct=include_sacct,
             include_tails=include_logs,
         )
-        poll_started = time.perf_counter()
-        poll_completed = _run_ssh_shell(effective_config, poll_shell)
-        _record_timing(notebook_timings, "poll_s", poll_started)
-        if poll_completed.returncode != 0:
-            raise RuntimeError(
-                "Remote Sol status poll failed.\n"
-                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-            )
-
-        try:
-            status = json.loads((poll_completed.stdout or "").strip())
-        except json.JSONDecodeError as exc:
+        poll_completed = None
+        last_exc: json.JSONDecodeError | None = None
+        status: dict[str, Any] | None = None
+        for attempt in range(poll_json_retries):
+            poll_started = time.perf_counter()
+            poll_completed = _run_ssh_shell(effective_config, poll_shell)
+            _record_timing(notebook_timings, "poll_s", poll_started)
+            if poll_completed.returncode != 0:
+                raise RuntimeError(
+                    "Remote Sol status poll failed.\n"
+                    f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+                )
+            try:
+                status = json.loads((poll_completed.stdout or "").strip())
+                break
+            except json.JSONDecodeError as exc:
+                last_exc = exc
+                if attempt + 1 >= poll_json_retries:
+                    break
+                time.sleep(min(0.5 * (attempt + 1), 2.0))
+        if status is None:
+            assert poll_completed is not None
             raise RuntimeError(
                 "Remote Sol poll did not return valid JSON.\n"
                 f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-            ) from exc
+            ) from last_exc
 
         poll_transcript.append(status)
         return status
@@ -6598,6 +6610,7 @@ def _run_remote_sweep(
         int(effective_config.get("sweep_live_sync_max_items_per_poll", 8) or 0),
         0,
     )
+    poll_json_retries = max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1)
     next_sacct_poll_at = time.monotonic()
 
     def refresh_remote_leases(*, warn: bool = False) -> None:
@@ -6618,25 +6631,33 @@ def _run_remote_sweep(
             include_sacct=include_sacct,
             include_tails=False,
         )
-        poll_started = time.perf_counter()
-        poll_completed = _run_ssh_shell(
-            effective_config,
-            poll_shell,
-            timeout_s=_remote_poll_command_timeout_s(effective_config),
-        )
-        _record_timing(notebook_timings, "poll_s", poll_started)
-        if poll_completed.returncode != 0:
-            raise RuntimeError(
-                "Remote sweep status poll failed.\n"
-                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+        poll_completed = None
+        last_exc: json.JSONDecodeError | None = None
+        for attempt in range(poll_json_retries):
+            poll_started = time.perf_counter()
+            poll_completed = _run_ssh_shell(
+                effective_config,
+                poll_shell,
+                timeout_s=_remote_poll_command_timeout_s(effective_config),
             )
-        try:
-            return json.loads((poll_completed.stdout or "").strip())
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                "Remote sweep poll did not return valid JSON.\n"
-                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-            ) from exc
+            _record_timing(notebook_timings, "poll_s", poll_started)
+            if poll_completed.returncode != 0:
+                raise RuntimeError(
+                    "Remote sweep status poll failed.\n"
+                    f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+                )
+            try:
+                return json.loads((poll_completed.stdout or "").strip())
+            except json.JSONDecodeError as exc:
+                last_exc = exc
+                if attempt + 1 >= poll_json_retries:
+                    break
+                time.sleep(min(0.5 * (attempt + 1), 2.0))
+        assert poll_completed is not None
+        raise RuntimeError(
+            "Remote sweep poll did not return valid JSON.\n"
+            f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
+        ) from last_exc
 
     def sync_finished_items(status: dict[str, Any]) -> None:
         if not bool(effective_config.get("sweep_sync_live", True)):
