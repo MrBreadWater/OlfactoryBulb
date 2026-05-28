@@ -64,6 +64,15 @@ PLAUSIBILITY_SOFT_LIMITS = {
     "kar_gc_weight_scale": 4.0,
     "kar_mt_effective_drive": 0.10,
 }
+DEFAULT_TIME_CONSTANTS_MS = {
+    "input_syn_tau1_ms": 6.0,
+    "input_syn_tau2_ms": 12.0,
+    "gaba_tau2_ms": 100.0,
+    "kar_tau1_ms": 6.728726245,
+    "kar_tau2_ms": 81.75126152,
+    "kar_tau3_ms": 468.7337682,
+}
+TIME_CONSTANT_FRACTIONAL_VARIATION = 0.20
 
 
 @dataclass(frozen=True)
@@ -114,12 +123,17 @@ class ParameterSpec:
 
 
 def default_hfo_search_space() -> list[ParameterSpec]:
-    """Return the default conductance-focused search space.
+    """Return the default HFO search space.
 
     The ranges are intentionally wide enough to discover a viable regime while
-    still remaining organized around interpretable conductance and coupling
-    knobs rather than arbitrary timing rewrites.
+    staying organized around interpretable conductance/coupling knobs plus a
+    narrow +-20 percent window on existing timing constants.
     """
+    def time_range(path: str) -> tuple[float, float]:
+        baseline = float(DEFAULT_TIME_CONSTANTS_MS[path])
+        frac = float(TIME_CONSTANT_FRACTIONAL_VARIATION)
+        return baseline * (1.0 - frac), baseline * (1.0 + frac)
+
     return [
         ParameterSpec(
             path="kar_mt_gmax",
@@ -216,6 +230,54 @@ def default_hfo_search_space() -> list[ParameterSpec]:
             scale="log",
             default=1.0,
             description="Granule-cell A-type potassium conductance scale",
+        ),
+        ParameterSpec(
+            path="input_syn_tau1_ms",
+            low=time_range("input_syn_tau1_ms")[0],
+            high=time_range("input_syn_tau1_ms")[1],
+            scale="linear",
+            default=DEFAULT_TIME_CONSTANTS_MS["input_syn_tau1_ms"],
+            description="OSN input Exp2Syn rise time",
+        ),
+        ParameterSpec(
+            path="input_syn_tau2_ms",
+            low=time_range("input_syn_tau2_ms")[0],
+            high=time_range("input_syn_tau2_ms")[1],
+            scale="linear",
+            default=DEFAULT_TIME_CONSTANTS_MS["input_syn_tau2_ms"],
+            description="OSN input Exp2Syn decay time",
+        ),
+        ParameterSpec(
+            path="gaba_tau2_ms",
+            low=time_range("gaba_tau2_ms")[0],
+            high=time_range("gaba_tau2_ms")[1],
+            scale="linear",
+            default=DEFAULT_TIME_CONSTANTS_MS["gaba_tau2_ms"],
+            description="Global GabaSyn decay time",
+        ),
+        ParameterSpec(
+            path="kar_tau1_ms",
+            low=time_range("kar_tau1_ms")[0],
+            high=time_range("kar_tau1_ms")[1],
+            scale="linear",
+            default=DEFAULT_TIME_CONSTANTS_MS["kar_tau1_ms"],
+            description="KAR fast rise time constant",
+        ),
+        ParameterSpec(
+            path="kar_tau2_ms",
+            low=time_range("kar_tau2_ms")[0],
+            high=time_range("kar_tau2_ms")[1],
+            scale="linear",
+            default=DEFAULT_TIME_CONSTANTS_MS["kar_tau2_ms"],
+            description="KAR intermediate decay time constant",
+        ),
+        ParameterSpec(
+            path="kar_tau3_ms",
+            low=time_range("kar_tau3_ms")[0],
+            high=time_range("kar_tau3_ms")[1],
+            scale="linear",
+            default=DEFAULT_TIME_CONSTANTS_MS["kar_tau3_ms"],
+            description="KAR slow tail time constant",
         ),
     ]
 
@@ -1208,14 +1270,20 @@ def _targeted_elite_probe_rows(
         "epli_gaba_weight_scale",
         "kar_gc_gmax",
         "kar_mt_gmax",
+        "gaba_tau2_ms",
         "tc_input_weight",
         "gap_tc",
         "ampa_nmda_gmax",
         "kar_gc_weight_scale",
+        "kar_tau2_ms",
+        "kar_tau3_ms",
+        "input_syn_tau2_ms",
         "gc_ka_gbar_scale",
         "gap_mc",
         "mc_input_weight",
         "kar_osn_weight_scale",
+        "kar_tau1_ms",
+        "input_syn_tau1_ms",
     ]
     priority_indices = [
         index
@@ -1825,8 +1893,8 @@ def propose_elite_batch(
     search_space: Sequence[ParameterSpec],
     n_candidates: int,
     seed: int | None = None,
-    elite_frac: float = 0.25,
-    explore_frac: float = 0.25,
+    elite_frac: float = 0.18,
+    explore_frac: float = 0.30,
     stage: str = "refine",
     method: str = "elite_refine",
 ) -> dict[str, Any]:
@@ -1844,7 +1912,7 @@ def propose_elite_batch(
         )
 
     ranked = sorted(valid, key=lambda row: float(row["pair_score"]), reverse=True)
-    elite_count = min(max(4, int(math.ceil(float(elite_frac) * len(ranked)))), 12, len(ranked))
+    elite_count = min(max(3, int(math.ceil(float(elite_frac) * len(ranked)))), 8, len(ranked))
     elite = ranked[:elite_count]
     elite_vectors = np.vstack([_candidate_vector(row["parameters"], search_space) for row in elite])
     mean = elite_vectors.mean(axis=0)
@@ -1865,66 +1933,75 @@ def propose_elite_batch(
     encoded_span = encoded_hi - encoded_lo
 
     total_n = int(n_candidates)
-    explore_n = min(max(0, int(round(float(explore_frac) * total_n))), max(total_n - 1, 0))
-    if len(valid) >= 128:
-        explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
+    lhs_floor_frac = 0.20 if total_n >= 12 else 0.125
+    lhs_n = min(
+        max(1 if total_n < 8 else 2, int(round(max(float(explore_frac), lhs_floor_frac) * total_n))),
+        total_n,
+    )
+    restart_frac = 0.125 if len(valid) >= 64 else 0.0
+    restart_min = 2 if (len(valid) >= 64 and total_n >= 12) else 0
+    restart_n = min(
+        max(restart_min, int(round(restart_frac * total_n))),
+        max(total_n - lhs_n - 1, 0),
+    )
+
+    available_after_global = max(total_n - lhs_n - restart_n, 0)
+
+    def bounded_count(target_fraction: float, min_count: int, available: int, reserve: int) -> int:
+        if available <= reserve:
+            return 0
+        target_count = int(round(float(target_fraction) * total_n))
+        return min(max(min_count, target_count), max(available - reserve, 0))
+
     targeted_n = 0
     targeted_mode = "none"
     objective_filter = load_objective_filter(campaign_dir)
     early_frontier_after_objective_pivot = bool(objective_filter.get("target_hfo_hz")) and len(valid) >= 192
     if early_frontier_after_objective_pivot and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.40, 5, available_after_global, reserve=2)
         targeted_mode = "frontier"
     elif len(valid) >= 448 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.40, 5, available_after_global, reserve=2)
         targeted_mode = "frontier"
     elif len(valid) >= 416 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.42, 5, available_after_global, reserve=2)
         targeted_mode = "basin"
     elif len(valid) >= 368 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.42, 5, available_after_global, reserve=2)
         targeted_mode = "needle"
     elif len(valid) >= 320 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(10, int(round(0.70 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.35, 4, available_after_global, reserve=2)
         targeted_mode = "ridge"
     elif len(valid) >= 288 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(10, int(round(0.75 * total_n))), max(total_n - explore_n - 1, 0))
+        targeted_n = bounded_count(0.35, 4, available_after_global, reserve=2)
         targeted_mode = "micro"
     elif len(valid) >= 256 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(8, int(round(0.60 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.32, 4, available_after_global, reserve=2)
         targeted_mode = "combo"
     elif len(valid) >= 224 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
-        targeted_n = min(max(6, int(round(0.50 * total_n))), max(total_n - explore_n - 3, 0))
+        targeted_n = bounded_count(0.30, 4, available_after_global, reserve=2)
         targeted_mode = "stencil"
     elif len(valid) >= 192 and len(elite) >= 2 and total_n >= 8:
-        explore_n = min(explore_n, max(1, int(round(0.125 * total_n))))
-        targeted_n = min(max(2, int(round(0.25 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_n = bounded_count(0.20, 2, available_after_global, reserve=2)
         targeted_mode = "line"
-    remaining_n = total_n - explore_n - targeted_n
-    local_fraction = 0.70 if targeted_n > 0 else 0.55
+    remaining_n = total_n - lhs_n - restart_n - targeted_n
+    local_fraction = 0.45 if targeted_n > 0 else 0.40
     local_n = min(max(1, int(round(local_fraction * remaining_n))), remaining_n) if remaining_n > 0 else 0
-    covariance_n = max(0, total_n - explore_n - targeted_n - local_n)
+    covariance_n = max(0, total_n - lhs_n - restart_n - targeted_n - local_n)
 
-    local_source_count = min(4, len(elite))
+    local_source_count = min(3, len(elite))
     local_centers = elite_vectors[:local_source_count]
     raw_weights = np.asarray(
         [max(float(row.get("pair_score", 0.0)), 0.0) + 1e-6 for row in elite[:local_source_count]],
         dtype=float,
     )
+    raw_weights = np.sqrt(raw_weights)
     local_weights = raw_weights / raw_weights.sum()
-    tight_local_n = min(local_n, max(1, int(round(0.50 * local_n)))) if local_n > 0 else 0
+    tight_local_n = min(local_n, max(1, int(round(0.40 * local_n)))) if local_n > 0 else 0
     broad_local_n = max(0, local_n - tight_local_n)
 
-    tight_local_sigma = np.maximum(0.035 * encoded_span, 1e-6)
-    broad_local_sigma = np.maximum(0.10 * encoded_span, 1e-6)
+    tight_local_sigma = np.maximum(0.05 * encoded_span, 1e-6)
+    broad_local_sigma = np.maximum(0.14 * encoded_span, 1e-6)
     local_rows = []
     if tight_local_n > 0:
         tight_source_count = min(2, local_source_count)
@@ -1959,14 +2036,33 @@ def propose_elite_batch(
         seed=None if seed is None else seed + 2,
         archive_rows=ranked,
     )
-
-    if explore_n > 0:
-        explore_rows = np.vstack(
-            [_candidate_vector(row, search_space) for row in _decode_unit_samples(_sample_unit_lhs(explore_n, len(search_space), seed=None if seed is None else seed + 1), search_space)]
+    restart_rows = (
+        np.vstack(
+            [
+                _candidate_vector(row, search_space)
+                for row in _decode_unit_samples(
+                    _random_unit_samples(restart_n, len(search_space), seed=None if seed is None else seed + 3),
+                    search_space,
+                )
+            ]
         )
-        all_rows = np.vstack([targeted_rows, local_rows, covariance_rows, explore_rows])
+        if restart_n > 0
+        else np.empty((0, len(search_space)), dtype=float)
+    )
+
+    if lhs_n > 0:
+        lhs_rows = np.vstack(
+            [
+                _candidate_vector(row, search_space)
+                for row in _decode_unit_samples(
+                    _sample_unit_lhs(lhs_n, len(search_space), seed=None if seed is None else seed + 1),
+                    search_space,
+                )
+            ]
+        )
+        all_rows = np.vstack([targeted_rows, local_rows, covariance_rows, restart_rows, lhs_rows])
     else:
-        all_rows = np.vstack([targeted_rows, local_rows, covariance_rows])
+        all_rows = np.vstack([targeted_rows, local_rows, covariance_rows, restart_rows])
     used_signatures = _archive_encoded_signatures(ranked, search_space)
     all_rows, duplicate_rows_dropped = _deduplicate_candidate_rows(
         all_rows,
@@ -2001,7 +2097,8 @@ def propose_elite_batch(
             "targeted": int(targeted_n),
             "local": int(local_n),
             "covariance": int(covariance_n),
-            "explore": int(explore_n),
+            "lhs": int(lhs_n),
+            "restart": int(restart_n),
         },
         "local_detail_counts": {
             "tight_top": int(tight_local_n),
@@ -2013,6 +2110,12 @@ def propose_elite_batch(
             "line_probe_count": int(min(targeted_n, 3) if targeted_mode == "line" else 0),
             "coordinate_probe_count": int(max(targeted_n - 3, 0) if targeted_mode == "line" else targeted_n),
             "archive_duplicate_rows_dropped": int(duplicate_rows_dropped),
+        },
+        "exploration_detail": {
+            "elite_count": int(elite_count),
+            "lhs_forced_fraction": float(max(float(explore_frac), lhs_floor_frac)),
+            "restart_fraction": float(restart_frac),
+            "available_after_global": int(available_after_global),
         },
     }
     _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)

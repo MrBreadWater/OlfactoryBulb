@@ -50,6 +50,12 @@ for required_path in (
     "kar_osn_weight_scale",
     "kar_gc_weight_scale",
     "gc_ka_gbar_scale",
+    "input_syn_tau1_ms",
+    "input_syn_tau2_ms",
+    "gaba_tau2_ms",
+    "kar_tau1_ms",
+    "kar_tau2_ms",
+    "kar_tau3_ms",
 ):
     assert required_path in default_paths
 default_specs = {spec.path: spec for spec in default_hfo_search_space()}
@@ -57,6 +63,12 @@ assert default_specs["kar_mt_gmax"].high == 0.08
 assert default_specs["kar_gc_gmax"].high == 0.025
 assert default_specs["kar_osn_weight_scale"].high == 2.0
 assert default_specs["kar_gc_weight_scale"].high == 4.0
+assert np.isclose(default_specs["input_syn_tau1_ms"].low, 4.8)
+assert np.isclose(default_specs["input_syn_tau1_ms"].high, 7.2)
+assert np.isclose(default_specs["gaba_tau2_ms"].low, 80.0)
+assert np.isclose(default_specs["gaba_tau2_ms"].high, 120.0)
+assert np.isclose(default_specs["kar_tau3_ms"].low, 468.7337682 * 0.8)
+assert np.isclose(default_specs["kar_tau3_ms"].high, 468.7337682 * 1.2)
 assert hfo_module.DEFAULT_SCORE_BANDS["high_gamma"] == (65.0, 100.0)
 assert hfo_module.DEFAULT_OPTIMIZER_SEGMENT_MS == 1000.0
 assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 2000.0
@@ -118,6 +130,29 @@ short_overrides = short_hfo_runtime_overrides()
 assert short_overrides["tstop_ms"] == 2000.0
 assert short_overrides["hfo_ketamine_switch_time_ms"] == 1000.0
 assert short_overrides["hfo_ketamine_switch_washout_ms"] == 100.0
+
+
+def assert_proposal_mix(
+    batch: dict,
+    *,
+    n_candidates: int,
+    min_lhs: int,
+    min_targeted: int = 0,
+    max_targeted: int | None = None,
+    expect_restart: bool = False,
+    mode: str | None = None,
+) -> None:
+    counts = batch["proposal_counts"]
+    assert sum(counts.values()) == n_candidates
+    assert counts["lhs"] >= min_lhs
+    if expect_restart:
+        assert counts["restart"] >= 2
+    if mode is not None:
+        assert batch["targeted_detail"]["mode"] == mode
+    assert counts["targeted"] >= min_targeted
+    if max_targeted is not None:
+        assert counts["targeted"] <= max_targeted
+    assert batch["local_detail_counts"]["tight_top"] + batch["local_detail_counts"]["broad_weighted"] == counts["local"]
 assert max(short_overrides["input_odors"]) == 1800
 assert default_switch_washout_ms(9000.0) == 500.0
 assert default_switch_washout_ms(1000.0) == 100.0
@@ -442,10 +477,10 @@ with TemporaryDirectory() as tmpdir:
         method="elite_truncated_gaussian_plus_lhs",
     )
     assert batch["strategy"] == "elite_truncated_gaussian_plus_lhs"
-    assert batch["local_source_ids"] == ["C00000", "C00001", "C00002", "C00003"]
-    assert sum(batch["proposal_counts"].values()) == 8
+    assert batch["local_source_ids"] == ["C00000", "C00001", "C00002"]
+    assert_proposal_mix(batch, n_candidates=8, min_lhs=2, max_targeted=0, expect_restart=False)
     assert batch["local_detail_counts"]["tight_top"] >= 1
-    assert batch["local_detail_counts"]["tight_top"] + batch["local_detail_counts"]["broad_weighted"] == batch["proposal_counts"]["local"]
+    assert batch["exploration_detail"]["elite_count"] <= 8
     assert len(batch["candidates"]) == 8
 
 with TemporaryDirectory() as tmpdir:
@@ -505,10 +540,8 @@ with TemporaryDirectory() as tmpdir:
         seed=11,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 4
-    assert batch["proposal_counts"]["explore"] == 2
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=2, max_targeted=4, expect_restart=True, mode="line")
     assert batch["targeted_detail"]["top_pair"] == ["C00000", "C00001"]
-    assert sum(batch["proposal_counts"].values()) == 16
     assert len(batch["candidates"]) == 16
 
 with TemporaryDirectory() as tmpdir:
@@ -566,10 +599,7 @@ with TemporaryDirectory() as tmpdir:
         seed=111,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 12
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "frontier"
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=5, max_targeted=6, expect_restart=True, mode="frontier")
     assert len(batch["candidates"]) == 16
 
 with TemporaryDirectory() as tmpdir:
@@ -609,11 +639,7 @@ with TemporaryDirectory() as tmpdir:
         seed=12,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 8
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "stencil"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 8
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=4, max_targeted=5, expect_restart=True, mode="stencil")
     assert len(batch["candidates"]) == 16
 
 with TemporaryDirectory() as tmpdir:
@@ -659,11 +685,7 @@ with TemporaryDirectory() as tmpdir:
         seed=13,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 10
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "combo"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 10
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=4, max_targeted=5, expect_restart=True, mode="combo")
     assert len(batch["candidates"]) == 16
 
 with TemporaryDirectory() as tmpdir:
@@ -707,11 +729,7 @@ with TemporaryDirectory() as tmpdir:
         seed=14,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 12
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "micro"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 12
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=5, max_targeted=6, expect_restart=True, mode="micro")
     assert len(batch["candidates"]) == 16
 
 with TemporaryDirectory() as tmpdir:
@@ -755,11 +773,7 @@ with TemporaryDirectory() as tmpdir:
         seed=15,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 11
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "ridge"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 11
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=5, max_targeted=6, expect_restart=True, mode="ridge")
     assert len(batch["candidates"]) == 16
 
     for index in range(320, 368):
@@ -789,11 +803,7 @@ with TemporaryDirectory() as tmpdir:
         seed=16,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 12
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "needle"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 12
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=6, max_targeted=7, expect_restart=True, mode="needle")
     assert len(batch["candidates"]) == 16
 
     for index in range(368, 416):
@@ -823,11 +833,7 @@ with TemporaryDirectory() as tmpdir:
         seed=17,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 12
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "basin"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 12
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=6, max_targeted=7, expect_restart=True, mode="basin")
     assert len(batch["candidates"]) == 16
 
 with TemporaryDirectory() as tmpdir:
@@ -884,11 +890,7 @@ with TemporaryDirectory() as tmpdir:
         seed=18,
         method="elite_truncated_gaussian_plus_lhs",
     )
-    assert batch["proposal_counts"]["targeted"] == 12
-    assert batch["proposal_counts"]["explore"] == 1
-    assert batch["targeted_detail"]["mode"] == "frontier"
-    assert batch["targeted_detail"]["coordinate_probe_count"] == 12
-    assert sum(batch["proposal_counts"].values()) == 16
+    assert_proposal_mix(batch, n_candidates=16, min_lhs=5, min_targeted=5, max_targeted=6, expect_restart=True, mode="frontier")
     assert len(batch["candidates"]) == 16
     assert any(candidate["epli_ampa_weight_scale"] > 1.0 for candidate in batch["candidates"])
     assert any(candidate["epli_gaba_weight_scale"] > 1.0 for candidate in batch["candidates"])
