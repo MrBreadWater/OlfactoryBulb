@@ -14,6 +14,7 @@ launch many independent runs concurrently inside one long-lived allocation.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
@@ -1774,15 +1775,59 @@ def _joint_sweep_paths_for_batch(
     return paths
 
 
+def _switch_sweep_paths_for_batch(
+    batch_plan: dict[str, Any],
+    *,
+    switch_time_ms: float,
+    switch_washout_ms: float,
+    ketamine_block_values: dict[str, float] | None = None,
+) -> dict[str, list[Any]]:
+    ketamine_block_values = dict(ketamine_block_values or {"control": 1.0, "ketamine": 0.0})
+    before_block = float(ketamine_block_values.get("control", 1.0))
+    after_block = float(ketamine_block_values.get("ketamine", 0.0))
+    paths: dict[str, list[Any]] = {}
+    for candidate in batch_plan["candidates"]:
+        item_values = dict(candidate)
+        item_values["ketamine_block"] = before_block
+        item_values["ketamine_switch_time_ms"] = float(switch_time_ms)
+        item_values["ketamine_block_after_switch"] = after_block
+        item_values["ketamine_switch_washout_ms"] = float(switch_washout_ms)
+        item_values["optimizer_condition"] = "switch"
+        item_values["optimizer_pair_id"] = str(candidate["optimizer_candidate_id"])
+        for key, value in item_values.items():
+            paths.setdefault(key, []).append(value)
+    return paths
+
+
 def run_hfo_batch(
     campaign_dir: str | Path,
     *,
     base_config: dict[str, Any],
     batch_plan: dict[str, Any],
     ketamine_block_values: dict[str, float] | None = None,
+    condition_mode: str = "separate",
+    ketamine_switch_time_ms: float | None = None,
+    ketamine_switch_washout_ms: float = 500.0,
 ) -> dict[str, Any]:
     campaign_dir = Path(campaign_dir)
-    sweep_path = _joint_sweep_paths_for_batch(batch_plan, ketamine_block_values=ketamine_block_values)
+    condition_mode = str(condition_mode)
+    if condition_mode == "separate":
+        sweep_path = _joint_sweep_paths_for_batch(batch_plan, ketamine_block_values=ketamine_block_values)
+    elif condition_mode == "switch":
+        tstop_ms = float(base_config.get("tstop_ms") or 0.0)
+        switch_time_ms = float(
+            ketamine_switch_time_ms
+            if ketamine_switch_time_ms is not None
+            else max(tstop_ms * 0.5, 0.0)
+        )
+        sweep_path = _switch_sweep_paths_for_batch(
+            batch_plan,
+            switch_time_ms=switch_time_ms,
+            switch_washout_ms=float(ketamine_switch_washout_ms),
+            ketamine_block_values=ketamine_block_values,
+        )
+    else:
+        raise ValueError("condition_mode must be 'separate' or 'switch'")
     config = dict(base_config)
     config["label_prefix"] = f"hfo_opt_{batch_plan['batch_name']}"
     sweep = hlp.run_parameter_sweep(config, sweep_path)
@@ -1791,6 +1836,13 @@ def run_hfo_batch(
         "batch_name": batch_plan["batch_name"],
         "strategy": batch_plan["strategy"],
         "stage": batch_plan["stage"],
+        "condition_mode": condition_mode,
+        "ketamine_switch_time_ms": (
+            None if condition_mode != "switch" else float(sweep_path["ketamine_switch_time_ms"][0])
+        ),
+        "ketamine_switch_washout_ms": (
+            None if condition_mode != "switch" else float(sweep_path["ketamine_switch_washout_ms"][0])
+        ),
         "sweep_dir": str(sweep_dir),
         "item_count": len(sweep.get("items", [])),
     }
@@ -2163,6 +2215,182 @@ def _append_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
             handle.write(json.dumps(hlp._json_ready(row), sort_keys=True) + "\n")
 
 
+def _empty_condition_metrics() -> dict[str, Any]:
+    return {
+        "condition_score": float("-inf"),
+        "peak_hz": math.nan,
+        "peak_ratio": 0.0,
+        "target_peak_contrast": 0.0,
+        "target_density_ratio": 0.0,
+        "freq_match": 0.0,
+        "target_centroid_hz": math.nan,
+        "target_centroid_match": 0.0,
+        "dominance": 0.0,
+        "target_clean_fraction": 0.0,
+        "supra_hfo_relative": 0.0,
+        "beta_gamma_support": 0.0,
+        "phase_lock": 0.0,
+        "rate_penalty": 0.0,
+        "spike_support_rate_hz": 0.0,
+        "epli_rate_hz": 0.0,
+        "spike_support_penalty": 0.0,
+        "input_coverage_fraction": 0.0,
+        "input_dropout_penalty": 0.0,
+        "psd_shape_freqs_hz": list(PSD_TEMPLATE_FREQS_HZ),
+        "psd_shape_power": [0.0 for _ in PSD_TEMPLATE_FREQS_HZ],
+        "band_power": {},
+        "relative_band_power": {},
+        "mean_firing_rate_by_type": {},
+    }
+
+
+def _result_tstop_ms(result: dict[str, Any] | None) -> float:
+    if result is None:
+        return 0.0
+    summary = result.get("summary") or {}
+    params = summary.get("params") or {}
+    try:
+        tstop_ms = float(params.get("tstop") or 0.0)
+    except (TypeError, ValueError):
+        tstop_ms = 0.0
+    if tstop_ms <= 0.0:
+        lfp_t = result.get("lfp_t")
+        if lfp_t is not None and len(lfp_t) > 0:
+            tstop_ms = float(np.max(np.asarray(lfp_t, dtype=float)))
+    return max(tstop_ms, 0.0)
+
+
+def _windowed_times(times: Any, start_ms: float, stop_ms: float) -> np.ndarray:
+    values = np.atleast_1d(np.asarray(times, dtype=float))
+    if len(values) == 0:
+        return values
+    mask = (values >= float(start_ms)) & (values < float(stop_ms))
+    return values[mask] - float(start_ms)
+
+
+def _windowed_trace(
+    times: Any,
+    values: Any,
+    start_ms: float,
+    stop_ms: float,
+) -> tuple[np.ndarray, np.ndarray]:
+    t = np.atleast_1d(np.asarray(times, dtype=float))
+    y = np.atleast_1d(np.asarray(values, dtype=float))
+    if len(t) == 0 or len(y) == 0:
+        return np.array([], dtype=float), np.array([], dtype=float)
+    n = min(len(t), len(y))
+    t = t[:n]
+    y = y[:n]
+    mask = (t >= float(start_ms)) & (t < float(stop_ms))
+    return t[mask] - float(start_ms), y[mask]
+
+
+def _windowed_event_rows(rows: Any, start_ms: float, stop_ms: float) -> list[Any]:
+    result = []
+    for row in rows or []:
+        if isinstance(row, (list, tuple)) and len(row) >= 2:
+            row_values = list(row)
+            row_values[1] = _windowed_times(row_values[1], start_ms, stop_ms)
+            result.append(tuple(row_values) if isinstance(row, tuple) else row_values)
+        else:
+            result.append(row)
+    return result
+
+
+def _windowed_soma_spikes(soma_spikes: Any, start_ms: float, stop_ms: float) -> dict[str, Any]:
+    if not isinstance(soma_spikes, dict):
+        return {}
+    payload = dict(soma_spikes)
+    payload["labels"] = list(soma_spikes.get("labels") or [])
+    payload["spike_times"] = [
+        _windowed_times(times, start_ms, stop_ms)
+        for times in (soma_spikes.get("spike_times") or [])
+    ]
+    metadata = dict(soma_spikes.get("metadata") or {})
+    metadata["window_start_ms"] = float(start_ms)
+    metadata["window_stop_ms"] = float(stop_ms)
+    payload["metadata"] = metadata
+    return payload
+
+
+def _windowed_soma_traces(soma_vs: Any, start_ms: float, stop_ms: float) -> list[Any]:
+    result = []
+    for row in soma_vs or []:
+        if isinstance(row, (list, tuple)) and len(row) >= 3:
+            label, times, values, *rest = list(row)
+            t_window, v_window = _windowed_trace(times, values, start_ms, stop_ms)
+            new_row = [label, t_window, v_window, *rest]
+            result.append(tuple(new_row) if isinstance(row, tuple) else new_row)
+        else:
+            result.append(row)
+    return result
+
+
+def window_result_for_condition(
+    result: dict[str, Any],
+    *,
+    start_ms: float,
+    stop_ms: float,
+    condition: str,
+) -> dict[str, Any]:
+    """Return a result-like dict restricted to one postprocessed time window."""
+    start_ms = max(float(start_ms), 0.0)
+    stop_ms = max(float(stop_ms), start_ms)
+    duration_ms = max(stop_ms - start_ms, 0.0)
+    windowed = dict(result)
+    summary = deepcopy(result.get("summary") or {})
+    params = deepcopy(summary.get("params") or {})
+    params["tstop"] = float(duration_ms)
+    params["source_tstop"] = float(_result_tstop_ms(result))
+    params["condition_window"] = {
+        "condition": str(condition),
+        "start_ms": float(start_ms),
+        "stop_ms": float(stop_ms),
+        "duration_ms": float(duration_ms),
+    }
+    summary["params"] = params
+    windowed["summary"] = summary
+    windowed["lfp_t"], windowed["lfp"] = _windowed_trace(
+        result.get("lfp_t", []),
+        result.get("lfp", []),
+        start_ms,
+        stop_ms,
+    )
+    windowed["soma_spikes"] = _windowed_soma_spikes(
+        result.get("soma_spikes"),
+        start_ms,
+        stop_ms,
+    )
+    windowed["input_times"] = _windowed_event_rows(result.get("input_times"), start_ms, stop_ms)
+    windowed["gc_output_events"] = _windowed_event_rows(result.get("gc_output_events"), start_ms, stop_ms)
+    if "soma_vs" in result and result.get("soma_vs"):
+        windowed["soma_vs"] = _windowed_soma_traces(result.get("soma_vs"), start_ms, stop_ms)
+    return windowed
+
+
+def _switch_condition_windows(
+    result: dict[str, Any] | None,
+    value: dict[str, Any],
+    *,
+    default_washout_ms: float,
+) -> dict[str, tuple[float, float]]:
+    tstop_ms = _result_tstop_ms(result)
+    switch_time = value.get("ketamine_switch_time_ms", value.get("ketamine_switch_time"))
+    if switch_time in (None, ""):
+        summary = (result or {}).get("summary") or {}
+        params = summary.get("params") or {}
+        switch_payload = params.get("ketamine_switch") or {}
+        switch_time = switch_payload.get("time_ms") if isinstance(switch_payload, dict) else None
+    switch_time_ms = float(switch_time if switch_time not in (None, "") else tstop_ms * 0.5)
+    washout_ms = float(value.get("ketamine_switch_washout_ms", default_washout_ms) or 0.0)
+    control_start = min(max(washout_ms, 0.0), max(switch_time_ms, 0.0))
+    ketamine_start = min(max(switch_time_ms + max(washout_ms, 0.0), 0.0), max(tstop_ms, 0.0))
+    return {
+        "control": (control_start, max(switch_time_ms, control_start)),
+        "ketamine": (ketamine_start, max(tstop_ms, ketamine_start)),
+    }
+
+
 def score_hfo_batch(
     campaign_dir: str | Path,
     *,
@@ -2172,6 +2400,7 @@ def score_hfo_batch(
     dt_ms: float = 0.1,
     target_hz: float = 195.0,
     target_half_width_hz: float = 35.0,
+    switch_washout_ms: float = 500.0,
 ) -> dict[str, Any]:
     campaign_dir = Path(campaign_dir)
     items = sweep.get("items", [])
@@ -2187,33 +2416,50 @@ def score_hfo_batch(
         candidate_id = str(value.get("optimizer_candidate_id") or value.get("optimizer_pair_id") or "")
         condition = str(value.get("optimizer_condition") or "")
         result = item.get("result")
+        if condition == "switch":
+            windows = _switch_condition_windows(
+                result,
+                value,
+                default_washout_ms=switch_washout_ms,
+            )
+            for split_condition, (window_start, window_stop) in windows.items():
+                if result is None or window_stop <= window_start:
+                    split_metrics = _empty_condition_metrics()
+                else:
+                    split_metrics = score_condition_result(
+                        window_result_for_condition(
+                            result,
+                            start_ms=window_start,
+                            stop_ms=window_stop,
+                            condition=split_condition,
+                        ),
+                        signal=signal,
+                        dt_ms=dt_ms,
+                        target_hz=target_hz,
+                        target_half_width_hz=target_half_width_hz,
+                    )
+                item_row = {
+                    "batch_name": batch_plan["batch_name"],
+                    "candidate_id": candidate_id,
+                    "condition": split_condition,
+                    "source_condition": condition,
+                    "label": item.get("label"),
+                    "sweep_dir": str(sweep.get("sweep_dir")),
+                    "result_dir": (
+                        str(getattr(item.get("run"), "result_dir", ""))
+                        if item.get("run") is not None
+                        else ""
+                    ),
+                    "window_start_ms": float(window_start),
+                    "window_stop_ms": float(window_stop),
+                    "parameters": candidate_lookup.get(candidate_id, {}),
+                    **split_metrics,
+                }
+                item_rows.append(item_row)
+                grouped.setdefault(candidate_id, {})[split_condition] = item_row
+            continue
         if result is None:
-            metrics = {
-                "condition_score": float("-inf"),
-                "peak_hz": math.nan,
-                "peak_ratio": 0.0,
-                "target_peak_contrast": 0.0,
-                "target_density_ratio": 0.0,
-                "freq_match": 0.0,
-                "target_centroid_hz": math.nan,
-                "target_centroid_match": 0.0,
-                "dominance": 0.0,
-                "target_clean_fraction": 0.0,
-                "supra_hfo_relative": 0.0,
-                "beta_gamma_support": 0.0,
-                "phase_lock": 0.0,
-                "rate_penalty": 0.0,
-                "spike_support_rate_hz": 0.0,
-                "epli_rate_hz": 0.0,
-                "spike_support_penalty": 0.0,
-                "input_coverage_fraction": 0.0,
-                "input_dropout_penalty": 0.0,
-                "psd_shape_freqs_hz": list(PSD_TEMPLATE_FREQS_HZ),
-                "psd_shape_power": [0.0 for _ in PSD_TEMPLATE_FREQS_HZ],
-                "band_power": {},
-                "relative_band_power": {},
-                "mean_firing_rate_by_type": {},
-            }
+            metrics = _empty_condition_metrics()
         else:
             metrics = score_condition_result(
                 result,
@@ -2327,5 +2573,6 @@ __all__ = [
     "search_space_rows",
     "sustained_odor_schedule",
     "top_candidate_rows",
+    "window_result_for_condition",
     "write_objective_filter",
 ]

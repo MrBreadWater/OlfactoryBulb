@@ -58,7 +58,7 @@ NEURON {
 	POINT_PROCESS AmpaNmdaSyn
 	RANGE R, g, mg, inmda, iampa, gnmda, gampa
 	RANGE x, mgid, ggid, srcgid, gmax, ltdinvl, ltpinvl, nmdafactor
-	RANGE ketamine_block, ampa_block
+	RANGE ketamine_block, ketamine_switch_time, ketamine_block_after, ampa_block
 	RANGE Rinf, Rtau
 	NONSPECIFIC_CURRENT i
 	GLOBAL Cdur, Alpha, Beta, E, ampatau
@@ -84,6 +84,8 @@ PARAMETER {
 	gampafactor = 0.001 (1)
 	nmdafactor = 0.0035 (1)
 	ketamine_block = 1 (1)
+	ketamine_switch_time = -1 (ms)
+	ketamine_block_after = 1 (1)
 	ampa_block = 1 (1)
 	ltdinvl = 250 (ms)		: longer intervals, no change
 	ltpinvl = 33.33 (ms)		: shorter interval, LTP
@@ -106,6 +108,7 @@ ASSIGNED {
 	Rinf				: steady state channels open
 	Rtau		(ms)		: time constant of channel binding
 	synon
+	ketamine_effective_block
 }
 
 STATE {Ron Roff
@@ -121,7 +124,12 @@ INITIAL {
 
 BREAKPOINT {
 	SOLVE release METHOD cnexp
-	gnmda = mgblock(v)*(Ron + Roff)*gmax*nmdafactor*ketamine_block
+	if (ketamine_switch_time >= 0 && t >= ketamine_switch_time) {
+		ketamine_effective_block = ketamine_block_after
+	} else {
+		ketamine_effective_block = ketamine_block
+	}
+	gnmda = mgblock(v)*(Ron + Roff)*gmax*nmdafactor*ketamine_effective_block
 	inmda = gnmda*(v - E)
 	iampa = ampa_block*gampa*(v - E)
 	i = iampa + inmda

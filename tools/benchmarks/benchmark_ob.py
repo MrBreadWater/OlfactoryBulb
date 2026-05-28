@@ -486,6 +486,12 @@ def main() -> None:
             if path.exists():
                 file_summaries[filename] = summarize_pickle(path)
 
+        synapse_properties = getattr(ob.params, "synapse_properties", {})
+        ampa_nmda_properties = (
+            synapse_properties.get("AmpaNmdaSyn", {})
+            if isinstance(synapse_properties, dict)
+            else {}
+        )
         summary = {
             "label": final_label,
             "requested_label": args.label,
@@ -527,6 +533,11 @@ def main() -> None:
                     "warp_balance": getattr(coreneuron, "warp_balance", None) if coreneuron is not None else None,
                 },
                 "parallel_timeout": getattr(ob.params, "parallel_timeout", None),
+                "ketamine_switch": {
+                    "time_ms": ampa_nmda_properties.get("ketamine_switch_time"),
+                    "block_before": ampa_nmda_properties.get("ketamine_block"),
+                    "block_after": ampa_nmda_properties.get("ketamine_block_after"),
+                },
             },
             "files": file_summaries,
         }

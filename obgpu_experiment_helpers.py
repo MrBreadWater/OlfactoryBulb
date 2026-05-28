@@ -162,6 +162,8 @@ CONTROL_HELP = {
     "ampa_nmda_gmax": "Global AmpaNmdaSyn gmax.",
     "ampa_nmda_nmdafactor": "Global AmpaNmdaSyn NMDA factor.",
     "ketamine_block": "Semantic NMDA block multiplier on AmpaNmdaSyn NMDA current.",
+    "ketamine_switch_time_ms": "Optional simulation time when AmpaNmdaSyn switches to ketamine_block_after_switch.",
+    "ketamine_block_after_switch": "NMDA block multiplier used after ketamine_switch_time_ms.",
     "ampa_block": "AMPA current multiplier on AmpaNmdaSyn AMPA current.",
     "gaba_gmax": "Global GabaSyn gmax.",
     "gaba_tau2_ms": "Global GabaSyn tau2.",
@@ -813,6 +815,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "ampa_nmda_gmax": None,
         "ampa_nmda_nmdafactor": None,
         "ketamine_block": None,
+        "ketamine_switch_time_ms": None,
+        "ketamine_block_after_switch": None,
         "ampa_block": None,
         "gaba_gmax": None,
         "gaba_tau2_ms": None,
@@ -1308,6 +1312,8 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
             "ampa_nmda_gmax",
             "ampa_nmda_nmdafactor",
             "ketamine_block",
+            "ketamine_switch_time_ms",
+            "ketamine_block_after_switch",
             "ampa_block",
             "gaba_gmax",
             "gaba_tau2_ms",
@@ -1316,7 +1322,14 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         overrides.setdefault("synapse_properties", {})
     if any(
         config.get(key) is not None
-        for key in ("ampa_nmda_gmax", "ampa_nmda_nmdafactor", "ketamine_block", "ampa_block")
+        for key in (
+            "ampa_nmda_gmax",
+            "ampa_nmda_nmdafactor",
+            "ketamine_block",
+            "ketamine_switch_time_ms",
+            "ketamine_block_after_switch",
+            "ampa_block",
+        )
     ):
         overrides["synapse_properties"].setdefault("AmpaNmdaSyn", {})
         if config.get("ampa_nmda_gmax") is not None:
@@ -1328,6 +1341,16 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         if config.get("ketamine_block") is not None:
             overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block"] = float(
                 config["ketamine_block"]
+            )
+        if config.get("ketamine_switch_time_ms") is not None:
+            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_switch_time"] = float(
+                config["ketamine_switch_time_ms"]
+            )
+        if config.get("ketamine_switch_time_ms") is not None and config.get("ketamine_block_after_switch") is None:
+            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block_after"] = 0.0
+        if config.get("ketamine_block_after_switch") is not None:
+            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block_after"] = float(
+                config["ketamine_block_after_switch"]
             )
         if config.get("ampa_block") is not None:
             overrides["synapse_properties"]["AmpaNmdaSyn"]["ampa_block"] = float(

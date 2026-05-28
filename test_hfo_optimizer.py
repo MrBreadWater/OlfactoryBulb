@@ -22,7 +22,9 @@ from olfactorybulb.hfo_optimizer import (
     propose_elite_batch,
     score_candidate_pair,
     score_condition_result,
+    score_hfo_batch,
     sustained_odor_schedule,
+    window_result_for_condition,
     write_objective_filter,
 )
 
@@ -68,6 +70,20 @@ assert lfp_filter_overrides["lfp_include_cell_types"] == ["MC", "TC"]
 assert lfp_filter_overrides["lfp_exclude_cell_types"] == ["GC"]
 assert lfp_filter_overrides["save_soma_traces"] is False
 assert lfp_filter_overrides["save_voltage_summary"] is False
+switch_config = hlp.build_run_config(
+    ketamine_block=1.0,
+    ketamine_switch_time_ms=4500.0,
+    ketamine_block_after_switch=0.0,
+)
+switch_overrides = hlp.build_param_overrides(switch_config)
+switch_synapse_overrides = switch_overrides["synapse_properties"]["AmpaNmdaSyn"]
+assert switch_synapse_overrides["ketamine_block"] == 1.0
+assert switch_synapse_overrides["ketamine_switch_time"] == 4500.0
+assert switch_synapse_overrides["ketamine_block_after"] == 0.0
+switch_default_after = hlp.build_param_overrides(
+    hlp.build_run_config(ketamine_switch_time_ms=4500.0)
+)["synapse_properties"]["AmpaNmdaSyn"]
+assert switch_default_after["ketamine_block_after"] == 0.0
 assert hlp.cell_type_of("PVCRH_FSI1[0].soma") == "EPLI"
 lfp_diagnostics = lfp_source_diagnostic_configs(
     lfp_filter_config,
@@ -104,6 +120,72 @@ upper_target = synthetic_result(freq_hz=220.0, amplitude=1.0, seed=4)
 lower_edge_target = synthetic_result(freq_hz=161.0, amplitude=1.0, seed=5)
 off_target = synthetic_result(freq_hz=90.0, amplitude=1.0, seed=2)
 flat = synthetic_result(freq_hz=40.0, amplitude=0.25, noise_std=0.25, seed=3)
+
+switch_t = np.arange(0.0, 4000.0, 0.1)
+switch_lfp = np.where(
+    switch_t < 2000.0,
+    0.25 * np.sin(2.0 * np.pi * 40.0 * switch_t / 1000.0),
+    np.sin(2.0 * np.pi * 180.0 * switch_t / 1000.0),
+)
+switch_result = {
+    "lfp_t": switch_t,
+    "lfp": switch_lfp,
+    "input_times": [("input", np.arange(0.0, 4000.0, 100.0))],
+    "soma_spikes": {
+        "labels": ["EPLI0[0].soma"],
+        "spike_times": [np.arange(100.0, 3900.0, 100.0)],
+        "metadata": {},
+    },
+    "summary": {"params": {"tstop": 4000.0}},
+}
+ketamine_window = window_result_for_condition(
+    switch_result,
+    start_ms=2200.0,
+    stop_ms=4000.0,
+    condition="ketamine",
+)
+assert ketamine_window["summary"]["params"]["tstop"] == 1800.0
+assert np.isclose(ketamine_window["lfp_t"][0], 0.0)
+assert np.all(ketamine_window["soma_spikes"]["spike_times"][0] >= 0.0)
+
+with TemporaryDirectory() as tmpdir:
+    switch_batch_plan = {
+        "batch_name": "batch_switch",
+        "strategy": "test",
+        "stage": "test",
+        "candidates": [{"optimizer_candidate_id": "Cswitch", "kar_mt_gmax": 0.02}],
+    }
+    switch_sweep = {
+        "sweep_dir": tmpdir,
+        "items": [
+            {
+                "value": {
+                    "optimizer_candidate_id": "Cswitch",
+                    "optimizer_pair_id": "Cswitch",
+                    "optimizer_condition": "switch",
+                    "ketamine_switch_time_ms": 2000.0,
+                    "ketamine_switch_washout_ms": 200.0,
+                },
+                "label": "switch_item",
+                "result": switch_result,
+                "run": None,
+            }
+        ],
+    }
+    switch_scored = score_hfo_batch(
+        tmpdir,
+        batch_plan=switch_batch_plan,
+        sweep=switch_sweep,
+        target_hz=180.0,
+        target_half_width_hz=20.0,
+        switch_washout_ms=200.0,
+    )
+    assert [row["condition"] for row in switch_scored["item_rows"]] == ["control", "ketamine"]
+    switch_candidate = switch_scored["candidate_rows"][0]
+    assert switch_candidate["ketamine_metrics"]["relative_band_power"]["target_hfo"] > (
+        switch_candidate["control_metrics"]["relative_band_power"]["target_hfo"]
+    )
+    assert math.isfinite(switch_candidate["pair_score"])
 
 target_metrics = score_condition_result(target)
 upper_target_metrics = score_condition_result(upper_target, target_hz=180.0, target_half_width_hz=20.0)
