@@ -382,7 +382,38 @@ def _archive_seq(row: dict[str, Any]) -> int:
         return -1
 
 
-def _recent_rows(rows: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
+def _latest_completed_batch_name(campaign_dir: Path) -> str | None:
+    state = hfo.load_campaign_state(campaign_dir)
+    completed = state.get("completed_batches") or []
+    if not isinstance(completed, list):
+        return None
+    for batch_name in reversed(completed):
+        text = str(batch_name or "").strip()
+        if text:
+            return text
+    return None
+
+
+def _recent_rows(
+    rows: list[dict[str, Any]],
+    *,
+    limit: int,
+    recent_batch_name: str | None = None,
+) -> list[dict[str, Any]]:
+    batch_name = str(recent_batch_name or "").strip()
+    if batch_name:
+        ranked = sorted(
+            [row for row in rows if str(row.get("batch_name") or "") == batch_name],
+            key=lambda row: (
+                float(row.get("pair_score", float("-inf"))),
+                _archive_seq(row),
+                str(row.get("candidate_id") or ""),
+            ),
+            reverse=True,
+        )
+        if ranked:
+            return ranked[: int(limit)]
+
     latest_batch_name = ""
     ranked_by_arrival = sorted(
         rows,
@@ -700,6 +731,7 @@ def _generate_missing_packets(
     *,
     top_n: int,
     workers: int | None = None,
+    recent_batch_name: str | None = None,
 ) -> list[Path]:
     if top_n <= 0:
         return []
@@ -707,7 +739,10 @@ def _generate_missing_packets(
     packets = find_candidate_packets(campaign_dir)
     selected_rows: list[dict[str, Any]] = []
     seen_candidate_ids: set[str] = set()
-    for source_rows in (rows[: int(top_n)], _recent_rows(rows, limit=int(top_n))):
+    for source_rows in (
+        rows[: int(top_n)],
+        _recent_rows(rows, limit=int(top_n), recent_batch_name=recent_batch_name),
+    ):
         for row in source_rows:
             candidate_id = str(row.get("candidate_id") or "")
             if not candidate_id or candidate_id in seen_candidate_ids:
@@ -1052,7 +1087,12 @@ def _render_top_table(rows: list[dict[str, Any]], *, top_n: int) -> str:
     )
 
 
-def _render_recent_table(rows: list[dict[str, Any]], *, top_n: int) -> str:
+def _render_recent_table(
+    rows: list[dict[str, Any]],
+    *,
+    top_n: int,
+    recent_batch_name: str | None = None,
+) -> str:
     headers = [
         "order",
         "candidate",
@@ -1070,7 +1110,10 @@ def _render_recent_table(rows: list[dict[str, Any]], *, top_n: int) -> str:
         "C TC",
     ]
     body = []
-    for index, row in enumerate(_recent_rows(rows, limit=int(top_n)), start=1):
+    for index, row in enumerate(
+        _recent_rows(rows, limit=int(top_n), recent_batch_name=recent_batch_name),
+        start=1,
+    ):
         s = _metric_summary(row)
         cells = [
             index,
@@ -1224,9 +1267,10 @@ def _render_html(
     generated_packets: list[Path],
     status_payload: dict[str, Any],
     generated_at: str,
+    recent_batch_name: str | None = None,
 ) -> str:
     best_rows = rows[: int(top_n)]
-    recent_rows = _recent_rows(rows, limit=int(top_n))
+    recent_rows = _recent_rows(rows, limit=int(top_n), recent_batch_name=recent_batch_name)
     tab_specs = hfo_visuals.dashboard_tabs()
     best_packet_cards = "\n".join(
         _render_packet_card(
@@ -1254,7 +1298,7 @@ def _render_html(
             "packet_cards": best_packet_cards,
         },
         "recent": {
-            "table_html": _render_recent_table(rows, top_n=top_n),
+            "table_html": _render_recent_table(rows, top_n=top_n, recent_batch_name=recent_batch_name),
             "packet_cards": recent_packet_cards,
         },
     }
@@ -1757,10 +1801,18 @@ def export_visual_dashboard(
             cleanup_stale_packets(campaign_path, dry_run=False)
 
         rows = _load_ranked_rows(campaign_path)
+        recent_batch_name = _latest_completed_batch_name(campaign_path)
         packet_candidate_count = len(
             {
                 str(row.get("candidate_id") or "")
-                for row in [*rows[: int(generate_packets_top_n)], *_recent_rows(rows, limit=int(generate_packets_top_n))]
+                for row in [
+                    *rows[: int(generate_packets_top_n)],
+                    *_recent_rows(
+                        rows,
+                        limit=int(generate_packets_top_n),
+                        recent_batch_name=recent_batch_name,
+                    ),
+                ]
                 if str(row.get("candidate_id") or "")
             }
         )
@@ -1769,6 +1821,7 @@ def export_visual_dashboard(
             rows,
             top_n=int(generate_packets_top_n),
             workers=int(generate_packet_workers),
+            recent_batch_name=recent_batch_name,
         )
         packets = find_candidate_packets(campaign_path)
         status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
@@ -1784,6 +1837,7 @@ def export_visual_dashboard(
             generated_packets=generated_packets,
             status_payload=payload,
             generated_at=generated_at,
+            recent_batch_name=recent_batch_name,
         )
         index_path = output_path / "index.html"
         index_tmp = index_path.with_name(f".{index_path.name}.tmp")

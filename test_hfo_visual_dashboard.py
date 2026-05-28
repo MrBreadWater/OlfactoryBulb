@@ -40,7 +40,7 @@ from tools.analysis.hfo_visual_dashboard import (
     ensure_visual_dashboard_runtime,
     find_candidate_packets,
 )
-from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
+from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION, _normalized_template_for_plot
 
 assert _effective_packet_generation_workers(0, 0) == 1
 assert _effective_packet_generation_workers(0, 1) == 1
@@ -66,18 +66,32 @@ assert [row["candidate_id"] for row in _recent_rows(recent_archive_fixture_rows,
     "C02000",
     "C01000",
 ]
+recent_state_fixture_rows = [
+    {"batch_name": "batch_0199", "candidate_id": "C08000", "pair_score": 5.0, "_archive_seq": 100},
+    {"batch_name": "batch_0202", "candidate_id": "C01000", "pair_score": 1.0, "_archive_seq": 101},
+    {"batch_name": "batch_0202", "candidate_id": "C02000", "pair_score": 2.0, "_archive_seq": 102},
+    {"batch_name": "batch_0202", "candidate_id": "C03000", "pair_score": 9.0, "_archive_seq": 103},
+]
+assert [row["candidate_id"] for row in _recent_rows(recent_state_fixture_rows, limit=3, recent_batch_name="batch_0202")] == [
+    "C03000",
+    "C02000",
+    "C01000",
+]
 
 window_t = np.arange(0.0, 1000.0, 0.1, dtype=float)
 windowed = {
     "lfp_t": window_t,
     "lfp": np.sin(2.0 * np.pi * 180.0 * window_t / 1000.0),
 }
+visual_freqs = np.linspace(20.0, 300.0, 141)
+visual_template = _normalized_template_for_plot("ketamine", visual_freqs)
 nperseg, noverlap = _spectrogram_window_geometry(windowed)
 assert nperseg >= 128
 freq_bins = int(np.count_nonzero(np.fft.rfftfreq(int(nperseg), d=0.0001) <= float(hfo.DEFAULT_SCORE_BANDS["target_hfo"][1])))
 time_bins = 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap))
 assert freq_bins >= time_bins
 assert time_bins <= 16
+assert float(np.nanmin(visual_template[np.isfinite(visual_template)])) >= 1e-7
 
 fake_psd_module = types.SimpleNamespace(PSD_PACKET_RENDER_VERSION=123)
 fake_visuals_module = types.SimpleNamespace(VISUAL_STYLE_VERSION=456)
