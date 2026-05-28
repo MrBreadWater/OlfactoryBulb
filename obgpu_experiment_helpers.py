@@ -191,6 +191,9 @@ CONTROL_HELP = {
     "enable_reciprocal_synapses": "Toggle GC<->MC/TC reciprocal synapses.",
     "extra_overrides": "Any raw paramset overrides not exposed above.",
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
+    "spectrogram_max_freq_hz": "Maximum frequency (Hz) shown in spectrogram output.",
+    "spectrogram_nperseg": "Spectrogram STFT window length in samples.",
+    "spectrogram_noverlap": "Number of samples of overlap between spectrogram windows.",
     "wavelet_signal": "Signal for wavelet plots, e.g. 'lfp', 'mean_TC_voltage', or a soma label.",
     "runner_backend": "Execution backend: 'local', 'sol_slurm', or 'slurm_remote'.",
     "use_corenrn": "Local-run CoreNEURON toggle. Remote Slurm runs infer this from the Slurm resource request unless you explicitly override it after applying the remote config.",
@@ -852,6 +855,9 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "gc_ka_gbar_scale": None,
         "analysis_dt_ms": 0.1,
         "spectrogram_signal": "lfp",
+        "spectrogram_max_freq_hz": 250.0,
+        "spectrogram_nperseg": 256,
+        "spectrogram_noverlap": 192,
         "wavelet_signal": "lfp",
         "max_voltage_traces_per_type": 4,
         "max_spike_raster_cells_per_type": 24,
@@ -7977,6 +7983,9 @@ def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
         "lfp_exclude_cell_types",
         "analysis_dt_ms",
         "spectrogram_signal",
+        "spectrogram_max_freq_hz",
+        "spectrogram_nperseg",
+        "spectrogram_noverlap",
         "wavelet_signal",
         "max_voltage_traces_per_type",
         "max_spike_raster_cells_per_type",
@@ -8322,9 +8331,9 @@ def compute_spectrogram(
     signal_t: np.ndarray | list[float],
     signal_y: np.ndarray | list[float],
     dt_ms: float | None = None,
-    max_freq_hz: float = 150.0,
-    nperseg: int = 512,
-    noverlap: int = 448,
+    max_freq_hz: float = 250.0,
+    nperseg: int = 256,
+    noverlap: int = 192,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Compute a standard spectrogram on a uniform time base."""
     t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
@@ -8333,6 +8342,33 @@ def compute_spectrogram(
     fs_hz = 1000.0 / float(np.median(np.diff(t)))
     nperseg = min(nperseg, len(y))
     noverlap = min(noverlap, max(0, nperseg - 1))
+
+    # Keep enough short-time windows for brief runs (e.g., 1000 ms batches).
+    nperseg = max(8, int(nperseg))
+    noverlap = max(0, min(int(noverlap), max(0, nperseg - 1)))
+    if len(y) <= nperseg:
+        # Ensure at least a couple windows when the requested window is too long.
+        # We prefer a quarter-window to still keep decent frequency resolution.
+        nperseg = max(8, min(256, len(y) // 4))
+        noverlap = max(0, int(0.75 * nperseg))
+        nperseg = max(8, min(int(nperseg), len(y)))
+        noverlap = min(noverlap, max(0, nperseg - 1))
+
+    # If the chosen geometry still yields a single segment, keep stepping down
+    # the window until at least 2 segments are returned.
+    while len(y) > 0 and nperseg >= 16:
+        if nperseg - noverlap <= 0:
+            noverlap = max(0, nperseg // 2)
+        n_steps = 1 + max(0, (len(y) - nperseg) // max(1, nperseg - noverlap))
+        if n_steps >= 2:
+            break
+        nperseg = max(16, nperseg // 2)
+        noverlap = min(noverlap, max(0, nperseg // 2))
+    # Safety fallback: keep at least one segment.
+    if nperseg > len(y):
+        nperseg = len(y)
+        noverlap = max(0, min(noverlap, nperseg - 1))
+
     freqs, times_s, power = spectrogram(
         y,
         fs=fs_hz,
@@ -10197,9 +10233,9 @@ def plot_spectrogram(
     result: dict[str, Any],
     signal: str = "lfp",
     dt_ms: float = 0.1,
-    max_freq_hz: float = 150.0,
-    nperseg: int = 512,
-    noverlap: int = 448,
+    max_freq_hz: float = 250.0,
+    nperseg: int = 256,
+    noverlap: int = 192,
     ax: Any = None,
     modulus: float | None = None,
 ) -> Any:
@@ -11161,9 +11197,9 @@ def animate_spectrogram_sweep(
     sweep: dict[str, Any],
     signal: str = "lfp",
     dt_ms: float = 0.1,
-    max_freq_hz: float = 150.0,
-    nperseg: int = 512,
-    noverlap: int = 448,
+    max_freq_hz: float = 250.0,
+    nperseg: int = 256,
+    noverlap: int = 192,
     interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate spectrograms across a one-parameter sweep."""
@@ -11685,6 +11721,9 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
         psd_xlim_hz = (float(psd_xlim_hz[0]), float(psd_xlim_hz[1]))
     else:
         psd_xlim_hz = None
+    spectrogram_max_freq_hz = float(config.get("spectrogram_max_freq_hz", 250.0))
+    spectrogram_nperseg = int(config.get("spectrogram_nperseg", 256))
+    spectrogram_noverlap = int(config.get("spectrogram_noverlap", 192))
 
     plot_input_overview(
         result,
@@ -11721,7 +11760,14 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     )
     plt.show()
 
-    plot_spectrogram(result, signal=config.get("spectrogram_signal", "lfp"), dt_ms=dt_ms)
+    plot_spectrogram(
+        result,
+        signal=config.get("spectrogram_signal", "lfp"),
+        dt_ms=dt_ms,
+        max_freq_hz=spectrogram_max_freq_hz,
+        nperseg=spectrogram_nperseg,
+        noverlap=spectrogram_noverlap,
+    )
     plt.show()
 
     plot_wavelet(result, signal=config.get("wavelet_signal", "lfp"), dt_ms=dt_ms)
