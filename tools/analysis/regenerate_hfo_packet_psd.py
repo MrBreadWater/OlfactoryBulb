@@ -26,6 +26,9 @@ import obgpu_experiment_helpers as hlp
 import olfactorybulb.hfo_optimizer as hfo
 
 
+PSD_TARGET_VISUAL_FLOOR = 10 ** -7.5
+
+
 def _load_manifest(packet: Path) -> tuple[Path, dict[str, Any]]:
     manifest_path = packet / "manifest.json" if packet.is_dir() else packet
     if not manifest_path.exists():
@@ -60,13 +63,14 @@ def _set_psd_axis_limits(ax: Any, arrays: list[np.ndarray]) -> None:
 
 
 def _normalized_template_for_plot(kind: str, freqs: np.ndarray) -> np.ndarray:
-    _target_freqs, target = hfo.psd_template_curve(kind, freqs)
+    _target_freqs, target = hfo.psd_template_curve(kind, freqs, floor=hfo.PSD_TEMPLATE_VISUAL_FLOOR)
     if not target.size:
         return target
     peak = float(np.nanmax(target))
     if peak <= 0.0:
         return np.zeros_like(target)
     normalized = target / peak
+    normalized = np.maximum(normalized, PSD_TARGET_VISUAL_FLOOR)
     domain = (freqs >= min(hfo.PSD_TEMPLATE_FREQS_HZ)) & (freqs <= max(hfo.PSD_TEMPLATE_FREQS_HZ))
     return np.where(domain, normalized, np.nan)
 

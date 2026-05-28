@@ -50,6 +50,7 @@ DEFAULT_SCORE_BANDS = {
     "supra_hfo": (230.0, 260.0),
 }
 PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
+PSD_TEMPLATE_VISUAL_FLOOR = 10 ** -7.5
 
 PAIR_SCORE_VERSION = 8
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
@@ -853,6 +854,8 @@ def _theoretical_psd_template(kind: str) -> np.ndarray:
 def psd_template_curve(
     kind: str,
     freqs_hz: Sequence[float] | np.ndarray | None = None,
+    *,
+    floor: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return a normalized theoretical PSD template for diagnostics.
 
@@ -862,6 +865,8 @@ def psd_template_curve(
     """
     template_freqs = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
     template_power = _theoretical_psd_template(kind)
+    if floor > 0.0:
+        template_power = np.maximum(template_power, float(floor))
     if freqs_hz is None:
         return template_freqs.copy(), template_power.copy()
 
@@ -879,6 +884,7 @@ def scaled_psd_template_curve(
     *,
     fit_band_hz: tuple[float, float] = (20.0, 300.0),
     method: str = "area",
+    floor: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return a PSD template scaled onto a measured PSD axis.
 
@@ -886,7 +892,7 @@ def scaled_psd_template_curve(
     matches the peak height in that band.  This is for visual diagnostics only;
     scoring still uses the normalized template vectors.
     """
-    freqs, template = psd_template_curve(kind, freqs_hz)
+    freqs, template = psd_template_curve(kind, freqs_hz, floor=floor)
     reference = np.asarray(reference_psd, dtype=float)
     if reference.shape != freqs.shape:
         raise ValueError("reference_psd must have the same shape as freqs_hz")
@@ -913,7 +919,10 @@ def scaled_psd_template_curve(
 
     if template_scale <= 0.0 or reference_scale <= 0.0:
         return freqs, np.zeros_like(template)
-    return freqs, template * (reference_scale / template_scale)
+    scaled = template * (reference_scale / template_scale)
+    if floor > 0.0:
+        scaled = np.maximum(scaled, float(floor))
+    return freqs, scaled
 
 
 def _psd_shape_from_arrays(freqs: np.ndarray, psd: np.ndarray) -> np.ndarray:
