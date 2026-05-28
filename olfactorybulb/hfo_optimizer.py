@@ -46,7 +46,7 @@ DEFAULT_SCORE_BANDS = {
     "supra_hfo": (230.0, 260.0),
 }
 
-PAIR_SCORE_VERSION = 4
+PAIR_SCORE_VERSION = 5
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 PLAUSIBILITY_SOFT_LIMITS = {
     "kar_mt_gmax": 0.05,
@@ -1644,6 +1644,7 @@ def score_condition_result(
             "condition_score": float("-inf"),
             "peak_hz": math.nan,
             "peak_ratio": 0.0,
+            "target_peak_contrast": 0.0,
             "target_density_ratio": 0.0,
             "freq_match": 0.0,
             "target_clean_fraction": 0.0,
@@ -1675,6 +1676,7 @@ def score_condition_result(
     shoulder_mask = ((freqs >= 100.0) & (freqs < target_lo)) | ((freqs > target_hi) & (freqs <= 240.0))
     background_floor = float(np.median(psd[background_mask])) if np.any(background_mask) else 0.0
     shoulder_floor = float(np.median(psd[shoulder_mask])) if np.any(shoulder_mask) else background_floor
+    target_floor = float(np.median(target_psd)) if np.any(target_mask) else 0.0
     target_power = float(summary["band_power"].get("target_hfo", 0.0))
     target_width_hz = max(target_hi - target_lo, 1e-9)
     target_density = target_power / target_width_hz
@@ -1687,7 +1689,8 @@ def score_condition_result(
     background_density = background_power / max(background_width_hz, 1e-9)
     denom = max(background_density, background_floor, shoulder_floor, 1e-18)
     target_density_ratio = target_density / denom
-    peak_ratio = target_density_ratio
+    peak_ratio = peak_power / max(background_floor, shoulder_floor, 1e-18)
+    target_peak_contrast = peak_power / max(target_floor, shoulder_floor, background_floor, 1e-18)
 
     freq_match = math.exp(-0.5 * ((peak_hz - target_hz) / max(float(target_half_width_hz), 1e-9)) ** 2) if np.isfinite(peak_hz) else 0.0
     if np.any(target_mask):
@@ -1732,6 +1735,7 @@ def score_condition_result(
     except KeyError:
         phase_lock = 0.0
     mean_rates = mean_firing_rates_by_type(result)
+    epli_rate = mean_rates.get("EPLI", 0.0) + mean_rates.get("PVCRH", 0.0)
 
     rate_penalty = 0.0
     rate_penalty += max(mean_rates.get("TC", 0.0) - 120.0, 0.0) / 60.0
@@ -1750,6 +1754,7 @@ def score_condition_result(
     condition_score = (
         2.4 * math.log10(1.0 + target_density_ratio)
         + 4.0 * relative_target
+        + 1.0 * math.log10(1.0 + target_peak_contrast)
         + 2.2 * math.log10(1.0 + dominance)
         + 1.2 * target_clean_fraction
         + 0.8 * target_centroid_match
@@ -1764,6 +1769,7 @@ def score_condition_result(
         "condition_score": float(condition_score),
         "peak_hz": float(peak_hz),
         "peak_ratio": float(peak_ratio),
+        "target_peak_contrast": float(target_peak_contrast),
         "target_density_ratio": float(target_density_ratio),
         "freq_match": float(freq_match),
         "target_centroid_hz": float(target_centroid_hz),
@@ -1775,6 +1781,7 @@ def score_condition_result(
         "phase_lock": float(phase_lock),
         "rate_penalty": float(rate_penalty),
         "spike_support_rate_hz": float(spike_support_rate),
+        "epli_rate_hz": float(epli_rate),
         "spike_support_penalty": float(spike_support_penalty),
         "input_coverage_fraction": float(input_coverage),
         "input_dropout_penalty": float(input_dropout_penalty),
@@ -1807,6 +1814,8 @@ def score_candidate_pair(
     ketamine_target = float((ketamine_metrics.get("relative_band_power") or {}).get("target_hfo", 0.0))
     control_ratio = _target_density_ratio(control_metrics)
     ketamine_ratio = _target_density_ratio(ketamine_metrics)
+    control_peak_contrast = float(control_metrics.get("target_peak_contrast", control_metrics.get("peak_ratio", 0.0)))
+    ketamine_peak_contrast = float(ketamine_metrics.get("target_peak_contrast", ketamine_metrics.get("peak_ratio", 0.0)))
     control_supra = _supra_hfo_relative(control_metrics)
     ketamine_supra = _supra_hfo_relative(ketamine_metrics)
     control_clean = _target_clean_fraction(control_metrics)
@@ -1817,6 +1826,8 @@ def score_candidate_pair(
     ketamine_peak_hz = float(ketamine_metrics.get("peak_hz", math.nan))
     control_center_match = float(control_metrics.get("target_centroid_match", control_metrics.get("freq_match", 0.0)))
     ketamine_center_match = float(ketamine_metrics.get("target_centroid_match", ketamine_metrics.get("freq_match", 0.0)))
+    control_epli_rate = float(control_metrics.get("epli_rate_hz", (control_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
+    ketamine_epli_rate = float(ketamine_metrics.get("epli_rate_hz", (ketamine_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
     target_lo_hz, target_hi_hz = _target_band_for_pair(control_metrics, ketamine_metrics)
 
     target_contrast = math.log10((ketamine_target + 1e-12) / (control_target + 1e-12))
@@ -1848,6 +1859,10 @@ def score_candidate_pair(
     negative_delta_penalty = 25.0 * max(-target_delta, 0.0)
     ketamine_center_penalty = 1.5 * max(0.70 - ketamine_center_match, 0.0)
     control_center_advantage_penalty = 1.0 * max(control_center_match - ketamine_center_match, 0.0)
+    ketamine_peak_contrast_penalty = 1.5 * max(1.75 - ketamine_peak_contrast, 0.0)
+    control_peak_contrast_penalty = 0.75 * max(control_peak_contrast - ketamine_peak_contrast, 0.0)
+    ketamine_epli_silence_penalty = 2.0 * max(2.0 - ketamine_epli_rate, 0.0) / 2.0
+    epli_dropout_penalty = 0.5 * max(control_epli_rate - ketamine_epli_rate, 0.0) / 5.0
     ketamine_wrong_band_penalty = (
         8.0 * max(ketamine_supra - 0.45 * max(ketamine_target, 1e-12), 0.0)
         + 3.0 * max(0.45 - ketamine_clean, 0.0)
@@ -1860,6 +1875,8 @@ def score_candidate_pair(
         + 4.0 * compound_contrast
         + 18.0 * target_delta
         + 3.0 * clean_delta
+        + 1.2 * math.log10(1.0 + ketamine_peak_contrast)
+        - 0.8 * math.log10(1.0 + control_peak_contrast)
         + 1.5 * max(-supra_delta, 0.0)
         + 0.8 * (ketamine_center_match - control_center_match)
         - control_leak_penalty
@@ -1868,6 +1885,10 @@ def score_candidate_pair(
         - negative_delta_penalty
         - ketamine_center_penalty
         - control_center_advantage_penalty
+        - ketamine_peak_contrast_penalty
+        - control_peak_contrast_penalty
+        - ketamine_epli_silence_penalty
+        - epli_dropout_penalty
         - ketamine_wrong_band_penalty
         - control_wrong_band_penalty
     )
@@ -1889,6 +1910,14 @@ def score_candidate_pair(
         "control_center_advantage_penalty": float(control_center_advantage_penalty),
         "ketamine_center_match": float(ketamine_center_match),
         "control_center_match": float(control_center_match),
+        "ketamine_peak_contrast_penalty": float(ketamine_peak_contrast_penalty),
+        "control_peak_contrast_penalty": float(control_peak_contrast_penalty),
+        "ketamine_peak_contrast": float(ketamine_peak_contrast),
+        "control_peak_contrast": float(control_peak_contrast),
+        "ketamine_epli_silence_penalty": float(ketamine_epli_silence_penalty),
+        "epli_dropout_penalty": float(epli_dropout_penalty),
+        "ketamine_epli_rate_hz": float(ketamine_epli_rate),
+        "control_epli_rate_hz": float(control_epli_rate),
         "ketamine_wrong_band_penalty": float(ketamine_wrong_band_penalty),
         "control_wrong_band_penalty": float(control_wrong_band_penalty),
         "ketamine_freq_match": float(ketamine_freq_match),
@@ -1933,6 +1962,7 @@ def score_hfo_batch(
                 "condition_score": float("-inf"),
                 "peak_hz": math.nan,
                 "peak_ratio": 0.0,
+                "target_peak_contrast": 0.0,
                 "target_density_ratio": 0.0,
                 "freq_match": 0.0,
                 "target_centroid_hz": math.nan,
@@ -1944,6 +1974,7 @@ def score_hfo_batch(
                 "phase_lock": 0.0,
                 "rate_penalty": 0.0,
                 "spike_support_rate_hz": 0.0,
+                "epli_rate_hz": 0.0,
                 "spike_support_penalty": 0.0,
                 "input_coverage_fraction": 0.0,
                 "input_dropout_penalty": 0.0,
