@@ -14,6 +14,7 @@ row = {
     "pair_score": 2.5,
     "target_delta": 0.07,
     "control_target_excess_penalty": 0.1,
+    "ketamine_epli_low_support_penalty": 0.2,
     "parameters": {
         "kar_mt_gmax": 0.03,
         "gaba_gmax": 1.2,
@@ -58,6 +59,7 @@ by_tag = {record.tag: record for record in records}
 
 assert by_tag["score/pair_score"].step == 42
 assert by_tag["score/pair_score"].value == 2.5
+assert by_tag["score/ketamine_epli_low_support_penalty"].value == 0.2
 assert by_tag["band_relative/ketamine/target_hfo"].value == 0.10
 assert by_tag["band_relative/control/high_gamma"].value == 0.12
 assert by_tag["band_relative_delta/target_hfo"].value == 0.07

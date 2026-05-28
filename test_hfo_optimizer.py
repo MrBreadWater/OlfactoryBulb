@@ -314,8 +314,8 @@ assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
-assert upper_bad_pair["pair_score_version"] == 6
-assert PAIR_SCORE_VERSION == 6
+assert upper_bad_pair["pair_score_version"] == 7
+assert PAIR_SCORE_VERSION == 7
 assert "psd_shape_power" in target_metrics
 assert len(target_metrics["psd_shape_power"]) > 10
 status_summary = candidate_status_summary(
@@ -328,7 +328,8 @@ assert good_pair["psd_contrast_template_loss"] < bad_pair["psd_contrast_template
 assert bad_pair["control_hfo_template_similarity"] > good_pair["control_hfo_template_similarity"]
 assert leaky_pair["control_target_excess_penalty"] > 0.0
 assert edge_pair["ketamine_center_penalty"] > 0.0
-assert silent_pair["ketamine_epli_silence_penalty"] > 0.0
+assert silent_pair["ketamine_epli_silence_penalty"] >= 8.0
+assert silent_pair["ketamine_epli_low_support_penalty"] > 0.0
 assert low_contrast_pair["ketamine_peak_contrast_penalty"] > 0.0
 assert bad_pair["target_delta"] == 0.0
 assert artifact_pair["control_wrong_band_penalty"] > 0.0

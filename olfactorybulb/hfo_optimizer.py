@@ -49,7 +49,7 @@ DEFAULT_SCORE_BANDS = {
 }
 PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
 
-PAIR_SCORE_VERSION = 6
+PAIR_SCORE_VERSION = 7
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 PLAUSIBILITY_SOFT_LIMITS = {
     "kar_mt_gmax": 0.05,
@@ -2264,7 +2264,8 @@ def score_candidate_pair(
     control_center_advantage_penalty = 1.0 * max(control_center_match - ketamine_center_match, 0.0)
     ketamine_peak_contrast_penalty = 1.5 * max(1.75 - ketamine_peak_contrast, 0.0)
     control_peak_contrast_penalty = 0.75 * max(control_peak_contrast - ketamine_peak_contrast, 0.0)
-    ketamine_epli_silence_penalty = 2.0 * max(2.0 - ketamine_epli_rate, 0.0) / 2.0
+    ketamine_epli_silence_penalty = 8.0 * max(2.0 - ketamine_epli_rate, 0.0) / 2.0
+    ketamine_epli_low_support_penalty = 2.0 * max(5.0 - ketamine_epli_rate, 0.0) / 5.0
     epli_dropout_penalty = 0.5 * max(control_epli_rate - ketamine_epli_rate, 0.0) / 5.0
     ketamine_wrong_band_penalty = (
         8.0 * max(ketamine_supra - 0.45 * max(ketamine_target, 1e-12), 0.0)
@@ -2292,6 +2293,7 @@ def score_candidate_pair(
         - ketamine_peak_contrast_penalty
         - control_peak_contrast_penalty
         - ketamine_epli_silence_penalty
+        - ketamine_epli_low_support_penalty
         - epli_dropout_penalty
         - 1.5 * psd_template_metrics["psd_template_loss"]
         - ketamine_wrong_band_penalty
@@ -2320,6 +2322,7 @@ def score_candidate_pair(
         "ketamine_peak_contrast": float(ketamine_peak_contrast),
         "control_peak_contrast": float(control_peak_contrast),
         "ketamine_epli_silence_penalty": float(ketamine_epli_silence_penalty),
+        "ketamine_epli_low_support_penalty": float(ketamine_epli_low_support_penalty),
         "epli_dropout_penalty": float(epli_dropout_penalty),
         "ketamine_epli_rate_hz": float(ketamine_epli_rate),
         "control_epli_rate_hz": float(control_epli_rate),

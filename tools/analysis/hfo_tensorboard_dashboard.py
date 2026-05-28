@@ -55,6 +55,7 @@ PAIR_METRIC_KEYS = (
     "ketamine_peak_contrast_penalty",
     "control_peak_contrast_penalty",
     "ketamine_epli_silence_penalty",
+    "ketamine_epli_low_support_penalty",
     "epli_dropout_penalty",
     "ketamine_wrong_band_penalty",
     "control_wrong_band_penalty",
