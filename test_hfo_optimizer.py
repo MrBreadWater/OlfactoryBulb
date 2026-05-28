@@ -22,6 +22,7 @@ from olfactorybulb.hfo_optimizer import (
     load_candidate_archive_rows,
     lfp_source_diagnostic_configs,
     parameter_plausibility_penalty,
+    paramiko_auth_probe,
     propose_elite_batch,
     psd_template_curve,
     run_hfo_batch,
@@ -135,6 +136,33 @@ lfp_diagnostics = lfp_source_diagnostic_configs(
 assert lfp_diagnostics["exclude_gc_lfp"]["lfp_exclude_cell_types"] == ["GC"]
 assert lfp_diagnostics["non_gc_sources_lfp"]["lfp_include_cell_types"][:2] == ["MC", "TC"]
 assert lfp_diagnostics["probe_shift_00"]["lfp_electrode_location"] == [116.0, 900.0, -61.0]
+
+captured_auth_probe: dict[str, object] = {}
+original_run_ssh_shell = hfo_module.hlp._run_ssh_shell
+
+
+def fake_run_ssh_shell(config, command):
+    captured_auth_probe["config"] = dict(config)
+    captured_auth_probe["command"] = command
+    return type("Completed", (), {"returncode": 0, "stdout": "ok", "stderr": ""})()
+
+
+try:
+    hfo_module.hlp._run_ssh_shell = fake_run_ssh_shell
+    auth_probe = paramiko_auth_probe(
+        {
+            "remote_host": "jmpaniag@localhost",
+            "remote_preserve_paramiko_session": True,
+        },
+        command="true",
+    )
+finally:
+    hfo_module.hlp._run_ssh_shell = original_run_ssh_shell
+
+assert auth_probe["returncode"] == 0
+assert captured_auth_probe["command"] == "true"
+assert captured_auth_probe["config"]["remote_preserve_paramiko_session"] is True
+assert captured_auth_probe["config"]["remote_allow_paramiko_reauth"] is True
 
 
 def synthetic_result(

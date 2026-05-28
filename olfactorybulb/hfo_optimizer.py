@@ -291,8 +291,18 @@ def paramiko_auth_probe(
     *,
     command: str = "printf 'paramiko-auth-ok host=%s cwd=%s\\n' \"$(hostname)\" \"$PWD\"",
 ) -> dict[str, Any]:
-    """Perform a cheap Paramiko-authenticated remote command."""
-    completed = hlp._run_ssh_shell(remote_config, command)
+    """Perform a cheap Paramiko-authenticated remote command.
+
+    This is an explicit user-triggered auth probe, so it is allowed to refresh
+    a previously authenticated Paramiko session after the cached transport has
+    died.  Normal unattended optimizer runs still inherit the fail-closed
+    default and will not silently prompt for password/2FA mid-run.
+    """
+    probe_config = {
+        **remote_config,
+        "remote_allow_paramiko_reauth": True,
+    }
+    completed = hlp._run_ssh_shell(probe_config, command)
     return {
         "returncode": int(completed.returncode),
         "stdout": completed.stdout,
