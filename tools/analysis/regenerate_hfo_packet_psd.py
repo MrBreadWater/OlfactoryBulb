@@ -40,7 +40,11 @@ def _finite_psd(summary: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
     return freqs[mask], psd[mask]
 
 
-def _target_band_patch(ax: Any, bands: dict[str, tuple[float, float]]) -> None:
+def _score_band_patches(ax: Any, bands: dict[str, tuple[float, float]]) -> None:
+    high_gamma = bands.get("high_gamma")
+    if high_gamma is not None:
+        lo_hz, hi_hz = high_gamma
+        ax.axvspan(lo_hz, hi_hz, color="#16a34a", alpha=0.07, lw=0, label="high gamma band")
     lo_hz, hi_hz = bands["target_hfo"]
     ax.axvspan(lo_hz, hi_hz, color="#d97706", alpha=0.10, lw=0, label="target HFO band")
     ax.axvline(195.0, color="#d97706", alpha=0.35, lw=1.25, ls=":", label="target center")
@@ -93,7 +97,7 @@ def _plot_single_psd(
     target_shape = _normalized_template_for_plot(target_kind, freqs)
 
     fig, ax = plt.subplots(figsize=(12, 6.6), constrained_layout=True)
-    _target_band_patch(ax, bands)
+    _score_band_patches(ax, bands)
     ax.plot(freqs, psd, color=color, lw=2.0, label=f"{condition} LFP PSD")
     ax.set_xlim(0, 300)
     _set_psd_axis_limits(ax, [psd])
@@ -157,7 +161,7 @@ def _plot_overlay_psd(
     ketamine_target_shape = _normalized_template_for_plot("ketamine", ketamine_freqs)
 
     fig, ax = plt.subplots(figsize=(12, 6.8), constrained_layout=True)
-    _target_band_patch(ax, bands)
+    _score_band_patches(ax, bands)
     ax.plot(control_freqs, control_psd, color="#2563eb", lw=1.9, label="control LFP PSD")
     ax.plot(ketamine_freqs, ketamine_psd, color="#dc2626", lw=1.9, label="ketamine LFP PSD")
     ax.set_xlim(0, 300)
@@ -288,6 +292,8 @@ def regenerate_packet_psd(packet: Path) -> Path:
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "templates": ["control", "ketamine"],
         "scaling": "normalized target shape on right axis",
+        "high_gamma_hz": list(bands["high_gamma"]),
+        "target_hfo_hz": list(bands["target_hfo"]),
         "source": "tools/analysis/regenerate_hfo_packet_psd.py",
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))

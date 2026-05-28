@@ -2620,6 +2620,43 @@ def top_candidate_rows(
     return archive[: int(limit)]
 
 
+def _metrics_relative_band(metrics: dict[str, Any], band_name: str) -> float | None:
+    relative = metrics.get("relative_band_power") or {}
+    value = relative.get(band_name)
+    try:
+        return None if value is None else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def candidate_status_summary(row: dict[str, Any]) -> dict[str, Any]:
+    """Return the compact candidate summary used by notebooks and status files."""
+    ketamine = row.get("ketamine_metrics") or {}
+    control = row.get("control_metrics") or {}
+    return {
+        "candidate_id": row.get("candidate_id"),
+        "pair_score": row.get("pair_score"),
+        "ketamine_peak_hz": ketamine.get("peak_hz"),
+        "control_peak_hz": control.get("peak_hz"),
+        "ketamine_target_rel": _metrics_relative_band(ketamine, "target_hfo"),
+        "control_target_rel": _metrics_relative_band(control, "target_hfo"),
+        "ketamine_high_gamma_rel": _metrics_relative_band(ketamine, "high_gamma"),
+        "control_high_gamma_rel": _metrics_relative_band(control, "high_gamma"),
+        "ketamine_rates": ketamine.get("mean_firing_rate_by_type"),
+        "control_rates": control.get("mean_firing_rate_by_type"),
+        "parameters": row.get("parameters"),
+    }
+
+
+def top_candidate_summaries(
+    campaign_dir: str | Path,
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Return compact top-candidate summaries, including target-HFO and high-gamma bands."""
+    return [candidate_status_summary(row) for row in top_candidate_rows(campaign_dir, limit=limit)]
+
+
 def maybe_dataframe(rows: list[dict[str, Any]]) -> Any:
     try:
         import pandas as pd  # type: ignore
@@ -2633,6 +2670,7 @@ __all__ = [
     "DEFAULT_SCORE_BANDS",
     "ParameterSpec",
     "build_manual_allocation_remote_config",
+    "candidate_status_summary",
     "default_campaign_run_config",
     "default_hfo_search_space",
     "ensure_campaign_dir",
@@ -2658,6 +2696,7 @@ __all__ = [
     "scaled_psd_template_curve",
     "search_space_rows",
     "sustained_odor_schedule",
+    "top_candidate_summaries",
     "top_candidate_rows",
     "window_result_for_condition",
     "write_objective_filter",

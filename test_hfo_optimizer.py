@@ -15,6 +15,7 @@ from olfactorybulb.hfo_optimizer import (
     DEFAULT_CAMPAIGNS_BASE,
     PAIR_SCORE_VERSION,
     ParameterSpec,
+    candidate_status_summary,
     default_campaign_run_config,
     default_hfo_search_space,
     load_candidate_archive_rows,
@@ -51,6 +52,7 @@ assert default_specs["kar_mt_gmax"].high == 0.08
 assert default_specs["kar_gc_gmax"].high == 0.025
 assert default_specs["kar_osn_weight_scale"].high == 2.0
 assert default_specs["kar_gc_weight_scale"].high == 4.0
+assert hfo_module.DEFAULT_SCORE_BANDS["high_gamma"] == (65.0, 100.0)
 
 template_freqs, ketamine_template = psd_template_curve("ketamine")
 assert template_freqs.shape == ketamine_template.shape
@@ -305,6 +307,11 @@ assert upper_bad_pair["pair_score_version"] == 6
 assert PAIR_SCORE_VERSION == 6
 assert "psd_shape_power" in target_metrics
 assert len(target_metrics["psd_shape_power"]) > 10
+status_summary = candidate_status_summary(
+    {"candidate_id": "C-test", "control_metrics": flat_metrics, "ketamine_metrics": target_metrics, "pair_score": 1.25}
+)
+assert status_summary["ketamine_high_gamma_rel"] == target_metrics["relative_band_power"]["high_gamma"]
+assert status_summary["control_high_gamma_rel"] == flat_metrics["relative_band_power"]["high_gamma"]
 assert good_pair["psd_template_loss"] < bad_pair["psd_template_loss"]
 assert good_pair["psd_contrast_template_loss"] < bad_pair["psd_contrast_template_loss"]
 assert bad_pair["control_hfo_template_similarity"] > good_pair["control_hfo_template_similarity"]
