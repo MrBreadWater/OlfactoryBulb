@@ -99,6 +99,11 @@ from olfactorybulb.result_artifacts import (
     preferred_soma_trace_artifact_name,
     soma_trace_artifact_candidates,
 )
+from olfactorybulb.hfo_features import (
+    apply_hfo_runtime_overrides,
+    hfo_control_help,
+    hfo_run_config_defaults,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -154,40 +159,6 @@ CONTROL_HELP = {
     "input_stimuli": "Custom InputSpec-driven stimuli keyed by onset ms. Cannot be combined with input_odors.",
     "max_firing_rate_hz": "Maximum ORN firing rate.",
     "inhale_duration_ms": "Inhalation duration in ms.",
-    "input_syn_tau1_ms": "Input Exp2Syn tau1.",
-    "input_syn_tau2_ms": "Input Exp2Syn tau2.",
-    "mc_input_weight": "MC odor input synaptic weight.",
-    "tc_input_weight": "TC odor input synaptic weight.",
-    "mc_input_delay_ms": "MC odor input delay in ms.",
-    "tc_input_delay_ms": "TC odor input delay in ms.",
-    "gap_mc": "MC gap-junction conductance.",
-    "gap_tc": "TC gap-junction conductance.",
-    "ampa_nmda_gmax": "Global AmpaNmdaSyn gmax.",
-    "ampa_nmda_nmdafactor": "Global AmpaNmdaSyn NMDA factor.",
-    "ketamine_block": "Semantic NMDA block multiplier on AmpaNmdaSyn NMDA current.",
-    "ketamine_switch_time_ms": "Optional simulation time when AmpaNmdaSyn switches to ketamine_block_after_switch.",
-    "ketamine_block_after_switch": "NMDA block multiplier used after ketamine_switch_time_ms.",
-    "ampa_block": "AMPA current multiplier on AmpaNmdaSyn AMPA current.",
-    "gaba_gmax": "Global GabaSyn gmax.",
-    "gaba_tau2_ms": "Global GabaSyn tau2.",
-    "gc_gaba_weight_scale": "Multiplier applied to GC->MC/TC reciprocal GABA NetCon weights.",
-    "gc_ampa_weight_scale": "Multiplier applied to MC/TC->GC reciprocal AMPA/NMDA NetCon weights.",
-    "epli_gaba_weight_scale": "Multiplier applied to EPLI->MC/TC reciprocal GABA NetCon weights.",
-    "epli_ampa_weight_scale": "Multiplier applied to MC/TC->EPLI reciprocal AMPA/NMDA NetCon weights.",
-    "kar_mt_gmax": "Slow OSN-glutamate KAR conductance on MC/TC tuft inputs.",
-    "enable_gc_kar": "Enable optional MC/TC->GC KAR conductance at reciprocal excitation sites.",
-    "kar_gc_gmax": "Optional slow MC/TC-glutamate KAR conductance on GCs.",
-    "kar_tau1_ms": "KAR activation rise time.",
-    "kar_tau2_ms": "KAR activation decay time.",
-    "kar_tau3_ms": "Slow KAR tail time constant for the fitted conductance kernel.",
-    "kar_amp1": "First fitted KAR conductance-kernel amplitude.",
-    "kar_amp2": "Second fitted KAR conductance-kernel amplitude.",
-    "kar_amp3": "Third fitted KAR conductance-kernel amplitude.",
-    "kar_kd": "KAR activation half-saturation for event-driven glutamate proxy.",
-    "kar_block": "KAR current multiplier for sensitivity/blockade tests.",
-    "kar_osn_weight_scale": "Multiplier applied to OSN event weights delivered to KAR synapses.",
-    "kar_gc_weight_scale": "Multiplier applied to reciprocal MC/TC event weights delivered to GC KAR synapses.",
-    "gc_ka_gbar_scale": "Scale GC KA/I_A conductance; 0 removes GC I_A.",
     "enable_reciprocal_synapses": "Toggle GC<->MC/TC reciprocal synapses.",
     "extra_overrides": "Any raw paramset overrides not exposed above.",
     "spectrogram_signal": "Signal for spectrogram plots, e.g. 'lfp', 'mean_MC_voltage', or 'MC5[0].soma'.",
@@ -253,6 +224,7 @@ CONTROL_HELP = {
     "modify_connections": "Modify the synaptic weight between two specific neurons.",
     "swap_cell_types": "A list of cells to swap to another cell type."
 }
+CONTROL_HELP.update(hfo_control_help())
 
 
 @dataclass
@@ -819,40 +791,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "input_stimuli": None,
         "max_firing_rate_hz": None,
         "inhale_duration_ms": None,
-        "input_syn_tau1_ms": None,
-        "input_syn_tau2_ms": None,
-        "mc_input_weight": None,
-        "tc_input_weight": None,
-        "mc_input_delay_ms": None,
-        "tc_input_delay_ms": None,
-        "gap_mc": None,
-        "gap_tc": None,
-        "ampa_nmda_gmax": None,
-        "ampa_nmda_nmdafactor": None,
-        "ketamine_block": None,
-        "ketamine_switch_time_ms": None,
-        "ketamine_block_after_switch": None,
-        "ampa_block": None,
-        "gaba_gmax": None,
-        "gaba_tau2_ms": None,
-        "gc_gaba_weight_scale": None,
-        "gc_ampa_weight_scale": None,
-        "epli_gaba_weight_scale": None,
-        "epli_ampa_weight_scale": None,
-        "kar_mt_gmax": None,
-        "enable_gc_kar": None,
-        "kar_gc_gmax": None,
-        "kar_tau1_ms": None,
-        "kar_tau2_ms": None,
-        "kar_tau3_ms": None,
-        "kar_amp1": None,
-        "kar_amp2": None,
-        "kar_amp3": None,
-        "kar_kd": None,
-        "kar_block": None,
-        "kar_osn_weight_scale": None,
-        "kar_gc_weight_scale": None,
-        "gc_ka_gbar_scale": None,
+        **hfo_run_config_defaults(),
         "analysis_dt_ms": 0.1,
         "spectrogram_signal": "lfp",
         "spectrogram_max_freq_hz": 250.0,
@@ -1310,104 +1249,7 @@ def build_param_overrides(config: dict[str, Any]) -> dict[str, Any]:
         overrides["max_firing_rate"] = float(config["max_firing_rate_hz"])
     if config.get("inhale_duration_ms") is not None:
         overrides["inhale_duration"] = float(config["inhale_duration_ms"])
-    if config.get("input_syn_tau1_ms") is not None:
-        overrides["input_syn_tau1"] = float(config["input_syn_tau1_ms"])
-    if config.get("input_syn_tau2_ms") is not None:
-        overrides["input_syn_tau2"] = float(config["input_syn_tau2_ms"])
-    if config.get("mc_input_weight") is not None:
-        overrides["mc_input_weight"] = float(config["mc_input_weight"])
-    if config.get("tc_input_weight") is not None:
-        overrides["tc_input_weight"] = float(config["tc_input_weight"])
-    if config.get("mc_input_delay_ms") is not None:
-        overrides["mc_input_delay"] = float(config["mc_input_delay_ms"])
-    if config.get("tc_input_delay_ms") is not None:
-        overrides["tc_input_delay"] = float(config["tc_input_delay_ms"])
-    if config.get("gap_mc") is not None or config.get("gap_tc") is not None:
-        overrides.setdefault("gap_juction_gmax", {})
-        if config.get("gap_mc") is not None:
-            overrides["gap_juction_gmax"]["MC"] = float(config["gap_mc"])
-        if config.get("gap_tc") is not None:
-            overrides["gap_juction_gmax"]["TC"] = float(config["gap_tc"])
-    if any(
-        config.get(key) is not None
-        for key in (
-            "ampa_nmda_gmax",
-            "ampa_nmda_nmdafactor",
-            "ketamine_block",
-            "ketamine_switch_time_ms",
-            "ketamine_block_after_switch",
-            "ampa_block",
-            "gaba_gmax",
-            "gaba_tau2_ms",
-        )
-    ):
-        overrides.setdefault("synapse_properties", {})
-    if any(
-        config.get(key) is not None
-        for key in (
-            "ampa_nmda_gmax",
-            "ampa_nmda_nmdafactor",
-            "ketamine_block",
-            "ketamine_switch_time_ms",
-            "ketamine_block_after_switch",
-            "ampa_block",
-        )
-    ):
-        overrides["synapse_properties"].setdefault("AmpaNmdaSyn", {})
-        if config.get("ampa_nmda_gmax") is not None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["gmax"] = float(config["ampa_nmda_gmax"])
-        if config.get("ampa_nmda_nmdafactor") is not None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["nmdafactor"] = float(
-                config["ampa_nmda_nmdafactor"]
-            )
-        if config.get("ketamine_block") is not None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block"] = float(
-                config["ketamine_block"]
-            )
-        if config.get("ketamine_switch_time_ms") is not None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_switch_time"] = float(
-                config["ketamine_switch_time_ms"]
-            )
-        if config.get("ketamine_switch_time_ms") is not None and config.get("ketamine_block_after_switch") is None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block_after"] = 0.0
-        if config.get("ketamine_block_after_switch") is not None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["ketamine_block_after"] = float(
-                config["ketamine_block_after_switch"]
-            )
-        if config.get("ampa_block") is not None:
-            overrides["synapse_properties"]["AmpaNmdaSyn"]["ampa_block"] = float(
-                config["ampa_block"]
-            )
-    if config.get("gaba_gmax") is not None or config.get("gaba_tau2_ms") is not None:
-        overrides["synapse_properties"].setdefault("GabaSyn", {})
-        if config.get("gaba_gmax") is not None:
-            overrides["synapse_properties"]["GabaSyn"]["gmax"] = float(config["gaba_gmax"])
-        if config.get("gaba_tau2_ms") is not None:
-            overrides["synapse_properties"]["GabaSyn"]["tau2"] = float(config["gaba_tau2_ms"])
-    scalar_param_map = {
-        "gc_gaba_weight_scale": "gc_gaba_weight_scale",
-        "gc_ampa_weight_scale": "gc_ampa_weight_scale",
-        "epli_gaba_weight_scale": "epli_gaba_weight_scale",
-        "epli_ampa_weight_scale": "epli_ampa_weight_scale",
-        "kar_mt_gmax": "kar_mt_gmax",
-        "kar_gc_gmax": "kar_gc_gmax",
-        "kar_tau1_ms": "kar_tau1",
-        "kar_tau2_ms": "kar_tau2",
-        "kar_tau3_ms": "kar_tau3",
-        "kar_amp1": "kar_amp1",
-        "kar_amp2": "kar_amp2",
-        "kar_amp3": "kar_amp3",
-        "kar_kd": "kar_kd",
-        "kar_block": "kar_block",
-        "kar_osn_weight_scale": "kar_osn_weight_scale",
-        "kar_gc_weight_scale": "kar_gc_weight_scale",
-        "gc_ka_gbar_scale": "gc_ka_gbar_scale",
-    }
-    for config_key, param_key in scalar_param_map.items():
-        if config.get(config_key) is not None:
-            overrides[param_key] = float(config[config_key])
-    if config.get("enable_gc_kar") is not None:
-        overrides["enable_gc_kar"] = bool(config["enable_gc_kar"])
+    apply_hfo_runtime_overrides(config, overrides)
     if config.get("enable_epl_interneurons") is not None:
         overrides["enable_epl_interneurons"] = bool(config["enable_epl_interneurons"])
     if config.get("max_epl_interneurons") is not None:

@@ -36,6 +36,8 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import olfactorybulb.hfo_optimizer as hfo
+from olfactorybulb.hfo_features import PARAMETER_CONTRACT_VERSION, parameter_display_order
+import olfactorybulb.hfo_visuals as hfo_visuals
 import generate_hfo_candidate_packet as packet_generator_module
 import regenerate_hfo_packet_psd as psd_packet_module
 from generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
@@ -49,22 +51,12 @@ DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
 DEFAULT_CLEANUP_STALE_PACKETS = True
 GENERATE_PACKET_ENDPOINT = "/__hfo_generate_packet__"
-EXPECTED_SPECTROGRAM_FILES = {
-    "control": "04_spectrogram_control.png",
-    "ketamine": "05_spectrogram_ketamine.png",
-}
-EXPECTED_SPECTROGRAM_PIPELINE = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
-EXPECTED_SPECTROGRAM_WINDOW_MS = 1000.0
+EXPECTED_SPECTROGRAM_FILES = dict(hfo_visuals.SPECTROGRAM_FILE_BY_CONDITION)
+EXPECTED_SPECTROGRAM_PIPELINE = str(hfo_visuals.SPECTROGRAM_PIPELINE["generator"])
+EXPECTED_SPECTROGRAM_WINDOW_MS = float(hfo_visuals.NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS)
 SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json")
-PRIMARY_PSD_NAME_ORDER = (
-    "03_psd_overlay.png",
-    "03_power_spectrum_control_vs_ketamine.png",
-    "01_lfp_psd_ketamine.png",
-    "01_psd_ketamine.png",
-    "01_lfp_psd_control.png",
-    "01_psd_control.png",
-)
-_STYLE_SOURCE_SIGNATURE: tuple[int, int] = (0, 0)
+PRIMARY_PSD_NAME_ORDER = tuple(hfo_visuals.PRIMARY_PSD_NAME_ORDER)
+_STYLE_SOURCE_SIGNATURE: tuple[int, int, int] = (0, 0, 0)
 
 
 @dataclass(frozen=True)
@@ -209,10 +201,11 @@ def _path_mtime_ns(path: Path) -> int:
         return 0
 
 
-def _style_source_signature() -> tuple[int, int]:
+def _style_source_signature() -> tuple[int, int, int]:
     return tuple(
         _path_mtime_ns(path)
         for path in (
+            Path(hfo_visuals.__file__).resolve(),
             SCRIPT_DIR / "generate_hfo_candidate_packet.py",
             SCRIPT_DIR / "regenerate_hfo_packet_psd.py",
         )
@@ -220,19 +213,20 @@ def _style_source_signature() -> tuple[int, int]:
 
 
 def _reload_visual_packet_modules_if_needed(
-    source_signature: tuple[int, int] | None = None,
+    source_signature: tuple[int, int, int] | None = None,
     *,
     force: bool = False,
 ) -> bool:
     """Reload packet-generation modules when their source changes on disk."""
-    global VISUAL_STYLE_VERSION, PSD_PACKET_RENDER_VERSION, packet_generator_module, psd_packet_module, _STYLE_SOURCE_SIGNATURE
+    global VISUAL_STYLE_VERSION, PSD_PACKET_RENDER_VERSION, hfo_visuals, packet_generator_module, psd_packet_module, _STYLE_SOURCE_SIGNATURE
     signature = source_signature or _style_source_signature()
     if not force and signature == _STYLE_SOURCE_SIGNATURE:
         return False
     importlib.invalidate_caches()
+    hfo_visuals = importlib.reload(hfo_visuals)
     psd_packet_module = importlib.reload(psd_packet_module)
     packet_generator_module = importlib.reload(packet_generator_module)
-    VISUAL_STYLE_VERSION = int(packet_generator_module.VISUAL_STYLE_VERSION)
+    VISUAL_STYLE_VERSION = int(hfo_visuals.VISUAL_STYLE_VERSION)
     PSD_PACKET_RENDER_VERSION = int(psd_packet_module.PSD_PACKET_RENDER_VERSION)
     _STYLE_SOURCE_SIGNATURE = signature
     return True
@@ -316,6 +310,18 @@ def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> boo
     if packet is None:
         return True
     if packet.manifest.get("visual_style_version") != VISUAL_STYLE_VERSION:
+        return True
+    visual_contract = packet.manifest.get("visual_contract") or {}
+    if not isinstance(visual_contract, dict):
+        return True
+    if int(visual_contract.get("style_version", 0) or 0) != int(VISUAL_STYLE_VERSION):
+        return True
+    parameter_contract = packet.manifest.get("parameter_contract") or {}
+    if not isinstance(parameter_contract, dict):
+        return True
+    if int(parameter_contract.get("version", 0) or 0) != int(PARAMETER_CONTRACT_VERSION):
+        return True
+    if not list(parameter_contract.get("search_space_paths") or []):
         return True
     try:
         row_score_version = int(row.get("pair_score_version", getattr(hfo, "PAIR_SCORE_VERSION", 0)) or 0)
@@ -546,15 +552,18 @@ def _metric_summary(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _parameter_chips(parameters: dict[str, Any]) -> str:
-    preferred = [spec.path for spec in hfo.default_hfo_search_space()]
-    extras = sorted(
-        key
-        for key in parameters
-        if key not in preferred and not str(key).startswith("optimizer_")
-    )
+def _parameter_chips(parameters: dict[str, Any], *, packet: PacketInfo | None = None) -> str:
+    contract = packet.manifest.get("parameter_contract") if packet is not None else {}
+    if not isinstance(contract, dict):
+        contract = {}
+    preferred = list(contract.get("search_space_paths") or [])
+    if not preferred:
+        campaign_dir = packet.manifest.get("campaign_dir") if packet is not None else None
+        preferred = parameter_display_order({}, campaign_dir=campaign_dir)
+        preferred = [key for key in preferred if key in parameters or not str(key).startswith("optimizer_")]
+    ordered = parameter_display_order(parameters, search_space_paths=preferred)
     chunks = []
-    for name in [*preferred, *extras]:
+    for name in ordered:
         if name in parameters:
             chunks.append(f"<span><b>{_esc(name)}</b> {_esc(_fmt(parameters[name], 4))}</span>")
     return "\n".join(chunks)
@@ -654,13 +663,12 @@ def _condition_pair_html(
 
 
 def _frequency_kde_pairs(images: tuple[Path, ...], *, kind: str) -> dict[str, dict[str, Path]]:
-    pattern = re.compile(rf"spike_frequency_kde_{re.escape(kind)}_(control|ketamine)_(.+)\.png$")
     pairs: dict[str, dict[str, Path]] = {}
     for image in images:
-        match = pattern.search(image.name)
-        if not match:
+        parsed = hfo_visuals.parse_kde_filename(image.name, kind=kind)
+        if parsed is None:
             continue
-        condition, group = match.groups()
+        condition, group = parsed
         pairs.setdefault(group, {})[condition] = image
     return pairs
 
@@ -675,23 +683,18 @@ def _condition_comparison_sections(
     used: set[Path] = set()
     sections: list[str] = []
 
-    fixed_pairs = [
-        ("LFP spectrogram", "04_spectrogram_control.png", "05_spectrogram_ketamine.png", True),
-        ("Soma spike raster", "07_raster_control.png", "08_raster_ketamine.png", False),
-        ("Target-HFO phase locking", "11_phase_control.png", "12_phase_ketamine.png", False),
-    ]
-    for title, control_name, ketamine_name, default_open in fixed_pairs:
-        control_image = by_name.get(control_name)
-        ketamine_image = by_name.get(ketamine_name)
+    for pair_spec in hfo_visuals.fixed_condition_pair_specs():
+        control_image = by_name.get(pair_spec.control_file)
+        ketamine_image = by_name.get(pair_spec.ketamine_file)
         used.update(path for path in (control_image, ketamine_image) if path is not None)
         sections.append(
             _condition_pair_html(
-                title,
+                pair_spec.title,
                 control_image,
                 ketamine_image,
                 output_dir=output_dir,
-                dom_id=f"{packet.candidate_id}-{control_name.split('_', 1)[0]}",
-                open_by_default=default_open and rank == 1,
+                dom_id=f"{packet.candidate_id}-{pair_spec.dom_id_suffix}",
+                open_by_default=pair_spec.open_by_default and rank == 1,
             )
         )
 
@@ -947,7 +950,7 @@ def _render_packet_card(
   <div class="card-body">
     <div class="packet-meta">{packet_meta}</div>
     <div class="chips">{penalty_html}</div>
-    <div class="chips params">{_parameter_chips(s["params"])}</div>
+    <div class="chips params">{_parameter_chips(s["params"], packet=packet)}</div>
     {primary_psd_html}
     {secondary_psd_html}
     {comparison_html}
@@ -972,6 +975,7 @@ def _render_html(
 ) -> str:
     best_rows = rows[: int(top_n)]
     recent_rows = _recent_rows(rows, limit=int(top_n))
+    tab_specs = hfo_visuals.dashboard_tabs()
     best_packet_cards = "\n".join(
         _render_packet_card(
             row,
@@ -991,6 +995,36 @@ def _render_html(
             dom_prefix="recent",
         )
         for index, row in enumerate(recent_rows, start=1)
+    )
+    tab_views = {
+        "best": {
+            "table_html": _render_top_table(best_rows, top_n=top_n),
+            "packet_cards": best_packet_cards,
+        },
+        "recent": {
+            "table_html": _render_recent_table(rows, top_n=top_n),
+            "packet_cards": recent_packet_cards,
+        },
+    }
+    tab_nav_html = "\n".join(
+        (
+            f"<button class='tab-button' type='button' role='tab' data-tab-button "
+            f"data-tab-target='tab-{_esc(spec.key)}' aria-controls='tab-{_esc(spec.key)}' "
+            f"aria-selected='{'true' if index == 0 else 'false'}'>{_esc(spec.label)}</button>"
+        )
+        for index, spec in enumerate(tab_specs)
+    )
+    tab_panels_html = "\n".join(
+        (
+            f"<div id='tab-{_esc(spec.key)}' class='tab-panel' role='tabpanel'"
+            f"{'' if index == 0 else ' hidden'}>"
+            f"<section><h2>{_esc(spec.table_heading)}</h2>"
+            f"<div class='table-wrap'>{tab_views[spec.key]['table_html']}</div></section>"
+            f"<section><h2>{_esc(spec.packet_heading)}</h2>"
+            f"<div style='padding: 0 14px 14px;'>{tab_views[spec.key]['packet_cards']}</div></section>"
+            "</div>"
+        )
+        for index, spec in enumerate(tab_specs)
     )
     generated_html = ""
     if generated_packets:
@@ -1307,31 +1341,9 @@ def _render_html(
     {generated_html}
     <div class="tab-shell">
       <nav class="tab-bar" aria-label="Dashboard sections" role="tablist">
-        <button class="tab-button" type="button" role="tab" data-tab-button data-tab-target="tab-best" aria-controls="tab-best" aria-selected="true">Best</button>
-        <button class="tab-button" type="button" role="tab" data-tab-button data-tab-target="tab-recent" aria-controls="tab-recent" aria-selected="false">Recent</button>
+        {tab_nav_html}
       </nav>
-
-      <div id="tab-best" class="tab-panel" role="tabpanel">
-        <section>
-          <h2>Top Candidates</h2>
-          <div class="table-wrap">{_render_top_table(best_rows, top_n=top_n)}</div>
-        </section>
-        <section>
-          <h2>Best Visual Packets</h2>
-          <div style="padding: 0 14px 14px;">{best_packet_cards}</div>
-        </section>
-      </div>
-
-      <div id="tab-recent" class="tab-panel" role="tabpanel" hidden>
-        <section>
-          <h2>Most Recent Candidates</h2>
-          <div class="table-wrap">{_render_recent_table(rows, top_n=top_n)}</div>
-        </section>
-        <section>
-          <h2>Recent Visual Packets</h2>
-          <div style="padding: 0 14px 14px;">{recent_packet_cards}</div>
-        </section>
-      </div>
+      {tab_panels_html}
     </div>
   </main>
   <div id="refresh-indicator" class="refresh-indicator" aria-live="polite"></div>

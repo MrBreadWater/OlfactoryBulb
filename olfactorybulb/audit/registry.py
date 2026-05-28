@@ -48,6 +48,15 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
                 module_path="olfactorybulb.audit.epli_correctness",
             ),
         ),
+        (
+            "hfo_feature_contracts",
+            AuditSpec(
+                audit_id="hfo_feature_contracts",
+                title="HFO feature/visual contract audit",
+                description="Audit that HFO optimizer parameters, notebook controls, packet artifacts, and dashboard expectations share one centralized contract.",
+                module_path="olfactorybulb.audit.hfo_feature_contracts",
+            ),
+        ),
     ]
 )
 

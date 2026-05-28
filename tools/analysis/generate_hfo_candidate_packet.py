@@ -5,98 +5,28 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-from PIL import Image, ImageDraw
-from scipy import signal
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
-SCRIPT_DIR = Path(__file__).resolve().parent
-if str(SCRIPT_DIR) not in sys.path:
-    sys.path.insert(0, str(SCRIPT_DIR))
 
 import obgpu_experiment_helpers as hlp
+from olfactorybulb.hfo_features import parameter_contract_snapshot
 import olfactorybulb.hfo_optimizer as hfo
+import olfactorybulb.hfo_visuals as hv
 from regenerate_hfo_packet_psd import regenerate_packet_psd
 
 
-CELL_COLORS = {
-    "MC": "#2563eb",
-    "TC": "#dc2626",
-    "GC": "#16a34a",
-    "EPLI": "#9333ea",
-    "PVCRH": "#9333ea",
-    "other": "#4b5563",
-}
-VISUAL_STYLE_VERSION = 11
-NOTEBOOK_ANALYSIS_DT_MS = 0.1
-NOTEBOOK_TIME_MODULUS_MS = 1e10
-NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
-NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS = 1000.0
-SPECTROGRAM_FILE_CONTROL = "04_spectrogram_control.png"
-SPECTROGRAM_FILE_KETAMINE = "05_spectrogram_ketamine.png"
-SPECTROGRAM_GENERATOR_ID = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
-SPECTROGRAM_PIPELINE = {
-    "module": "tools.analysis.generate_hfo_candidate_packet",
-    "function": "_save_spectrogram",
-    "helper": "obgpu_experiment_helpers.plot_spectrogram",
-    "source_signal": "lfp",
-    "source_metric": "windowed.result['lfp']",
-    "generator": SPECTROGRAM_GENERATOR_ID,
-}
-NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT = 16
-NOTEBOOK_SPECTROGRAM_MIN_NPERSEG = 128
-NOTEBOOK_SPECTROGRAM_MAX_NPERSEG = 1024
-NOTEBOOK_SPECTROGRAM_OVERLAP_RATIO = 0.9
-
-
-def _spectrogram_window_geometry(windowed: dict[str, Any]) -> tuple[int, int]:
-    """Choose a dynamic spectrogram geometry that preserves time bins on 1 s slices."""
-    t, y = _finite_lfp(windowed)
-    n_samples = int(len(y))
-    if n_samples <= 1:
-        return NOTEBOOK_SPECTROGRAM_MIN_NPERSEG, 0
-
-    # Keep a moderately long window for frequency resolution, but use strong overlap
-    # so the 1 s visualization slice still yields many visible time bins.
-    nperseg = max(
-        NOTEBOOK_SPECTROGRAM_MIN_NPERSEG,
-        min(NOTEBOOK_SPECTROGRAM_MAX_NPERSEG, max(1, n_samples // NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT)),
-    )
-    # A high overlap makes the spectrogram readable over short 1 s windows without
-    # collapsing the result into a handful of coarse horizontal bands.
-    noverlap = max(0, min(int(NOTEBOOK_SPECTROGRAM_OVERLAP_RATIO * nperseg), nperseg - 1))
-    return nperseg, noverlap
-NOTEBOOK_FREQ_CONFIG = hlp.FrequencyPlotConfig(
-    modulus=NOTEBOOK_TIME_MODULUS_MS,
-    max_freq_hz=hfo.DEFAULT_SCORE_BANDS["target_hfo"][1],
-    kde_bw_method="scott",
-    kde1d_engine="exact",
-    kde_bw_x=0.125,
-    kde_bw_y=0.25,
-    kde2d_engine="histogram",
-    kde_resolution_t=100,
-    kde_resolution_f=100,
-    kde_f_resolution=1600,
-    num_time_bins=32,
-    bin_alpha=0.5,
-    kde_cmap="inferno",
-    dot_size=5,
-    dot_alpha=0.2,
-    strip_plot=True,
-    guide_line_spacing_ms=0.0,
-)
+VISUAL_STYLE_VERSION = hv.VISUAL_STYLE_VERSION
+SPECTROGRAM_FILE_CONTROL = hv.SPECTROGRAM_FILE_BY_CONDITION["control"]
+SPECTROGRAM_FILE_KETAMINE = hv.SPECTROGRAM_FILE_BY_CONDITION["ketamine"]
+SPECTROGRAM_PIPELINE = hv.SPECTROGRAM_PIPELINE
+_spectrogram_window_geometry = hv.spectrogram_window_geometry
+_save_spectrogram = hv.save_spectrogram
 
 
 def _load_candidate(campaign_dir: Path, candidate_id: str) -> dict[str, Any]:
@@ -112,345 +42,73 @@ def _load_candidate(campaign_dir: Path, candidate_id: str) -> dict[str, Any]:
     raise ValueError(f"Candidate {candidate_id!r} not found under {campaign_dir}")
 
 
-def _condition_windows(row: dict[str, Any]) -> dict[str, tuple[float, float]]:
-    control = row.get("control_metrics") or {}
-    ketamine = row.get("ketamine_metrics") or {}
-    return {
-        "control": (
-            float(control.get("window_start_ms", 0.0)),
-            float(control.get("window_stop_ms", 0.0)),
-        ),
-        "ketamine": (
-            float(ketamine.get("window_start_ms", 0.0)),
-            float(ketamine.get("window_stop_ms", 0.0)),
-        ),
-    }
-
-
-def _spectrogram_switch_time(row: dict[str, Any], result: dict[str, Any]) -> float:
-    """Resolve the control-to-ketamine switch time used for spectrogram slicing."""
-    summary = result.get("summary") or {}
-    params = summary.get("params") or {}
-    switch = params.get("ketamine_switch")
-    if isinstance(switch, dict):
-        try:
-            switch_time = float(switch.get("time_ms"))
-        except (TypeError, ValueError):
-            switch_time = math.nan
-        if math.isfinite(switch_time) and switch_time > 0.0:
-            return switch_time
-
-    for container in (row.get("parameters") or {}, row.get("control_metrics") or {}, row.get("ketamine_metrics") or {}):
-        for key in ("ketamine_switch_time_ms", "hfo_ketamine_switch_time_ms", "switch_time_ms"):
-            try:
-                switch_time = float(container.get(key))
-            except (AttributeError, TypeError, ValueError):
-                continue
-            if math.isfinite(switch_time) and switch_time > 0.0:
-                return switch_time
-
-    t = np.asarray(result.get("lfp_t", []), dtype=float)
-    finite_t = t[np.isfinite(t)]
-    if finite_t.size:
-        return float(np.max(finite_t)) * 0.5
-    return float(NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS)
-
-
-def _spectrogram_windows(row: dict[str, Any], result: dict[str, Any]) -> dict[str, tuple[float, float]]:
-    """Return 1 s control/ketamine visualization windows anchored to the switch time."""
-    switch_time = _spectrogram_switch_time(row, result)
-    vis_window = float(NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS)
-    t = np.asarray(result.get("lfp_t", []), dtype=float)
-    finite_t = t[np.isfinite(t)]
-    result_start = float(np.min(finite_t)) if finite_t.size else 0.0
-    result_stop = float(np.max(finite_t)) if finite_t.size else max(switch_time + vis_window, vis_window)
-    control_start = max(result_start, switch_time - vis_window)
-    control_stop = min(result_stop, switch_time)
-    ketamine_start = max(result_start, switch_time)
-    ketamine_stop = min(result_stop, switch_time + vis_window)
-    return {
-        "control": (float(control_start), float(control_stop)),
-        "ketamine": (float(ketamine_start), float(ketamine_stop)),
-    }
-
-
-def _window_result(result: dict[str, Any], windows: dict[str, tuple[float, float]], condition: str) -> dict[str, Any]:
-    start_ms, stop_ms = windows[condition]
-    return hfo.window_result_for_condition(result, start_ms=start_ms, stop_ms=stop_ms, condition=condition)
-
-
-def _finite_lfp(windowed: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
-    t = np.asarray(windowed.get("lfp_t", []), dtype=float)
-    y = np.asarray(windowed.get("lfp", []), dtype=float)
-    mask = np.isfinite(t) & np.isfinite(y)
-    return t[mask], y[mask]
-
-
-def _save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float]], out: Path) -> None:
-    t = np.asarray(result.get("lfp_t", []), dtype=float)
-    y = np.asarray(result.get("lfp", []), dtype=float)
-    fig, ax = plt.subplots(figsize=(12, 4.8), constrained_layout=True)
-    ax.plot(t, y, color="#111827", lw=0.8)
-    for name, color in [("control", "#2563eb"), ("ketamine", "#dc2626")]:
-        start, stop = windows[name]
-        ax.axvspan(start, stop, color=color, alpha=0.08, lw=0, label=f"{name} scoring window")
-    ax.axvline(windows["control"][1], color="#6b7280", lw=1.0, ls=":", label="switch")
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("LFP proxy")
-    ax.set_title("LFP trace and scoring windows")
-    ax.legend(frameon=False, loc="upper right")
-    ax.grid(True, alpha=0.18)
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _save_spectrogram(windowed: dict[str, Any], condition: str, out: Path, *, nperseg: int, noverlap: int) -> None:
-    fig, ax = plt.subplots(figsize=(14, 5.0), constrained_layout=True)
-    try:
-        hlp.plot_spectrogram(
-            windowed,
-            signal="lfp",
-            dt_ms=NOTEBOOK_ANALYSIS_DT_MS,
-            max_freq_hz=NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
-            nperseg=nperseg,
-            noverlap=noverlap,
-            modulus=None,
-            ax=ax,
-        )
-    except Exception as exc:
-        ax.text(0.5, 0.5, f"Could not render spectrogram: {exc}", ha="center", va="center", transform=ax.transAxes)
-    ax.axhspan(*hfo.DEFAULT_SCORE_BANDS["high_gamma"], color="#16a34a", alpha=0.09, lw=0)
-    ax.axhspan(*hfo.DEFAULT_SCORE_BANDS["target_hfo"], color="#d97706", alpha=0.10, lw=0)
-    ax.set_ylim(0, NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ)
-    ax.set_title(f"{condition} LFP spectrogram")
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _spike_rows(windowed: dict[str, Any]) -> list[tuple[str, np.ndarray]]:
-    spikes = windowed.get("soma_spikes") or {}
-    labels = list(spikes.get("labels") or [])
-    times = list(spikes.get("spike_times") or [])
-    rows = []
-    for label, values in zip(labels, times):
-        arr = np.asarray(values, dtype=float)
-        arr = arr[np.isfinite(arr)]
-        rows.append((str(label), arr))
-    return rows
-
-
-def _save_raster(windowed: dict[str, Any], condition: str, out: Path) -> None:
-    rows = _spike_rows(windowed)
-    fig, ax = plt.subplots(figsize=(12, 6.0), constrained_layout=True)
-    for y, (label, times) in enumerate(rows):
-        if times.size == 0:
-            continue
-        cell_type = hlp.cell_type_of(label)
-        ax.scatter(times, np.full(times.shape, y), s=4, color=CELL_COLORS.get(cell_type, CELL_COLORS["other"]), alpha=0.75)
-    ax.set_xlabel("Time in window (ms)")
-    ax.set_ylabel("Recorded soma index")
-    ax.set_title(f"{condition} soma spike raster")
-    ax.grid(True, axis="x", alpha=0.15)
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _save_spike_frequency_kde_1d(
-    windowed: dict[str, Any],
-    condition: str,
-    label: str,
-    cell_types: tuple[str, ...],
-    out: Path,
-) -> None:
-    fig, ax = plt.subplots(figsize=(10.5, 5.0), constrained_layout=True)
-    hlp.plot_spike_frequency_kde_1d(
-        windowed,
-        cell_types=cell_types,
-        config=NOTEBOOK_FREQ_CONFIG,
-        ax=ax,
-        title=f"{condition} soma spike frequency 1D KDE ({label})",
-    )
-    ax.axvspan(*hfo.DEFAULT_SCORE_BANDS["high_gamma"], color="#16a34a", alpha=0.08, lw=0)
-    ax.axvspan(*hfo.DEFAULT_SCORE_BANDS["target_hfo"], color="#d97706", alpha=0.08, lw=0)
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _save_spike_frequency_kde_2d(
-    windowed: dict[str, Any],
-    condition: str,
-    label: str,
-    cell_types: tuple[str, ...],
-    out: Path,
-) -> None:
-    fig, ax = plt.subplots(figsize=(10.5, 5.4), constrained_layout=True)
-    hlp.plot_spike_frequency_kde_2d(
-        windowed,
-        cell_types=cell_types,
-        config=NOTEBOOK_FREQ_CONFIG,
-        ax=ax,
-        title=f"{condition} soma spike frequency KDE ({label})",
-    )
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _save_input_overview(result: dict[str, Any], windows: dict[str, tuple[float, float]], out: Path) -> None:
-    fig, ax = plt.subplots(figsize=(12, 4.8), constrained_layout=True)
-    all_times = []
-    for _label, times in result.get("input_times", []) or []:
-        values = np.asarray(times, dtype=float)
-        all_times.extend(values[np.isfinite(values)].tolist())
-    if all_times:
-        bins = np.arange(0.0, max(all_times) + 25.0, 25.0)
-        ax.hist(all_times, bins=bins, color="#0f766e", alpha=0.75)
-    for name, color in [("control", "#2563eb"), ("ketamine", "#dc2626")]:
-        start, stop = windows[name]
-        ax.axvspan(start, stop, color=color, alpha=0.08, lw=0, label=f"{name} scoring window")
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Input events / 25 ms")
-    ax.set_title("Afferent input event overview")
-    ax.legend(frameon=False)
-    ax.grid(True, axis="y", alpha=0.16)
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _band_phase(t_ms: np.ndarray, y: np.ndarray, band: tuple[float, float]) -> tuple[np.ndarray, np.ndarray]:
-    if len(t_ms) < 16:
-        return t_ms, np.zeros_like(t_ms)
-    dt_s = float(np.median(np.diff(t_ms))) / 1000.0
-    fs = 1.0 / max(dt_s, 1e-9)
-    high = min(float(band[1]) / (fs / 2.0), 0.99)
-    low = max(float(band[0]) / (fs / 2.0), 1e-6)
-    if not 0.0 < low < high:
-        return t_ms, np.zeros_like(t_ms)
-    sos = signal.butter(4, [low, high], btype="bandpass", output="sos")
-    filtered = signal.sosfiltfilt(sos, y - np.mean(y))
-    return t_ms, np.angle(signal.hilbert(filtered))
-
-
-def _save_phase_hist(windowed: dict[str, Any], condition: str, out: Path) -> None:
-    t, y = _finite_lfp(windowed)
-    phase_t, phase = _band_phase(t, y, hfo.DEFAULT_SCORE_BANDS["target_hfo"])
-    spike_phases: list[float] = []
-    for label, times in _spike_rows(windowed):
-        if hlp.cell_type_of(label) not in {"MC", "TC", "EPLI", "PVCRH"} or not len(times):
-            continue
-        spike_phases.extend(np.interp(times, phase_t, phase).tolist())
-    fig, ax = plt.subplots(figsize=(7.2, 5.2), subplot_kw={"projection": "polar"}, constrained_layout=True)
-    if spike_phases:
-        bins = np.linspace(-np.pi, np.pi, 25)
-        counts, edges = np.histogram(spike_phases, bins=bins)
-        centers = edges[:-1] + np.diff(edges) / 2
-        ax.bar(centers, counts, width=np.diff(edges), color="#a21caf", alpha=0.75)
-    ax.set_title(f"{condition} M/T/EPLI phase to target-HFO LFP")
-    fig.savefig(out, dpi=160)
-    plt.close(fig)
-
-
-def _refresh_contact_sheet(packet_dir: Path, files: list[str]) -> None:
-    image_paths = [
-        (name, packet_dir / name)
-        for name in files
-        if name != "contact_sheet.png" and (packet_dir / name).suffix.lower() == ".png"
-    ]
-    image_paths = [(name, path) for name, path in image_paths if path.exists()]
-    if not image_paths:
-        return
-    thumb_w, thumb_h = 360, 230
-    cols = 3
-    rows = math.ceil(len(image_paths) / cols)
-    sheet = Image.new("RGB", (cols * thumb_w, rows * thumb_h), "white")
-    draw = ImageDraw.Draw(sheet)
-    for index, (name, path) in enumerate(image_paths):
-        image = Image.open(path).convert("RGB")
-        image.thumbnail((thumb_w, thumb_h - 26), Image.Resampling.LANCZOS)
-        x = (index % cols) * thumb_w
-        y = (index // cols) * thumb_h
-        sheet.paste(image, (x + (thumb_w - image.width) // 2, y + 22 + (thumb_h - 26 - image.height) // 2))
-        draw.text((x + 8, y + 5), name, fill=(20, 20, 20))
-    sheet.save(packet_dir / "contact_sheet.png")
-
-
 def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | None = None) -> Path:
     row = _load_candidate(campaign_dir, candidate_id)
     result_dir = Path((row.get("ketamine_metrics") or {}).get("result_dir") or (row.get("control_metrics") or {})["result_dir"])
     result = hlp.load_result(result_dir, progress=False)
-    windows = _condition_windows(row)
-    spectrogram_windows = _spectrogram_windows(row, result)
+    windows = hv.condition_windows(row)
+    spectrogram_windows = hv.spectrogram_windows(row, result)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     packet_dir = output_dir or campaign_dir / "figures" / f"short_expected_{candidate_id}_{timestamp}"
     packet_dir.mkdir(parents=True, exist_ok=True)
 
-    windowed = {condition: _window_result(result, windows, condition) for condition in ("control", "ketamine")}
+    windowed = {condition: hv.window_result(result, windows, condition) for condition in ("control", "ketamine")}
     spectrogram_windowed = {
-        condition: _window_result(result, spectrogram_windows, condition)
+        condition: hv.window_result(result, spectrogram_windows, condition)
         for condition in ("control", "ketamine")
     }
-    spectrogram_switch_time = _spectrogram_switch_time(row, result)
-    files = [
-        SPECTROGRAM_FILE_CONTROL,
-        SPECTROGRAM_FILE_KETAMINE,
-        "06_lfp_windows.png",
-        "07_raster_control.png",
-        "08_raster_ketamine.png",
-        "10_inputs.png",
-        "11_phase_control.png",
-        "12_phase_ketamine.png",
-    ]
-    control_geom = _spectrogram_window_geometry(spectrogram_windowed["control"])
-    ketamine_geom = _spectrogram_window_geometry(spectrogram_windowed["ketamine"])
-    _save_spectrogram(
+    spectrogram_switch_time = hv.spectrogram_switch_time(row, result)
+
+    control_geom = hv.spectrogram_window_geometry(spectrogram_windowed["control"])
+    ketamine_geom = hv.spectrogram_window_geometry(spectrogram_windowed["ketamine"])
+
+    hv.save_spectrogram(
         spectrogram_windowed["control"],
         condition="control",
-        out=packet_dir / files[0],
+        out=packet_dir / SPECTROGRAM_FILE_CONTROL,
         nperseg=control_geom[0],
         noverlap=control_geom[1],
     )
-    _save_spectrogram(
+    hv.save_spectrogram(
         spectrogram_windowed["ketamine"],
         condition="ketamine",
-        out=packet_dir / files[1],
+        out=packet_dir / SPECTROGRAM_FILE_KETAMINE,
         nperseg=ketamine_geom[0],
         noverlap=ketamine_geom[1],
     )
-    _save_lfp_zoom(result, windows, packet_dir / files[2])
-    _save_raster(windowed["control"], "control", packet_dir / files[3])
-    _save_raster(windowed["ketamine"], "ketamine", packet_dir / files[4])
-    _save_input_overview(result, windows, packet_dir / files[5])
-    _save_phase_hist(windowed["control"], "control", packet_dir / files[6])
-    _save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / files[7])
-    frequency_groups = [
-        ("MT", ("MC", "TC")),
-        ("EPLI", ("EPLI", "PVCRH")),
-        ("GC", ("GC",)),
-    ]
-    for condition in ("control", "ketamine"):
-        for group_label, cell_types in frequency_groups:
-            name = f"13_spike_frequency_kde_1d_{condition}_{group_label}.png"
-            _save_spike_frequency_kde_1d(
-                windowed[condition],
-                condition,
-                group_label,
-                cell_types,
-                packet_dir / name,
-            )
-            files.append(name)
-            name = f"13_spike_frequency_kde_2d_{condition}_{group_label}.png"
-            _save_spike_frequency_kde_2d(
-                windowed[condition],
-                condition,
-                group_label,
-                cell_types,
-                packet_dir / name,
-            )
-            files.append(name)
+    hv.save_lfp_zoom(result, windows, packet_dir / "06_lfp_windows.png")
+    hv.save_raster(windowed["control"], "control", packet_dir / "07_raster_control.png")
+    hv.save_raster(windowed["ketamine"], "ketamine", packet_dir / "08_raster_ketamine.png")
+    hv.save_input_overview(result, windows, packet_dir / "10_inputs.png")
+    hv.save_phase_hist(windowed["control"], "control", packet_dir / "11_phase_control.png")
+    hv.save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / "12_phase_ketamine.png")
 
+    for condition in ("control", "ketamine"):
+        for group in hv.frequency_group_specs():
+            kde_1d = hv.kde_filename("1d", condition, group.label)
+            hv.save_spike_frequency_kde_1d(
+                windowed[condition],
+                condition,
+                group.label,
+                group.cell_types,
+                packet_dir / kde_1d,
+            )
+            kde_2d = hv.kde_filename("2d", condition, group.label)
+            hv.save_spike_frequency_kde_2d(
+                windowed[condition],
+                condition,
+                group.label,
+                group.cell_types,
+                packet_dir / kde_2d,
+            )
+
+    created_at = datetime.now().isoformat(timespec="seconds")
     manifest = {
         "candidate_id": candidate_id,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": created_at,
         "visual_style_version": VISUAL_STYLE_VERSION,
+        "visual_contract": hv.visual_contract_snapshot(),
+        "parameter_contract": parameter_contract_snapshot(campaign_dir=campaign_dir),
         "campaign_dir": str(campaign_dir),
         "result_dir": str(result_dir),
         "pair_score": row.get("pair_score"),
@@ -459,7 +117,7 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "ketamine_peak_hz": (row.get("ketamine_metrics") or {}).get("peak_hz"),
         "control_window_ms": list(windows["control"]),
         "ketamine_window_ms": list(windows["ketamine"]),
-        "spectrogram_window_ms": NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
+        "spectrogram_window_ms": hv.NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
         "spectrogram_switch_time_ms": spectrogram_switch_time,
         "spectrogram_window_ms_by_condition": {
             "control": list(spectrogram_windows["control"]),
@@ -468,24 +126,24 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "spectrogram_geometry": {
             "control": {"nperseg": control_geom[0], "noverlap": control_geom[1]},
             "ketamine": {"nperseg": ketamine_geom[0], "noverlap": ketamine_geom[1]},
-            "dt_ms": NOTEBOOK_ANALYSIS_DT_MS,
-            "max_freq_hz": NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
+            "dt_ms": hv.NOTEBOOK_ANALYSIS_DT_MS,
+            "max_freq_hz": hv.notebook_spectrogram_max_freq_hz(),
         },
         "spectrogram_generation": {
             "pipeline": SPECTROGRAM_PIPELINE,
             "control_file": SPECTROGRAM_FILE_CONTROL,
             "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
-            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "generated_at": created_at,
             "note": "lfp spectrograms produced from 1000 ms visualization windows using dense overlap and the existing helper renderer",
         },
         "parameters": row.get("parameters"),
         "control_metrics": row.get("control_metrics"),
         "ketamine_metrics": row.get("ketamine_metrics"),
-        "files": ["01_psd_control.png", "01_psd_ketamine.png", "03_psd_overlay.png", *files, "contact_sheet.png"],
+        "files": hv.packet_manifest_files(),
     }
     (packet_dir / "manifest.json").write_text(json.dumps(hlp._json_ready(manifest), indent=2, sort_keys=True))
     regenerate_packet_psd(packet_dir)
-    _refresh_contact_sheet(packet_dir, manifest["files"])
+    hv.refresh_contact_sheet(packet_dir, manifest["files"])
     return packet_dir
 
 

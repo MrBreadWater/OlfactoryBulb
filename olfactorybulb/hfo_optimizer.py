@@ -15,7 +15,6 @@ launch many independent runs concurrently inside one long-lived allocation.
 from __future__ import annotations
 
 from copy import deepcopy
-from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable, Sequence
 
@@ -26,6 +25,13 @@ import numpy as np
 from scipy.stats import qmc
 
 import obgpu_experiment_helpers as hlp
+from olfactorybulb.hfo_features import (
+    DEFAULT_TIME_CONSTANTS_MS,
+    TIME_CONSTANT_FRACTIONAL_VARIATION,
+    ParameterSpec,
+    default_hfo_search_space,
+    search_space_rows,
+)
 
 
 def _default_repo_root() -> Path:
@@ -64,228 +70,6 @@ PLAUSIBILITY_SOFT_LIMITS = {
     "kar_gc_weight_scale": 4.0,
     "kar_mt_effective_drive": 0.10,
 }
-DEFAULT_TIME_CONSTANTS_MS = {
-    "input_syn_tau1_ms": 6.0,
-    "input_syn_tau2_ms": 12.0,
-    "gaba_tau2_ms": 100.0,
-    "kar_tau1_ms": 6.728726245,
-    "kar_tau2_ms": 81.75126152,
-    "kar_tau3_ms": 468.7337682,
-}
-TIME_CONSTANT_FRACTIONAL_VARIATION = 0.20
-
-
-@dataclass(frozen=True)
-class ParameterSpec:
-    path: str
-    low: float
-    high: float
-    scale: str = "log"
-    dtype: str = "float"
-    description: str = ""
-    default: float | None = None
-
-    def clamp(self, value: float) -> float:
-        return min(max(float(value), float(self.low)), float(self.high))
-
-    def encode(self, value: float) -> float:
-        value = self.clamp(value)
-        if self.scale == "log":
-            return math.log10(max(value, 1e-12))
-        if self.scale != "linear":
-            raise ValueError(f"Unsupported scale {self.scale!r}")
-        return float(value)
-
-    def decode(self, value: float) -> float:
-        if self.scale == "log":
-            decoded = 10.0 ** float(value)
-        elif self.scale == "linear":
-            decoded = float(value)
-        else:
-            raise ValueError(f"Unsupported scale {self.scale!r}")
-        decoded = self.clamp(decoded)
-        if self.dtype == "int":
-            return int(round(decoded))
-        return float(decoded)
-
-    def low_encoded(self) -> float:
-        return self.encode(self.low)
-
-    def high_encoded(self) -> float:
-        return self.encode(self.high)
-
-    def default_value(self) -> float:
-        if self.default is not None:
-            return self.clamp(float(self.default))
-        if self.scale == "log":
-            return self.decode(0.5 * (self.low_encoded() + self.high_encoded()))
-        return self.decode(0.5 * (float(self.low) + float(self.high)))
-
-
-def default_hfo_search_space() -> list[ParameterSpec]:
-    """Return the default HFO search space.
-
-    The ranges are intentionally wide enough to discover a viable regime while
-    staying organized around interpretable conductance/coupling knobs plus a
-    narrow +-20 percent window on existing timing constants.
-    """
-    def time_range(path: str) -> tuple[float, float]:
-        baseline = float(DEFAULT_TIME_CONSTANTS_MS[path])
-        frac = float(TIME_CONSTANT_FRACTIONAL_VARIATION)
-        return baseline * (1.0 - frac), baseline * (1.0 + frac)
-
-    return [
-        ParameterSpec(
-            path="kar_mt_gmax",
-            low=0.01,
-            high=0.08,
-            scale="log",
-            description="KAR conductance on M/T cells",
-        ),
-        ParameterSpec(
-            path="kar_gc_gmax",
-            low=0.001,
-            high=0.025,
-            scale="log",
-            description="Optional KAR conductance on granule cells",
-        ),
-        ParameterSpec(
-            path="gaba_gmax",
-            low=0.25,
-            high=8.0,
-            scale="log",
-            description="Fast inhibitory GABA-A max conductance",
-        ),
-        ParameterSpec(
-            path="ampa_nmda_gmax",
-            low=16.0,
-            high=128.0,
-            scale="log",
-            description="Dendrodendritic AMPA/NMDA max conductance",
-        ),
-        ParameterSpec(
-            path="epli_ampa_weight_scale",
-            low=0.1,
-            high=8.0,
-            scale="log",
-            default=1.0,
-            description="MC/TC->EPLI reciprocal excitation weight scale",
-        ),
-        ParameterSpec(
-            path="epli_gaba_weight_scale",
-            low=0.1,
-            high=8.0,
-            scale="log",
-            default=1.0,
-            description="EPLI->MC/TC reciprocal inhibition weight scale",
-        ),
-        ParameterSpec(
-            path="gap_tc",
-            low=4.0,
-            high=64.0,
-            scale="log",
-            description="TC gap-junction conductance",
-        ),
-        ParameterSpec(
-            path="gap_mc",
-            low=2.0,
-            high=48.0,
-            scale="log",
-            description="MC gap-junction conductance",
-        ),
-        ParameterSpec(
-            path="tc_input_weight",
-            low=0.4,
-            high=1.2,
-            scale="linear",
-            description="Feedforward TC input weight",
-        ),
-        ParameterSpec(
-            path="mc_input_weight",
-            low=0.05,
-            high=0.35,
-            scale="linear",
-            description="Feedforward MC input weight",
-        ),
-        ParameterSpec(
-            path="kar_osn_weight_scale",
-            low=0.25,
-            high=2.0,
-            scale="log",
-            default=1.0,
-            description="OSN event weight multiplier for M/T KAR traces",
-        ),
-        ParameterSpec(
-            path="kar_gc_weight_scale",
-            low=0.25,
-            high=4.0,
-            scale="log",
-            default=1.0,
-            description="M/T event weight multiplier for GC KAR traces",
-        ),
-        ParameterSpec(
-            path="gc_ka_gbar_scale",
-            low=0.25,
-            high=3.0,
-            scale="log",
-            default=1.0,
-            description="Granule-cell A-type potassium conductance scale",
-        ),
-        ParameterSpec(
-            path="input_syn_tau1_ms",
-            low=time_range("input_syn_tau1_ms")[0],
-            high=time_range("input_syn_tau1_ms")[1],
-            scale="linear",
-            default=DEFAULT_TIME_CONSTANTS_MS["input_syn_tau1_ms"],
-            description="OSN input Exp2Syn rise time",
-        ),
-        ParameterSpec(
-            path="input_syn_tau2_ms",
-            low=time_range("input_syn_tau2_ms")[0],
-            high=time_range("input_syn_tau2_ms")[1],
-            scale="linear",
-            default=DEFAULT_TIME_CONSTANTS_MS["input_syn_tau2_ms"],
-            description="OSN input Exp2Syn decay time",
-        ),
-        ParameterSpec(
-            path="gaba_tau2_ms",
-            low=time_range("gaba_tau2_ms")[0],
-            high=time_range("gaba_tau2_ms")[1],
-            scale="linear",
-            default=DEFAULT_TIME_CONSTANTS_MS["gaba_tau2_ms"],
-            description="Global GabaSyn decay time",
-        ),
-        ParameterSpec(
-            path="kar_tau1_ms",
-            low=time_range("kar_tau1_ms")[0],
-            high=time_range("kar_tau1_ms")[1],
-            scale="linear",
-            default=DEFAULT_TIME_CONSTANTS_MS["kar_tau1_ms"],
-            description="KAR fast rise time constant",
-        ),
-        ParameterSpec(
-            path="kar_tau2_ms",
-            low=time_range("kar_tau2_ms")[0],
-            high=time_range("kar_tau2_ms")[1],
-            scale="linear",
-            default=DEFAULT_TIME_CONSTANTS_MS["kar_tau2_ms"],
-            description="KAR intermediate decay time constant",
-        ),
-        ParameterSpec(
-            path="kar_tau3_ms",
-            low=time_range("kar_tau3_ms")[0],
-            high=time_range("kar_tau3_ms")[1],
-            scale="linear",
-            default=DEFAULT_TIME_CONSTANTS_MS["kar_tau3_ms"],
-            description="KAR slow tail time constant",
-        ),
-    ]
-
-
-def search_space_rows(search_space: Sequence[ParameterSpec]) -> list[dict[str, Any]]:
-    return [asdict(spec) for spec in search_space]
-
-
 def infer_remote_template_from_recent_runs(
     *,
     results_base: str | Path | None = None,
@@ -717,7 +501,7 @@ def initialize_campaign(
     (campaign_dir / "batches").mkdir(exist_ok=True)
     config_payload = {
         "base_config": hlp._json_ready(base_config),
-        "search_space": [asdict(spec) for spec in search_space],
+        "search_space": search_space_rows(search_space),
         "notes": notes or "",
     }
     _write_json(campaign_dir / "campaign_config.json", config_payload)
