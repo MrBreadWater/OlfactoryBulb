@@ -1565,12 +1565,38 @@ def _make_sweep_item_label(
 def _requested_task_count_from_slurm_args(values: list[str] | tuple[str, ...] | None) -> int | None:
     """Best-effort parse of one total Slurm task count from extra args."""
     args = [str(value) for value in (values or [])]
+    nodes: int | None = None
+    ntasks_per_node: int | None = None
+
     for index, part in enumerate(args):
         if part in {"-n", "--ntasks"} and index + 1 < len(args):
             try:
                 return max(int(args[index + 1]), 1)
             except ValueError:
                 continue
+        if part in {"-N", "--nodes", "--ntasks-per-node"} and index + 1 < len(args):
+            try:
+                value = max(int(args[index + 1]), 1)
+            except ValueError:
+                continue
+            if part == "--ntasks-per-node":
+                ntasks_per_node = value
+                continue
+            if part in {"-N", "--nodes"}:
+                nodes = value
+                continue
+        if part.startswith("--nodes="):
+            try:
+                nodes = max(int(part.split("=", 1)[1]), 1)
+            except ValueError:
+                nodes = None
+            continue
+        if part.startswith("--ntasks-per-node="):
+            try:
+                ntasks_per_node = max(int(part.split("=", 1)[1]), 1)
+            except ValueError:
+                ntasks_per_node = None
+            continue
         if part.startswith("--ntasks="):
             try:
                 return max(int(part.split("=", 1)[1]), 1)
@@ -1581,6 +1607,15 @@ def _requested_task_count_from_slurm_args(values: list[str] | tuple[str, ...] | 
                 return max(int(part[2:]), 1)
             except ValueError:
                 continue
+        if part.startswith("-N") and part != "-N":
+            try:
+                nodes = max(int(part[2:]), 1)
+            except ValueError:
+                nodes = None
+
+    if nodes is not None and ntasks_per_node is not None:
+        return max(nodes * ntasks_per_node, 1)
+
     return None
 
 
@@ -1612,8 +1647,14 @@ def _remote_sweep_parallelism(config: dict[str, Any], *, tasks_per_item: int) ->
 
     remote_mpi_exec = str(config.get("remote_mpi_exec") or default_remote_mpi_exec()).strip()
     launcher_head = shlex.split(remote_mpi_exec)[0] if remote_mpi_exec else ""
-    if os.path.basename(launcher_head) != "srun":
-        return 1
+
+    # Prefer optimization profile / allocation metadata over launcher inference.
+    total_tasks = config.get("optimizer_total_tasks")
+    if total_tasks in (None, ""):
+        total_tasks = config.get("slurm_total_tasks")
+
+    if total_tasks in (None, ""):
+        total_tasks = _requested_task_count_from_slurm_args(config.get("slurm_extra_args", []))
 
     # GPU sweeps are intentionally conservative unless the caller specifies otherwise.
     slurm_gpus = config.get("slurm_gpus")
@@ -1626,11 +1667,33 @@ def _remote_sweep_parallelism(config: dict[str, Any], *, tasks_per_item: int) ->
     if gpu_count > 0:
         return 1
 
-    total_tasks = _requested_task_count_from_slurm_args(config.get("slurm_extra_args", []))
+    if total_tasks is None and os.path.basename(launcher_head) != "srun":
+        return 1
+
     if total_tasks is None:
         allocation_job_id = config.get("slurm_allocation_job_id")
-        if allocation_job_id not in (None, "") and config.get("nranks") not in (None, ""):
-            total_tasks = int(config.get("nranks", 1))
+        if allocation_job_id in (None, ""):
+            return 1
+        # Last-ditch fallback: use optimization profile size if we missed it above.
+        fallback_total = config.get("optimizer_total_tasks")
+        if fallback_total not in (None, ""):
+            try:
+                total_tasks = max(int(fallback_total), 1)
+            except (TypeError, ValueError):
+                return 1
+        else:
+            return 1
+
+    try:
+        total_tasks = int(total_tasks)
+    except (TypeError, ValueError):
+        return 1
+
+    if total_tasks <= 0:
+        return 1
+
+    if tasks_per_item <= 0:
+        return 1
     if total_tasks is None or tasks_per_item <= 0:
         return 1
     return max(total_tasks // max(tasks_per_item, 1), 1)

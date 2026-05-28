@@ -432,6 +432,31 @@ with tempfile.TemporaryDirectory() as tmp:
     parsed_manifest = json.loads(manifest_json)
     assert isinstance(parsed_manifest, list) and len(parsed_manifest) == len(manifest_items)
     assert parsed_manifest[0]["label"] == manifest_items[0]["label"]
+
+    # --- Sweep parallelism should use optimizer task-size metadata even for non-srun launchers ---
+    assert hlp._remote_sweep_parallelism(
+        {
+            "remote_mpi_exec": "mpiexec --bind-to none",
+            "optimizer_total_tasks": 120,
+            "nranks": 15,
+        },
+        tasks_per_item=15,
+    ) == 8
+    assert hlp._remote_sweep_parallelism(
+        {
+            "remote_mpi_exec": "srun --mpi=pmix_v4 --cpu-bind=none",
+            "slurm_extra_args": ["--nodes", "3", "--ntasks-per-node", "40"],
+        },
+        tasks_per_item=16,
+    ) == 7
+    assert hlp._remote_sweep_parallelism(
+        {
+            "remote_mpi_exec": "srun --mpi=pmix_v4",
+            "sweep_parallelism": 4,
+            "optimizer_total_tasks": 120,
+        },
+        tasks_per_item=15,
+    ) == 4
     long_joint_sweep_label = hlp._safe_sweep_path_label(
         {
             "kar_mt_gmax": [1.0],
