@@ -706,6 +706,72 @@ def _theoretical_psd_template(kind: str) -> np.ndarray:
     raise ValueError(f"Unknown PSD template kind {kind!r}")
 
 
+def psd_template_curve(
+    kind: str,
+    freqs_hz: Sequence[float] | np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a normalized theoretical PSD template for diagnostics.
+
+    The returned curve is the same shape target used by the v6 objective.  It is
+    normalized as a discrete probability vector, so callers plotting it on top
+    of a measured PSD should scale it to the measured units first.
+    """
+    template_freqs = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    template_power = _theoretical_psd_template(kind)
+    if freqs_hz is None:
+        return template_freqs.copy(), template_power.copy()
+
+    freqs = np.asarray(freqs_hz, dtype=float)
+    if freqs.ndim != 1:
+        raise ValueError("freqs_hz must be one-dimensional")
+    curve = np.interp(freqs, template_freqs, template_power, left=0.0, right=0.0)
+    return freqs.copy(), _normalize_psd_shape(curve)
+
+
+def scaled_psd_template_curve(
+    kind: str,
+    freqs_hz: Sequence[float] | np.ndarray,
+    reference_psd: Sequence[float] | np.ndarray,
+    *,
+    fit_band_hz: tuple[float, float] = (20.0, 300.0),
+    method: str = "area",
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a PSD template scaled onto a measured PSD axis.
+
+    `method="area"` matches integrated power over `fit_band_hz`; `method="peak"`
+    matches the peak height in that band.  This is for visual diagnostics only;
+    scoring still uses the normalized template vectors.
+    """
+    freqs, template = psd_template_curve(kind, freqs_hz)
+    reference = np.asarray(reference_psd, dtype=float)
+    if reference.shape != freqs.shape:
+        raise ValueError("reference_psd must have the same shape as freqs_hz")
+
+    lo_hz, hi_hz = fit_band_hz
+    mask = (
+        np.isfinite(freqs)
+        & np.isfinite(template)
+        & np.isfinite(reference)
+        & (freqs >= float(lo_hz))
+        & (freqs <= float(hi_hz))
+    )
+    if not np.any(mask):
+        return freqs, np.zeros_like(template)
+
+    if method == "area":
+        template_scale = float(np.trapezoid(template[mask], freqs[mask]))
+        reference_scale = float(np.trapezoid(np.maximum(reference[mask], 0.0), freqs[mask]))
+    elif method == "peak":
+        template_scale = float(np.max(template[mask]))
+        reference_scale = float(np.max(np.maximum(reference[mask], 0.0)))
+    else:
+        raise ValueError(f"Unsupported template scaling method {method!r}")
+
+    if template_scale <= 0.0 or reference_scale <= 0.0:
+        return freqs, np.zeros_like(template)
+    return freqs, template * (reference_scale / template_scale)
+
+
 def _psd_shape_from_arrays(freqs: np.ndarray, psd: np.ndarray) -> np.ndarray:
     freqs = np.asarray(freqs, dtype=float)
     psd = np.asarray(psd, dtype=float)
@@ -2583,11 +2649,13 @@ __all__ = [
     "parameter_plausibility_penalty",
     "propose_elite_batch",
     "propose_lhs_batch",
+    "psd_template_curve",
     "rescore_candidate_row",
     "run_hfo_batch",
     "score_candidate_pair",
     "score_condition_result",
     "score_hfo_batch",
+    "scaled_psd_template_curve",
     "search_space_rows",
     "sustained_odor_schedule",
     "top_candidate_rows",

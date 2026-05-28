@@ -21,10 +21,12 @@ from olfactorybulb.hfo_optimizer import (
     lfp_source_diagnostic_configs,
     parameter_plausibility_penalty,
     propose_elite_batch,
+    psd_template_curve,
     run_hfo_batch,
     score_candidate_pair,
     score_condition_result,
     score_hfo_batch,
+    scaled_psd_template_curve,
     sustained_odor_schedule,
     window_result_for_condition,
     write_objective_filter,
@@ -49,6 +51,21 @@ assert default_specs["kar_mt_gmax"].high == 0.08
 assert default_specs["kar_gc_gmax"].high == 0.025
 assert default_specs["kar_osn_weight_scale"].high == 2.0
 assert default_specs["kar_gc_weight_scale"].high == 4.0
+
+template_freqs, ketamine_template = psd_template_curve("ketamine")
+assert template_freqs.shape == ketamine_template.shape
+assert np.isclose(np.sum(ketamine_template), 1.0)
+assert template_freqs[int(np.argmax(ketamine_template))] == 195.0
+plot_freqs = np.linspace(20.0, 300.0, 141)
+reference_psd = np.ones_like(plot_freqs) * 2.0
+scaled_freqs, scaled_template = scaled_psd_template_curve("ketamine", plot_freqs, reference_psd)
+assert scaled_freqs.shape == scaled_template.shape == reference_psd.shape
+assert np.trapezoid(scaled_template, scaled_freqs) > 0.0
+assert np.isclose(
+    np.trapezoid(scaled_template, scaled_freqs),
+    np.trapezoid(reference_psd, plot_freqs),
+    rtol=0.15,
+)
 
 schedule = sustained_odor_schedule(9000.0)
 assert min(schedule) == 0
