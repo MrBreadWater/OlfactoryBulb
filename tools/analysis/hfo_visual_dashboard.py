@@ -16,6 +16,7 @@ import json
 import math
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -40,7 +41,9 @@ from regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
 DEFAULT_OUTPUT_SUBDIR = "visual_dashboard"
 DEFAULT_REFRESH_S = 60.0
 DEFAULT_TOP_N = 20
+DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
+DEFAULT_CLEANUP_STALE_PACKETS = True
 SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json")
 PRIMARY_PSD_NAME_ORDER = (
     "03_psd_overlay.png",
@@ -131,6 +134,18 @@ def _rate(metrics: dict[str, Any], cell_type: str) -> float | None:
     return _safe_float(rates.get(cell_type))
 
 
+def _is_current_visual_style_manifest(manifest: dict[str, Any], *, allow_legacy: bool = False) -> bool:
+    if allow_legacy:
+        return True
+    style = manifest.get("visual_style_version")
+    if style is None:
+        return False
+    try:
+        return int(style) == int(VISUAL_STYLE_VERSION)
+    except (TypeError, ValueError):
+        return False
+
+
 def _load_ranked_rows(campaign_dir: Path) -> list[dict[str, Any]]:
     rows = hfo.load_candidate_archive_rows(campaign_dir)
     rows = [row for row in rows if _safe_float(row.get("pair_score")) is not None]
@@ -154,7 +169,11 @@ def _packet_mtime(paths: list[Path]) -> float:
     return max(mtimes) if mtimes else 0.0
 
 
-def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
+def find_candidate_packets(
+    campaign_dir: str | Path,
+    *,
+    require_current_visual_style: bool = True,
+) -> dict[str, PacketInfo]:
     """Return the newest diagnostic packet per candidate ID."""
     campaign_path = Path(campaign_dir)
     figures_dir = campaign_path / "figures"
@@ -165,6 +184,10 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
     for packet_dir in sorted(path for path in figures_dir.iterdir() if path.is_dir()):
         manifest_path = packet_dir / "manifest.json"
         manifest = _read_json(manifest_path) if manifest_path.exists() else {}
+        if not _is_current_visual_style_manifest(
+            manifest, allow_legacy=(not require_current_visual_style)
+        ):
+            continue
         candidate_id = str(manifest.get("candidate_id") or _candidate_id_from_path(packet_dir) or "")
         if not candidate_id:
             continue
@@ -194,6 +217,30 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
         if previous is None or packet.mtime >= previous.mtime:
             packets[candidate_id] = packet
     return packets
+
+
+def cleanup_stale_packets(
+    campaign_dir: str | Path,
+    *,
+    require_current_visual_style: bool = True,
+    dry_run: bool = False,
+) -> tuple[int, list[str]]:
+    """Delete stale packet directories and return (removed_count, removed_names)."""
+    campaign_path = Path(campaign_dir)
+    figures_dir = campaign_path / "figures"
+    if not figures_dir.exists():
+        return 0, []
+
+    removed: list[str] = []
+    for packet_dir in sorted(path for path in figures_dir.iterdir() if path.is_dir()):
+        manifest = _read_json(packet_dir / "manifest.json") if (packet_dir / "manifest.json").exists() else {}
+        if _is_current_visual_style_manifest(manifest, allow_legacy=(not require_current_visual_style)):
+            continue
+        removed.append(packet_dir.name)
+        if dry_run:
+            continue
+        shutil.rmtree(packet_dir)
+    return len(removed), removed
 
 
 def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> bool:
@@ -1024,8 +1071,9 @@ def export_visual_dashboard(
     output_dir: str | Path | None = None,
     top_n: int = DEFAULT_TOP_N,
     refresh_s: float | None = DEFAULT_REFRESH_S,
-    generate_packets_top_n: int = 0,
+    generate_packets_top_n: int = DEFAULT_GENERATE_PACKETS_TOP_N,
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write ``index.html`` for one campaign and return a small manifest."""
@@ -1036,6 +1084,8 @@ def export_visual_dashboard(
         else campaign_path / DEFAULT_OUTPUT_SUBDIR
     )
     output_path.mkdir(parents=True, exist_ok=True)
+    if cleanup_stale_packets_before_render:
+        cleanup_stale_packets(campaign_path, dry_run=False)
 
     rows = _load_ranked_rows(campaign_path)
     generated_packets = _generate_missing_packets(
@@ -1081,6 +1131,7 @@ def export_visual_dashboard(
         )
         if int(generate_packets_top_n) > 0
         else 0,
+        "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
         "top_candidate_id": rows[0].get("candidate_id") if rows else None,
         "top_score": rows[0].get("pair_score") if rows else None,
     }
@@ -1097,8 +1148,9 @@ def watch_visual_dashboard(
     output_dir: str | Path | None = None,
     top_n: int = DEFAULT_TOP_N,
     refresh_s: float = DEFAULT_REFRESH_S,
-    generate_packets_top_n: int = 0,
+    generate_packets_top_n: int = DEFAULT_GENERATE_PACKETS_TOP_N,
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
 ) -> None:
     campaign_path = Path(campaign_dir).expanduser().resolve()
@@ -1119,6 +1171,7 @@ def watch_visual_dashboard(
                 refresh_s=refresh_s,
                 generate_packets_top_n=generate_packets_top_n,
                 generate_packet_workers=generate_packet_workers,
+                cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
                 status_json=status_path,
             )
             print(
@@ -1179,8 +1232,9 @@ def serve_visual_dashboard(
     output_dir: str | Path | None = None,
     top_n: int = DEFAULT_TOP_N,
     refresh_s: float = DEFAULT_REFRESH_S,
-    generate_packets_top_n: int = 0,
+    generate_packets_top_n: int = DEFAULT_GENERATE_PACKETS_TOP_N,
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
     host: str = "127.0.0.1",
     port: int = 6006,
 ) -> None:
@@ -1191,6 +1245,7 @@ def serve_visual_dashboard(
         refresh_s=refresh_s,
         generate_packets_top_n=generate_packets_top_n,
         generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
     )
     output_path = Path(manifest["output_dir"])
     campaign_path = Path(manifest["campaign_dir"])
@@ -1226,14 +1281,22 @@ def _build_parser() -> argparse.ArgumentParser:
         subparser.add_argument(
             "--generate-packets-top-n",
             type=int,
-            default=0,
-            help="Generate missing diagnostic packets for the current top N candidates before rendering.",
+            default=DEFAULT_GENERATE_PACKETS_TOP_N,
+            help=(
+                "Generate missing diagnostic packets for the current top N candidates before rendering."
+                " Use 0 to disable and rely on precomputed packets."
+            ),
         )
         subparser.add_argument(
             "--generate-packet-workers",
             type=int,
             default=DEFAULT_PACKET_GENERATION_WORKERS,
             help="Worker processes for packet generation. Use 0 to auto-scale to all local CPU cores.",
+        )
+        subparser.add_argument(
+            "--no-cleanup-stale-packets",
+            action="store_true",
+            help="Keep packet directories from older visual styles instead of deleting them.",
         )
         subparser.add_argument("--status-json", type=Path, default=None)
 
@@ -1261,6 +1324,7 @@ def main(argv: list[str] | None = None) -> None:
             refresh_s=args.refresh_s,
             generate_packets_top_n=args.generate_packets_top_n,
             generate_packet_workers=args.generate_packet_workers,
+            cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
             status_json=args.status_json,
         )
         print(json.dumps(manifest, indent=2, sort_keys=True))
@@ -1272,6 +1336,7 @@ def main(argv: list[str] | None = None) -> None:
             refresh_s=args.refresh_s,
             generate_packets_top_n=args.generate_packets_top_n,
             generate_packet_workers=args.generate_packet_workers,
+            cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
             status_json=args.status_json,
         )
     elif args.command == "serve":
@@ -1282,6 +1347,7 @@ def main(argv: list[str] | None = None) -> None:
             refresh_s=args.refresh_s,
             generate_packets_top_n=args.generate_packets_top_n,
             generate_packet_workers=args.generate_packet_workers,
+            cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
             host=args.host,
             port=args.port,
         )
