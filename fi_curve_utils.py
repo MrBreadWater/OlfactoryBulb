@@ -39,10 +39,27 @@ def count_spikes(trace_dict: dict, threshold_mV: float = -20.0) -> int:
     return int(np.sum(np.diff(above.astype(int)) == 1))
 
 
+def count_spikes_in_window(
+    trace_dict: dict,
+    threshold_mV: float = -20.0,
+    window_start_ms: float = 0.0,
+    window_end_ms: Optional[float] = None,
+) -> int:
+    """Count upward threshold crossings inside a time window."""
+    spike_times = find_spike_times_milliseconds(
+        trace_dict,
+        spike_threshold_millivolts=threshold_mV,
+        step_onset_milliseconds=window_start_ms,
+        step_end_milliseconds=window_end_ms,
+    )
+    return int(len(spike_times))
+
+
 def traces_to_fi(
     results: List[dict],
     step_dur_ms: float,
     threshold_mV: float = -20.0,
+    delay_ms: float = 0.0,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """Convert run_current_clamp_series output to (currents_nA, freqs_hz).
 
@@ -51,6 +68,7 @@ def traces_to_fi(
     results      : list of dicts from single_cell_utils.run_current_clamp_series
     step_dur_ms  : current step duration used in the run (ms)
     threshold_mV : spike detection threshold (mV)
+    delay_ms     : current step onset time (ms)
 
     Returns
     -------
@@ -58,8 +76,10 @@ def traces_to_fi(
     freqs_hz    : 1-D ndarray
     """
     currents = np.array([r["amp_nA"] for r in results])
+    step_end_ms = delay_ms + step_dur_ms
     freqs = np.array([
-        count_spikes(r, threshold_mV) / (step_dur_ms * 1e-3)
+        count_spikes_in_window(r, threshold_mV, delay_ms, step_end_ms)
+        / (step_dur_ms * 1e-3)
         for r in results
     ])
     return currents, freqs
@@ -127,6 +147,54 @@ def compute_fi_slope(
     return float(slope), float(intercept), float(r ** 2)
 
 
+def compute_fi_maximum_linear_slope(
+    currents_nA: np.ndarray,
+    freqs_hz: np.ndarray,
+    freq_threshold_hz: float = 1.0,
+) -> Tuple[float, float, float, int]:
+    """Return the maximum adjacent f-I slope.
+
+    Burton & Urban define f-I gain as the maximum linear slope of the f-I
+    relationship. With their 50 pA step protocol, the local line segment between
+    adjacent current steps is the most direct discrete estimate.
+
+    Returns
+    -------
+    slope_hz_per_nA, intercept_hz, r_squared, segment_start_index
+    All NaN values and -1 when no suprathreshold adjacent segment exists.
+    """
+    currents_nA = np.asarray(currents_nA, dtype=float)
+    freqs_hz = np.asarray(freqs_hz, dtype=float)
+    if currents_nA.size < 2 or freqs_hz.size != currents_nA.size:
+        return np.nan, np.nan, np.nan, -1
+
+    best_slope = -np.inf
+    best_intercept = np.nan
+    best_index = -1
+
+    for index in range(currents_nA.size - 1):
+        left_current = currents_nA[index]
+        right_current = currents_nA[index + 1]
+        left_freq = freqs_hz[index]
+        right_freq = freqs_hz[index + 1]
+        if not np.all(np.isfinite([left_current, right_current, left_freq, right_freq])):
+            continue
+        if right_current <= left_current:
+            continue
+        if max(left_freq, right_freq) < freq_threshold_hz:
+            continue
+
+        slope = (right_freq - left_freq) / (right_current - left_current)
+        if slope > best_slope:
+            best_slope = slope
+            best_intercept = left_freq - slope * left_current
+            best_index = index
+
+    if best_index < 0:
+        return np.nan, np.nan, np.nan, -1
+    return float(best_slope), float(best_intercept), 1.0, best_index
+
+
 def _estimate_rheobase(currents_nA: np.ndarray, freqs_hz: np.ndarray) -> float:
     """Current (nA) at which the first spike epoch was observed."""
     firing = freqs_hz >= 1.0
@@ -154,6 +222,8 @@ def run_cell_type_fi(
     dt: float = 0.1,
     celsius: float = 35.0,
     threshold_mV: float = -20.0,
+    bias_current_nA: float = 0.0,
+    v_init_mV=None,
 ) -> Dict[str, dict]:
     """Run the f-I protocol for all numbered models of one cell type.
 
@@ -164,6 +234,8 @@ def run_cell_type_fi(
     use_coreneuron : enable CoreNEURON for this sweep (fast for many amplitudes)
     use_gpu    : enable GPU-accelerated CoreNEURON (requires GPU-capable build)
     n_cells    : run models 1 through n_cells
+    bias_current_nA : constant background current applied to every condition
+    v_init_mV : optional initial membrane voltage passed through h.v_init
 
     Returns
     -------
@@ -193,6 +265,8 @@ def run_cell_type_fi(
             threshold_mV=threshold_mV,
             use_coreneuron=use_coreneuron,
             use_gpu=use_gpu,
+            bias_current_nA=bias_current_nA,
+            v_init_mV=v_init_mV,
         )
 
         rows_by_cell = {name: [] for name in cell_names}
@@ -203,13 +277,14 @@ def run_cell_type_fi(
             cell_rows = sorted(rows_by_cell[name], key=lambda row: row["amp_index"])
             currents = np.array([row["amp_nA"] for row in cell_rows])
             freqs = np.array([row["freq_hz"] for row in cell_rows])
-            slope, intercept, r2 = compute_fi_slope(currents, freqs)
+            slope, intercept, r2, segment_index = compute_fi_maximum_linear_slope(currents, freqs)
             results[name] = dict(
                 currents_nA=currents,
                 freqs_hz=freqs,
                 slope=slope,
                 intercept=intercept,
                 r2=r2,
+                max_gain_segment_index=segment_index,
             )
         print("done")
         return results
@@ -223,8 +298,10 @@ def run_cell_type_fi(
                 duration_ms=step_dur_ms, delay_ms=delay_ms, tail_ms=tail_ms,
                 dt=dt, celsius=celsius,
                 use_coreneuron=use_coreneuron, use_gpu=use_gpu,
+                bias_current_nA=bias_current_nA,
+                v_init_mV=v_init_mV,
             )
-            currents, freqs = traces_to_fi(traces, step_dur_ms, threshold_mV)
+            currents, freqs = traces_to_fi(traces, step_dur_ms, threshold_mV, delay_ms)
         else:
             ramp = run_fi_ramp(
                 name,
@@ -232,16 +309,19 @@ def run_cell_type_fi(
                 step_dur_ms=step_dur_ms, delay_ms=delay_ms, tail_ms=tail_ms,
                 dt=dt, celsius=celsius,
                 use_coreneuron=use_coreneuron, use_gpu=use_gpu,
+                bias_current_nA=bias_current_nA,
+                v_init_mV=v_init_mV,
             )
             currents, freqs = ramp_to_fi(ramp, threshold_mV)
 
-        slope, intercept, r2 = compute_fi_slope(currents, freqs)
+        slope, intercept, r2, segment_index = compute_fi_maximum_linear_slope(currents, freqs)
         results[name] = dict(
             currents_nA=currents,
             freqs_hz=freqs,
             slope=slope,
             intercept=intercept,
             r2=r2,
+            max_gain_segment_index=segment_index,
         )
         if np.isnan(slope):
             print("no spikes detected")
@@ -420,6 +500,7 @@ def find_spike_times_milliseconds(
     trace_dict: dict,
     spike_threshold_millivolts: float = -20.0,
     step_onset_milliseconds: float = 0.0,
+    step_end_milliseconds: Optional[float] = None,
 ) -> np.ndarray:
     """Detect upward threshold crossings in a voltage trace and return spike times.
 
@@ -433,6 +514,9 @@ def find_spike_times_milliseconds(
     step_onset_milliseconds : float
         Only return spikes that occur at or after this time (ms). Used to
         exclude spontaneous activity before the current step. Default 0.0.
+    step_end_milliseconds : float, optional
+        If provided, only return spikes before this time (ms). Used to exclude
+        post-step rebound or tail-period spikes.
 
     Returns
     -------
@@ -450,13 +534,17 @@ def find_spike_times_milliseconds(
     ) / 2.0
 
     all_spike_times_milliseconds = crossing_midpoint_times_milliseconds[upward_crossing_mask]
-    return all_spike_times_milliseconds[all_spike_times_milliseconds >= step_onset_milliseconds]
+    spike_window_mask = all_spike_times_milliseconds >= step_onset_milliseconds
+    if step_end_milliseconds is not None:
+        spike_window_mask &= all_spike_times_milliseconds < step_end_milliseconds
+    return all_spike_times_milliseconds[spike_window_mask]
 
 
 def compute_interspike_interval_statistics(
     trace_dict: dict,
     spike_threshold_millivolts: float = -20.0,
     step_onset_milliseconds: float = 0.0,
+    step_end_milliseconds: Optional[float] = None,
 ) -> dict:
     """Compute ISI-based firing statistics from a single voltage trace.
 
@@ -470,6 +558,8 @@ def compute_interspike_interval_statistics(
         Voltage threshold for spike detection (mV). Default −20.0.
     step_onset_milliseconds : float
         Ignore spikes before this time (ms). Default 0.0.
+    step_end_milliseconds : float, optional
+        Ignore spikes at or after this time.
 
     Returns
     -------
@@ -488,7 +578,10 @@ def compute_interspike_interval_statistics(
     )
 
     spike_times_milliseconds = find_spike_times_milliseconds(
-        trace_dict, spike_threshold_millivolts, step_onset_milliseconds
+        trace_dict,
+        spike_threshold_millivolts,
+        step_onset_milliseconds,
+        step_end_milliseconds,
     )
 
     if len(spike_times_milliseconds) < 2:
@@ -513,9 +606,106 @@ def compute_interspike_interval_statistics(
     )
 
 
+def compute_peak_instantaneous_firing_rate_hertz(
+    traces_list: List[dict],
+    spike_threshold_millivolts: float = -20.0,
+    step_delay_milliseconds: float = 0.0,
+    step_duration_milliseconds: Optional[float] = None,
+) -> float:
+    """Compute peak instantaneous rate across current-step traces.
+
+    Burton & Urban define this as the inverse of the minimum ISI recorded
+    during step-current injections.
+    """
+    step_end_milliseconds = (
+        step_delay_milliseconds + step_duration_milliseconds
+        if step_duration_milliseconds is not None
+        else None
+    )
+    minimum_isi_milliseconds = np.inf
+
+    for trace_result in traces_list:
+        spike_times_milliseconds = find_spike_times_milliseconds(
+            trace_result,
+            spike_threshold_millivolts,
+            step_delay_milliseconds,
+            step_end_milliseconds,
+        )
+        if len(spike_times_milliseconds) < 2:
+            continue
+        local_minimum_isi_milliseconds = float(np.min(np.diff(spike_times_milliseconds)))
+        minimum_isi_milliseconds = min(
+            minimum_isi_milliseconds,
+            local_minimum_isi_milliseconds,
+        )
+
+    if not np.isfinite(minimum_isi_milliseconds) or minimum_isi_milliseconds <= 0.0:
+        return np.nan
+    return float(1000.0 / minimum_isi_milliseconds)
+
+
+def compute_isi_statistics_near_rate(
+    traces_list: List[dict],
+    target_rate_hertz: float = 20.0,
+    spike_threshold_millivolts: float = -20.0,
+    step_delay_milliseconds: float = 0.0,
+    step_duration_milliseconds: Optional[float] = None,
+) -> dict:
+    """Compute ISI statistics from the trace closest to a target mean rate.
+
+    Burton & Urban report CV_ISI at approximately 20 Hz, using the step-current
+    response closest to that firing rate.
+    """
+    if step_duration_milliseconds is None:
+        raise ValueError("step_duration_milliseconds is required for rate selection")
+
+    step_end_milliseconds = step_delay_milliseconds + step_duration_milliseconds
+    best_trace = None
+    best_rate_hertz = np.nan
+    best_distance = np.inf
+
+    for trace_result in traces_list:
+        spike_count = count_spikes_in_window(
+            trace_result,
+            spike_threshold_millivolts,
+            step_delay_milliseconds,
+            step_end_milliseconds,
+        )
+        if spike_count < 2:
+            continue
+        mean_rate_hertz = spike_count / (step_duration_milliseconds * 1e-3)
+        distance = abs(mean_rate_hertz - target_rate_hertz)
+        if distance < best_distance:
+            best_trace = trace_result
+            best_rate_hertz = mean_rate_hertz
+            best_distance = distance
+
+    if best_trace is None:
+        return dict(
+            selected_current_nanoamps=np.nan,
+            selected_mean_rate_hertz=np.nan,
+            mean_interspike_interval_milliseconds=np.nan,
+            std_interspike_interval_milliseconds=np.nan,
+            coefficient_of_variation_interspike_interval=np.nan,
+            peak_instantaneous_firing_rate_hertz=np.nan,
+        )
+
+    statistics = compute_interspike_interval_statistics(
+        best_trace,
+        spike_threshold_millivolts,
+        step_delay_milliseconds,
+        step_end_milliseconds,
+    )
+    statistics["selected_current_nanoamps"] = float(best_trace["amp_nA"])
+    statistics["selected_mean_rate_hertz"] = float(best_rate_hertz)
+    return statistics
+
+
 def compute_rheobase_nanoamps(
     traces_list: List[dict],
     spike_threshold_millivolts: float = -20.0,
+    step_delay_milliseconds: float = 0.0,
+    step_duration_milliseconds: Optional[float] = None,
 ) -> float:
     """Find the minimum current amplitude that evokes at least one spike.
 
@@ -529,6 +719,11 @@ def compute_rheobase_nanoamps(
         have keys ``amp_nA`` and ``v_soma``.
     spike_threshold_millivolts : float
         Voltage threshold for spike detection (mV). Default −20.0.
+    step_delay_milliseconds : float
+        Time of current step onset (ms).
+    step_duration_milliseconds : float, optional
+        Duration of the current step. When provided, tail-period spikes are
+        excluded from rheobase detection.
 
     Returns
     -------
@@ -536,9 +731,19 @@ def compute_rheobase_nanoamps(
         Current amplitude (nA) of the weakest suprathreshold step,
         or NaN if no step produced spikes.
     """
+    step_end_milliseconds = (
+        step_delay_milliseconds + step_duration_milliseconds
+        if step_duration_milliseconds is not None
+        else None
+    )
     sorted_traces = sorted(traces_list, key=lambda trace_result: trace_result["amp_nA"])
     for trace_result in sorted_traces:
-        if count_spikes(trace_result, spike_threshold_millivolts) >= 1:
+        if count_spikes_in_window(
+            trace_result,
+            spike_threshold_millivolts,
+            step_delay_milliseconds,
+            step_end_milliseconds,
+        ) >= 1:
             return float(trace_result["amp_nA"])
     return np.nan
 
@@ -547,6 +752,7 @@ def compute_rheobase_spike_latency_milliseconds(
     traces_list: List[dict],
     spike_threshold_millivolts: float = -20.0,
     step_delay_milliseconds: float = 100.0,
+    step_duration_milliseconds: Optional[float] = None,
 ) -> float:
     """Time from current step onset to the first spike at the rheobase amplitude.
 
@@ -559,6 +765,9 @@ def compute_rheobase_spike_latency_milliseconds(
     step_delay_milliseconds : float
         Time of current step onset in the simulation (ms). Must match the
         ``delay_ms`` used in run_current_clamp_series. Default 100.0.
+    step_duration_milliseconds : float, optional
+        Duration of the current step. When provided, tail-period spikes are
+        excluded.
 
     Returns
     -------
@@ -567,7 +776,10 @@ def compute_rheobase_spike_latency_milliseconds(
         if rheobase could not be determined.
     """
     rheobase_current_nanoamps = compute_rheobase_nanoamps(
-        traces_list, spike_threshold_millivolts
+        traces_list,
+        spike_threshold_millivolts,
+        step_delay_milliseconds,
+        step_duration_milliseconds,
     )
     if np.isnan(rheobase_current_nanoamps):
         return np.nan
@@ -578,6 +790,11 @@ def compute_rheobase_spike_latency_milliseconds(
                 trace_result,
                 spike_threshold_millivolts,
                 step_onset_milliseconds=step_delay_milliseconds,
+                step_end_milliseconds=(
+                    step_delay_milliseconds + step_duration_milliseconds
+                    if step_duration_milliseconds is not None
+                    else None
+                ),
             )
             if len(spike_times_milliseconds) > 0:
                 return float(spike_times_milliseconds[0]) - step_delay_milliseconds
@@ -731,7 +948,8 @@ def compute_action_potential_properties(
         np.min(voltage_derivative_millivolts_per_millisecond[ap_peak_index:fall_slope_end_index])
     ) if fall_slope_end_index > ap_peak_index else np.nan
 
-    # AHP: minimum voltage within 10 ms after AP onset
+    # AHP: onset voltage minus minimum voltage within 10 ms after AP onset.
+    # Burton & Urban report this as a positive amplitude.
     ahp_window_end_index = min(
         ap_onset_index + max(1, round(10.0 / timestep_milliseconds)),
         len(voltage_post_onset),
@@ -739,7 +957,7 @@ def compute_action_potential_properties(
     ahp_window_voltages = voltage_post_onset[ap_onset_index:ahp_window_end_index]
     ahp_minimum_local_offset = int(np.argmin(ahp_window_voltages))
     ahp_minimum_voltage_millivolts = float(ahp_window_voltages[ahp_minimum_local_offset])
-    ahp_amplitude_millivolts = ahp_minimum_voltage_millivolts - ap_onset_voltage_millivolts
+    ahp_amplitude_millivolts = ap_onset_voltage_millivolts - ahp_minimum_voltage_millivolts
     ahp_minimum_index = ap_onset_index + ahp_minimum_local_offset
 
     # T_AHP50%: time from falling-phase crossing of onset voltage to 50% recovery
@@ -757,7 +975,7 @@ def compute_action_potential_properties(
         )
         # 50% recovery voltage: halfway between AHP minimum and onset voltage
         ahp_fifty_percent_recovery_voltage_millivolts = (
-            ap_onset_voltage_millivolts + 0.5 * ahp_amplitude_millivolts
+            ap_onset_voltage_millivolts - 0.5 * ahp_amplitude_millivolts
         )
         recovery_phase_voltages = voltage_post_onset[ahp_minimum_index:]
         recovery_phase_times = time_post_onset[ahp_minimum_index:]

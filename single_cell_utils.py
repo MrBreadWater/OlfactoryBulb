@@ -174,6 +174,8 @@ def run_current_clamp(
     param_values=None,
     use_coreneuron: bool = False,
     use_gpu: bool = False,
+    bias_current_nA: float = 0.0,
+    v_init_mV=None,
 ) -> dict:
     """Single constant-amplitude IClamp pulse on the soma.
 
@@ -187,6 +189,8 @@ def run_current_clamp(
     dt          : fixed integration timestep (ms)
     celsius     : simulation temperature (°C)
     param_values: optional list of parameter overrides (see get_default_param_values)
+    bias_current_nA: constant background current applied for the whole run (nA)
+    v_init_mV   : optional initial membrane voltage passed through h.v_init
 
     Returns
     -------
@@ -198,25 +202,38 @@ def run_current_clamp(
     cell = build_cell(cell_spec, param_values)
     _configure_neuron(dt, celsius, use_coreneuron=locals().get('use_coreneuron', False))
     h.tstop = delay_ms + duration_ms + tail_ms
+    previous_v_init = float(h.v_init)
+    if v_init_mV is not None:
+        h.v_init = float(v_init_mV)
 
     ic = h.IClamp(cell.soma(0.5))
     ic.delay = delay_ms
     ic.dur = duration_ms
     ic.amp = float(amp_nA)
 
+    bias_ic = h.IClamp(cell.soma(0.5))
+    bias_ic.delay = 0.0
+    bias_ic.dur = h.tstop
+    bias_ic.amp = float(bias_current_nA)
+
     t_vec = h.Vector().record(h._ref_t)
     v_vec = h.Vector().record(cell.soma(0.5)._ref_v)
 
-    if use_coreneuron:
-        return _psolve_series(cell, ic, [amp_nA], h.tstop, dt, use_gpu, t_vec, v_vec)[0]
-
-    h.run()
-
-    return {
-        "t": np.array(t_vec),
-        "v_soma": np.array(v_vec),
-        "amp_nA": float(amp_nA),
-    }
+    try:
+        if use_coreneuron:
+            result = _psolve_series(cell, ic, [amp_nA], h.tstop, dt, use_gpu, t_vec, v_vec)[0]
+        else:
+            h.run()
+            result = {
+                "t": np.array(t_vec),
+                "v_soma": np.array(v_vec),
+                "amp_nA": float(amp_nA),
+            }
+        result["bias_current_nA"] = float(bias_current_nA)
+        return result
+    finally:
+        if v_init_mV is not None:
+            h.v_init = previous_v_init
 
 
 def run_current_clamp_series(
@@ -230,6 +247,8 @@ def run_current_clamp_series(
     param_values=None,
     use_coreneuron: bool = False,
     use_gpu: bool = False,
+    bias_current_nA: float = 0.0,
+    v_init_mV=None,
 ) -> List[dict]:
     """One IClamp run per amplitude; cell is built once and reused.
 
@@ -248,28 +267,42 @@ def run_current_clamp_series(
     cell = build_cell(cell_spec, param_values)
     _configure_neuron(dt, celsius, use_coreneuron=locals().get('use_coreneuron', False))
     h.tstop = delay_ms + duration_ms + tail_ms
+    previous_v_init = float(h.v_init)
+    if v_init_mV is not None:
+        h.v_init = float(v_init_mV)
 
     ic = h.IClamp(cell.soma(0.5))
     ic.delay = delay_ms
     ic.dur = duration_ms
 
+    bias_ic = h.IClamp(cell.soma(0.5))
+    bias_ic.delay = 0.0
+    bias_ic.dur = h.tstop
+    bias_ic.amp = float(bias_current_nA)
+
     t_vec = h.Vector().record(h._ref_t)
     v_vec = h.Vector().record(cell.soma(0.5)._ref_v)
 
-    if use_coreneuron:
-        return _psolve_series(cell, ic, amps_nA, h.tstop, dt, use_gpu, t_vec, v_vec)
+    try:
+        if use_coreneuron:
+            results = _psolve_series(cell, ic, amps_nA, h.tstop, dt, use_gpu, t_vec, v_vec)
+        else:
+            results = []
+            for amp in amps_nA:
+                ic.amp = float(amp)
+                h.run()
+                results.append({
+                    "t": np.array(t_vec),
+                    "v_soma": np.array(v_vec),
+                    "amp_nA": float(amp),
+                })
 
-    results = []
-    for amp in amps_nA:
-        ic.amp = float(amp)
-        h.run()
-        results.append({
-            "t": np.array(t_vec),
-            "v_soma": np.array(v_vec),
-            "amp_nA": float(amp),
-        })
-
-    return results
+        for result in results:
+            result["bias_current_nA"] = float(bias_current_nA)
+        return results
+    finally:
+        if v_init_mV is not None:
+            h.v_init = previous_v_init
 
 
 def run_current_clamp_batch(
@@ -285,6 +318,8 @@ def run_current_clamp_batch(
     use_coreneuron: bool = False,
     use_gpu: bool = False,
     gid_start: int = 1,
+    bias_current_nA: float = 0.0,
+    v_init_mV=None,
 ) -> List[dict]:
     """Run independent current-clamp conditions in one batched simulation.
 
@@ -305,6 +340,8 @@ def run_current_clamp_batch(
     celsius      : simulation temperature (C)
     threshold_mV : spike detection threshold (mV)
     param_values : optional parameter overrides applied to every clone
+    bias_current_nA: constant background current applied to every clone (nA)
+    v_init_mV    : optional initial membrane voltage passed through h.v_init
 
     Returns
     -------
@@ -334,6 +371,7 @@ def run_current_clamp_batch(
 
     cells = []
     clamps = []
+    bias_clamps = []
     netcons = []
     spike_vectors = {}
     pc = None
@@ -360,6 +398,11 @@ def run_current_clamp_batch(
         clamp.dur = duration_ms
         clamp.amp = condition["amp_nA"]
 
+        bias_clamp = h.IClamp(cell.soma(0.5))
+        bias_clamp.delay = 0.0
+        bias_clamp.dur = h.tstop
+        bias_clamp.amp = float(bias_current_nA)
+
         spike_vector = h.Vector()
         netcon = h.NetCon(cell.soma(0.5)._ref_v, None, sec=cell.soma)
         netcon.threshold = threshold_mV
@@ -371,22 +414,30 @@ def run_current_clamp_batch(
 
         cells.append(cell)
         clamps.append(clamp)
+        bias_clamps.append(bias_clamp)
         netcons.append(netcon)
         spike_vectors[condition["condition_index"]] = spike_vector
 
     _configure_neuron(dt, celsius, use_coreneuron=use_coreneuron)
+    previous_v_init = float(h.v_init)
+    if v_init_mV is not None:
+        h.v_init = float(v_init_mV)
 
-    if use_coreneuron:
-        pc.setup_transfer()
-        h.cvode_active(0)
-        h.dt = dt
-        h.steps_per_ms = round(1.0 / dt)
-        h.setdt()
-        pc.set_maxstep(10)
-        h.stdinit()
-        pc.psolve(h.tstop)
-    else:
-        h.run()
+    try:
+        if use_coreneuron:
+            pc.setup_transfer()
+            h.cvode_active(0)
+            h.dt = dt
+            h.steps_per_ms = round(1.0 / dt)
+            h.setdt()
+            pc.set_maxstep(10)
+            h.stdinit()
+            pc.psolve(h.tstop)
+        else:
+            h.run()
+    finally:
+        if v_init_mV is not None:
+            h.v_init = previous_v_init
 
     step_start_ms = delay_ms
     step_end_ms = delay_ms + duration_ms
@@ -408,6 +459,7 @@ def run_current_clamp_batch(
             cell_index=condition["cell_index"],
             amp_index=condition["amp_index"],
             amp_nA=condition["amp_nA"],
+            bias_current_nA=float(bias_current_nA),
             spike_count=spike_count,
             freq_hz=spike_count / (duration_ms * 1e-3),
             spike_times_ms=spike_times_ms,
@@ -439,6 +491,8 @@ def run_fi_ramp(
     param_values=None,
     use_coreneuron: bool = False,
     use_gpu: bool = False,
+    bias_current_nA: float = 0.0,
+    v_init_mV=None,
 ) -> dict:
     """Staircase current protocol in a single run.
 
@@ -458,6 +512,8 @@ def run_fi_ramp(
     dt          : fixed integration timestep (ms)
     celsius     : simulation temperature (°C)
     param_values: optional list of parameter overrides
+    bias_current_nA: constant background current added to the staircase (nA)
+    v_init_mV   : optional initial membrane voltage passed through h.v_init
 
     Returns
     -------
@@ -472,10 +528,18 @@ def run_fi_ramp(
     cell = build_cell(cell_spec, param_values)
     _configure_neuron(dt, celsius, use_coreneuron=locals().get('use_coreneuron', False))
     h.tstop = delay_ms + len(currents_nA) * step_dur_ms + tail_ms
+    previous_v_init = float(h.v_init)
+    if v_init_mV is not None:
+        h.v_init = float(v_init_mV)
 
     ic = h.IClamp(cell.soma(0.5))
     ic.delay = 0.0
     ic.dur = h.tstop
+
+    bias_ic = h.IClamp(cell.soma(0.5))
+    bias_ic.delay = 0.0
+    bias_ic.dur = h.tstop
+    bias_ic.amp = float(bias_current_nA)
 
     n_delay    = round(delay_ms    / dt)
     n_per_step = round(step_dur_ms / dt)
@@ -493,27 +557,30 @@ def run_fi_ramp(
     t_vec = h.Vector().record(h._ref_t)
     v_vec = h.Vector().record(cell.soma(0.5)._ref_v)
 
-    if use_coreneuron:
-        # Single run — use a throw-away amp list of length 1; ic.amp is driven by
-        # the Vector.play so _psolve_series' ic.amp assignment is overwritten, but
-        # we still need the psolve infrastructure.
-        _configure_coreneuron(use_gpu)
-        pc = h.ParallelContext()
-        gid = 1
-        pc.set_gid2node(gid, 0)
-        _nc = h.NetCon(cell.soma(0.5)._ref_v, None, sec=cell.soma)
-        _nc.threshold = -20.0
-        pc.cell(gid, _nc)
-        pc.setup_transfer()
-        h.cvode_active(0)
-        h.dt = dt
-        h.steps_per_ms = round(1.0 / dt)
-        h.setdt()
-        pc.set_maxstep(10)
-        h.stdinit()
-        pc.psolve(h.tstop)
-    else:
-        h.run()
+    try:
+        if use_coreneuron:
+            # Single run — the Vector.play drives the step clamp amplitude while
+            # the bias clamp supplies any constant holding current.
+            _configure_coreneuron(use_gpu)
+            pc = h.ParallelContext()
+            gid = 1
+            pc.set_gid2node(gid, 0)
+            _nc = h.NetCon(cell.soma(0.5)._ref_v, None, sec=cell.soma)
+            _nc.threshold = -20.0
+            pc.cell(gid, _nc)
+            pc.setup_transfer()
+            h.cvode_active(0)
+            h.dt = dt
+            h.steps_per_ms = round(1.0 / dt)
+            h.setdt()
+            pc.set_maxstep(10)
+            h.stdinit()
+            pc.psolve(h.tstop)
+        else:
+            h.run()
+    finally:
+        if v_init_mV is not None:
+            h.v_init = previous_v_init
 
     return {
         "t": np.array(t_vec),
@@ -521,6 +588,7 @@ def run_fi_ramp(
         "currents_nA": currents_nA,
         "step_dur_ms": step_dur_ms,
         "delay_ms": delay_ms,
+        "bias_current_nA": float(bias_current_nA),
     }
 
 
@@ -699,6 +767,8 @@ def run_hyperpolarizing_steps(
     param_values=None,
     use_coreneuron: bool = False,
     use_gpu: bool = False,
+    bias_current_nA: float = 0.0,
+    v_init_mV=None,
 ) -> List[dict]:
     """Hyperpolarizing current step series for sag amplitude and input resistance.
 
@@ -730,6 +800,10 @@ def run_hyperpolarizing_steps(
         Simulation temperature (°C). Default 35.0.
     param_values : list of float, optional
         Parameter overrides applied via set_model_params.
+    bias_current_nA : float
+        Constant background current applied for the whole run (nA).
+    v_init_mV : float, optional
+        Initial membrane voltage passed through h.v_init.
 
     Returns
     -------
@@ -755,6 +829,8 @@ def run_hyperpolarizing_steps(
         param_values=param_values,
         use_coreneuron=use_coreneuron,
         use_gpu=use_gpu,
+        bias_current_nA=bias_current_nA,
+        v_init_mV=v_init_mV,
     )
 
 
