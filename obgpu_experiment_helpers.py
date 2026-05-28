@@ -226,6 +226,7 @@ CONTROL_HELP = {
     "remote_heartbeat_timeout_s": "Remote Slurm watchdog timeout in seconds. Notebook-managed jobs and reusable allocations self-terminate if the notebook stops refreshing their heartbeat for longer than this.",
     "remote_ssh_command_timeout_s": "Timeout in seconds for one notebook-managed Paramiko shell command. None or <=0 disables the timeout.",
     "remote_ssh_exec_timeout_s": "Timeout in seconds for Paramiko exec_command acknowledgement before the command output phase starts.",
+    "remote_ssh_upload_timeout_s": "Timeout in seconds for Paramiko shell-backed file upload send/write operations.",
     "remote_poll_command_timeout_s": "Timeout in seconds for lightweight remote status-poll shell commands. Keeps a stale SSH channel from freezing an active notebook worker.",
     "remote_cleanup_stale_allocations": "When True, cancel stale or pre-heartbeat notebook-managed reusable allocations on the remote before submitting a new run.",
     "remote_sync_compress": "When True, compress the remote result directory before downloading it back to the notebook.",
@@ -886,6 +887,7 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "remote_heartbeat_timeout_s": 120,
         "remote_ssh_command_timeout_s": 300,
         "remote_ssh_exec_timeout_s": 30,
+        "remote_ssh_upload_timeout_s": 120,
         "remote_poll_command_timeout_s": 60,
         "remote_cleanup_stale_allocations": True,
         "remote_defer_soma_vs_sync": False,
@@ -2196,6 +2198,20 @@ def _remote_ssh_exec_timeout_s(config: dict[str, Any]) -> float | None:
         timeout = float(value)
     except (TypeError, ValueError):
         return 30.0
+    if timeout <= 0:
+        return None
+    return timeout
+
+
+def _remote_ssh_upload_timeout_s(config: dict[str, Any]) -> float | None:
+    """Return the Paramiko shell upload timeout, or None when disabled."""
+    value = config.get("remote_ssh_upload_timeout_s", 120)
+    if value is None:
+        return _remote_ssh_command_timeout_s(config)
+    try:
+        timeout = float(value)
+    except (TypeError, ValueError):
+        return 120.0
     if timeout <= 0:
         return None
     return timeout
@@ -4976,6 +4992,7 @@ def _upload_paramiko_file_via_shell(
     channel = None
     stderr_chunks: list[bytes] = []
     bytes_written = 0
+    upload_timeout_s = _remote_ssh_upload_timeout_s(config)
     progress = _ProgressBar(
         total=max(int(local_path.stat().st_size), 0),
         desc=progress_desc,
@@ -4985,6 +5002,8 @@ def _upload_paramiko_file_via_shell(
     )
     try:
         channel = transport.open_session()
+        if upload_timeout_s is not None:
+            channel.settimeout(upload_timeout_s)
         remote_shell_command = f"cat > {shlex.quote(remote_path)}"
         channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
         with local_path.open("rb") as handle:
@@ -4995,6 +5014,11 @@ def _upload_paramiko_file_via_shell(
                 view = memoryview(chunk)
                 while len(view):
                     sent = channel.send(view)
+                    if sent <= 0:
+                        raise TimeoutError(
+                            "Paramiko upload channel accepted no bytes while writing "
+                            f"{local_path} to {remote_path}."
+                        )
                     view = view[sent:]
                     bytes_written += sent
                     progress.update_to(bytes_written)
@@ -5015,6 +5039,15 @@ def _upload_paramiko_file_via_shell(
             stdout="",
             stderr=b"".join(stderr_chunks).decode("utf-8", errors="replace"),
         )
+    except socket.timeout as exc:
+        progress.close()
+        raise TimeoutError(
+            "Timed out while uploading a file over the notebook Paramiko transport.\n"
+            f"Local file: {local_path}\n"
+            f"Remote file: {remote_path}\n"
+            f"Bytes written before timeout: {bytes_written}\n"
+            f"Timeout: {upload_timeout_s}s"
+        ) from exc
     except Exception as exc:
         progress.close()
         if not _paramiko_transport_is_usable(transport):
