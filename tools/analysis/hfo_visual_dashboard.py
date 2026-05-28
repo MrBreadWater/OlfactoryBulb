@@ -55,7 +55,7 @@ DEFAULT_TOP_N = 20
 DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
 DEFAULT_CLEANUP_STALE_PACKETS = True
-DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N = 0
+DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N = 5
 DEFAULT_WATCHDOG_SUPERVISE_S = 20.0
 DEFAULT_STALE_AFTER_S = 180.0
 GENERATE_PACKET_ENDPOINT = "/__hfo_generate_packet__"
@@ -176,11 +176,26 @@ def _process_cmdline(pid: int) -> str:
     return raw.replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip()
 
 
+def _process_cmdargs(pid: int) -> list[str]:
+    try:
+        raw = Path(f"/proc/{int(pid)}/cmdline").read_bytes()
+    except OSError:
+        return []
+    return [arg for arg in raw.decode("utf-8", errors="ignore").split("\x00") if arg]
+
+
 def _process_matches_tokens(pid: int, expected_tokens: list[str]) -> bool:
     cmdline = _process_cmdline(pid)
     if not cmdline:
         return False
     return all(token in cmdline for token in expected_tokens)
+
+
+def _process_matches_command(pid: int, expected_command: list[str]) -> bool:
+    actual = _process_cmdargs(pid)
+    if not actual:
+        return False
+    return actual == [str(arg) for arg in expected_command]
 
 
 def _matching_pids(expected_tokens: list[str]) -> list[int]:
@@ -278,12 +293,15 @@ def _spawn_detached_process(
 
 
 def _port_in_use(host: str, port: int) -> bool:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            sock.bind((host, int(port)))
-        except OSError:
-            return True
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                sock.bind((host, int(port)))
+            except OSError:
+                return True
+    except PermissionError:
+        return False
     return False
 
 
@@ -316,6 +334,11 @@ def _is_legacy_ad_hoc_kde_image(path: Path) -> bool:
 
 def _is_hidden_packet_image(path: Path) -> bool:
     return path.name in {"contact_sheet.png", "00_contact_sheet.png", "09_population_rates.png"}
+
+
+def _is_hidden_packet_dir(path: Path) -> bool:
+    name = path.name
+    return name.startswith(".")
 
 
 def _condition_metrics(row: dict[str, Any], condition: str) -> dict[str, Any]:
@@ -454,7 +477,13 @@ def _recent_rows(
 
 
 def _packet_mtime(paths: list[Path]) -> float:
-    mtimes = [path.stat().st_mtime for path in paths if path.exists()]
+    mtimes: list[float] = []
+    for path in paths:
+        try:
+            if path.exists():
+                mtimes.append(path.stat().st_mtime)
+        except (FileNotFoundError, OSError):
+            continue
     return max(mtimes) if mtimes else 0.0
 
 
@@ -509,6 +538,8 @@ def find_candidate_packets(
 
     packets: dict[str, PacketInfo] = {}
     for packet_dir in sorted(path for path in figures_dir.iterdir() if path.is_dir()):
+        if _is_hidden_packet_dir(packet_dir):
+            continue
         manifest_path = packet_dir / "manifest.json"
         manifest = _read_json(manifest_path) if manifest_path.exists() else {}
         if not _is_current_visual_style_manifest(
@@ -560,6 +591,8 @@ def cleanup_stale_packets(
 
     removed: list[str] = []
     for packet_dir in sorted(path for path in figures_dir.iterdir() if path.is_dir()):
+        if _is_hidden_packet_dir(packet_dir):
+            continue
         manifest = _read_json(packet_dir / "manifest.json") if (packet_dir / "manifest.json").exists() else {}
         if _is_current_visual_style_manifest(manifest, allow_legacy=(not require_current_visual_style)):
             continue
@@ -2031,11 +2064,10 @@ def _ensure_visual_dashboard_sidecars(
         status_path=status_path,
     )
     watcher_info = _read_runtime_process_info(output_path, "watcher")
-    watcher_expected_tokens = [str(Path(__file__).resolve()), " watch ", str(campaign_path)]
     watcher_alive = (
         watcher_info is not None
         and _pid_is_alive(watcher_info.pid)
-        and _process_matches_tokens(watcher_info.pid, watcher_expected_tokens)
+        and _process_matches_command(watcher_info.pid, watcher_cmd)
     )
     watcher_stale = _watcher_is_stale(
         campaign_path,
@@ -2070,29 +2102,28 @@ def _ensure_visual_dashboard_sidecars(
         "stderr_log": str(_runtime_process_paths(output_path, "watcher")["stderr"]),
     }
 
+    server_cmd = _dashboard_runtime_command(
+        "serve-static",
+        campaign_path,
+        output_path=output_path,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_path=status_path,
+        host=host,
+        port=port,
+    )
     server_info = _read_runtime_process_info(output_path, "server")
-    server_expected_tokens = [str(Path(__file__).resolve()), " serve-static ", str(campaign_path)]
     server_alive = (
         server_info is not None
         and _pid_is_alive(server_info.pid)
-        and _process_matches_tokens(server_info.pid, server_expected_tokens)
+        and _process_matches_command(server_info.pid, server_cmd)
     )
     external_port_in_use = _port_in_use(host, port)
-    if not server_alive and not external_port_in_use:
+    if not server_alive:
         paths = _runtime_process_paths(output_path, "server")
-        server_cmd = _dashboard_runtime_command(
-            "serve-static",
-            campaign_path,
-            output_path=output_path,
-            top_n=top_n,
-            refresh_s=refresh_s,
-            generate_packets_top_n=generate_packets_top_n,
-            generate_packet_workers=generate_packet_workers,
-            cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-            status_path=status_path,
-            host=host,
-            port=port,
-        )
         server_info = _spawn_detached_process(
             server_cmd,
             cwd=REPO_ROOT,
@@ -2225,11 +2256,10 @@ def ensure_visual_dashboard_runtime(
     runtime_dir = _runtime_dir(output_path)
     runtime_dir.mkdir(parents=True, exist_ok=True)
     watchdog_info = _read_runtime_process_info(output_path, "watchdog")
-    watchdog_expected_tokens = [str(Path(__file__).resolve()), " watchdog ", str(campaign_path)]
     watchdog_alive = (
         watchdog_info is not None
         and _pid_is_alive(watchdog_info.pid)
-        and _process_matches_tokens(watchdog_info.pid, watchdog_expected_tokens)
+        and _process_matches_command(watchdog_info.pid, command)
     )
     if not watchdog_alive:
         paths = _runtime_process_paths(output_path, "watchdog")

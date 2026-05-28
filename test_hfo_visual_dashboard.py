@@ -47,6 +47,7 @@ assert _effective_packet_generation_workers(0, 1) == 1
 assert _effective_packet_generation_workers(1, 8) == 1
 assert _effective_packet_generation_workers(2, 8) == 2
 assert _effective_packet_generation_workers(999, 3) == 3
+assert hfo_vd.DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N == 5
 
 recent_fixture_rows = [
     {"batch_name": "batch_0007", "candidate_id": "C00007", "pair_score": 1.0},
@@ -146,6 +147,45 @@ with TemporaryDirectory() as tmp:
     kde2d_epli_k_mod = packet_dir / "13_spike_frequency_kde_2d_ketamine_EPLI_mod200.png"
     legacy_kde = packet_dir / "kde_control_MC.png"
     contact = packet_dir / "contact_sheet.png"
+    row_score_version = int(hfo.PAIR_SCORE_VERSION)
+    packet_overlay = {
+        "render_version": PSD_PACKET_RENDER_VERSION,
+        "target_hfo_hz": list(hfo.DEFAULT_SCORE_BANDS["target_hfo"]),
+        "high_gamma_hz": list(hfo.DEFAULT_SCORE_BANDS["high_gamma"]),
+    }
+    hidden_packet_dir = figures_dir / ".packet_build_C00042"
+    hidden_packet_dir.mkdir(parents=True)
+    hidden_manifest = hidden_packet_dir / "manifest.json"
+    hidden_manifest.write_text(
+        json.dumps(
+            {
+                "candidate_id": "C00042",
+                "visual_style_version": VISUAL_STYLE_VERSION,
+                "visual_contract": visual_contract_snapshot(),
+                "parameter_contract": parameter_contract_snapshot(campaign_dir=campaign),
+                "pair_score_version": row_score_version,
+                "psd_target_overlay": packet_overlay,
+                "spectrogram_geometry": {
+                    "control": {"nperseg": 256, "noverlap": 192},
+                    "ketamine": {"nperseg": 256, "noverlap": 192},
+                    "dt_ms": 0.1,
+                    "max_freq_hz": float(list(hfo.DEFAULT_SCORE_BANDS["target_hfo"])[1]),
+                },
+                "spectrogram_window_ms": 1000.0,
+                "spectrogram_switch_time_ms": 1000.0,
+                "spectrogram_window_ms_by_condition": {
+                    "control": [0.0, 1000.0],
+                    "ketamine": [1000.0, 2000.0],
+                },
+                "spectrogram_generation": {
+                    "pipeline": SPECTROGRAM_PIPELINE,
+                    "control_file": SPECTROGRAM_FILE_CONTROL,
+                    "ketamine_file": SPECTROGRAM_FILE_KETAMINE,
+                },
+            }
+        )
+    )
+    (hidden_packet_dir / "03_psd_overlay.png").write_bytes(b"placeholder")
     for path in (
         helper_spec,
         psd_overlay,
@@ -194,12 +234,6 @@ with TemporaryDirectory() as tmp:
         assert ax.get_xlabel() == "Time (ms)"
     finally:
         plt.close(fig)
-    row_score_version = int(hfo.PAIR_SCORE_VERSION)
-    packet_overlay = {
-        "render_version": PSD_PACKET_RENDER_VERSION,
-        "target_hfo_hz": list(hfo.DEFAULT_SCORE_BANDS["target_hfo"]),
-        "high_gamma_hz": list(hfo.DEFAULT_SCORE_BANDS["high_gamma"]),
-    }
     (packet_dir / "manifest.json").write_text(
         json.dumps(
             {
@@ -234,6 +268,7 @@ with TemporaryDirectory() as tmp:
     discovered = find_candidate_packets(root)
     assert legacy_kde not in discovered["C00042"].images
     assert stale_population_rates not in discovered["C00042"].images
+    assert discovered["C00042"].packet_dir == packet_dir
 
     packet = PacketInfo(
         candidate_id="C00042",
@@ -672,7 +707,6 @@ with TemporaryDirectory() as tmp:
         payload = ensure_visual_dashboard_runtime(
             campaign,
             output_dir=output_dir,
-            generate_packets_top_n=0,
             status_json=campaign / "status.json",
             port=6006,
         )
@@ -683,3 +717,6 @@ with TemporaryDirectory() as tmp:
     assert payload["watchdog"]["pid"] == 4243
     assert payload["sidecars"]["watcher"]["alive"] is True
     assert payload["sidecars"]["server"]["alive"] is True
+    watchdog_command = spawn_mock.call_args_list[0].args[0]
+    watchdog_top_n_index = watchdog_command.index("--generate-packets-top-n")
+    assert watchdog_command[watchdog_top_n_index + 1] == str(hfo_vd.DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N)
