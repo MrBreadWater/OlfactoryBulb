@@ -1456,7 +1456,13 @@ def propose_elite_batch(
         explore_n = min(explore_n, max(0, int(round(0.25 * total_n))))
     targeted_n = 0
     targeted_mode = "none"
-    if len(valid) >= 448 and len(elite) >= 2 and total_n >= 8:
+    objective_filter = load_objective_filter(campaign_dir)
+    early_frontier_after_objective_pivot = bool(objective_filter.get("target_hfo_hz")) and len(valid) >= 192
+    if early_frontier_after_objective_pivot and len(elite) >= 2 and total_n >= 8:
+        explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
+        targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
+        targeted_mode = "frontier"
+    elif len(valid) >= 448 and len(elite) >= 2 and total_n >= 8:
         explore_n = min(explore_n, max(1, int(round(0.075 * total_n))))
         targeted_n = min(max(12, int(round(0.75 * total_n))), max(total_n - explore_n - 2, 0))
         targeted_mode = "frontier"
