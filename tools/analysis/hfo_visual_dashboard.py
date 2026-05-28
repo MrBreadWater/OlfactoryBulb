@@ -368,10 +368,18 @@ def _batch_index(row: dict[str, Any]) -> int:
         return -1
 
 
+def _archive_seq(row: dict[str, Any]) -> int:
+    try:
+        return int(row.get("_archive_seq"))
+    except (TypeError, ValueError):
+        return -1
+
+
 def _recent_rows(rows: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
     ranked = sorted(
         rows,
         key=lambda row: (
+            _archive_seq(row),
             _batch_index(row),
             float(row.get("pair_score", float("-inf"))),
             str(row.get("candidate_id") or ""),

@@ -1689,10 +1689,11 @@ def load_candidate_archive_rows(campaign_dir: str | Path) -> list[dict[str, Any]
         return []
     objective_filter = load_objective_filter(campaign_path)
     rows = []
-    for line in path.read_text().splitlines():
+    for archive_seq, line in enumerate(path.read_text().splitlines()):
         if not line.strip():
             continue
         row = rescore_candidate_row(json.loads(line))
+        row["_archive_seq"] = int(archive_seq)
         if _row_matches_objective_filter(row, objective_filter):
             rows.append(row)
     return rows

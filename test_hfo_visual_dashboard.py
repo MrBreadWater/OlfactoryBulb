@@ -56,6 +56,17 @@ recent_fixture_rows = [
 ]
 assert [row["candidate_id"] for row in _recent_rows(recent_fixture_rows, limit=3)] == ["C00008", "C00009", "C00004"]
 
+recent_archive_fixture_rows = [
+    {"batch_name": "batch_0199", "candidate_id": "C08000", "pair_score": 5.0, "_archive_seq": 100},
+    {"batch_name": "batch_0036", "candidate_id": "C01000", "pair_score": 1.0, "_archive_seq": 101},
+    {"batch_name": "batch_0088", "candidate_id": "C02000", "pair_score": 2.0, "_archive_seq": 102},
+]
+assert [row["candidate_id"] for row in _recent_rows(recent_archive_fixture_rows, limit=3)] == [
+    "C02000",
+    "C01000",
+    "C08000",
+]
+
 window_t = np.arange(0.0, 1000.0, 0.1, dtype=float)
 windowed = {
     "lfp_t": window_t,
