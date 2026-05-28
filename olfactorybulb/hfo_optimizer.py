@@ -97,6 +97,13 @@ def build_manual_allocation_remote_config(
 ) -> dict[str, Any]:
     """Build a remote config that reuses one explicit user-managed allocation."""
     template = dict(base_template or {})
+
+    def _timeout_or_default(key: str, default: float) -> float:
+        value = template.get(key, default)
+        if value in (None, ""):
+            return float(default)
+        return float(value)
+
     remote_host = str(template.get("remote_host") or "jmpaniag@localhost")
     remote_repo_root = str(template.get("remote_repo_root") or "/home/jmpaniag/OlfactoryBulb")
     remote_results_root = str(
@@ -120,9 +127,14 @@ def build_manual_allocation_remote_config(
         slurm_cpus_per_task=template.get("slurm_cpus_per_task"),
         slurm_mem=template.get("slurm_mem"),
         sweep_sync_live=False,
+        remote_ssh_command_timeout_s=_timeout_or_default("remote_ssh_command_timeout_s", 300.0),
+        remote_ssh_exec_timeout_s=_timeout_or_default("remote_ssh_exec_timeout_s", 30.0),
+        remote_ssh_upload_timeout_s=_timeout_or_default("remote_ssh_upload_timeout_s", 120.0),
+        remote_poll_command_timeout_s=_timeout_or_default("remote_poll_command_timeout_s", 60.0),
         sweep_sync_soma_vs=False,
         sweep_sync_voltage_summary=False,
         remote_preserve_paramiko_session=True,
+        remote_allow_paramiko_reauth=bool(template.get("remote_allow_paramiko_reauth", False)),
         remote_repo_mode=str(template.get("remote_repo_mode") or "shared"),
         remote_git_ref=template.get("remote_git_ref"),
         remote_git_fetch=bool(template.get("remote_git_fetch", False)),
@@ -519,6 +531,28 @@ def initialize_campaign(
 
 def load_campaign_state(campaign_dir: str | Path) -> dict[str, Any]:
     return _read_json(_state_path(Path(campaign_dir)), {})
+
+
+def resume_pending_batch_name(campaign_dir: str | Path) -> str | None:
+    """Return the newest unscored batch plan, preferring the state-expected index."""
+    campaign_dir = Path(campaign_dir)
+    batch_dir = campaign_dir / "batches"
+    pending: list[tuple[int, str]] = []
+    for plan_path in batch_dir.glob("batch_*_plan.json"):
+        batch_name = plan_path.name.replace("_plan.json", "")
+        if (batch_dir / f"{batch_name}_scored.json").exists():
+            continue
+        batch_index = _batch_index_from_name(batch_name)
+        pending.append(((-1 if batch_index is None else int(batch_index)), batch_name))
+    if not pending:
+        return None
+    state = load_campaign_state(campaign_dir)
+    expected_index = int(state.get("next_batch_index", 0) or 0) - 1
+    for batch_index, batch_name in pending:
+        if batch_index == expected_index:
+            return batch_name
+    pending.sort()
+    return pending[-1][1]
 
 
 def _write_campaign_state(campaign_dir: Path, state: dict[str, Any]) -> None:
@@ -2789,6 +2823,7 @@ __all__ = [
     "propose_elite_batch",
     "propose_lhs_batch",
     "psd_template_curve",
+    "resume_pending_batch_name",
     "rescore_candidate_row",
     "run_hfo_batch",
     "score_candidate_pair",

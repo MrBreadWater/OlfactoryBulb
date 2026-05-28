@@ -16,6 +16,7 @@ from olfactorybulb.hfo_optimizer import (
     PAIR_SCORE_VERSION,
     ParameterSpec,
     apply_hfo_remote_throughput_profile,
+    build_manual_allocation_remote_config,
     candidate_status_summary,
     default_switch_washout_ms,
     default_campaign_run_config,
@@ -27,6 +28,7 @@ from olfactorybulb.hfo_optimizer import (
     paramiko_auth_probe,
     propose_elite_batch,
     psd_template_curve,
+    resume_pending_batch_name,
     run_hfo_batch,
     score_candidate_pair,
     score_condition_result,
@@ -229,6 +231,34 @@ assert auth_probe["returncode"] == 0
 assert captured_auth_probe["command"] == "true"
 assert captured_auth_probe["config"]["remote_preserve_paramiko_session"] is True
 assert captured_auth_probe["config"]["remote_allow_paramiko_reauth"] is True
+
+manual_remote = build_manual_allocation_remote_config(
+    slurm_allocation_job_id="14537854",
+    base_template={
+        "remote_host": "jmpaniag@localhost",
+        "remote_repo_root": "/home/jmpaniag/OlfactoryBulb",
+        "remote_ssh_command_timeout_s": None,
+        "remote_ssh_exec_timeout_s": None,
+        "remote_ssh_upload_timeout_s": None,
+        "remote_poll_command_timeout_s": None,
+    },
+    total_tasks=120,
+)
+assert manual_remote["remote_ssh_command_timeout_s"] == 300.0
+assert manual_remote["remote_ssh_exec_timeout_s"] == 30.0
+assert manual_remote["remote_ssh_upload_timeout_s"] == 120.0
+assert manual_remote["remote_poll_command_timeout_s"] == 60.0
+
+with TemporaryDirectory() as tmpdir:
+    tmpdir = Path(tmpdir)
+    batch_dir = tmpdir / "batches"
+    batch_dir.mkdir()
+    (tmpdir / "state.json").write_text(json.dumps({"next_batch_index": 201, "next_candidate_index": 0, "completed_batches": []}))
+    for name in ("batch_0036", "batch_0088", "batch_0200"):
+        (batch_dir / f"{name}_plan.json").write_text(json.dumps({"batch_name": name}))
+    assert resume_pending_batch_name(tmpdir) == "batch_0200"
+    (batch_dir / "batch_0200_scored.json").write_text("{}")
+    assert resume_pending_batch_name(tmpdir) == "batch_0088"
 
 
 def synthetic_result(

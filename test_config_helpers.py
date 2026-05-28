@@ -165,6 +165,43 @@ with tempfile.TemporaryDirectory() as tmp:
     assert custom_epli_overrides["record_from_somas"] == ["MC", "PVI"]
     print("EPLI controls: OK")
 
+    # --- Cached Paramiko auth should enable silent reconnects without notebook prompts ---
+    prompt_cfg = hlp.build_run_config(remote_host="jmpaniag@localhost", remote_preserve_paramiko_session=True)
+    prompt_key = hlp._paramiko_connection_key(prompt_cfg)
+    saved_prompt_cache = deepcopy(hlp._LIVE_PARAMIKO_PROMPT_CACHE)
+    saved_authenticated = set(hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS)
+    original_getpass = hlp.getpass
+    try:
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(prompt_key)
+        assert hlp._paramiko_can_reconnect(prompt_cfg) is False
+        hlp._cache_paramiko_prompt_response(prompt_cfg, "Password for jmpaniag@localhost:", "cached-secret")
+        assert hlp._paramiko_can_reconnect(prompt_cfg) is True
+        assert (
+            hlp._paramiko_prompt_response("Password for jmpaniag@localhost:", config=prompt_cfg)
+            == "cached-secret"
+        )
+
+        def _raise_eof(_prompt: str) -> str:
+            raise EOFError
+
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
+        hlp.getpass = _raise_eof
+        try:
+            hlp._paramiko_prompt_response("Password for jmpaniag@localhost:", config=prompt_cfg)
+            raise AssertionError("expected notebook auth prompt to raise RuntimeError on EOF")
+        except RuntimeError as exc:
+            assert "could not read notebook input" in str(exc)
+            assert "paramiko_auth_probe(REMOTE_CONFIG)" in str(exc)
+    finally:
+        hlp.getpass = original_getpass
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.update(saved_prompt_cache)
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.update(saved_authenticated)
+    print("Paramiko cached auth / EOF guard: OK")
+
     # --- Compressed soma trace artifacts should default to float32 NPZ and round-trip cleanly ---
     assert cfg["soma_trace_format"] == DEFAULT_SOMA_TRACE_FORMAT
     assert cfg["soma_trace_dtype"] == DEFAULT_SOMA_TRACE_DTYPE

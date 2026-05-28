@@ -662,6 +662,7 @@ if not hasattr(builtins, "_OBGPU_NOTEBOOK_RUNTIME"):
 _NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
 _NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
 _NOTEBOOK_RUNTIME.setdefault("paramiko_authenticated_keys", set())
+_NOTEBOOK_RUNTIME.setdefault("paramiko_prompt_cache", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_git_refs", {})
 _NOTEBOOK_RUNTIME.setdefault("remote_helper_caches", {})
@@ -670,6 +671,7 @@ _NOTEBOOK_RUNTIME.setdefault("remote_stale_cleanup", {})
 _NOTEBOOK_RUNTIME.setdefault("slurm_allocation_atexit_registered", False)
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 _LIVE_PARAMIKO_AUTHENTICATED_KEYS: set[str] = _NOTEBOOK_RUNTIME["paramiko_authenticated_keys"]
+_LIVE_PARAMIKO_PROMPT_CACHE: dict[str, dict[str, str]] = _NOTEBOOK_RUNTIME["paramiko_prompt_cache"]
 _LIVE_SLURM_ALLOCATIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["slurm_allocations"]
 _LIVE_REMOTE_GIT_REFS: dict[str, set[str]] = _NOTEBOOK_RUNTIME["remote_git_refs"]
 _LIVE_REMOTE_HELPER_CACHES: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_helper_caches"]
@@ -883,12 +885,17 @@ def build_slurm_remote_config(
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
+    remote_ssh_command_timeout_s: float | None = 300,
+    remote_ssh_exec_timeout_s: float | None = 30,
+    remote_ssh_upload_timeout_s: float | None = 120,
+    remote_poll_command_timeout_s: float | None = 60,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = False,
     sweep_live_sync_max_items_per_poll: int = 8,
     sweep_sync_soma_vs: bool = False,
     sweep_sync_voltage_summary: bool = False,
     remote_preserve_paramiko_session: bool = True,
+    remote_allow_paramiko_reauth: bool = False,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -931,6 +938,18 @@ def build_slurm_remote_config(
         "remote_live_status": bool(remote_live_status),
         "remote_live_logs": bool(remote_live_logs),
         "remote_heartbeat_timeout_s": int(remote_heartbeat_timeout_s),
+        "remote_ssh_command_timeout_s": (
+            None if remote_ssh_command_timeout_s in (None, "") else float(remote_ssh_command_timeout_s)
+        ),
+        "remote_ssh_exec_timeout_s": (
+            None if remote_ssh_exec_timeout_s in (None, "") else float(remote_ssh_exec_timeout_s)
+        ),
+        "remote_ssh_upload_timeout_s": (
+            None if remote_ssh_upload_timeout_s in (None, "") else float(remote_ssh_upload_timeout_s)
+        ),
+        "remote_poll_command_timeout_s": (
+            None if remote_poll_command_timeout_s in (None, "") else float(remote_poll_command_timeout_s)
+        ),
         "remote_cleanup_stale_allocations": bool(remote_cleanup_stale_allocations),
         "remote_sync_compress": True,
         "remote_defer_soma_vs_sync": bool(remote_defer_soma_vs_sync),
@@ -938,6 +957,7 @@ def build_slurm_remote_config(
         "sweep_sync_soma_vs": bool(sweep_sync_soma_vs),
         "sweep_sync_voltage_summary": bool(sweep_sync_voltage_summary),
         "remote_preserve_paramiko_session": bool(remote_preserve_paramiko_session),
+        "remote_allow_paramiko_reauth": bool(remote_allow_paramiko_reauth),
         "disable_status_report": False,
         "remote_repo_mode": str(remote_repo_mode),
         "remote_git_ref": remote_git_ref,
@@ -991,12 +1011,17 @@ def build_sol_remote_config(
     remote_live_status: bool = True,
     remote_live_logs: bool = True,
     remote_heartbeat_timeout_s: int = 120,
+    remote_ssh_command_timeout_s: float | None = 300,
+    remote_ssh_exec_timeout_s: float | None = 30,
+    remote_ssh_upload_timeout_s: float | None = 120,
+    remote_poll_command_timeout_s: float | None = 60,
     remote_cleanup_stale_allocations: bool = True,
     remote_defer_soma_vs_sync: bool = False,
     sweep_live_sync_max_items_per_poll: int = 8,
     sweep_sync_soma_vs: bool = False,
     sweep_sync_voltage_summary: bool = False,
     remote_preserve_paramiko_session: bool = True,
+    remote_allow_paramiko_reauth: bool = False,
     remote_repo_mode: str = "shared",
     remote_git_ref: str | None = None,
     remote_git_fetch: bool = False,
@@ -1036,12 +1061,17 @@ def build_sol_remote_config(
         remote_live_status=remote_live_status,
         remote_live_logs=remote_live_logs,
         remote_heartbeat_timeout_s=remote_heartbeat_timeout_s,
+        remote_ssh_command_timeout_s=remote_ssh_command_timeout_s,
+        remote_ssh_exec_timeout_s=remote_ssh_exec_timeout_s,
+        remote_ssh_upload_timeout_s=remote_ssh_upload_timeout_s,
+        remote_poll_command_timeout_s=remote_poll_command_timeout_s,
         remote_cleanup_stale_allocations=remote_cleanup_stale_allocations,
         remote_defer_soma_vs_sync=remote_defer_soma_vs_sync,
         sweep_live_sync_max_items_per_poll=sweep_live_sync_max_items_per_poll,
         sweep_sync_soma_vs=sweep_sync_soma_vs,
         sweep_sync_voltage_summary=sweep_sync_voltage_summary,
         remote_preserve_paramiko_session=remote_preserve_paramiko_session,
+        remote_allow_paramiko_reauth=remote_allow_paramiko_reauth,
         remote_repo_mode=remote_repo_mode,
         remote_git_ref=remote_git_ref,
         remote_git_fetch=remote_git_fetch,
@@ -2062,6 +2092,46 @@ def _paramiko_transport_is_usable(transport: Any) -> bool:
         return False
 
 
+def _paramiko_prompt_key(prompt_text: str) -> str:
+    """Normalize one interactive-auth prompt into a stable cache key."""
+    return " ".join(str(prompt_text or "").strip().split())
+
+
+def _paramiko_cached_prompt_responses(config: dict[str, Any]) -> dict[str, str]:
+    """Return the cached auth-prompt responses for one endpoint."""
+    cache_key = _paramiko_connection_key(config)
+    cached = _LIVE_PARAMIKO_PROMPT_CACHE.get(cache_key)
+    if cached is None:
+        cached = {}
+        _LIVE_PARAMIKO_PROMPT_CACHE[cache_key] = cached
+    return cached
+
+
+def _get_cached_paramiko_prompt_response(config: dict[str, Any], prompt_text: str) -> str | None:
+    """Return one remembered auth response for this endpoint, if available."""
+    return _paramiko_cached_prompt_responses(config).get(_paramiko_prompt_key(prompt_text))
+
+
+def _cache_paramiko_prompt_response(config: dict[str, Any], prompt_text: str, response: str) -> None:
+    """Remember one auth response for later noninteractive reconnects."""
+    _paramiko_cached_prompt_responses(config)[_paramiko_prompt_key(prompt_text)] = str(response)
+
+
+def _paramiko_has_cached_auth(config: dict[str, Any]) -> bool:
+    """Return whether one endpoint has cached auth responses for silent reconnect."""
+    return bool(_LIVE_PARAMIKO_PROMPT_CACHE.get(_paramiko_connection_key(config)))
+
+
+def _paramiko_can_reconnect(config: dict[str, Any]) -> bool:
+    """Return whether one dead transport may be recovered automatically."""
+    cache_key = _paramiko_connection_key(config)
+    preserve_session = bool(config.get("remote_preserve_paramiko_session", True))
+    allow_reauth = bool(config.get("remote_allow_paramiko_reauth", False))
+    if not preserve_session or cache_key not in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+        return True
+    return allow_reauth or _paramiko_has_cached_auth(config)
+
+
 def _paramiko_midrun_reauth_error(config: dict[str, Any]) -> str:
     """Explain why a fresh Paramiko login is being refused mid-run."""
     return (
@@ -2190,13 +2260,31 @@ def _slurm_allocation_cache_key(config: dict[str, Any]) -> str:
     return sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _paramiko_prompt_response(prompt_text: str) -> str:
+def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
     """Prompt the notebook user for one interactive SSH auth field."""
     prompt = prompt_text.strip() or "SSH authentication:"
+    if config is not None:
+        cached = _get_cached_paramiko_prompt_response(config, prompt)
+        if cached is not None:
+            return cached
     lowered = prompt.lower()
-    if "password" in lowered or "passphrase" in lowered:
-        return getpass(prompt + " ")
-    return input(prompt + " ")
+    try:
+        if "password" in lowered or "passphrase" in lowered:
+            response = getpass(prompt + " ")
+        else:
+            response = input(prompt + " ")
+    except EOFError as exc:
+        endpoint = _paramiko_connection_key(config) if isinstance(config, dict) else "<unknown>"
+        raise RuntimeError(
+            "Paramiko authentication could not read notebook input.\n"
+            f"Endpoint: {endpoint}\n"
+            "This usually means the live notebook kernel cannot service an interactive getpass/input prompt. "
+            "Run `paramiko_auth_probe(REMOTE_CONFIG)` in the active kernel to refresh auth, "
+            "or rely on cached auth responses for unattended reconnects."
+        ) from exc
+    if config is not None:
+        _cache_paramiko_prompt_response(config, prompt, response)
+    return response
 
 
 def _drop_paramiko_connection(config: dict[str, Any]) -> None:
@@ -2258,16 +2346,15 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
 
     cache_key = _paramiko_connection_key(config)
     preserve_session = bool(config.get("remote_preserve_paramiko_session", True))
-    allow_reauth = bool(config.get("remote_allow_paramiko_reauth", False))
     cached = _LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
     if cached is not None:
         transport = cached.get("transport")
         if _paramiko_transport_is_usable(transport):
             return cached
         _LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
-        if preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not allow_reauth:
+        if preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not _paramiko_can_reconnect(config):
             raise RuntimeError(_paramiko_midrun_reauth_error(config))
-    elif preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not allow_reauth:
+    elif preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not _paramiko_can_reconnect(config):
         raise RuntimeError(_paramiko_midrun_reauth_error(config))
 
     hostname, port, username = _remote_endpoint(config)
@@ -2304,7 +2391,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                 if instructions:
                     print(instructions)
                 for prompt_text, _echo in prompt_list:
-                    responses.append(_paramiko_prompt_response(prompt_text))
+                    responses.append(_paramiko_prompt_response(prompt_text, config=config))
                 return responses
 
             try:
@@ -2318,7 +2405,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                 _progress_write(f"[Sol remote] Waiting for password authentication...")
                 transport.auth_password(
                     username,
-                    _paramiko_prompt_response(f"Password for {username}@{hostname}:"),
+                    _paramiko_prompt_response(f"Password for {username}@{hostname}:", config=config),
                 )
                 authenticated = transport.is_authenticated()
             except _PARAMIKO_PARTIAL_AUTH_EXC as exc:
@@ -2334,7 +2421,7 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
                 if instructions:
                     print(instructions)
                 for prompt_text, _echo in prompt_list:
-                    responses.append(_paramiko_prompt_response(prompt_text))
+                    responses.append(_paramiko_prompt_response(prompt_text, config=config))
                 return responses
 
             transport.auth_interactive(username, handler)
@@ -2456,7 +2543,11 @@ def _run_paramiko_shell(
             last_exc = exc
             _close_paramiko_sftp(config)
             if not _paramiko_transport_is_usable(transport):
-                if bool(config.get("remote_preserve_paramiko_session", True)) and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
+                if (
+                    bool(config.get("remote_preserve_paramiko_session", True))
+                    and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS
+                    and not _paramiko_can_reconnect(config)
+                ):
                     raise RuntimeError(
                         _paramiko_midrun_reauth_error(config) + f"\nOriginal error: {exc}"
                     ) from exc
