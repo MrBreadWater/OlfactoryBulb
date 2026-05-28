@@ -1810,6 +1810,24 @@ def run_hfo_batch(
     ketamine_switch_washout_ms: float = 500.0,
 ) -> dict[str, Any]:
     campaign_dir = Path(campaign_dir)
+    configured_condition_mode = base_config.get(
+        "hfo_condition_mode",
+        base_config.get("optimizer_condition_mode"),
+    )
+    if condition_mode == "separate" and configured_condition_mode is not None:
+        condition_mode = str(configured_condition_mode)
+    configured_switch_time_ms = base_config.get(
+        "hfo_ketamine_switch_time_ms",
+        base_config.get("ketamine_switch_time_ms"),
+    )
+    configured_switch_washout_ms = base_config.get(
+        "hfo_ketamine_switch_washout_ms",
+        base_config.get("ketamine_switch_washout_ms"),
+    )
+    if ketamine_switch_time_ms is None and configured_switch_time_ms is not None:
+        ketamine_switch_time_ms = float(configured_switch_time_ms)
+    if configured_switch_washout_ms is not None:
+        ketamine_switch_washout_ms = float(configured_switch_washout_ms)
     condition_mode = str(condition_mode)
     if condition_mode == "separate":
         sweep_path = _joint_sweep_paths_for_batch(batch_plan, ketamine_block_values=ketamine_block_values)

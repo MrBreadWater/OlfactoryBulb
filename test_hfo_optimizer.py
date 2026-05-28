@@ -10,6 +10,7 @@ from tempfile import TemporaryDirectory
 import numpy as np
 
 import obgpu_experiment_helpers as hlp
+import olfactorybulb.hfo_optimizer as hfo_module
 from olfactorybulb.hfo_optimizer import (
     DEFAULT_CAMPAIGNS_BASE,
     PAIR_SCORE_VERSION,
@@ -20,6 +21,7 @@ from olfactorybulb.hfo_optimizer import (
     lfp_source_diagnostic_configs,
     parameter_plausibility_penalty,
     propose_elite_batch,
+    run_hfo_batch,
     score_candidate_pair,
     score_condition_result,
     score_hfo_batch,
@@ -192,6 +194,34 @@ with TemporaryDirectory() as tmpdir:
         switch_candidate["control_metrics"]["relative_band_power"]["target_hfo"]
     )
     assert math.isfinite(switch_candidate["pair_score"])
+
+with TemporaryDirectory() as tmpdir:
+    captured_sweep: dict[str, object] = {}
+    original_run_parameter_sweep = hfo_module.hlp.run_parameter_sweep
+
+    def fake_run_parameter_sweep(config, sweep_path):
+        captured_sweep["config"] = dict(config)
+        captured_sweep["sweep_path"] = {key: list(value) for key, value in sweep_path.items()}
+        return {"sweep_dir": tmpdir, "items": []}
+
+    try:
+        hfo_module.hlp.run_parameter_sweep = fake_run_parameter_sweep
+        run_hfo_batch(
+            tmpdir,
+            base_config={
+                "tstop_ms": 4000.0,
+                "hfo_condition_mode": "switch",
+                "hfo_ketamine_switch_time_ms": 1500.0,
+                "hfo_ketamine_switch_washout_ms": 250.0,
+            },
+            batch_plan=switch_batch_plan,
+            ketamine_block_values={"control": 1.0, "ketamine": 0.0},
+        )
+    finally:
+        hfo_module.hlp.run_parameter_sweep = original_run_parameter_sweep
+    assert captured_sweep["sweep_path"]["optimizer_condition"] == ["switch"]
+    assert captured_sweep["sweep_path"]["ketamine_switch_time_ms"] == [1500.0]
+    assert captured_sweep["sweep_path"]["ketamine_switch_washout_ms"] == [250.0]
 
 target_metrics = score_condition_result(target)
 upper_target_metrics = score_condition_result(upper_target, target_hz=180.0, target_half_width_hz=20.0)
