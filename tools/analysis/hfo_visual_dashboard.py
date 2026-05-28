@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import html
+import importlib
 import json
 import math
 import os
@@ -34,6 +35,8 @@ if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
 import olfactorybulb.hfo_optimizer as hfo
+import generate_hfo_candidate_packet as packet_generator_module
+import regenerate_hfo_packet_psd as psd_packet_module
 from generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
 from regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
 
@@ -59,6 +62,7 @@ PRIMARY_PSD_NAME_ORDER = (
     "01_lfp_psd_control.png",
     "01_psd_control.png",
 )
+_STYLE_SOURCE_SIGNATURE: tuple[int, int] = (0, 0)
 
 
 @dataclass(frozen=True)
@@ -173,6 +177,42 @@ def _load_ranked_rows(campaign_dir: Path) -> list[dict[str, Any]]:
 def _packet_mtime(paths: list[Path]) -> float:
     mtimes = [path.stat().st_mtime for path in paths if path.exists()]
     return max(mtimes) if mtimes else 0.0
+
+
+def _path_mtime_ns(path: Path) -> int:
+    try:
+        return int(path.stat().st_mtime_ns)
+    except OSError:
+        return 0
+
+
+def _style_source_signature() -> tuple[int, int]:
+    return tuple(
+        _path_mtime_ns(path)
+        for path in (
+            SCRIPT_DIR / "generate_hfo_candidate_packet.py",
+            SCRIPT_DIR / "regenerate_hfo_packet_psd.py",
+        )
+    )  # type: ignore[return-value]
+
+
+def _reload_visual_packet_modules_if_needed(
+    source_signature: tuple[int, int] | None = None,
+    *,
+    force: bool = False,
+) -> bool:
+    """Reload packet-generation modules when their source changes on disk."""
+    global VISUAL_STYLE_VERSION, PSD_PACKET_RENDER_VERSION, packet_generator_module, psd_packet_module, _STYLE_SOURCE_SIGNATURE
+    signature = source_signature or _style_source_signature()
+    if not force and signature == _STYLE_SOURCE_SIGNATURE:
+        return False
+    importlib.invalidate_caches()
+    psd_packet_module = importlib.reload(psd_packet_module)
+    packet_generator_module = importlib.reload(packet_generator_module)
+    VISUAL_STYLE_VERSION = int(packet_generator_module.VISUAL_STYLE_VERSION)
+    PSD_PACKET_RENDER_VERSION = int(psd_packet_module.PSD_PACKET_RENDER_VERSION)
+    _STYLE_SOURCE_SIGNATURE = signature
+    return True
 
 
 def find_candidate_packets(
@@ -1160,6 +1200,7 @@ def export_visual_dashboard(
     status_json: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write ``index.html`` for one campaign and return a small manifest."""
+    _reload_visual_packet_modules_if_needed()
     campaign_path = Path(campaign_dir).expanduser().resolve()
     output_path = (
         Path(output_dir).expanduser().resolve()
@@ -1239,13 +1280,13 @@ def watch_visual_dashboard(
     campaign_path = Path(campaign_dir).expanduser().resolve()
     archive = campaign_path / "candidate_archive.jsonl"
     figures = campaign_path / "figures"
-    last_signature: tuple[int, int, int] | None = None
+    last_signature: tuple[int, ...] | None = None
     while True:
         archive_sig = int(archive.stat().st_mtime_ns if archive.exists() else 0) ^ int(archive.stat().st_size if archive.exists() else 0)
         figures_sig = int(figures.stat().st_mtime_ns if figures.exists() else 0)
         status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
         status_sig = int(status_path.stat().st_mtime_ns if status_path.exists() else 0)
-        signature = (archive_sig, figures_sig, status_sig)
+        signature = (archive_sig, figures_sig, status_sig, *_style_source_signature())
         if signature != last_signature:
             manifest = export_visual_dashboard(
                 campaign_path,

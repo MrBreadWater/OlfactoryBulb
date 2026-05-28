@@ -5,11 +5,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import types
+from unittest.mock import patch
 
 import matplotlib.pyplot as plt
 import numpy as np
 import obgpu_experiment_helpers as hlp
 import olfactorybulb.hfo_optimizer as hfo
+import tools.analysis.hfo_visual_dashboard as hfo_vd
 from tools.analysis.generate_hfo_candidate_packet import (
     VISUAL_STYLE_VERSION,
     SPECTROGRAM_FILE_CONTROL,
@@ -47,6 +50,22 @@ nperseg, noverlap = _spectrogram_window_geometry(windowed)
 assert nperseg >= 128
 assert noverlap >= int(0.85 * nperseg)
 assert 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap)) >= 100
+
+fake_psd_module = types.SimpleNamespace(PSD_PACKET_RENDER_VERSION=123)
+fake_packet_module = types.SimpleNamespace(VISUAL_STYLE_VERSION=456)
+with (
+    patch.object(hfo_vd, "VISUAL_STYLE_VERSION", 4),
+    patch.object(hfo_vd, "PSD_PACKET_RENDER_VERSION", 5),
+    patch.object(hfo_vd, "_STYLE_SOURCE_SIGNATURE", (1, 2)),
+    patch.object(hfo_vd, "packet_generator_module", object()),
+    patch.object(hfo_vd, "psd_packet_module", object()),
+    patch.object(hfo_vd.importlib, "reload", side_effect=[fake_psd_module, fake_packet_module]) as reload_mock,
+):
+    changed = hfo_vd._reload_visual_packet_modules_if_needed(source_signature=(3, 4))
+    assert changed is True
+    assert hfo_vd.VISUAL_STYLE_VERSION == 456
+    assert hfo_vd.PSD_PACKET_RENDER_VERSION == 123
+    assert reload_mock.call_count == 2
 
 
 with TemporaryDirectory() as tmp:
