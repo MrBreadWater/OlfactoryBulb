@@ -65,16 +65,27 @@ def relocate_repo_paths(command: list[str], *, shared_repo_root: str, repo_root:
     return relocated
 
 
-def add_srun_exclusive(command: list[str]) -> list[str]:
-    """Inject ``--exclusive`` into srun commands when not already present."""
+def add_srun_parallel_step_flags(command: list[str]) -> list[str]:
+    """Inject step flags needed for concurrent ``srun`` children.
+
+    ``--exclusive`` keeps sibling sweep items from overlapping on the same
+    ranks. ``--exact`` prevents one step from reserving more of the parent
+    allocation than the requested ``-n`` count, which would otherwise starve
+    parallel sweep occupancy.
+    """
     if not command:
         return list(command)
     base = os.path.basename(command[0])
     if base != "srun":
         return list(command)
-    if any(part == "--exclusive" or part.startswith("--exclusive=") for part in command[1:]):
+    flags: list[str] = []
+    if not any(part == "--exclusive" or part.startswith("--exclusive=") for part in command[1:]):
+        flags.append("--exclusive")
+    if not any(part == "--exact" or part.startswith("--exact=") for part in command[1:]):
+        flags.append("--exact")
+    if not flags:
         return list(command)
-    return [command[0], "--exclusive", *command[1:]]
+    return [command[0], *flags, *command[1:]]
 
 
 def inject_neuron_dll_args(command: list[str], dll_path: Path | None) -> list[str]:
@@ -305,7 +316,7 @@ def main() -> None:
             repo_root=str(repo_root),
         )
         if max_concurrent > 1:
-            command = add_srun_exclusive(command)
+            command = add_srun_parallel_step_flags(command)
         command = inject_neuron_dll_args(command, dll_path)
         return command
 

@@ -488,6 +488,24 @@ with tempfile.TemporaryDirectory() as tmp:
     remote_sweep_driver = importlib.util.module_from_spec(sweep_driver_spec)
     sweep_driver_spec.loader.exec_module(remote_sweep_driver)
 
+    assert remote_sweep_driver.add_srun_parallel_step_flags(
+        ["srun", "--mpi=pmix_v4", "--cpu-bind=none", "-n", "15", "nrniv", "-mpi"]
+    ) == [
+        "srun",
+        "--exclusive",
+        "--exact",
+        "--mpi=pmix_v4",
+        "--cpu-bind=none",
+        "-n",
+        "15",
+        "nrniv",
+        "-mpi",
+    ]
+    assert remote_sweep_driver.add_srun_parallel_step_flags(
+        ["srun", "--exclusive", "--exact", "-n", "15", "nrniv"]
+    ) == ["srun", "--exclusive", "--exact", "-n", "15", "nrniv"]
+    print("Remote sweep parallel srun flags: OK")
+
     requested_dir = tmp / "remote-sweep-requested"
     requested_dir.mkdir(parents=True, exist_ok=True)
     payload_dir = tmp / "remote-sweep-requested_20260525_120000"
@@ -736,6 +754,14 @@ with tempfile.TemporaryDirectory() as tmp:
     assert remote_builder_live_cfg["sweep_sync_live"] is True
     assert remote_builder_live_cfg["sweep_sync_voltage_summary"] is True
     assert remote_builder_live_cfg["sweep_live_sync_max_items_per_poll"] == 2
+    assert hlp._should_sync_remote_sweep_finished_items({}, pending_count=4, running_count=4) is False
+    assert hlp._should_sync_remote_sweep_finished_items({}, pending_count=0, running_count=2) is True
+    assert hlp._should_sync_remote_sweep_finished_items({}, pending_count=0, running_count=0) is False
+    assert hlp._should_sync_remote_sweep_finished_items(
+        {"sweep_sync_live": True},
+        pending_count=4,
+        running_count=4,
+    ) is True
     print("Remote sweep builder defaults favor robust final sync: OK")
 
     if hlp.paramiko is not None:

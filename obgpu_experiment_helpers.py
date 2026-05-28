@@ -1867,6 +1867,20 @@ def _should_sync_sweep_voltage_summary(config: dict[str, Any] | None = None) -> 
     )
 
 
+def _should_sync_remote_sweep_finished_items(
+    config: dict[str, Any] | None = None,
+    *,
+    pending_count: int,
+    running_count: int,
+) -> bool:
+    """Return whether compact finished-item sync should run during sweep polling."""
+    if bool((config or {}).get("sweep_sync_live", False)):
+        return True
+    # Once the final wave is in flight, overlap compact item transfer with the
+    # remaining remote work so the next batch pays less end-of-sweep latency.
+    return int(pending_count) <= 0 and int(running_count) > 0
+
+
 def _remote_sweep_item_sync_files(config: dict[str, Any] | None = None) -> tuple[str, ...]:
     """Return compact per-item artifacts synced by remote sweeps by default."""
     files = [
@@ -6723,9 +6737,15 @@ def _run_remote_sweep(
         ) from last_exc
 
     def sync_finished_items(status: dict[str, Any]) -> None:
-        if not bool(effective_config.get("sweep_sync_live", True)):
-            return
         progress_payload = status.get("progress_payload") or {}
+        pending_labels = progress_payload.get("pending_labels") or []
+        running_items = progress_payload.get("running_items") or []
+        if not _should_sync_remote_sweep_finished_items(
+            effective_config,
+            pending_count=len(pending_labels),
+            running_count=len(running_items),
+        ):
+            return
         finished_items = progress_payload.get("finished_items") or []
         synced_this_poll = 0
         for finished in finished_items:
