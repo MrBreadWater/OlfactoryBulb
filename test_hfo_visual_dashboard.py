@@ -268,6 +268,12 @@ with TemporaryDirectory() as tmp:
     assert html.index("Live PSD overlay with scoring template") < html.index("Contact sheet")
     assert _packet_needs_refresh(packet, row) is False
 
+    missing_html = _render_packet_card(row, None, output_dir=root, rank=1, dom_prefix="recent")
+    assert "No PSD packet has been generated for this candidate yet." in missing_html
+    assert "data-generate-packet" in missing_html
+    assert "data-candidate-id='C00042'" in missing_html
+    assert "Generate packet" in missing_html
+
     stale_packet_version = PacketInfo(
         candidate_id="C00042",
         packet_dir=packet_dir,
@@ -377,6 +383,7 @@ with TemporaryDirectory() as tmp:
     assert "Most Recent Candidates" in dashboard_html
     assert "Recent Visual Packets" in dashboard_html
     assert "Best Visual Packets" in dashboard_html
+    assert f'fetch("{hfo_vd.GENERATE_PACKET_ENDPOINT}"' in dashboard_html
     assert "setActiveTab(" in dashboard_html
 
     dashboard = campaign / "visual_dashboard"
@@ -387,6 +394,50 @@ with TemporaryDirectory() as tmp:
     entrypoint_html = entrypoint.read_text()
     assert 'src="/visual_dashboard/"' in entrypoint_html
     assert "Directory listing" not in entrypoint_html
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    packet_dir = campaign / "figures" / "packet_C00042"
+    with (
+        patch.object(hfo_vd.packet_generator_module, "generate_packet", return_value=packet_dir) as generate_mock,
+        patch.object(
+            hfo_vd,
+            "export_visual_dashboard",
+            return_value={
+                "campaign_dir": str(campaign),
+                "output_dir": str(campaign / "visual_dashboard"),
+                "index_html": str(campaign / "visual_dashboard" / "index.html"),
+                "entrypoint_html": str(campaign / "index.html"),
+                "entrypoint_url_path": "/visual_dashboard/",
+                "generated_at": "2026-05-28T12:00:00",
+                "candidate_rows": 1,
+                "packet_count": 1,
+                "generated_packets": [str(packet_dir)],
+                "generate_packet_workers": 1,
+                "cleanup_stale_packets_before_render": True,
+                "top_candidate_id": "C00042",
+                "top_score": 1.0,
+            },
+        ) as export_mock,
+    ):
+        payload = hfo_vd._generate_dashboard_packet(
+            campaign,
+            "C00042",
+            output_dir=campaign / "visual_dashboard",
+            top_n=1,
+            refresh_s=60.0,
+            generate_packets_top_n=1,
+            generate_packet_workers=1,
+            cleanup_stale_packets_before_render=True,
+            status_json=None,
+            reload_modules=False,
+        )
+
+    assert payload["ok"] is True
+    assert payload["candidate_id"] == "C00042"
+    assert payload["packet_dir"] == str(packet_dir)
+    generate_mock.assert_called_once()
+    export_mock.assert_called_once()
 
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)

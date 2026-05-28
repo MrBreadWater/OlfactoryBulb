@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import http.server
 import html
 import importlib
 import json
@@ -18,14 +19,14 @@ import math
 import os
 import re
 import shutil
-import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -47,6 +48,7 @@ DEFAULT_TOP_N = 20
 DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
 DEFAULT_CLEANUP_STALE_PACKETS = True
+GENERATE_PACKET_ENDPOINT = "/__hfo_generate_packet__"
 EXPECTED_SPECTROGRAM_FILES = {
     "control": "04_spectrogram_control.png",
     "ketamine": "05_spectrogram_ketamine.png",
@@ -481,6 +483,40 @@ def _generate_missing_packets(
     return generated
 
 
+def _generate_dashboard_packet(
+    campaign_dir: Path,
+    candidate_id: str,
+    *,
+    output_dir: str | Path | None,
+    top_n: int,
+    refresh_s: float | None,
+    generate_packets_top_n: int,
+    generate_packet_workers: int,
+    cleanup_stale_packets_before_render: bool,
+    status_json: str | Path | None,
+    reload_modules: bool = True,
+) -> dict[str, Any]:
+    if reload_modules:
+        _reload_visual_packet_modules_if_needed()
+    packet_dir = Path(packet_generator_module.generate_packet(campaign_dir, candidate_id))
+    manifest = export_visual_dashboard(
+        campaign_dir,
+        output_dir=output_dir,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
+    )
+    return {
+        "ok": True,
+        "candidate_id": candidate_id,
+        "packet_dir": str(packet_dir),
+        "manifest": manifest,
+    }
+
+
 def _metric_summary(row: dict[str, Any]) -> dict[str, Any]:
     control = _condition_metrics(row, "control")
     ketamine = _condition_metrics(row, "ketamine")
@@ -824,7 +860,17 @@ def _render_packet_card(
         else f"{dom_prefix}-candidate-rank-{rank}"
     )
     packet_meta = ""
-    primary_psd_html = "<div class='missing'>No PSD packet has been generated for this candidate yet.</div>"
+    primary_psd_html = (
+        "<div class='missing'>"
+        "<div>No PSD packet has been generated for this candidate yet.</div>"
+        + (
+            f"<button type='button' class='generate-packet-button' data-generate-packet "
+            f"data-candidate-id='{_esc(candidate_id)}'>Generate packet</button>"
+            if candidate_id
+            else ""
+        )
+        + "</div>"
+    )
     secondary_psd_html = ""
     comparison_html = ""
     other_gallery_html = ""
@@ -1190,11 +1236,33 @@ def _render_html(
       font-size: 12px;
     }}
     .missing {{
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
       padding: 18px;
       border: 1px dashed #cbd5e1;
       border-radius: 8px;
       color: var(--muted);
       background: #fbfcfe;
+    }}
+    .generate-packet-button {{
+      appearance: none;
+      border: 1px solid #c7d2fe;
+      border-radius: 8px;
+      padding: 8px 12px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }}
+    .generate-packet-button:hover {{
+      background: #dbeafe;
+    }}
+    .generate-packet-button:disabled {{
+      opacity: 0.65;
+      cursor: progress;
     }}
     .generated {{ color: var(--green); }}
     .refresh-indicator {{
@@ -1270,9 +1338,6 @@ def _render_html(
   <script>
     (() => {{
       const refreshSeconds = Number(document.body.dataset.refreshS || 0);
-      if (!Number.isFinite(refreshSeconds) || refreshSeconds <= 0) {{
-        return;
-      }}
       const indicator = document.getElementById("refresh-indicator");
       let refreshing = false;
 
@@ -1308,6 +1373,38 @@ def _render_html(
         setActiveTab(button.dataset.tabTarget || "tab-best");
       }});
 
+      document.addEventListener("click", async (event) => {{
+        const button = event.target.closest("[data-generate-packet]");
+        if (!button) return;
+        event.preventDefault();
+        if (button.disabled) return;
+        const candidateId = String(button.dataset.candidateId || "").trim();
+        if (!candidateId) return;
+        const originalText = button.textContent || "Generate packet";
+        button.disabled = true;
+        button.textContent = "Generating...";
+        showIndicator(`Generating packet for ${{candidateId}}...`);
+        try {{
+          const response = await fetch("{GENERATE_PACKET_ENDPOINT}", {{
+            method: "POST",
+            headers: {{ "Content-Type": "application/json" }},
+            body: JSON.stringify({{ candidate_id: candidateId }}),
+            cache: "no-store",
+          }});
+          const payload = await response.json().catch(() => ({{}}));
+          if (!response.ok || !payload.ok) {{
+            throw new Error(String(payload.error || `Packet generation failed with status ${{response.status}}`));
+          }}
+          showIndicator(`Generated packet for ${{candidateId}}. Reloading dashboard...`);
+          window.setTimeout(() => window.location.reload(), 350);
+        }} catch (exc) {{
+          console.warn("Packet generation failed", exc);
+          showIndicator(`Packet generation failed for ${{candidateId}}.`);
+          button.disabled = false;
+          button.textContent = originalText;
+        }}
+      }});
+
       function captureState() {{
         const openDetails = Array.from(document.querySelectorAll("details[id][open]")).map((node) => node.id);
         const active = document.activeElement && document.activeElement.id ? document.activeElement.id : null;
@@ -1332,36 +1429,38 @@ def _render_html(
 
       setActiveTab(document.getElementById("dashboard-main")?.dataset.activeTab || "tab-best");
 
-      async function refreshIfChanged() {{
-        if (refreshing) return;
-        refreshing = true;
-        try {{
-          const manifestResp = await fetch("manifest.json?cache=" + Date.now(), {{ cache: "no-store" }});
-          if (!manifestResp.ok) return;
-          const manifest = await manifestResp.json();
-          const generatedAt = String(manifest.generated_at || "");
-          if (!generatedAt || generatedAt === document.body.dataset.generatedAt) return;
+      if (Number.isFinite(refreshSeconds) && refreshSeconds > 0) {{
+        async function refreshIfChanged() {{
+          if (refreshing) return;
+          refreshing = true;
+          try {{
+            const manifestResp = await fetch("manifest.json?cache=" + Date.now(), {{ cache: "no-store" }});
+            if (!manifestResp.ok) return;
+            const manifest = await manifestResp.json();
+            const generatedAt = String(manifest.generated_at || "");
+            if (!generatedAt || generatedAt === document.body.dataset.generatedAt) return;
 
-          const state = captureState();
-          const htmlResp = await fetch("index.html?cache=" + Date.now(), {{ cache: "no-store" }});
-          if (!htmlResp.ok) return;
-          const nextText = await htmlResp.text();
-          const nextDoc = new DOMParser().parseFromString(nextText, "text/html");
-          const nextMain = nextDoc.getElementById("dashboard-main");
-          const currentMain = document.getElementById("dashboard-main");
-          if (!nextMain || !currentMain) return;
-          currentMain.replaceWith(document.importNode(nextMain, true));
-          document.body.dataset.generatedAt = generatedAt;
-          restoreState(state);
-          showIndicator("Dashboard updated without changing scroll position.");
-        }} catch (exc) {{
-          console.warn("Dashboard refresh failed", exc);
-        }} finally {{
-          refreshing = false;
+            const state = captureState();
+            const htmlResp = await fetch("index.html?cache=" + Date.now(), {{ cache: "no-store" }});
+            if (!htmlResp.ok) return;
+            const nextText = await htmlResp.text();
+            const nextDoc = new DOMParser().parseFromString(nextText, "text/html");
+            const nextMain = nextDoc.getElementById("dashboard-main");
+            const currentMain = document.getElementById("dashboard-main");
+            if (!nextMain || !currentMain) return;
+            currentMain.replaceWith(document.importNode(nextMain, true));
+            document.body.dataset.generatedAt = generatedAt;
+            restoreState(state);
+            showIndicator("Dashboard updated without changing scroll position.");
+          }} catch (exc) {{
+            console.warn("Dashboard refresh failed", exc);
+          }} finally {{
+            refreshing = false;
+          }}
         }}
-      }}
 
-      window.setInterval(refreshIfChanged, Math.max(refreshSeconds, 5) * 1000);
+        window.setInterval(refreshIfChanged, Math.max(refreshSeconds, 5) * 1000);
+      }}
     }})();
   </script>
 </body>
@@ -1547,6 +1646,7 @@ def serve_visual_dashboard(
     generate_packets_top_n: int = DEFAULT_GENERATE_PACKETS_TOP_N,
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
+    status_json: str | Path | None = None,
     host: str = "127.0.0.1",
     port: int = 6006,
 ) -> None:
@@ -1558,27 +1658,78 @@ def serve_visual_dashboard(
         generate_packets_top_n=generate_packets_top_n,
         generate_packet_workers=generate_packet_workers,
         cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
     )
     output_path = Path(manifest["output_dir"])
     campaign_path = Path(manifest["campaign_dir"])
     server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
     entrypoint_path = Path(manifest.get("entrypoint_html") or _write_dashboard_entrypoint(server_root, url_path))
-    command = [
-        sys.executable,
-        "-m",
-        "http.server",
-        str(int(port)),
-        "--bind",
-        str(host),
-        "--directory",
-        str(server_root),
-    ]
+    generation_lock = threading.Lock()
+
+    class DashboardRequestHandler(http.server.SimpleHTTPRequestHandler):
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            kwargs.setdefault("directory", str(server_root))
+            super().__init__(*args, **kwargs)
+
+        def log_message(self, format: str, *args: Any) -> None:  # noqa: A003 - standard handler signature
+            return
+
+        def _send_json(self, status: int, payload: dict[str, Any]) -> None:
+            data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_POST(self) -> None:  # noqa: N802 - HTTP handler API
+            if urlparse(self.path).path != GENERATE_PACKET_ENDPOINT:
+                self.send_error(404, "Not found")
+                return
+            try:
+                content_length = int(self.headers.get("Content-Length") or "0")
+            except (TypeError, ValueError):
+                content_length = 0
+            raw_body = self.rfile.read(content_length) if content_length > 0 else b"{}"
+            try:
+                payload = json.loads(raw_body.decode("utf-8") or "{}")
+            except json.JSONDecodeError as exc:
+                self._send_json(400, {"ok": False, "error": f"Invalid JSON body: {exc}"})
+                return
+            candidate_id = str((payload or {}).get("candidate_id") or "").strip()
+            if not candidate_id:
+                self._send_json(400, {"ok": False, "error": "Missing candidate_id"})
+                return
+            try:
+                with generation_lock:
+                    result = _generate_dashboard_packet(
+                        campaign_path,
+                        candidate_id,
+                        output_dir=output_dir,
+                        top_n=top_n,
+                        refresh_s=refresh_s,
+                        generate_packets_top_n=generate_packets_top_n,
+                        generate_packet_workers=generate_packet_workers,
+                        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                        status_json=status_json,
+                    )
+            except Exception as exc:  # pragma: no cover - exercised through integration, not unit tests
+                self._send_json(500, {"ok": False, "candidate_id": candidate_id, "error": str(exc)})
+                return
+            self._send_json(200, result)
+
+    server = http.server.ThreadingHTTPServer((host, int(port)), DashboardRequestHandler)
     print(
         f"Serving {entrypoint_path} at http://{host}:{int(port)}/ "
         f"(dashboard: http://{host}:{int(port)}{url_path})",
         flush=True,
     )
-    subprocess.run(command, check=True)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -1660,6 +1811,7 @@ def main(argv: list[str] | None = None) -> None:
             generate_packets_top_n=args.generate_packets_top_n,
             generate_packet_workers=args.generate_packet_workers,
             cleanup_stale_packets_before_render=not args.no_cleanup_stale_packets,
+            status_json=args.status_json,
             host=args.host,
             port=args.port,
         )
