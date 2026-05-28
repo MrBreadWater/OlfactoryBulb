@@ -2299,7 +2299,8 @@ def _remote_poll_command_timeout_s(config: dict[str, Any]) -> float | None:
     """Return the tighter timeout for lightweight remote polling commands."""
     value = config.get("remote_poll_command_timeout_s", 60)
     if value is None:
-        return _remote_ssh_command_timeout_s(config)
+        inherited = _remote_ssh_command_timeout_s(config)
+        return 60.0 if inherited is None else inherited
     try:
         timeout = float(value)
     except (TypeError, ValueError):
@@ -4203,7 +4204,11 @@ def _refresh_remote_heartbeat(
     if heartbeat_path in (None, ""):
         return False
     try:
-        completed = _run_ssh_shell(config, _build_remote_touch_command(str(heartbeat_path)))
+        completed = _run_ssh_shell(
+            config,
+            _build_remote_touch_command(str(heartbeat_path)),
+            timeout_s=_remote_poll_command_timeout_s(config),
+        )
     except Exception as exc:
         if warn:
             _progress_write(f"[Sol remote] Heartbeat refresh failed: {exc}")

@@ -130,6 +130,9 @@ assert hlp._remote_ssh_exec_timeout_s({"remote_ssh_exec_timeout_s": 0}) is None
 assert hlp._remote_ssh_upload_timeout_s({"remote_ssh_upload_timeout_s": 0}) is None
 assert hlp._remote_ssh_upload_timeout_s({"remote_ssh_upload_timeout_s": None, "remote_ssh_command_timeout_s": 42}) == 42.0
 assert hlp._remote_poll_command_timeout_s({"remote_poll_command_timeout_s": None}) == 300.0
+assert hlp._remote_poll_command_timeout_s(
+    {"remote_poll_command_timeout_s": None, "remote_ssh_command_timeout_s": None}
+) == 60.0
 
 lfp_filter_config = hlp.build_run_config(
     lfp_include_cell_types=["MC", "TC"],

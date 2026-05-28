@@ -946,6 +946,34 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._run_ssh_shell = original_run_ssh_shell
         hlp._LIVE_REMOTE_PREFLIGHTS.clear()
 
+    # --- Heartbeat refresh should keep a bounded timeout even when generic SSH timeouts are disabled ---
+    original_run_ssh_shell = hlp._run_ssh_shell
+    try:
+        heartbeat_calls = []
+
+        def _fake_run_ssh_shell(_config, command, check=False, timeout_s=None):
+            heartbeat_calls.append((command, check, timeout_s))
+            return subprocess.CompletedProcess(
+                args=["ssh", "bash", "-lc", command],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+
+        hlp._run_ssh_shell = _fake_run_ssh_shell
+        heartbeat_cfg = dict(remote_cfg)
+        heartbeat_cfg["remote_ssh_command_timeout_s"] = None
+        heartbeat_cfg["remote_poll_command_timeout_s"] = None
+        assert hlp._refresh_remote_heartbeat(
+            heartbeat_cfg,
+            "/remote/OlfactoryBulb/results/notebook_runs/.heartbeat/test.touch",
+        )
+        assert heartbeat_calls
+        assert heartbeat_calls[-1][2] == 60.0
+        print("Remote heartbeat refresh timeout fallback: OK")
+    finally:
+        hlp._run_ssh_shell = original_run_ssh_shell
+
     # --- Stale allocation cleanup should skip manual allocations and reuse its session cache ---
     original_cleanup = hlp._cleanup_stale_remote_slurm_allocations
     try:

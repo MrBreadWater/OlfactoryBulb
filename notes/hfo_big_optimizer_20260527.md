@@ -382,3 +382,12 @@ Throughput follow-up after the short-run pivot:
 - Regression coverage added in `test_config_helpers.py` for both the new `srun --exclusive --exact` step flags and the tail-sync decision helper.
 - Validation: `source tools/setup/activate_obgpu.sh OBGPU; python -m compileall -q tools/remote/remote_sweep_driver.py obgpu_experiment_helpers.py test_config_helpers.py test_hfo_optimizer.py && python test_config_helpers.py && python test_hfo_optimizer.py`.
 - This turn did not include a new authenticated Phoenix live-run proof, so the expected effect on actual batch occupancy and inter-batch pause still needs confirmation in Michael's live notebook worker.
+
+Heartbeat hang follow-up in Michael's live notebook worker:
+
+- Root cause found for the overnight stall after `batch_0117`: the worker thread was alive but blocked inside `_refresh_remote_heartbeat()` while issuing a tiny remote `touch` over the cached Paramiko transport. In Michael's live kernel, both `remote_ssh_command_timeout_s` and `remote_poll_command_timeout_s` were set to `None`, so the heartbeat command inherited an unbounded wait and could block forever if the transport stopped responding mid-poll.
+- Hardened `obgpu_experiment_helpers.py` so `_remote_poll_command_timeout_s()` falls back to `60 s` when both the explicit poll timeout and the generic SSH command timeout are `None`, and `_refresh_remote_heartbeat()` now always uses that bounded poll timeout instead of the generic shell default.
+- Added regression coverage:
+  - `test_hfo_optimizer.py` now asserts the `None`/`None` poll-timeout case falls back to `60.0`.
+  - `test_config_helpers.py` now asserts heartbeat refresh passes that bounded timeout through `_run_ssh_shell(...)`.
+- Validation repeated in `OBGPU` env with `python test_config_helpers.py`, `python test_hfo_optimizer.py`, and `python -m compileall -q obgpu_experiment_helpers.py test_config_helpers.py test_hfo_optimizer.py`.
