@@ -105,6 +105,7 @@ BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
 DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 PRIMARY_CELL_TYPE_ORDER = ("MC", "TC", "GC", "EPLI")
+PLOT_DISPLAY_CELL_GROUPS = ("MT", "GC", "EPLI", "other")
 CELL_TYPE_ALIASES = {
     # The optional EPLI population currently uses the synthetic PVCRH_FSI1
     # model class. Saved section labels expose that class name, but notebook
@@ -1565,6 +1566,7 @@ def _make_sweep_item_label(
 def _requested_task_count_from_slurm_args(values: list[str] | tuple[str, ...] | None) -> int | None:
     """Best-effort parse of one total Slurm task count from extra args."""
     args = [str(value) for value in (values or [])]
+
     nodes: int | None = None
     ntasks_per_node: int | None = None
 
@@ -1694,6 +1696,7 @@ def _remote_sweep_parallelism(config: dict[str, Any], *, tasks_per_item: int) ->
 
     if tasks_per_item <= 0:
         return 1
+
     if total_tasks is None or tasks_per_item <= 0:
         return 1
     return max(total_tasks // max(tasks_per_item, 1), 1)
@@ -7569,6 +7572,77 @@ def _ordered_cell_types(cell_types: list[str] | tuple[str, ...] | set[str]) -> l
     return ordered
 
 
+def _display_group_for_cell_type(cell_type: str, *, combine_mt: bool = True) -> str:
+    """Map notebook cell-family labels to a small display bucket."""
+    cell_type = str(cell_type)
+    if combine_mt and cell_type in {"MC", "TC"}:
+        return "MT"
+    return cell_type
+
+
+def _ordered_display_groups(groups: list[str] | tuple[str, ...] | set[str], *, combine_mt: bool = True) -> list[str]:
+    """Return display buckets in a stable order for plots."""
+    raw_seen = {str(group) for group in groups}
+    if combine_mt:
+        seen = {_display_group_for_cell_type(group, combine_mt=True) for group in raw_seen}
+    else:
+        return _ordered_cell_types(raw_seen)
+    if not seen:
+        return []
+    ordered = [group for group in PLOT_DISPLAY_CELL_GROUPS if group in seen]
+    ordered.extend(sorted(g for g in seen if g not in set(PLOT_DISPLAY_CELL_GROUPS) and g != "other"))
+    if "other" in seen:
+        ordered.append("other")
+    return ordered
+
+
+def _truncate_display_rows_for_group(
+    rows: list[tuple[str, Any]],
+    max_rows: int,
+    *,
+    combine_mt: bool,
+    display_group: str,
+) -> list[tuple[str, Any]]:
+    """Limit rows per display bucket with fair MT sampling when MC/TC are merged."""
+    if not rows or max_rows <= 0:
+        return []
+    if not combine_mt or display_group != "MT":
+        return rows[:max_rows]
+
+    subgroups: dict[str, list[tuple[str, Any]]] = {}
+    subgroup_order: list[str] = []
+    for row in rows:
+        label = str(row[0])
+        try:
+            subgroup = cell_type_of(label)
+        except ValueError:
+            subgroup = "other"
+        if subgroup not in subgroups:
+            subgroups[subgroup] = []
+            subgroup_order.append(subgroup)
+        subgroups[subgroup].append(row)
+
+    if len(subgroup_order) <= 1:
+        return rows[:max_rows]
+
+    selected: list[tuple[str, Any]] = []
+    indices = {subgroup: 0 for subgroup in subgroup_order}
+    while len(selected) < max_rows:
+        added = False
+        for subgroup in subgroup_order:
+            idx = indices[subgroup]
+            bucket = subgroups[subgroup]
+            if idx < len(bucket):
+                selected.append(bucket[idx])
+                indices[subgroup] = idx + 1
+                added = True
+                if len(selected) >= max_rows:
+                    break
+        if not added:
+            break
+    return selected
+
+
 def _infer_grouped_cell_types_from_labels(labels: list[str] | tuple[str, ...]) -> list[str]:
     """Infer ordered cell-family buckets from one list of saved labels."""
     inferred = []
@@ -8580,8 +8654,9 @@ def _saved_soma_spike_rows_by_type(
     *,
     max_cells_per_type: int,
     threshold: float | None = None,
+    combine_mt: bool = True,
 ) -> list[tuple[str, np.ndarray]] | None:
-    """Return saved spike rows grouped in stable cell-family order for rasters."""
+    """Return saved spike rows grouped in stable family display order for rasters."""
     rows = _saved_soma_spike_rows(result, threshold=threshold)
     if rows is None:
         return None
@@ -8592,11 +8667,19 @@ def _saved_soma_spike_rows_by_type(
             bucket = cell_type_of(label)
         except ValueError:
             bucket = "other"
+        bucket = _display_group_for_cell_type(bucket, combine_mt=combine_mt)
         grouped.setdefault(bucket, []).append((label, spikes))
 
     ordered = []
-    for cell_type in _ordered_cell_types(grouped.keys()):
-        ordered.extend(grouped.get(cell_type, [])[:max_cells_per_type])
+    for cell_type in _ordered_display_groups(grouped.keys(), combine_mt=combine_mt):
+        ordered.extend(
+            _truncate_display_rows_for_group(
+                grouped.get(cell_type, []),
+                max_cells_per_type,
+                combine_mt=combine_mt,
+                display_group=cell_type,
+            )
+        )
     return ordered
 
 
@@ -9686,19 +9769,57 @@ def plot_input_rate(
     return ax
 
 
-def plot_voltage_traces(result: dict[str, Any], max_per_type: int = 4, ax: Any = None) -> Any:
+def plot_voltage_traces(
+    result: dict[str, Any],
+    max_per_type: int = 4,
+    ax: Any = None,
+    *,
+    combine_mt: bool = True,
+) -> Any:
     """Plot a small representative subset of saved soma voltages."""
     ax = ax or plt.subplots(figsize=(14, 8))[1]
     grouped = split_traces_by_type(result)
-    ordered_cell_types = _ordered_cell_types(grouped.keys())
+    ordered_cell_types = _ordered_display_groups(
+        [
+            _display_group_for_cell_type(cell_type, combine_mt=combine_mt)
+            for cell_type in _ordered_cell_types(grouped.keys())
+        ],
+        combine_mt=combine_mt,
+    )
+    buckets = {cell_type: [] for cell_type in ordered_cell_types}
+    for label, t, v in result["soma_vs"]:
+        try:
+            group = _display_group_for_cell_type(cell_type_of(label), combine_mt=combine_mt)
+        except ValueError:
+            group = "other"
+        if group in buckets:
+            buckets[group].append((label, t, v))
     offset = 0.0
-    for cell_type in ordered_cell_types:
-        for label, t, v in grouped.get(cell_type, [])[:max_per_type]:
-            ax.plot(t, v + offset, color=_cell_color(cell_type), linewidth=1.0, label=label)
-            offset += 40.0 if cell_type == "GC" else 120.0
+    for display_group in ordered_cell_types:
+        traces = _truncate_display_rows_for_group(
+            buckets.get(display_group, []),
+            max_per_type,
+            combine_mt=combine_mt,
+            display_group=display_group,
+        )
+        if display_group == "MT":
+            # Keep MC/TC color/identity while grouping them with the same banner.
+            for label, t, v in traces:
+                original_type = cell_type_of(label)
+                ax.plot(t, v + offset, color=_cell_color(original_type), linewidth=1.0, label=label)
+                offset += 120.0
+            continue
+
+        for label, t, v in traces:
+            try:
+                color_key = cell_type_of(label)
+            except ValueError:
+                color_key = "other"
+            ax.plot(t, v + offset, color=_cell_color(color_key), linewidth=1.0, label=label)
+            offset += 40.0 if display_group == "GC" else 120.0
     ax.set_xlabel("Time (ms)")
     ax.set_ylabel("Offset Voltage")
-    ax.set_title("Sample Soma Voltages")
+    ax.set_title("Sample Soma Voltages" + (" (MT grouped)" if combine_mt else ""))
     if ax.lines:
         ax.legend(loc="upper right", fontsize=8, ncol=2)
     return ax
@@ -9710,18 +9831,38 @@ def plot_spike_raster(
     max_cells_per_type: int = 24,
     ax: Any = None,
     modulus: float | None = None,
+    *,
+    combine_mt: bool = True,
 ) -> Any:
     """Plot a soma-spike raster, preferring compact runtime spike artifacts."""
     saved_rows = _saved_soma_spike_rows_by_type(
         result,
         max_cells_per_type=max_cells_per_type,
         threshold=threshold,
+        combine_mt=combine_mt,
     )
     if saved_rows is None:
         grouped = split_traces_by_type(result)
-        raw_rows = []
+        raw_bucketed: dict[str, list[tuple[str, Any]]] = {}
         for cell_type in _ordered_cell_types(grouped.keys()):
-            raw_rows.extend(grouped.get(cell_type, [])[:max_cells_per_type])
+            display_group = _display_group_for_cell_type(cell_type, combine_mt=combine_mt)
+            raw_bucketed.setdefault(display_group, [])
+            for trace in grouped[cell_type][:max_cells_per_type]:
+                if isinstance(trace, tuple) and len(trace) == 3:
+                    raw_bucketed[display_group].append(trace)
+        grouped_rows = []
+        for display_group in _ordered_display_groups(raw_bucketed.keys(), combine_mt=combine_mt):
+            grouped_rows.extend(
+                _truncate_display_rows_for_group(
+                    raw_bucketed.get(display_group, []),
+                    max_cells_per_type,
+                    combine_mt=combine_mt,
+                    display_group=display_group,
+                )
+            )
+
+        raw_rows = []
+        raw_rows.extend(grouped_rows)
         rows = [(label, detect_spikes(t, v, threshold=threshold)) for label, t, v in raw_rows]
     else:
         rows = saved_rows
@@ -9742,7 +9883,7 @@ def plot_spike_raster(
         ax,
         [label for label, _spikes in rows],
         ylabel="Cell",
-        title="Detected Soma Spike Raster",
+        title="Detected Soma Spike Raster" + (" (MT grouped)" if combine_mt else ""),
         fontsize=_recommended_raster_fontsize(len(rows)),
         line_spacing=1.3,
     )
@@ -9936,7 +10077,15 @@ def plot_lfp_overview(
     result: dict[str, Any],
     dt_ms: float = 0.1,
     lowcut_hz: float = 30.0,
-    highcut_hz: float = 200.0,
+    highcut_hz: float = 300.0,
+    psd_xlim_hz: tuple[float, float] | None = None,
+    *,
+    show_psd_target_template: bool = True,
+    psd_template_kind: str = "ketamine",
+    psd_template_fit_band_hz: tuple[float, float] = (20.0, 300.0),
+    psd_template_scale_method: str = "area",
+    psd_template_floor: float = 0.0,
+    psd_template_color: str = "tab:orange",
 ) -> tuple[Any, Any]:
     """Plot raw LFP, band-passed LFP, and a Welch PSD summary."""
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=False)
@@ -9953,8 +10102,35 @@ def plot_lfp_overview(
 
     fs_hz = 1000.0 / float(np.median(np.diff(bp_t)))
     freqs, power = welch(bp_lfp, fs=fs_hz, nperseg=min(2048, len(bp_lfp)))
-    axes[2].plot(freqs, power, color="tab:green", linewidth=1.0)
-    axes[2].set_xlim(0, 150)
+    axes[2].plot(freqs, power, color="tab:green", linewidth=1.0, label="Measured PSD")
+
+    if show_psd_target_template:
+        try:
+            from olfactorybulb.hfo_optimizer import scaled_psd_template_curve
+
+            template_freqs, template_power = scaled_psd_template_curve(
+                psd_template_kind,
+                freqs,
+                power,
+                fit_band_hz=psd_template_fit_band_hz,
+                method=psd_template_scale_method,
+                floor=psd_template_floor,
+            )
+            axes[2].plot(
+                template_freqs,
+                template_power,
+                color=psd_template_color,
+                linewidth=1.0,
+                linestyle="--",
+                label=f"Template ({psd_template_kind})",
+            )
+            axes[2].legend(loc="upper right", fontsize=9)
+        except Exception:
+            pass
+
+    if psd_xlim_hz is None:
+        psd_xlim_hz = (0.0, float(highcut_hz))
+    axes[2].set_xlim(float(psd_xlim_hz[0]), float(psd_xlim_hz[1]))
     axes[2].set_xlabel("Frequency (Hz)")
     axes[2].set_ylabel("PSD")
     axes[2].set_title("Welch Power Spectrum")
@@ -11497,6 +11673,18 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     gc_max_connections = int(config.get("gc_output_max_connections", 120))
     gc_norm = str(config.get("gc_output_rate_normalization", "per_target_cell"))
     show_raw_voltage_traces = bool(config.get("show_voltage_traces", False))
+    show_psd_template = bool(config.get("lfp_show_psd_target_template", True))
+    psd_template_kind = str(config.get("lfp_psd_template_kind", "ketamine"))
+    psd_template_fit = config.get("lfp_psd_template_fit_band_hz", (20.0, 300.0))
+    if isinstance(psd_template_fit, (list, tuple)) and len(psd_template_fit) == 2:
+        psd_template_fit = (float(psd_template_fit[0]), float(psd_template_fit[1]))
+    else:
+        psd_template_fit = (20.0, 300.0)
+    psd_xlim_hz = config.get("lfp_psd_xlim_hz", (0.0, 300.0))
+    if isinstance(psd_xlim_hz, (list, tuple)) and len(psd_xlim_hz) == 2:
+        psd_xlim_hz = (float(psd_xlim_hz[0]), float(psd_xlim_hz[1]))
+    else:
+        psd_xlim_hz = None
 
     plot_input_overview(
         result,
@@ -11523,7 +11711,14 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     )
     plt.show()
 
-    plot_lfp_overview(result, dt_ms=dt_ms)
+    plot_lfp_overview(
+        result,
+        dt_ms=dt_ms,
+        show_psd_target_template=show_psd_template,
+        psd_template_kind=psd_template_kind,
+        psd_template_fit_band_hz=psd_template_fit,
+        psd_xlim_hz=psd_xlim_hz,
+    )
     plt.show()
 
     plot_spectrogram(result, signal=config.get("spectrogram_signal", "lfp"), dt_ms=dt_ms)
