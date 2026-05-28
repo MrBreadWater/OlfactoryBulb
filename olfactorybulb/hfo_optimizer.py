@@ -1935,6 +1935,8 @@ def score_hfo_batch(
                 "peak_ratio": 0.0,
                 "target_density_ratio": 0.0,
                 "freq_match": 0.0,
+                "target_centroid_hz": math.nan,
+                "target_centroid_match": 0.0,
                 "dominance": 0.0,
                 "target_clean_fraction": 0.0,
                 "supra_hfo_relative": 0.0,
