@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager, redirect_stderr, redirect_stdout
-import importlib
-import importlib.util
-import io
+import json
 import os
 from pathlib import Path
 import platform
@@ -14,9 +11,7 @@ import shlex
 import shutil
 import subprocess
 import sys
-import tempfile
-from typing import Callable, Iterable
-import warnings
+from typing import Iterable
 
 from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items
 
@@ -73,74 +68,6 @@ def _first_command(command: str | None) -> str | None:
 
 def _command_paths(commands: Iterable[str]) -> dict[str, str | None]:
     return {command: shutil.which(command) for command in commands}
-
-
-def _import_module(name: str) -> None:
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        importlib.import_module(name)
-
-
-def _import_module_from_path(name: str, path: Path) -> None:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not create import spec for {path}")
-    module = importlib.util.module_from_spec(spec)
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        spec.loader.exec_module(module)
-
-
-def _call_with_captured_output(callback: Callable[[], None]) -> tuple[Exception | None, str, str]:
-    stdout_text = io.StringIO()
-    stderr_text = io.StringIO()
-    exc: Exception | None = None
-    sys.stdout.flush()
-    sys.stderr.flush()
-    original_stdout_fd = os.dup(1)
-    original_stderr_fd = os.dup(2)
-    with tempfile.TemporaryFile(mode="w+b") as stdout_fd, tempfile.TemporaryFile(mode="w+b") as stderr_fd:
-        try:
-            os.dup2(stdout_fd.fileno(), 1)
-            os.dup2(stderr_fd.fileno(), 2)
-            with redirect_stdout(stdout_text), redirect_stderr(stderr_text):
-                callback()
-        except Exception as caught:
-            exc = caught
-        finally:
-            sys.stdout.flush()
-            sys.stderr.flush()
-            os.dup2(original_stdout_fd, 1)
-            os.dup2(original_stderr_fd, 2)
-            os.close(original_stdout_fd)
-            os.close(original_stderr_fd)
-
-        stdout_fd.seek(0)
-        stderr_fd.seek(0)
-        stdout = stdout_text.getvalue() + stdout_fd.read().decode(errors="replace")
-        stderr = stderr_text.getvalue() + stderr_fd.read().decode(errors="replace")
-
-    return exc, stdout, stderr
-
-
-def _verify_import_lists() -> tuple[list[str], list[str]]:
-    spec = importlib.util.spec_from_file_location("verify_obgpu_python_imports", VERIFY_IMPORTS_SCRIPT)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"Could not load {VERIFY_IMPORTS_SCRIPT}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return list(module.THIRD_PARTY_IMPORTS), list(module.REPO_IMPORTS)
-
-
-@contextmanager
-def _temporarily_unset(name: str):
-    marker = object()
-    previous = os.environ.pop(name, marker)
-    try:
-        yield
-    finally:
-        if previous is not marker:
-            os.environ[name] = str(previous)
 
 
 def audit_repo_layout() -> list[AuditItem]:
@@ -307,7 +234,7 @@ def audit_legacy_nmodl_path() -> list[AuditItem]:
     ]
 
 
-def audit_python_imports(*, skip_imports: bool = False) -> list[AuditItem]:
+def audit_python_imports(*, skip_imports: bool = False, timeout_seconds: float = 120.0) -> list[AuditItem]:
     if skip_imports:
         return [
             AuditItem(
@@ -318,96 +245,60 @@ def audit_python_imports(*, skip_imports: bool = False) -> list[AuditItem]:
             )
         ]
 
-    failures: list[dict[str, str]] = []
-    import_messages: list[dict[str, str]] = []
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
-
+    command = [sys.executable, str(VERIFY_IMPORTS_SCRIPT), "--repo-root", str(REPO_ROOT)]
+    env = os.environ.copy()
+    env.pop("NRN_NMODL_PATH", None)
     try:
-        third_party_imports, repo_imports = _verify_import_lists()
-    except Exception as exc:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=timeout_seconds,
+            check=False,
+            env=env,
+        )
+    except subprocess.TimeoutExpired as exc:
         return [
             AuditItem(
                 check_id="python_import_surface",
                 status="FAIL",
-                title="Maintained Python import list could not be loaded",
-                criterion="tools/setup/verify_obgpu_python_imports.py should be importable and define the maintained import surface.",
-                evidence={"error": repr(exc), "script": str(VERIFY_IMPORTS_SCRIPT)},
+                title="Maintained Python import surface check timed out",
+                criterion="tools/setup/verify_obgpu_python_imports.py should complete and report import failures without hanging.",
+                evidence={"command": command, "timeout_seconds": timeout_seconds, "error": repr(exc)},
             )
         ]
 
-    with _temporarily_unset("NRN_NMODL_PATH"):
-        for name in third_party_imports:
-            exc, stdout, stderr = _call_with_captured_output(lambda name=name: _import_module(name))
-            if exc is not None:
-                failure: dict[str, str] = {"kind": "third_party", "target": name, "error": repr(exc)}
-                if stdout.strip():
-                    failure["stdout"] = stdout.strip()[-500:]
-                if stderr.strip():
-                    failure["stderr"] = stderr.strip()[-500:]
-                failures.append(failure)
-            elif stdout.strip() or stderr.strip():
-                import_messages.append(
-                    {
-                        "kind": "third_party",
-                        "target": name,
-                        "stdout": stdout.strip()[-500:],
-                        "stderr": stderr.strip()[-500:],
-                    }
-                )
+    payload = None
+    if result.stdout.strip():
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            payload = None
 
-        for name in repo_imports:
-            exc, stdout, stderr = _call_with_captured_output(lambda name=name: _import_module(name))
-            if exc is not None:
-                failure = {"kind": "repo", "target": name, "error": repr(exc)}
-                if stdout.strip():
-                    failure["stdout"] = stdout.strip()[-500:]
-                if stderr.strip():
-                    failure["stderr"] = stderr.strip()[-500:]
-                failures.append(failure)
-            elif stdout.strip() or stderr.strip():
-                import_messages.append(
-                    {
-                        "kind": "repo",
-                        "target": name,
-                        "stdout": stdout.strip()[-500:],
-                        "stderr": stderr.strip()[-500:],
-                    }
-                )
-
-        benchmark_path = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
-        exc, stdout, stderr = _call_with_captured_output(lambda: _import_module_from_path("benchmark_ob", benchmark_path))
-        if exc is not None:
-            failure = {"kind": "repo_file", "target": str(benchmark_path), "error": repr(exc)}
-            if stdout.strip():
-                failure["stdout"] = stdout.strip()[-500:]
-            if stderr.strip():
-                failure["stderr"] = stderr.strip()[-500:]
-            failures.append(failure)
-        elif stdout.strip() or stderr.strip():
-            import_messages.append(
-                {
-                    "kind": "repo_file",
-                    "target": str(benchmark_path),
-                    "stdout": stdout.strip()[-500:],
-                    "stderr": stderr.strip()[-500:],
-                }
-            )
+    failures = payload.get("failures", []) if isinstance(payload, dict) else []
+    ok = result.returncode == 0 and isinstance(payload, dict) and payload.get("ok") is True
+    evidence = {
+        "command": command,
+        "returncode": result.returncode,
+        "ok": payload.get("ok") if isinstance(payload, dict) else None,
+        "third_party_checked": payload.get("third_party_checked", []) if isinstance(payload, dict) else [],
+        "repo_checked": payload.get("repo_checked", []) if isinstance(payload, dict) else [],
+        "repo_file_checked": payload.get("repo_file_checked") if isinstance(payload, dict) else None,
+        "failure_count": len(failures),
+        "failures": failures,
+    }
+    if result.stdout.strip() and payload is None:
+        evidence["stdout_tail"] = result.stdout.strip()[-2000:]
+    if result.stderr.strip():
+        evidence["stderr_tail"] = result.stderr.strip()[-2000:]
 
     return [
         AuditItem(
             check_id="python_import_surface",
-            status=_status(not failures),
+            status=_status(ok),
             title="Maintained OBGPU Python import surface loads",
             criterion="The same Python import surface checked by tools/setup/verify_obgpu_python_imports.py should import cleanly.",
-            evidence={
-                "third_party_checked": third_party_imports,
-                "repo_checked": repo_imports,
-                "repo_file_checked": str(REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"),
-                "failure_count": len(failures),
-                "failures": failures,
-                "import_messages": import_messages,
-            },
+            evidence=evidence,
         )
     ]
 
@@ -479,6 +370,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--skip-imports", action="store_true", help="Skip the maintained Python import surface check.")
     parser.add_argument("--require-gpu", action="store_true", help="Require GPU build tools such as nvc, nvc++, and nvcc.")
     parser.add_argument("--run-launcher-smoke", action="store_true", help="Run a cheap nrniv subprocess smoke test.")
+    parser.add_argument("--import-timeout-seconds", type=float, default=120.0, help="Timeout for the import surface subprocess.")
     parser.add_argument("--launcher-timeout-seconds", type=float, default=20.0, help="Timeout for --run-launcher-smoke.")
 
 
@@ -490,7 +382,10 @@ def run(args: argparse.Namespace) -> AuditReport:
         audit_command_line_tools(require_gpu=bool(getattr(args, "require_gpu", False))),
         audit_mechanism_outputs(),
         audit_legacy_nmodl_path(),
-        audit_python_imports(skip_imports=bool(getattr(args, "skip_imports", False))),
+        audit_python_imports(
+            skip_imports=bool(getattr(args, "skip_imports", False)),
+            timeout_seconds=float(getattr(args, "import_timeout_seconds", 120.0)),
+        ),
         audit_launcher_smoke(
             run_launcher_smoke=bool(getattr(args, "run_launcher_smoke", False)),
             timeout_seconds=float(getattr(args, "launcher_timeout_seconds", 20.0)),
