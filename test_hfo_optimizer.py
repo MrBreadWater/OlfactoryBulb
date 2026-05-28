@@ -75,14 +75,16 @@ assert hfo_module.DEFAULT_SCORE_BANDS["high_gamma"] == (65.0, 100.0)
 assert hfo_module.DEFAULT_OPTIMIZER_SEGMENT_MS == 1000.0
 assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 2000.0
 assert hfo_module.DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS == 100.0
+assert hfo_module.PSD_TEMPLATE_VISUAL_FLOOR == 1e-7
 
 template_freqs, ketamine_template = psd_template_curve("ketamine")
 assert template_freqs.shape == ketamine_template.shape
 assert np.isclose(np.sum(ketamine_template), 1.0)
-hfo_plateau = ketamine_template[(template_freqs >= 175.0) & (template_freqs < 230.0)]
-assert template_freqs[int(np.argmax(ketamine_template))] >= 175.0
+hfo_plateau = ketamine_template[(template_freqs >= 130.0) & (template_freqs < 230.0)]
+assert template_freqs[int(np.argmax(ketamine_template))] >= 130.0
 assert template_freqs[int(np.argmax(ketamine_template))] < 230.0
-assert float(np.min(hfo_plateau)) >= 0.95 * float(np.max(hfo_plateau))
+assert float(np.max(hfo_plateau)) > 1.15 * float(np.median(hfo_plateau))
+assert float(np.min(hfo_plateau)) >= 0.10 * float(np.max(hfo_plateau))
 assert hfo_module.PSD_TEMPLATE_HFO_WEIGHT > hfo_module.PSD_TEMPLATE_BROAD_WEIGHT
 plot_freqs = np.linspace(20.0, 300.0, 141)
 reference_psd = np.ones_like(plot_freqs) * 2.0
@@ -94,6 +96,14 @@ assert np.isclose(
     np.trapezoid(reference_psd, plot_freqs),
     rtol=0.15,
 )
+floor_freqs, floor_scaled_template = scaled_psd_template_curve(
+    "ketamine",
+    plot_freqs,
+    reference_psd,
+    floor=hfo_module.PSD_TEMPLATE_VISUAL_FLOOR,
+)
+assert floor_freqs.shape == floor_scaled_template.shape == reference_psd.shape
+assert float(np.nanmin(floor_scaled_template)) >= hfo_module.PSD_TEMPLATE_VISUAL_FLOOR
 
 schedule = sustained_odor_schedule(9000.0)
 assert min(schedule) == 0
@@ -284,7 +294,7 @@ def synthetic_result(
 
 target = synthetic_result(freq_hz=180.0, amplitude=1.0, seed=1)
 upper_target = synthetic_result(freq_hz=220.0, amplitude=1.0, seed=4)
-lower_edge_target = synthetic_result(freq_hz=161.0, amplitude=1.0, seed=5)
+lower_edge_target = synthetic_result(freq_hz=131.0, amplitude=1.0, seed=5)
 off_target = synthetic_result(freq_hz=90.0, amplitude=1.0, seed=2)
 flat = synthetic_result(freq_hz=40.0, amplitude=0.25, noise_std=0.25, seed=3)
 
@@ -388,10 +398,11 @@ flat_metrics = score_condition_result(flat)
 
 assert math.isfinite(target_metrics["condition_score"])
 assert target_metrics["condition_score"] > off_target_metrics["condition_score"]
-assert target_metrics["peak_hz"] > 150.0 and target_metrics["peak_hz"] < 210.0
+assert target_metrics["peak_hz"] > 130.0 and target_metrics["peak_hz"] < 230.0
 assert target_metrics["target_peak_contrast"] > 1.0
 assert target_metrics["target_centroid_match"] > lower_edge_metrics["target_centroid_match"]
-assert upper_target_metrics["target_band_hz"] == [160.0, 230.0]
+assert target_metrics["peak_height_score"] > flat_metrics["peak_height_score"]
+assert upper_target_metrics["target_band_hz"] == [130.0, 230.0]
 assert upper_target_metrics["peak_hz"] > 210.0 and upper_target_metrics["peak_hz"] < 230.0
 
 active_epli_target_metrics = {**target_metrics, "epli_rate_hz": 5.0}
@@ -436,10 +447,12 @@ assert good_pair["control_target_excess_penalty"] == 0.0
 assert bad_pair["pair_score"] > reversed_pair["pair_score"]
 assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
+assert good_pair["peak_height_delta"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
-assert upper_bad_pair["pair_score_version"] == 8
-assert PAIR_SCORE_VERSION == 8
+assert good_pair["ketamine_peak_height_score"] > good_pair["control_peak_height_score"]
+assert upper_bad_pair["pair_score_version"] == 9
+assert PAIR_SCORE_VERSION == 9
 assert "psd_shape_power" in target_metrics
 assert len(target_metrics["psd_shape_power"]) > 10
 status_summary = candidate_status_summary(
@@ -620,7 +633,7 @@ with TemporaryDirectory() as tmpdir:
     with open(f"{tmpdir}/candidate_archive.jsonl", "w") as handle:
         for row in rows:
             handle.write(json.dumps(row) + "\n")
-    write_objective_filter(tmpdir, {"min_batch_index": 52, "target_hfo_hz": [160.0, 230.0]})
+    write_objective_filter(tmpdir, {"min_batch_index": 52, "target_hfo_hz": [130.0, 230.0]})
 
     batch = propose_elite_batch(
         tmpdir,
