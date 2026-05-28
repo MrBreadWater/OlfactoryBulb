@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -804,6 +805,21 @@ def watch_visual_dashboard(
         time.sleep(max(float(refresh_s), 1.0))
 
 
+def _dashboard_server_root_and_url(output_path: Path, campaign_path: Path) -> tuple[Path, str]:
+    """Return the HTTP root and URL path that keep packet-relative image links valid."""
+    output_path = output_path.expanduser().resolve()
+    campaign_path = campaign_path.expanduser().resolve()
+    try:
+        root = Path(os.path.commonpath([str(output_path), str(campaign_path)]))
+    except ValueError:
+        root = output_path
+    if root == output_path:
+        return root, "/"
+    relative = output_path.relative_to(root).as_posix()
+    url_path = "/" + "/".join(quote(part) for part in relative.split("/") if part) + "/"
+    return root, url_path
+
+
 def serve_visual_dashboard(
     campaign_dir: str | Path,
     *,
@@ -822,6 +838,8 @@ def serve_visual_dashboard(
         generate_packets_top_n=generate_packets_top_n,
     )
     output_path = Path(manifest["output_dir"])
+    campaign_path = Path(manifest["campaign_dir"])
+    server_root, url_path = _dashboard_server_root_and_url(output_path, campaign_path)
     command = [
         sys.executable,
         "-m",
@@ -830,9 +848,9 @@ def serve_visual_dashboard(
         "--bind",
         str(host),
         "--directory",
-        str(output_path),
+        str(server_root),
     ]
-    print(f"Serving {output_path / 'index.html'} at http://{host}:{int(port)}/", flush=True)
+    print(f"Serving {output_path / 'index.html'} at http://{host}:{int(port)}{url_path}", flush=True)
     subprocess.run(command, check=True)
 
 

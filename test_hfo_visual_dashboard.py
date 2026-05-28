@@ -7,6 +7,7 @@ from tempfile import TemporaryDirectory
 
 from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
+    _dashboard_server_root_and_url,
     _primary_psd_image,
     _render_packet_card,
 )
@@ -59,3 +60,9 @@ with TemporaryDirectory() as tmp:
     assert "Contact sheet" in html
     assert html.index("Live PSD overlay with target PSD") < html.index("2D KDEs")
     assert html.index("Live PSD overlay with target PSD") < html.index("Contact sheet")
+
+    campaign = root / "campaign"
+    dashboard = campaign / "visual_dashboard"
+    server_root, url_path = _dashboard_server_root_and_url(dashboard, campaign)
+    assert server_root == campaign
+    assert url_path == "/visual_dashboard/"
