@@ -1064,6 +1064,55 @@ def _targeted_elite_probe_rows(
         def target_delta(row: dict[str, Any]) -> float:
             return target_rel(row, "ketamine") - target_rel(row, "control")
 
+        def peak_contrast(row: dict[str, Any], condition: str) -> float:
+            value = row.get(f"{condition}_peak_contrast")
+            try:
+                value_float = float(value)
+            except (TypeError, ValueError):
+                value_float = math.nan
+            if math.isfinite(value_float):
+                return value_float
+            metrics = row.get(f"{condition}_metrics")
+            if not isinstance(metrics, dict):
+                return 0.0
+            fallback = metrics.get("target_peak_contrast", metrics.get("peak_ratio", 0.0))
+            try:
+                fallback_float = float(fallback)
+            except (TypeError, ValueError):
+                return 0.0
+            return fallback_float if math.isfinite(fallback_float) else 0.0
+
+        def epli_rate(row: dict[str, Any], condition: str) -> float:
+            value = row.get(f"{condition}_epli_rate_hz")
+            try:
+                value_float = float(value)
+            except (TypeError, ValueError):
+                value_float = math.nan
+            if math.isfinite(value_float):
+                return value_float
+            metrics = row.get(f"{condition}_metrics")
+            if not isinstance(metrics, dict):
+                return 0.0
+            rates = metrics.get("mean_firing_rate_by_type")
+            if not isinstance(rates, dict):
+                return 0.0
+            try:
+                rate_float = float(rates.get("EPLI", 0.0))
+            except (TypeError, ValueError):
+                return 0.0
+            return rate_float if math.isfinite(rate_float) else 0.0
+
+        def contrast_support_score(row: dict[str, Any]) -> float:
+            ketamine_peak = peak_contrast(row, "ketamine")
+            control_peak = peak_contrast(row, "control")
+            ketamine_epli = epli_rate(row, "ketamine")
+            return (
+                2.0 * math.log10(1.0 + ketamine_peak)
+                - 1.0 * math.log10(1.0 + control_peak)
+                + 2.5 * target_delta(row)
+                + 0.2 * min(ketamine_epli, 8.0) / 8.0
+            )
+
         def ketamine_peak(row: dict[str, Any]) -> float:
             return _candidate_metric(row, "ketamine", "peak_hz", math.nan)
 
@@ -1088,16 +1137,27 @@ def _targeted_elite_probe_rows(
             row for row in target_rows
             if target_rel(row, "ketamine") >= 0.12
         ]
+        contrast_support_rows = [
+            row for row in target_rows
+            if (
+                epli_rate(row, "ketamine") >= 2.0
+                and peak_contrast(row, "ketamine") >= peak_contrast(row, "control")
+                and target_rel(row, "ketamine") >= 0.06
+                and target_rel(row, "control") <= 0.14
+            )
+        ]
 
         exact_row = max(exact_rows, key=lambda row: target_rel(row, "ketamine"), default=None)
         contrast_row = max(contrast_rows, key=target_delta, default=None)
         power_row = max(power_rows, key=lambda row: target_rel(row, "ketamine"), default=None)
         low_control_row = min(low_control_rows, key=lambda row: target_rel(row, "control"), default=None)
+        contrast_support_row = max(contrast_support_rows, key=contrast_support_score, default=None)
 
         exact_vector = row_vector(exact_row)
         contrast_vector = row_vector(contrast_row)
         power_vector = row_vector(power_row)
         low_control_vector = row_vector(low_control_row)
+        contrast_support_vector = row_vector(contrast_support_row)
         exact = exact_vector if exact_vector is not None else top
         contrast = contrast_vector if contrast_vector is not None else second
         power = power_vector if power_vector is not None else (elite_vectors[2] if len(elite_vectors) > 2 else second)
@@ -1106,12 +1166,18 @@ def _targeted_elite_probe_rows(
             if low_control_vector is not None
             else (elite_vectors[3] if len(elite_vectors) > 3 else top)
         )
+        contrast_support = (
+            contrast_support_vector
+            if contrast_support_vector is not None
+            else contrast
+        )
 
         frontier_centers = {
             "top": top,
             "exact": exact,
             "contrast25": np.clip(0.75 * top + 0.25 * contrast, encoded_lo, encoded_hi),
             "contrast50": np.clip(0.50 * top + 0.50 * contrast, encoded_lo, encoded_hi),
+            "contrast_support": contrast_support,
             "power": power,
             "low_control": low_control,
         }
@@ -1128,6 +1194,9 @@ def _targeted_elite_probe_rows(
             ("power", (("epli_ampa_weight_scale", 0.16), ("epli_gaba_weight_scale", 0.08), ("gaba_gmax", 0.006))),
             ("contrast25", (("epli_ampa_weight_scale", -0.16), ("epli_gaba_weight_scale", -0.16))),
             ("contrast50", (("epli_ampa_weight_scale", -0.24), ("epli_gaba_weight_scale", -0.16), ("gap_tc", -0.006))),
+            ("contrast_support", (("epli_ampa_weight_scale", 0.12), ("epli_gaba_weight_scale", -0.08), ("gaba_gmax", 0.006))),
+            ("contrast_support", (("epli_ampa_weight_scale", 0.18), ("kar_gc_gmax", 0.006))),
+            ("contrast_support", (("gap_tc", -0.006), ("ampa_nmda_gmax", -0.006))),
         ]
         path_to_index = {spec.path: index for index, spec in enumerate(search_space)}
         for center_name, moves in frontier_plan:
