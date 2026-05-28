@@ -100,6 +100,10 @@ def _candidate_id_from_path(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
+def _is_legacy_ad_hoc_kde_image(path: Path) -> bool:
+    return bool(re.match(r"kde_(control|ketamine)_[A-Za-z0-9]+\.png$", path.name))
+
+
 def _condition_metrics(row: dict[str, Any], condition: str) -> dict[str, Any]:
     payload = row.get(f"{condition}_metrics") or {}
     return payload if isinstance(payload, dict) else {}
@@ -156,6 +160,7 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
                 path
                 for path in packet_dir.glob("*.png")
                 if path.name not in {"contact_sheet.png", "00_contact_sheet.png"}
+                and not _is_legacy_ad_hoc_kde_image(path)
             )
         )
         mtime = _packet_mtime([manifest_path, contact_sheet or packet_dir, *images])
@@ -173,6 +178,15 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
     return packets
 
 
+def _packet_needs_frequency_kde_refresh(packet: PacketInfo | None) -> bool:
+    if packet is None:
+        return True
+    all_pngs = tuple(packet.packet_dir.glob("*.png"))
+    has_legacy_kde = any(_is_legacy_ad_hoc_kde_image(path) for path in all_pngs)
+    has_pipeline_kde = any("spike_frequency_kde_2d" in path.name for path in all_pngs)
+    return has_legacy_kde and not has_pipeline_kde
+
+
 def _generate_missing_packets(campaign_dir: Path, rows: list[dict[str, Any]], *, top_n: int) -> list[Path]:
     if top_n <= 0:
         return []
@@ -182,7 +196,9 @@ def _generate_missing_packets(campaign_dir: Path, rows: list[dict[str, Any]], *,
     packets = find_candidate_packets(campaign_dir)
     for row in rows[: int(top_n)]:
         candidate_id = str(row.get("candidate_id") or "")
-        if not candidate_id or candidate_id in packets:
+        if not candidate_id:
+            continue
+        if not _packet_needs_frequency_kde_refresh(packets.get(candidate_id)):
             continue
         generated.append(generate_packet(campaign_dir, candidate_id))
         packets = find_candidate_packets(campaign_dir)
@@ -267,10 +283,6 @@ def _psd_images(images: tuple[Path, ...]) -> list[Path]:
     ]
     order = {name: index for index, name in enumerate(PRIMARY_PSD_NAME_ORDER)}
     return sorted(selected, key=lambda image: (order.get(image.name, 100), image.name))
-
-
-def _kde_images(images: tuple[Path, ...]) -> list[Path]:
-    return sorted([image for image in images if "kde" in image.name.lower()])
 
 
 def _gallery_html(images: list[Path], *, output_dir: Path, css_class: str = "gallery") -> str:
@@ -390,7 +402,6 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
     packet_meta = ""
     primary_psd_html = "<div class='missing'>No PSD packet has been generated for this candidate yet.</div>"
     secondary_psd_html = ""
-    kde_html = ""
     other_gallery_html = ""
     contact_html = ""
     if packet is not None:
@@ -412,17 +423,10 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
             output_dir=output_dir,
             open_by_default=rank == 1,
         )
-        kde_set = set(_kde_images(packet.images))
-        kde_html = _details_gallery(
-            "2D KDEs",
-            sorted(kde_set),
-            output_dir=output_dir,
-            open_by_default=False,
-        )
-        excluded = set(psd_images) | kde_set
+        excluded = set(psd_images)
         other_images = [image for image in packet.images if image not in excluded]
         other_gallery_html = _details_gallery(
-            "Other diagnostics",
+            "Diagnostic packet",
             other_images,
             output_dir=output_dir,
             open_by_default=False,
@@ -465,7 +469,6 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
     <div class="chips params">{_parameter_chips(s["params"])}</div>
     {primary_psd_html}
     {secondary_psd_html}
-    {kde_html}
     {other_gallery_html}
     {contact_html}
   </div>

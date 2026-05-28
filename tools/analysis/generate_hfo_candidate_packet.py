@@ -17,7 +17,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw
-from scipy import signal, stats
+from scipy import signal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
@@ -190,37 +190,29 @@ def _save_population_rates(windows_by_condition: dict[str, dict[str, Any]], out:
     plt.close(fig)
 
 
-def _save_spike_kde(windowed: dict[str, Any], condition: str, cell_type: str, out: Path) -> None:
-    rows = [(label, times) for label, times in _spike_rows(windowed) if hlp.cell_type_of(label) == cell_type]
-    xs: list[float] = []
-    ys: list[float] = []
-    for y, (_label, times) in enumerate(rows):
-        xs.extend(times.tolist())
-        ys.extend([float(y)] * len(times))
-    fig, ax = plt.subplots(figsize=(8.5, 5.0), constrained_layout=True)
-    if len(xs) >= 5 and len(set(ys)) >= 2:
-        x = np.asarray(xs)
-        y = np.asarray(ys)
-        try:
-            kde = stats.gaussian_kde(np.vstack([x, y]))
-            xi = np.linspace(float(np.min(x)), float(np.max(x)), 140)
-            yi = np.linspace(float(np.min(y)), float(np.max(y)), 90)
-            grid_x, grid_y = np.meshgrid(xi, yi)
-            zi = kde(np.vstack([grid_x.ravel(), grid_y.ravel()])).reshape(grid_x.shape)
-            ax.imshow(
-                zi,
-                origin="lower",
-                extent=[xi.min(), xi.max(), yi.min(), yi.max()],
-                aspect="auto",
-                cmap="viridis",
-            )
-        except Exception:
-            ax.scatter(x, y, s=6, color=CELL_COLORS.get(cell_type, "#111827"), alpha=0.45)
-    elif xs:
-        ax.scatter(xs, ys, s=6, color=CELL_COLORS.get(cell_type, "#111827"), alpha=0.45)
-    ax.set_xlabel("Time in window (ms)")
-    ax.set_ylabel(f"{cell_type} cell index")
-    ax.set_title(f"{condition} {cell_type} spike-time KDE")
+def _save_spike_frequency_kde(
+    windowed: dict[str, Any],
+    condition: str,
+    label: str,
+    cell_types: tuple[str, ...],
+    out: Path,
+) -> None:
+    fig, ax = plt.subplots(figsize=(10.5, 5.4), constrained_layout=True)
+    config = hlp.FrequencyPlotConfig(
+        modulus=None,
+        max_freq_hz=300.0,
+        kde2d_engine="histogram",
+        kde_resolution_t=120,
+        kde_resolution_f=120,
+        kde_cmap="inferno",
+    )
+    hlp.plot_spike_frequency_kde_2d(
+        windowed,
+        cell_types=cell_types,
+        config=config,
+        ax=ax,
+        title=f"{condition} soma spike frequency KDE ({label})",
+    )
     fig.savefig(out, dpi=160)
     plt.close(fig)
 
@@ -333,10 +325,20 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     _save_input_overview(result, windows, packet_dir / files[6])
     _save_phase_hist(windowed["control"], "control", packet_dir / files[7])
     _save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / files[8])
+    frequency_groups = [
+        ("MT_EPLI", ("MC", "TC", "EPLI", "PVCRH")),
+        ("GC", ("GC",)),
+    ]
     for condition in ("control", "ketamine"):
-        for cell_type in ("MC", "TC", "EPLI", "GC"):
-            name = f"kde_{condition}_{cell_type}.png"
-            _save_spike_kde(windowed[condition], condition, cell_type, packet_dir / name)
+        for group_label, cell_types in frequency_groups:
+            name = f"13_spike_frequency_kde_2d_{condition}_{group_label}.png"
+            _save_spike_frequency_kde(
+                windowed[condition],
+                condition,
+                group_label,
+                cell_types,
+                packet_dir / name,
+            )
             files.append(name)
 
     manifest = {
