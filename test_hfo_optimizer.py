@@ -58,7 +58,9 @@ assert default_specs["kar_gc_gmax"].high == 0.025
 assert default_specs["kar_osn_weight_scale"].high == 2.0
 assert default_specs["kar_gc_weight_scale"].high == 4.0
 assert hfo_module.DEFAULT_SCORE_BANDS["high_gamma"] == (65.0, 100.0)
-assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 1000.0
+assert hfo_module.DEFAULT_OPTIMIZER_SEGMENT_MS == 1000.0
+assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 2000.0
+assert hfo_module.DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS == 100.0
 
 template_freqs, ketamine_template = psd_template_curve("ketamine")
 assert template_freqs.shape == ketamine_template.shape
@@ -105,13 +107,13 @@ assert tuned_config["sweep_parallelism"] == 16
 assert tuned_config["optimizer_total_tasks"] == 96
 assert tuned_config["hfo_throughput_profile"] == profile
 short_campaign_config = default_campaign_run_config({})
-assert short_campaign_config["tstop_ms"] == 1000.0
-assert max(short_campaign_config["input_odors"]) == 800
+assert short_campaign_config["tstop_ms"] == 2000.0
+assert max(short_campaign_config["input_odors"]) == 1800
 short_overrides = short_hfo_runtime_overrides()
-assert short_overrides["tstop_ms"] == 1000.0
-assert short_overrides["hfo_ketamine_switch_time_ms"] == 500.0
+assert short_overrides["tstop_ms"] == 2000.0
+assert short_overrides["hfo_ketamine_switch_time_ms"] == 1000.0
 assert short_overrides["hfo_ketamine_switch_washout_ms"] == 100.0
-assert max(short_overrides["input_odors"]) == 800
+assert max(short_overrides["input_odors"]) == 1800
 assert default_switch_washout_ms(9000.0) == 500.0
 assert default_switch_washout_ms(1000.0) == 100.0
 assert hlp.build_run_config()["remote_ssh_command_timeout_s"] == 300

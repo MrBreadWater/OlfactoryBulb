@@ -37,7 +37,9 @@ def _default_repo_root() -> Path:
 
 
 DEFAULT_CAMPAIGNS_BASE = _default_repo_root() / "results" / "notebook_runs" / "optimization"
-DEFAULT_OPTIMIZER_TSTOP_MS = 1000.0
+DEFAULT_OPTIMIZER_SEGMENT_MS = 1000.0
+DEFAULT_OPTIMIZER_TSTOP_MS = 2.0 * DEFAULT_OPTIMIZER_SEGMENT_MS
+DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS = 100.0
 DEFAULT_SCORE_BANDS = {
     "beta": (15.0, 35.0),
     "low_gamma": (35.0, 65.0),
@@ -344,7 +346,7 @@ def short_hfo_runtime_overrides(
     tstop_ms = float(tstop_ms)
     switch_time_ms = max(0.0, tstop_ms * float(switch_fraction))
     washout_ms = (
-        default_switch_washout_ms(tstop_ms)
+        DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS
         if switch_washout_ms is None
         else float(switch_washout_ms)
     )
@@ -2786,6 +2788,8 @@ def maybe_dataframe(rows: list[dict[str, Any]]) -> Any:
 
 __all__ = [
     "DEFAULT_CAMPAIGNS_BASE",
+    "DEFAULT_OPTIMIZER_SEGMENT_MS",
+    "DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS",
     "DEFAULT_OPTIMIZER_TSTOP_MS",
     "DEFAULT_SCORE_BANDS",
     "ParameterSpec",
