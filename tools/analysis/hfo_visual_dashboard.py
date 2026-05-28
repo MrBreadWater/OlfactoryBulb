@@ -33,6 +33,7 @@ if str(SCRIPT_DIR) not in sys.path:
 
 import olfactorybulb.hfo_optimizer as hfo
 from generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
+from regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
 
 
 DEFAULT_OUTPUT_SUBDIR = "visual_dashboard"
@@ -131,6 +132,17 @@ def _rate(metrics: dict[str, Any], cell_type: str) -> float | None:
 def _load_ranked_rows(campaign_dir: Path) -> list[dict[str, Any]]:
     rows = hfo.load_candidate_archive_rows(campaign_dir)
     rows = [row for row in rows if _safe_float(row.get("pair_score")) is not None]
+    current_score_version = int(getattr(hfo, "PAIR_SCORE_VERSION", 0) or 0)
+    current_version_rows = []
+    for row in rows:
+        try:
+            version = int(row.get("pair_score_version", current_score_version))
+        except (TypeError, ValueError):
+            version = current_score_version
+        if version == current_score_version:
+            current_version_rows.append(row)
+    if current_version_rows:
+        rows = current_version_rows
     rows.sort(key=lambda row: float(row.get("pair_score", float("-inf"))), reverse=True)
     return rows
 
@@ -182,10 +194,29 @@ def find_candidate_packets(campaign_dir: str | Path) -> dict[str, PacketInfo]:
     return packets
 
 
-def _packet_needs_frequency_kde_refresh(packet: PacketInfo | None) -> bool:
+def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> bool:
     if packet is None:
         return True
     if packet.manifest.get("visual_style_version") != VISUAL_STYLE_VERSION:
+        return True
+    try:
+        row_score_version = int(row.get("pair_score_version", getattr(hfo, "PAIR_SCORE_VERSION", 0)) or 0)
+    except (TypeError, ValueError):
+        row_score_version = int(getattr(hfo, "PAIR_SCORE_VERSION", 0) or 0)
+    try:
+        packet_score_version = int(packet.manifest.get("pair_score_version", row_score_version) or row_score_version)
+    except (TypeError, ValueError):
+        packet_score_version = row_score_version
+    if packet_score_version != row_score_version:
+        return True
+    overlay = packet.manifest.get("psd_target_overlay") or {}
+    if not isinstance(overlay, dict):
+        return True
+    if int(overlay.get("render_version", 0) or 0) != int(PSD_PACKET_RENDER_VERSION):
+        return True
+    if list(overlay.get("target_hfo_hz") or []) != list(hfo.DEFAULT_SCORE_BANDS["target_hfo"]):
+        return True
+    if list(overlay.get("high_gamma_hz") or []) != list(hfo.DEFAULT_SCORE_BANDS["high_gamma"]):
         return True
     all_pngs = tuple(packet.packet_dir.glob("*.png"))
     has_legacy_kde = any(_is_legacy_ad_hoc_kde_image(path) for path in all_pngs)
@@ -205,7 +236,7 @@ def _generate_missing_packets(campaign_dir: Path, rows: list[dict[str, Any]], *,
         candidate_id = str(row.get("candidate_id") or "")
         if not candidate_id:
             continue
-        if not _packet_needs_frequency_kde_refresh(packets.get(candidate_id)):
+        if not _packet_needs_refresh(packets.get(candidate_id), row):
             continue
         generated.append(generate_packet(campaign_dir, candidate_id))
         packets = find_candidate_packets(campaign_dir)
@@ -524,7 +555,7 @@ def _render_packet_card(row: dict[str, Any], packet: PacketInfo | None, *, outpu
                 primary_psd,
                 output_dir=output_dir,
                 css_class="primary-psd",
-                caption="Live PSD overlay with target PSD",
+                caption="Live PSD overlay with scoring template",
             )
         psd_images = _psd_images(packet.images)
         supporting_psd = [image for image in psd_images if image != primary_psd]

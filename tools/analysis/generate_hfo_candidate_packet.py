@@ -353,6 +353,7 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         "campaign_dir": str(campaign_dir),
         "result_dir": str(result_dir),
         "pair_score": row.get("pair_score"),
+        "pair_score_version": row.get("pair_score_version"),
         "control_peak_hz": (row.get("control_metrics") or {}).get("peak_hz"),
         "ketamine_peak_hz": (row.get("ketamine_metrics") or {}).get("peak_hz"),
         "control_window_ms": list(windows["control"]),

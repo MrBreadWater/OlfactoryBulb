@@ -27,6 +27,7 @@ import olfactorybulb.hfo_optimizer as hfo
 
 
 PSD_TARGET_VISUAL_FLOOR = 10 ** -7.5
+PSD_PACKET_RENDER_VERSION = 1
 
 
 def _load_manifest(packet: Path) -> tuple[Path, dict[str, Any]]:
@@ -294,6 +295,7 @@ def regenerate_packet_psd(packet: Path) -> Path:
 
     manifest["psd_target_overlay"] = {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
+        "render_version": PSD_PACKET_RENDER_VERSION,
         "templates": ["control", "ketamine"],
         "scaling": "normalized target shape on right axis",
         "high_gamma_hz": list(bands["high_gamma"]),

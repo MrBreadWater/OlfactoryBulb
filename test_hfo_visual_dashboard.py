@@ -2,18 +2,24 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import olfactorybulb.hfo_optimizer as hfo
+from tools.analysis.generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
 from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
     _dashboard_server_root_and_url,
+    _load_ranked_rows,
+    _packet_needs_refresh,
     _primary_psd_image,
     _render_html,
     _render_packet_card,
     _write_dashboard_entrypoint,
     find_candidate_packets,
 )
+from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
 
 
 with TemporaryDirectory() as tmp:
@@ -51,7 +57,22 @@ with TemporaryDirectory() as tmp:
         path.write_bytes(b"placeholder")
     stale_population_rates = packet_dir / "09_population_rates.png"
     stale_population_rates.write_bytes(b"placeholder")
-    (packet_dir / "manifest.json").write_text('{"candidate_id": "C00042", "visual_style_version": 3}')
+    row_score_version = int(hfo.PAIR_SCORE_VERSION)
+    packet_overlay = {
+        "render_version": PSD_PACKET_RENDER_VERSION,
+        "target_hfo_hz": list(hfo.DEFAULT_SCORE_BANDS["target_hfo"]),
+        "high_gamma_hz": list(hfo.DEFAULT_SCORE_BANDS["high_gamma"]),
+    }
+    (packet_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "candidate_id": "C00042",
+                "visual_style_version": VISUAL_STYLE_VERSION,
+                "pair_score_version": row_score_version,
+                "psd_target_overlay": packet_overlay,
+            }
+        )
+    )
 
     assert _primary_psd_image((raster, psd_control, psd_overlay)) == psd_overlay
     discovered = find_candidate_packets(root)
@@ -63,13 +84,19 @@ with TemporaryDirectory() as tmp:
         packet_dir=packet_dir,
         contact_sheet=contact,
         images=(psd_overlay, psd_control, raster, raster_k, spec_c, spec_k, kde1d_c, kde1d_k, kde, kde_k),
-        manifest={"candidate_id": "C00042", "visual_style_version": 3},
+        manifest={
+            "candidate_id": "C00042",
+            "visual_style_version": VISUAL_STYLE_VERSION,
+            "pair_score_version": row_score_version,
+            "psd_target_overlay": packet_overlay,
+        },
         mtime=1.0,
     )
     row = {
         "candidate_id": "C00042",
         "batch_name": "batch_0002",
         "pair_score": 5.0,
+        "pair_score_version": row_score_version,
         "target_delta": 0.1,
         "parameters": {"kar_mt_gmax": 0.02, "gaba_gmax": 1.5},
         "control_metrics": {
@@ -85,7 +112,7 @@ with TemporaryDirectory() as tmp:
     }
 
     html = _render_packet_card(row, packet, output_dir=root, rank=1)
-    assert "Live PSD overlay with target PSD" in html
+    assert "Live PSD overlay with scoring template" in html
     assert "03_psd_overlay.png" in html
     assert "LFP spectrogram" in html
     assert "Control" in html
@@ -94,8 +121,35 @@ with TemporaryDirectory() as tmp:
     assert "13_spike_frequency_kde_1d_control_MT_EPLI.png" in html
     assert "09_population_rates.png" not in html
     assert "Contact sheet" in html
-    assert html.index("Live PSD overlay with target PSD") < html.index("LFP spectrogram")
-    assert html.index("Live PSD overlay with target PSD") < html.index("Contact sheet")
+    assert html.index("Live PSD overlay with scoring template") < html.index("LFP spectrogram")
+    assert html.index("Live PSD overlay with scoring template") < html.index("Contact sheet")
+    assert _packet_needs_refresh(packet, row) is False
+
+    stale_packet_version = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=contact,
+        images=packet.images,
+        manifest={**packet.manifest, "pair_score_version": row_score_version - 1},
+        mtime=1.0,
+    )
+    assert _packet_needs_refresh(stale_packet_version, row) is True
+
+    stale_packet_overlay = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=contact,
+        images=packet.images,
+        manifest={
+            **packet.manifest,
+            "psd_target_overlay": {
+                **packet_overlay,
+                "render_version": PSD_PACKET_RENDER_VERSION - 1,
+            },
+        },
+        mtime=1.0,
+    )
+    assert _packet_needs_refresh(stale_packet_overlay, row) is True
 
     dashboard_html = _render_html(
         campaign_dir=campaign,
@@ -121,3 +175,29 @@ with TemporaryDirectory() as tmp:
     entrypoint_html = entrypoint.read_text()
     assert 'src="/visual_dashboard/"' in entrypoint_html
     assert "Directory listing" not in entrypoint_html
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    archive_path = campaign / "candidate_archive.jsonl"
+    rows = [
+        {
+            "batch_name": "batch_0117",
+            "candidate_id": "C02815",
+            "pair_score": 8.7,
+            "pair_score_version": int(hfo.PAIR_SCORE_VERSION),
+            "parameters": {},
+        },
+        {
+            "batch_name": "batch_0103",
+            "candidate_id": "C01743",
+            "pair_score": 25.2,
+            "pair_score_version": int(hfo.PAIR_SCORE_VERSION) - 1,
+            "parameters": {},
+        },
+    ]
+    with archive_path.open("w") as handle:
+        for row in rows:
+            handle.write(json.dumps(row) + "\n")
+
+    ranked_rows = _load_ranked_rows(campaign)
+    assert [row["candidate_id"] for row in ranked_rows] == ["C02815"]
