@@ -383,16 +383,42 @@ def _archive_seq(row: dict[str, Any]) -> int:
 
 
 def _recent_rows(rows: list[dict[str, Any]], *, limit: int) -> list[dict[str, Any]]:
-    ranked = sorted(
+    latest_batch_name = ""
+    ranked_by_arrival = sorted(
         rows,
         key=lambda row: (
             _archive_seq(row),
             _batch_index(row),
-            float(row.get("pair_score", float("-inf"))),
             str(row.get("candidate_id") or ""),
         ),
         reverse=True,
     )
+    for row in ranked_by_arrival:
+        batch_name = str(row.get("batch_name") or "")
+        if batch_name:
+            latest_batch_name = batch_name
+            break
+    if latest_batch_name:
+        ranked = sorted(
+            [row for row in rows if str(row.get("batch_name") or "") == latest_batch_name],
+            key=lambda row: (
+                float(row.get("pair_score", float("-inf"))),
+                _archive_seq(row),
+                str(row.get("candidate_id") or ""),
+            ),
+            reverse=True,
+        )
+    else:
+        ranked = sorted(
+            rows,
+            key=lambda row: (
+                float(row.get("pair_score", float("-inf"))),
+                _archive_seq(row),
+                _batch_index(row),
+                str(row.get("candidate_id") or ""),
+            ),
+            reverse=True,
+        )
     return ranked[: int(limit)]
 
 
