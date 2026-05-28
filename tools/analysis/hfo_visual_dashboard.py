@@ -1407,9 +1407,13 @@ def _render_html(
     generated_at: str,
     recent_batch_name: str | None = None,
 ) -> str:
-    best_rows = rows[: int(top_n)]
-    recent_rows = _recent_rows(rows, limit=int(top_n), recent_batch_name=recent_batch_name)
     tab_specs = hfo_visuals.dashboard_tabs()
+    best_rows = rows[: int(top_n)]
+    recent_tab_spec = next((spec for spec in tab_specs if spec.key == "recent"), None)
+    recent_limit = int(top_n)
+    if recent_tab_spec is not None and recent_tab_spec.display_limit is not None:
+        recent_limit = min(int(top_n), int(recent_tab_spec.display_limit))
+    recent_rows = _recent_rows(rows, limit=recent_limit, recent_batch_name=recent_batch_name)
     best_packet_cards = "\n".join(
         _render_packet_card(
             row,
@@ -1436,7 +1440,7 @@ def _render_html(
             "packet_cards": best_packet_cards,
         },
         "recent": {
-            "table_html": _render_recent_table(rows, top_n=top_n, recent_batch_name=recent_batch_name),
+            "table_html": _render_recent_table(rows, top_n=recent_limit, recent_batch_name=recent_batch_name),
             "packet_cards": recent_packet_cards,
         },
     }

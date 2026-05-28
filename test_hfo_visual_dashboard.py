@@ -52,6 +52,7 @@ assert _effective_packet_generation_workers(1, 8) == 1
 assert _effective_packet_generation_workers(2, 8) == 2
 assert _effective_packet_generation_workers(999, 3) == 3
 assert hfo_vd.DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N == 5
+assert next(spec for spec in hfo_vd.hfo_visuals.dashboard_tabs() if spec.key == "recent").display_limit == 5
 
 recent_fixture_rows = [
     {"batch_name": "batch_0007", "candidate_id": "C00007", "pair_score": 1.0},
@@ -497,6 +498,29 @@ with TemporaryDirectory() as tmp:
     assert "Best Visual Packets" in dashboard_html
     assert f'fetch("{hfo_vd.GENERATE_PACKET_ENDPOINT}"' in dashboard_html
     assert "setActiveTab(" in dashboard_html
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    output_dir.mkdir(parents=True)
+    rows = [
+        {"batch_name": "batch_0202", "candidate_id": f"C0000{index}", "pair_score": float(10 - index)}
+        for index in range(7)
+    ]
+    dashboard_html = _render_html(
+        campaign_dir=campaign,
+        output_dir=output_dir,
+        rows=rows,
+        packets={},
+        top_n=7,
+        refresh_s=60.0,
+        generated_packets=[],
+        status_payload={},
+        generated_at="2026-05-28T01:23:45",
+        recent_batch_name="batch_0202",
+    )
+    assert dashboard_html.count('id="best-candidate-') == 7
+    assert dashboard_html.count('id="recent-candidate-') == 5
 
     dashboard = campaign / "visual_dashboard"
     server_root, url_path = _dashboard_server_root_and_url(dashboard, campaign)

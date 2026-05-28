@@ -87,6 +87,7 @@ class DashboardTabSpec:
     label: str
     table_heading: str
     packet_heading: str
+    display_limit: int | None = None
 
 
 FREQUENCY_GROUPS = (
@@ -141,6 +142,7 @@ DASHBOARD_TABS = (
         label="Recent",
         table_heading="Most Recent Candidates",
         packet_heading="Recent Visual Packets",
+        display_limit=5,
     ),
 )
 
