@@ -39,7 +39,7 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
-VISUAL_STYLE_VERSION = 10
+VISUAL_STYLE_VERSION = 11
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
@@ -214,7 +214,7 @@ def _save_spectrogram(windowed: dict[str, Any], condition: str, out: Path, *, np
             max_freq_hz=NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ,
             nperseg=nperseg,
             noverlap=noverlap,
-            modulus=NOTEBOOK_TIME_MODULUS_MS,
+            modulus=None,
             ax=ax,
         )
     except Exception as exc:

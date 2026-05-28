@@ -6,7 +6,9 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+import matplotlib.pyplot as plt
 import numpy as np
+import obgpu_experiment_helpers as hlp
 import olfactorybulb.hfo_optimizer as hfo
 from tools.analysis.generate_hfo_candidate_packet import (
     VISUAL_STYLE_VERSION,
@@ -94,6 +96,20 @@ with TemporaryDirectory() as tmp:
     stale_population_rates.write_bytes(b"placeholder")
     _save_spectrogram(windowed, "control", helper_spec, nperseg=nperseg, noverlap=noverlap)
     assert helper_spec.exists()
+    fig, ax = plt.subplots()
+    try:
+        hlp.plot_spectrogram(
+            {"lfp_t": window_t, "lfp": windowed["lfp"]},
+            dt_ms=0.1,
+            max_freq_hz=250.0,
+            nperseg=nperseg,
+            noverlap=noverlap,
+            modulus=None,
+            ax=ax,
+        )
+        assert ax.get_xlabel() == "Time (ms)"
+    finally:
+        plt.close(fig)
     row_score_version = int(hfo.PAIR_SCORE_VERSION)
     packet_overlay = {
         "render_version": PSD_PACKET_RENDER_VERSION,
