@@ -48,6 +48,13 @@ DEFAULT_SCORE_BANDS = {
 
 PAIR_SCORE_VERSION = 3
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
+PLAUSIBILITY_SOFT_LIMITS = {
+    "kar_mt_gmax": 0.05,
+    "kar_gc_gmax": 0.02,
+    "kar_osn_weight_scale": 2.0,
+    "kar_gc_weight_scale": 4.0,
+    "kar_mt_effective_drive": 0.10,
+}
 
 
 @dataclass(frozen=True)
@@ -108,14 +115,14 @@ def default_hfo_search_space() -> list[ParameterSpec]:
         ParameterSpec(
             path="kar_mt_gmax",
             low=0.01,
-            high=512.0,
+            high=0.08,
             scale="log",
             description="KAR conductance on M/T cells",
         ),
         ParameterSpec(
             path="kar_gc_gmax",
             low=0.001,
-            high=64.0,
+            high=0.025,
             scale="log",
             description="Optional KAR conductance on granule cells",
         ),
@@ -180,7 +187,7 @@ def default_hfo_search_space() -> list[ParameterSpec]:
         ParameterSpec(
             path="kar_osn_weight_scale",
             low=0.25,
-            high=8.0,
+            high=2.0,
             scale="log",
             default=1.0,
             description="OSN event weight multiplier for M/T KAR traces",
@@ -188,7 +195,7 @@ def default_hfo_search_space() -> list[ParameterSpec]:
         ParameterSpec(
             path="kar_gc_weight_scale",
             low=0.25,
-            high=8.0,
+            high=4.0,
             scale="log",
             default=1.0,
             description="M/T event weight multiplier for GC KAR traces",
@@ -649,6 +656,55 @@ def _target_clean_fraction(metrics: dict[str, Any]) -> float:
     return target_power / denom if denom > 0.0 else 0.0
 
 
+def parameter_plausibility_penalty(parameters: dict[str, Any] | None) -> tuple[float, dict[str, float]]:
+    """Return a soft penalty for KAR settings outside the working plausible range."""
+    parameters = dict(parameters or {})
+    components: dict[str, float] = {}
+
+    def value(name: str, default: float) -> float:
+        try:
+            raw = float(parameters.get(name, default))
+        except (TypeError, ValueError):
+            return float(default)
+        return raw if math.isfinite(raw) else float(default)
+
+    def add_log_excess(name: str, soft_limit: float, weight: float) -> None:
+        raw = value(name, soft_limit)
+        if raw <= soft_limit:
+            return
+        excess = math.log10(max(raw / soft_limit, 1.0))
+        components[name] = float(weight * excess * excess)
+
+    add_log_excess("kar_mt_gmax", PLAUSIBILITY_SOFT_LIMITS["kar_mt_gmax"], 20.0)
+    add_log_excess("kar_gc_gmax", PLAUSIBILITY_SOFT_LIMITS["kar_gc_gmax"], 15.0)
+    add_log_excess("kar_osn_weight_scale", PLAUSIBILITY_SOFT_LIMITS["kar_osn_weight_scale"], 8.0)
+    add_log_excess("kar_gc_weight_scale", PLAUSIBILITY_SOFT_LIMITS["kar_gc_weight_scale"], 5.0)
+
+    mt_drive = value("kar_mt_gmax", 0.0) * value("kar_osn_weight_scale", 1.0)
+    mt_drive_limit = PLAUSIBILITY_SOFT_LIMITS["kar_mt_effective_drive"]
+    if mt_drive > mt_drive_limit:
+        excess = math.log10(max(mt_drive / mt_drive_limit, 1.0))
+        components["kar_mt_effective_drive"] = float(25.0 * excess * excess)
+
+    return float(sum(components.values())), components
+
+
+def _apply_parameter_plausibility_penalty(
+    pair_metrics: dict[str, Any],
+    parameters: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Subtract the KAR plausibility penalty from one pair score payload."""
+    adjusted = dict(pair_metrics)
+    base_score = float(adjusted.get("pair_score", float("-inf")))
+    penalty, components = parameter_plausibility_penalty(parameters)
+    adjusted["unpenalized_pair_score"] = float(base_score)
+    adjusted["parameter_plausibility_penalty"] = float(penalty)
+    adjusted["parameter_plausibility_components"] = components
+    if math.isfinite(base_score):
+        adjusted["pair_score"] = float(base_score - penalty)
+    return adjusted
+
+
 def _target_band_for_pair(
     control_metrics: dict[str, Any],
     ketamine_metrics: dict[str, Any],
@@ -676,12 +732,11 @@ def rescore_candidate_row(row: dict[str, Any]) -> dict[str, Any]:
     if control_metrics is None or ketamine_metrics is None:
         return row
     rescored = dict(row)
-    rescored.update(
-        score_candidate_pair(
-            control_metrics=control_metrics,
-            ketamine_metrics=ketamine_metrics,
-        )
+    pair_metrics = score_candidate_pair(
+        control_metrics=control_metrics,
+        ketamine_metrics=ketamine_metrics,
     )
+    rescored.update(_apply_parameter_plausibility_penalty(pair_metrics, row.get("parameters")))
     return rescored
 
 
@@ -1890,15 +1945,17 @@ def score_hfo_batch(
     for candidate_id, conditions in grouped.items():
         control_row = conditions.get("control")
         ketamine_row = conditions.get("ketamine")
+        parameters = candidate_lookup.get(candidate_id, {})
         pair_metrics = score_candidate_pair(
             control_metrics=control_row,
             ketamine_metrics=ketamine_row,
         )
+        pair_metrics = _apply_parameter_plausibility_penalty(pair_metrics, parameters)
         candidate_rows.append(
             {
                 "batch_name": batch_plan["batch_name"],
                 "candidate_id": candidate_id,
-                "parameters": candidate_lookup.get(candidate_id, {}),
+                "parameters": parameters,
                 "control_metrics": control_row,
                 "ketamine_metrics": ketamine_row,
                 **pair_metrics,
@@ -1965,6 +2022,7 @@ __all__ = [
     "maybe_dataframe",
     "mean_firing_rates_by_type",
     "paramiko_auth_probe",
+    "parameter_plausibility_penalty",
     "propose_elite_batch",
     "propose_lhs_batch",
     "rescore_candidate_row",

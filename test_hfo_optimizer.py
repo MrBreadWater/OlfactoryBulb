@@ -17,6 +17,7 @@ from olfactorybulb.hfo_optimizer import (
     default_hfo_search_space,
     load_candidate_archive_rows,
     lfp_source_diagnostic_configs,
+    parameter_plausibility_penalty,
     propose_elite_batch,
     score_candidate_pair,
     score_condition_result,
@@ -38,6 +39,11 @@ for required_path in (
     "gc_ka_gbar_scale",
 ):
     assert required_path in default_paths
+default_specs = {spec.path: spec for spec in default_hfo_search_space()}
+assert default_specs["kar_mt_gmax"].high == 0.08
+assert default_specs["kar_gc_gmax"].high == 0.025
+assert default_specs["kar_osn_weight_scale"].high == 2.0
+assert default_specs["kar_gc_weight_scale"].high == 4.0
 
 schedule = sustained_odor_schedule(9000.0)
 assert min(schedule) == 0
@@ -149,6 +155,17 @@ assert bad_pair["target_delta"] == 0.0
 assert artifact_pair["control_wrong_band_penalty"] > 0.0
 assert reversed_pair["negative_delta_penalty"] > 0.0
 assert missing_control_pair["pair_score"] == float("-inf")
+
+plausible_penalty, plausible_components = parameter_plausibility_penalty(
+    {"kar_mt_gmax": 0.03, "kar_osn_weight_scale": 1.0, "kar_gc_gmax": 0.008}
+)
+implausible_penalty, implausible_components = parameter_plausibility_penalty(
+    {"kar_mt_gmax": 276.0, "kar_osn_weight_scale": 5.2, "kar_gc_gmax": 0.004}
+)
+assert plausible_penalty == 0.0
+assert plausible_components == {}
+assert implausible_penalty > 100.0
+assert "kar_mt_effective_drive" in implausible_components
 
 with TemporaryDirectory() as tmpdir:
     search_space = [
