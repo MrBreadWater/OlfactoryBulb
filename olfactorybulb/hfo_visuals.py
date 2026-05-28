@@ -28,19 +28,25 @@ CELL_COLORS = {
     "other": "#4b5563",
 }
 
-VISUAL_STYLE_VERSION = 12
+VISUAL_STYLE_VERSION = 13
 PSD_PACKET_RENDER_VERSION = 1
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
+NOTEBOOK_PACKET_TIME_MODULUS_MS = 200.0
 NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS = 1000.0
 NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT = 16
+NOTEBOOK_SPECTROGRAM_MIN_TIME_BINS = 4
 NOTEBOOK_SPECTROGRAM_MIN_NPERSEG = 128
-NOTEBOOK_SPECTROGRAM_MAX_NPERSEG = 1024
+NOTEBOOK_SPECTROGRAM_MAX_NPERSEG = 4096
 NOTEBOOK_SPECTROGRAM_OVERLAP_RATIO = 0.9
 SPECTROGRAM_GENERATOR_ID = "tools.analysis.generate_hfo_candidate_packet.generate_packet"
 SPECTROGRAM_FILE_BY_CONDITION = {
     "control": "04_spectrogram_control.png",
     "ketamine": "05_spectrogram_ketamine.png",
+}
+SPECTROGRAM_MOD200_FILE_BY_CONDITION = {
+    "control": "04_spectrogram_control_mod200.png",
+    "ketamine": "05_spectrogram_ketamine_mod200.png",
 }
 SPECTROGRAM_PIPELINE = {
     "module": "tools.analysis.generate_hfo_candidate_packet",
@@ -98,10 +104,22 @@ FIXED_CONDITION_PAIR_SPECS = (
         open_by_default=True,
     ),
     ConditionPairSpec(
+        title="LFP spectrogram (mod 200 ms)",
+        control_file=SPECTROGRAM_MOD200_FILE_BY_CONDITION["control"],
+        ketamine_file=SPECTROGRAM_MOD200_FILE_BY_CONDITION["ketamine"],
+        dom_id_suffix="spectrogram-mod200",
+    ),
+    ConditionPairSpec(
         title="Soma spike raster",
         control_file="07_raster_control.png",
         ketamine_file="08_raster_ketamine.png",
         dom_id_suffix="raster",
+    ),
+    ConditionPairSpec(
+        title="Soma spike raster (mod 200 ms)",
+        control_file="07_raster_control_mod200.png",
+        ketamine_file="08_raster_ketamine_mod200.png",
+        dom_id_suffix="raster-mod200",
     ),
     ConditionPairSpec(
         title="Target-HFO phase locking",
@@ -175,11 +193,22 @@ def fixed_condition_pair_specs() -> tuple[ConditionPairSpec, ...]:
 
 
 def packet_manifest_files() -> list[str]:
-    files = ["01_psd_control.png", "01_psd_ketamine.png", "03_psd_overlay.png", *PACKET_BASE_FILES]
+    files = [
+        "01_psd_control.png",
+        "01_psd_ketamine.png",
+        "03_psd_overlay.png",
+        *PACKET_BASE_FILES,
+        *SPECTROGRAM_MOD200_FILE_BY_CONDITION.values(),
+        "06_lfp_windows_mod200.png",
+        "07_raster_control_mod200.png",
+        "08_raster_ketamine_mod200.png",
+        "10_inputs_mod200.png",
+    ]
     for condition in ("control", "ketamine"):
         for group in FREQUENCY_GROUPS:
             files.append(kde_filename("1d", condition, group.label))
             files.append(kde_filename("2d", condition, group.label))
+            files.append(kde_filename("2d", condition, group.label, suffix="mod200"))
     files.append("contact_sheet.png")
     return files
 
@@ -194,6 +223,7 @@ def visual_contract_snapshot() -> dict[str, Any]:
         "packet_files": packet_manifest_files(),
         "spectrogram_pipeline": dict(SPECTROGRAM_PIPELINE),
         "spectrogram_window_ms": NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
+        "time_modulus_ms": NOTEBOOK_PACKET_TIME_MODULUS_MS,
     }
 
 
@@ -205,11 +235,12 @@ def psd_overlay_contract_snapshot() -> dict[str, Any]:
     }
 
 
-def kde_filename(kind: str, condition: str, group_label: str) -> str:
-    return f"13_spike_frequency_kde_{kind}_{condition}_{group_label}.png"
+def kde_filename(kind: str, condition: str, group_label: str, *, suffix: str | None = None) -> str:
+    suffix_text = f"_{suffix}" if suffix else ""
+    return f"13_spike_frequency_kde_{kind}_{condition}_{group_label}{suffix_text}.png"
 
 
-def parse_kde_filename(name: str, *, kind: str) -> tuple[str, str] | None:
+def parse_kde_filename(name: str, *, kind: str) -> tuple[str, str, str | None] | None:
     prefix = f"13_spike_frequency_kde_{kind}_"
     suffix = ".png"
     if not name.startswith(prefix) or not name.endswith(suffix):
@@ -221,22 +252,77 @@ def parse_kde_filename(name: str, *, kind: str) -> tuple[str, str] | None:
         return None
     if condition not in {"control", "ketamine"} or not group:
         return None
-    return condition, group
+    variant: str | None = None
+    if group.endswith("_mod200"):
+        group = group[: -len("_mod200")]
+        variant = "mod200"
+    if not group:
+        return None
+    return condition, group, variant
 
 
 def spectrogram_window_geometry(windowed: dict[str, Any]) -> tuple[int, int]:
-    """Choose a dynamic spectrogram geometry that preserves time bins on 1 s slices."""
+    """Choose a spectrogram geometry with at least as many displayed freq bins as time bins."""
     _t_ms, values = finite_lfp(windowed)
     n_samples = int(len(values))
     if n_samples <= 1:
         return NOTEBOOK_SPECTROGRAM_MIN_NPERSEG, 0
 
-    nperseg = max(
-        NOTEBOOK_SPECTROGRAM_MIN_NPERSEG,
-        min(NOTEBOOK_SPECTROGRAM_MAX_NPERSEG, max(1, n_samples // NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT)),
+    max_candidate = max(16, min(NOTEBOOK_SPECTROGRAM_MAX_NPERSEG, n_samples - 1))
+    candidate_nperseg = sorted(
+        {
+            value
+            for value in (
+                16,
+                32,
+                64,
+                128,
+                256,
+                512,
+                1024,
+                2048,
+                4096,
+                max_candidate,
+            )
+            if 16 <= value <= max_candidate
+        },
+        reverse=True,
     )
-    noverlap = max(0, min(int(NOTEBOOK_SPECTROGRAM_OVERLAP_RATIO * nperseg), nperseg - 1))
-    return nperseg, noverlap
+    if not candidate_nperseg:
+        candidate_nperseg = [max(16, min(max_candidate, max(16, n_samples // 2)))]
+
+    fs_hz = 1000.0 / NOTEBOOK_ANALYSIS_DT_MS
+    max_freq_hz = notebook_spectrogram_max_freq_hz()
+    min_time_bins = max(2, int(NOTEBOOK_SPECTROGRAM_MIN_TIME_BINS))
+    target_time_bins = max(min_time_bins, int(NOTEBOOK_SPECTROGRAM_TARGET_WINDOW_COUNT))
+    best: tuple[int, int, int, int] | None = None
+
+    for nperseg in candidate_nperseg:
+        freqs = np.fft.rfftfreq(int(nperseg), d=1.0 / fs_hz)
+        displayed_freq_bins = int(np.count_nonzero(freqs <= max_freq_hz))
+        if displayed_freq_bins <= 0:
+            continue
+        desired_time_bins = max(min_time_bins, min(target_time_bins, displayed_freq_bins))
+        if desired_time_bins <= 1:
+            hop = max(1, nperseg)
+        else:
+            hop = max(1, math.ceil(max(0, n_samples - nperseg) / max(1, desired_time_bins - 1)))
+        hop = min(int(hop), int(nperseg))
+        noverlap = max(0, int(nperseg - hop))
+        time_bins = 1 + max(0, (n_samples - nperseg) // max(1, nperseg - noverlap))
+        if displayed_freq_bins < time_bins:
+            continue
+        candidate_score = (displayed_freq_bins, time_bins, nperseg, noverlap)
+        if best is None or candidate_score > best:
+            best = candidate_score
+
+    if best is not None:
+        _displayed_freq_bins, _time_bins, nperseg, noverlap = best
+        return int(nperseg), int(noverlap)
+
+    nperseg = max(16, min(max_candidate, max(1, n_samples // max(1, target_time_bins))))
+    noverlap = max(0, min(int(0.5 * nperseg), nperseg - 1))
+    return int(nperseg), int(noverlap)
 
 
 def condition_windows(row: dict[str, Any]) -> dict[str, tuple[float, float]]:
@@ -311,25 +397,47 @@ def finite_lfp(windowed: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
     return t_ms[mask], values[mask]
 
 
-def save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float]], out: Path) -> None:
+def save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float]], out: Path, *, modulus_ms: float | None = None) -> None:
     t_ms = np.asarray(result.get("lfp_t", []), dtype=float)
     values = np.asarray(result.get("lfp", []), dtype=float)
     fig, ax = plt.subplots(figsize=(12, 4.8), constrained_layout=True)
-    ax.plot(t_ms, values, color="#111827", lw=0.8)
-    for name, color in [("control", "#2563eb"), ("ketamine", "#dc2626")]:
-        start, stop = windows[name]
-        ax.axvspan(start, stop, color=color, alpha=0.08, lw=0, label=f"{name} scoring window")
-    ax.axvline(windows["control"][1], color="#6b7280", lw=1.0, ls=":", label="switch")
-    ax.set_xlabel("Time (ms)")
+    if modulus_ms is None:
+        ax.plot(t_ms, values, color="#111827", lw=0.8)
+        for name, color in [("control", "#2563eb"), ("ketamine", "#dc2626")]:
+            start, stop = windows[name]
+            ax.axvspan(start, stop, color=color, alpha=0.08, lw=0, label=f"{name} scoring window")
+        ax.axvline(windows["control"][1], color="#6b7280", lw=1.0, ls=":", label="switch")
+        ax.set_xlabel("Time (ms)")
+        ax.set_title("LFP trace and scoring windows")
+    else:
+        folded_t, folded_values = hlp._fold_time_series_by_modulus(  # type: ignore[attr-defined]
+            t_ms,
+            values,
+            modulus_ms,
+            dt_ms=NOTEBOOK_ANALYSIS_DT_MS,
+        )
+        ax.plot(folded_t, folded_values, color="#111827", lw=1.0)
+        ax.set_xlim(0.0, float(modulus_ms))
+        ax.set_xlabel(f"Time modulo {float(modulus_ms):g} ms")
+        ax.set_title(f"LFP trace folded modulo {float(modulus_ms):g} ms")
     ax.set_ylabel("LFP proxy")
-    ax.set_title("LFP trace and scoring windows")
-    ax.legend(frameon=False, loc="upper right")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(frameon=False, loc="upper right")
     ax.grid(True, alpha=0.18)
     fig.savefig(out, dpi=160)
     plt.close(fig)
 
 
-def save_spectrogram(windowed: dict[str, Any], condition: str, out: Path, *, nperseg: int, noverlap: int) -> None:
+def save_spectrogram(
+    windowed: dict[str, Any],
+    condition: str,
+    out: Path,
+    *,
+    nperseg: int,
+    noverlap: int,
+    modulus_ms: float | None = None,
+) -> None:
     fig, ax = plt.subplots(figsize=(14, 5.0), constrained_layout=True)
     try:
         hlp.plot_spectrogram(
@@ -339,7 +447,7 @@ def save_spectrogram(windowed: dict[str, Any], condition: str, out: Path, *, npe
             max_freq_hz=notebook_spectrogram_max_freq_hz(),
             nperseg=nperseg,
             noverlap=noverlap,
-            modulus=None,
+            modulus=modulus_ms,
             ax=ax,
         )
     except Exception as exc:
@@ -347,7 +455,10 @@ def save_spectrogram(windowed: dict[str, Any], condition: str, out: Path, *, npe
     ax.axhspan(*hfo.DEFAULT_SCORE_BANDS["high_gamma"], color="#16a34a", alpha=0.09, lw=0)
     ax.axhspan(*hfo.DEFAULT_SCORE_BANDS["target_hfo"], color="#d97706", alpha=0.10, lw=0)
     ax.set_ylim(0, notebook_spectrogram_max_freq_hz())
-    ax.set_title(f"{condition} LFP spectrogram")
+    if modulus_ms is None:
+        ax.set_title(f"{condition} LFP spectrogram")
+    else:
+        ax.set_title(f"{condition} LFP spectrogram (mod {float(modulus_ms):g} ms)")
     fig.savefig(out, dpi=160)
     plt.close(fig)
 
@@ -364,17 +475,23 @@ def spike_rows(windowed: dict[str, Any]) -> list[tuple[str, np.ndarray]]:
     return rows
 
 
-def save_raster(windowed: dict[str, Any], condition: str, out: Path) -> None:
+def save_raster(windowed: dict[str, Any], condition: str, out: Path, *, modulus_ms: float | None = None) -> None:
     rows = spike_rows(windowed)
     fig, ax = plt.subplots(figsize=(12, 6.0), constrained_layout=True)
     for y_index, (label, times) in enumerate(rows):
         if times.size == 0:
             continue
         cell_type = hlp.cell_type_of(label)
-        ax.scatter(times, np.full(times.shape, y_index), s=4, color=CELL_COLORS.get(cell_type, CELL_COLORS["other"]), alpha=0.75)
-    ax.set_xlabel("Time in window (ms)")
+        plot_times = np.mod(times, float(modulus_ms)) if modulus_ms is not None else times
+        ax.scatter(plot_times, np.full(times.shape, y_index), s=4, color=CELL_COLORS.get(cell_type, CELL_COLORS["other"]), alpha=0.75)
+    if modulus_ms is None:
+        ax.set_xlabel("Time in window (ms)")
+        ax.set_title(f"{condition} soma spike raster")
+    else:
+        ax.set_xlim(0.0, float(modulus_ms))
+        ax.set_xlabel(f"Time modulo {float(modulus_ms):g} ms")
+        ax.set_title(f"{condition} soma spike raster (mod {float(modulus_ms):g} ms)")
     ax.set_ylabel("Recorded soma index")
-    ax.set_title(f"{condition} soma spike raster")
     ax.grid(True, axis="x", alpha=0.15)
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -407,35 +524,56 @@ def save_spike_frequency_kde_2d(
     label: str,
     cell_types: tuple[str, ...],
     out: Path,
+    *,
+    modulus_ms: float | None = None,
 ) -> None:
     fig, ax = plt.subplots(figsize=(10.5, 5.4), constrained_layout=True)
+    config = (
+        hlp.frequency_plot_config_with_modulus(NOTEBOOK_FREQ_CONFIG, modulus_ms)
+        if modulus_ms is not None
+        else NOTEBOOK_FREQ_CONFIG
+    )
     hlp.plot_spike_frequency_kde_2d(
         windowed,
         cell_types=cell_types,
-        config=NOTEBOOK_FREQ_CONFIG,
+        config=config,
         ax=ax,
-        title=f"{condition} soma spike frequency KDE ({label})",
+        title=(
+            f"{condition} soma spike frequency KDE ({label})"
+            if modulus_ms is None
+            else f"{condition} soma spike frequency KDE ({label}, mod {float(modulus_ms):g} ms)"
+        ),
     )
     fig.savefig(out, dpi=160)
     plt.close(fig)
 
 
-def save_input_overview(result: dict[str, Any], windows: dict[str, tuple[float, float]], out: Path) -> None:
+def save_input_overview(result: dict[str, Any], windows: dict[str, tuple[float, float]], out: Path, *, modulus_ms: float | None = None) -> None:
     fig, ax = plt.subplots(figsize=(12, 4.8), constrained_layout=True)
     all_times = []
+    bin_width_ms = 5.0 if modulus_ms is not None else 25.0
     for _label, times in result.get("input_times", []) or []:
         values = np.asarray(times, dtype=float)
         all_times.extend(values[np.isfinite(values)].tolist())
     if all_times:
-        bins = np.arange(0.0, max(all_times) + 25.0, 25.0)
-        ax.hist(all_times, bins=bins, color="#0f766e", alpha=0.75)
-    for name, color in [("control", "#2563eb"), ("ketamine", "#dc2626")]:
-        start, stop = windows[name]
-        ax.axvspan(start, stop, color=color, alpha=0.08, lw=0, label=f"{name} scoring window")
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Input events / 25 ms")
-    ax.set_title("Afferent input event overview")
-    ax.legend(frameon=False)
+        plot_times = np.mod(all_times, float(modulus_ms)) if modulus_ms is not None else all_times
+        upper = float(modulus_ms) if modulus_ms is not None else max(plot_times) + bin_width_ms
+        bins = np.arange(0.0, upper + bin_width_ms, bin_width_ms)
+        ax.hist(plot_times, bins=bins, color="#0f766e", alpha=0.75)
+    if modulus_ms is None:
+        for name, color in [("control", "#2563eb"), ("ketamine", "#dc2626")]:
+            start, stop = windows[name]
+            ax.axvspan(start, stop, color=color, alpha=0.08, lw=0, label=f"{name} scoring window")
+        ax.set_xlabel("Time (ms)")
+        ax.set_title("Afferent input event overview")
+    else:
+        ax.set_xlim(0.0, float(modulus_ms))
+        ax.set_xlabel(f"Time modulo {float(modulus_ms):g} ms")
+        ax.set_title(f"Afferent input event overview (mod {float(modulus_ms):g} ms)")
+    ax.set_ylabel(f"Input events / {int(bin_width_ms) if modulus_ms is not None else 25} ms")
+    handles, labels = ax.get_legend_handles_labels()
+    if handles:
+        ax.legend(frameon=False)
     ax.grid(True, axis="y", alpha=0.16)
     fig.savefig(out, dpi=160)
     plt.close(fig)
@@ -505,11 +643,13 @@ __all__ = [
     "FREQUENCY_GROUPS",
     "NOTEBOOK_ANALYSIS_DT_MS",
     "NOTEBOOK_FREQ_CONFIG",
+    "NOTEBOOK_PACKET_TIME_MODULUS_MS",
     "NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS",
     "PRIMARY_PSD_NAME_ORDER",
     "PSD_PACKET_RENDER_VERSION",
     "PACKET_BASE_FILES",
     "SPECTROGRAM_FILE_BY_CONDITION",
+    "SPECTROGRAM_MOD200_FILE_BY_CONDITION",
     "SPECTROGRAM_PIPELINE",
     "VISUAL_STYLE_VERSION",
     "ConditionPairSpec",

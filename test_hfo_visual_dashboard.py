@@ -74,8 +74,10 @@ windowed = {
 }
 nperseg, noverlap = _spectrogram_window_geometry(windowed)
 assert nperseg >= 128
-assert noverlap >= int(0.85 * nperseg)
-assert 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap)) >= 100
+freq_bins = int(np.count_nonzero(np.fft.rfftfreq(int(nperseg), d=0.0001) <= float(hfo.DEFAULT_SCORE_BANDS["target_hfo"][1])))
+time_bins = 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap))
+assert freq_bins >= time_bins
+assert time_bins <= 16
 
 fake_psd_module = types.SimpleNamespace(PSD_PACKET_RENDER_VERSION=123)
 fake_visuals_module = types.SimpleNamespace(VISUAL_STYLE_VERSION=456)
@@ -108,16 +110,26 @@ with TemporaryDirectory() as tmp:
     psd_control = packet_dir / "01_psd_control.png"
     raster = packet_dir / "07_raster_control.png"
     raster_k = packet_dir / "08_raster_ketamine.png"
+    raster_mod = packet_dir / "07_raster_control_mod200.png"
+    raster_k_mod = packet_dir / "08_raster_ketamine_mod200.png"
     spec_c = packet_dir / SPECTROGRAM_FILE_CONTROL
     spec_k = packet_dir / SPECTROGRAM_FILE_KETAMINE
+    spec_c_mod = packet_dir / "04_spectrogram_control_mod200.png"
+    spec_k_mod = packet_dir / "05_spectrogram_ketamine_mod200.png"
+    lfp_mod = packet_dir / "06_lfp_windows_mod200.png"
+    inputs_mod = packet_dir / "10_inputs_mod200.png"
     kde1d_mt_c = packet_dir / "13_spike_frequency_kde_1d_control_MT.png"
     kde1d_mt_k = packet_dir / "13_spike_frequency_kde_1d_ketamine_MT.png"
     kde2d_mt_c = packet_dir / "13_spike_frequency_kde_2d_control_MT.png"
     kde2d_mt_k = packet_dir / "13_spike_frequency_kde_2d_ketamine_MT.png"
+    kde2d_mt_c_mod = packet_dir / "13_spike_frequency_kde_2d_control_MT_mod200.png"
+    kde2d_mt_k_mod = packet_dir / "13_spike_frequency_kde_2d_ketamine_MT_mod200.png"
     kde1d_epli_c = packet_dir / "13_spike_frequency_kde_1d_control_EPLI.png"
     kde1d_epli_k = packet_dir / "13_spike_frequency_kde_1d_ketamine_EPLI.png"
     kde2d_epli_c = packet_dir / "13_spike_frequency_kde_2d_control_EPLI.png"
     kde2d_epli_k = packet_dir / "13_spike_frequency_kde_2d_ketamine_EPLI.png"
+    kde2d_epli_c_mod = packet_dir / "13_spike_frequency_kde_2d_control_EPLI_mod200.png"
+    kde2d_epli_k_mod = packet_dir / "13_spike_frequency_kde_2d_ketamine_EPLI_mod200.png"
     legacy_kde = packet_dir / "kde_control_MC.png"
     contact = packet_dir / "contact_sheet.png"
     for path in (
@@ -126,16 +138,26 @@ with TemporaryDirectory() as tmp:
         psd_control,
         raster,
         raster_k,
+        raster_mod,
+        raster_k_mod,
         spec_c,
         spec_k,
+        spec_c_mod,
+        spec_k_mod,
+        lfp_mod,
+        inputs_mod,
         kde1d_mt_c,
         kde1d_mt_k,
         kde2d_mt_c,
         kde2d_mt_k,
+        kde2d_mt_c_mod,
+        kde2d_mt_k_mod,
         kde1d_epli_c,
         kde1d_epli_k,
         kde2d_epli_c,
         kde2d_epli_k,
+        kde2d_epli_c_mod,
+        kde2d_epli_k_mod,
         legacy_kde,
         contact,
     ):
@@ -208,16 +230,26 @@ with TemporaryDirectory() as tmp:
             psd_control,
             raster,
             raster_k,
+            raster_mod,
+            raster_k_mod,
             spec_c,
             spec_k,
+            spec_c_mod,
+            spec_k_mod,
+            lfp_mod,
+            inputs_mod,
             kde1d_mt_c,
             kde1d_mt_k,
             kde2d_mt_c,
             kde2d_mt_k,
+            kde2d_mt_c_mod,
+            kde2d_mt_k_mod,
             kde1d_epli_c,
             kde1d_epli_k,
             kde2d_epli_c,
             kde2d_epli_k,
+            kde2d_epli_c_mod,
+            kde2d_epli_k_mod,
         ),
         manifest={
             "candidate_id": "C00042",
@@ -282,6 +314,10 @@ with TemporaryDirectory() as tmp:
     assert "13_spike_frequency_kde_1d_control_EPLI.png" in html
     assert "Soma spike frequency 1D KDE: MT" in html
     assert "Soma spike frequency 1D KDE: EPLI" in html
+    assert "LFP spectrogram (mod 200 ms)" in html
+    assert "Soma spike raster (mod 200 ms)" in html
+    assert "Soma spike time/frequency 2D KDE: MT (mod 200 ms)" in html
+    assert "13_spike_frequency_kde_2d_control_MT_mod200.png" in html
     assert "09_population_rates.png" not in html
     assert "Contact sheet" in html
     assert "gaba_tau2_ms" in html

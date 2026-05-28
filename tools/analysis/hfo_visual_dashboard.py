@@ -910,14 +910,14 @@ def _condition_pair_html(
     )
 
 
-def _frequency_kde_pairs(images: tuple[Path, ...], *, kind: str) -> dict[str, dict[str, Path]]:
-    pairs: dict[str, dict[str, Path]] = {}
+def _frequency_kde_pairs(images: tuple[Path, ...], *, kind: str) -> dict[tuple[str, str | None], dict[str, Path]]:
+    pairs: dict[tuple[str, str | None], dict[str, Path]] = {}
     for image in images:
         parsed = hfo_visuals.parse_kde_filename(image.name, kind=kind)
         if parsed is None:
             continue
-        condition, group = parsed
-        pairs.setdefault(group, {})[condition] = image
+        condition, group, variant = parsed
+        pairs.setdefault((group, variant), {})[condition] = image
     return pairs
 
 
@@ -947,18 +947,22 @@ def _condition_comparison_sections(
         )
 
     for kind, title in [("1d", "Soma spike frequency 1D KDE"), ("2d", "Soma spike time/frequency 2D KDE")]:
-        for group, pair in sorted(_frequency_kde_pairs(packet.images, kind=kind).items()):
+        for (group, variant), pair in sorted(
+            _frequency_kde_pairs(packet.images, kind=kind).items(),
+            key=lambda item: (str(item[0][0]), "" if item[0][1] is None else str(item[0][1])),
+        ):
             control_image = pair.get("control")
             ketamine_image = pair.get("ketamine")
             used.update(path for path in (control_image, ketamine_image) if path is not None)
+            suffix = " (mod 200 ms)" if variant == "mod200" else ""
             sections.append(
                 _condition_pair_html(
-                    f"{title}: {group}",
+                    f"{title}: {group}{suffix}",
                     control_image,
                     ketamine_image,
                     output_dir=output_dir,
-                    dom_id=f"{packet.candidate_id}-kde-{kind}-{group}",
-                    open_by_default=kind == "1d" and rank == 1,
+                    dom_id=f"{packet.candidate_id}-kde-{kind}-{group}{'-' + variant if variant else ''}",
+                    open_by_default=kind == "1d" and variant is None and rank == 1,
                 )
             )
 

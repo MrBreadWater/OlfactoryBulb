@@ -27,6 +27,8 @@ from regenerate_hfo_packet_psd import regenerate_packet_psd
 VISUAL_STYLE_VERSION = hv.VISUAL_STYLE_VERSION
 SPECTROGRAM_FILE_CONTROL = hv.SPECTROGRAM_FILE_BY_CONDITION["control"]
 SPECTROGRAM_FILE_KETAMINE = hv.SPECTROGRAM_FILE_BY_CONDITION["ketamine"]
+SPECTROGRAM_MOD200_FILE_CONTROL = hv.SPECTROGRAM_MOD200_FILE_BY_CONDITION["control"]
+SPECTROGRAM_MOD200_FILE_KETAMINE = hv.SPECTROGRAM_MOD200_FILE_BY_CONDITION["ketamine"]
 SPECTROGRAM_PIPELINE = hv.SPECTROGRAM_PIPELINE
 _spectrogram_window_geometry = hv.spectrogram_window_geometry
 _save_spectrogram = hv.save_spectrogram
@@ -83,10 +85,50 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
             nperseg=ketamine_geom[0],
             noverlap=ketamine_geom[1],
         )
+        hv.save_spectrogram(
+            spectrogram_windowed["control"],
+            condition="control",
+            out=tmp_packet_dir / SPECTROGRAM_MOD200_FILE_CONTROL,
+            nperseg=control_geom[0],
+            noverlap=control_geom[1],
+            modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+        )
+        hv.save_spectrogram(
+            spectrogram_windowed["ketamine"],
+            condition="ketamine",
+            out=tmp_packet_dir / SPECTROGRAM_MOD200_FILE_KETAMINE,
+            nperseg=ketamine_geom[0],
+            noverlap=ketamine_geom[1],
+            modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+        )
         hv.save_lfp_zoom(result, windows, tmp_packet_dir / "06_lfp_windows.png")
+        hv.save_lfp_zoom(
+            result,
+            windows,
+            tmp_packet_dir / "06_lfp_windows_mod200.png",
+            modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+        )
         hv.save_raster(windowed["control"], "control", tmp_packet_dir / "07_raster_control.png")
         hv.save_raster(windowed["ketamine"], "ketamine", tmp_packet_dir / "08_raster_ketamine.png")
+        hv.save_raster(
+            windowed["control"],
+            "control",
+            tmp_packet_dir / "07_raster_control_mod200.png",
+            modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+        )
+        hv.save_raster(
+            windowed["ketamine"],
+            "ketamine",
+            tmp_packet_dir / "08_raster_ketamine_mod200.png",
+            modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+        )
         hv.save_input_overview(result, windows, tmp_packet_dir / "10_inputs.png")
+        hv.save_input_overview(
+            result,
+            windows,
+            tmp_packet_dir / "10_inputs_mod200.png",
+            modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+        )
         hv.save_phase_hist(windowed["control"], "control", tmp_packet_dir / "11_phase_control.png")
         hv.save_phase_hist(windowed["ketamine"], "ketamine", tmp_packet_dir / "12_phase_ketamine.png")
 
@@ -107,6 +149,14 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
                     group.label,
                     group.cell_types,
                     tmp_packet_dir / kde_2d,
+                )
+                hv.save_spike_frequency_kde_2d(
+                    windowed[condition],
+                    condition,
+                    group.label,
+                    group.cell_types,
+                    tmp_packet_dir / hv.kde_filename("2d", condition, group.label, suffix="mod200"),
+                    modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
                 )
 
         created_at = datetime.now().isoformat(timespec="seconds")
