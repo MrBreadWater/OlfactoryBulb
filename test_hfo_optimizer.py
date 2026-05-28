@@ -65,7 +65,11 @@ assert hfo_module.DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS == 100.0
 template_freqs, ketamine_template = psd_template_curve("ketamine")
 assert template_freqs.shape == ketamine_template.shape
 assert np.isclose(np.sum(ketamine_template), 1.0)
-assert template_freqs[int(np.argmax(ketamine_template))] == 195.0
+hfo_plateau = ketamine_template[(template_freqs >= 175.0) & (template_freqs < 230.0)]
+assert template_freqs[int(np.argmax(ketamine_template))] >= 175.0
+assert template_freqs[int(np.argmax(ketamine_template))] < 230.0
+assert float(np.min(hfo_plateau)) >= 0.95 * float(np.max(hfo_plateau))
+assert hfo_module.PSD_TEMPLATE_HFO_WEIGHT > hfo_module.PSD_TEMPLATE_BROAD_WEIGHT
 plot_freqs = np.linspace(20.0, 300.0, 141)
 reference_psd = np.ones_like(plot_freqs) * 2.0
 scaled_freqs, scaled_template = scaled_psd_template_curve("ketamine", plot_freqs, reference_psd)
@@ -365,8 +369,8 @@ assert good_pair["target_contrast_log10"] > 0.0
 assert good_pair["compound_contrast_log10"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
-assert upper_bad_pair["pair_score_version"] == 7
-assert PAIR_SCORE_VERSION == 7
+assert upper_bad_pair["pair_score_version"] == 8
+assert PAIR_SCORE_VERSION == 8
 assert "psd_shape_power" in target_metrics
 assert len(target_metrics["psd_shape_power"]) > 10
 status_summary = candidate_status_summary(
@@ -377,6 +381,8 @@ assert status_summary["control_high_gamma_rel"] == flat_metrics["relative_band_p
 assert good_pair["psd_template_loss"] < bad_pair["psd_template_loss"]
 assert good_pair["psd_contrast_template_loss"] < bad_pair["psd_contrast_template_loss"]
 assert bad_pair["control_hfo_template_similarity"] > good_pair["control_hfo_template_similarity"]
+assert good_pair["psd_template_hfo_weight"] == hfo_module.PSD_TEMPLATE_HFO_WEIGHT
+assert good_pair["ketamine_psd_template_hfo_weighted_similarity"] >= good_pair["ketamine_psd_template_broad_similarity"]
 assert leaky_pair["control_target_excess_penalty"] > 0.0
 assert edge_pair["ketamine_center_penalty"] > 0.0
 assert silent_pair["ketamine_epli_silence_penalty"] >= 8.0

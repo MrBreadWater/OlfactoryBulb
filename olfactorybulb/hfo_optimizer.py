@@ -51,8 +51,11 @@ DEFAULT_SCORE_BANDS = {
 }
 PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
 
-PAIR_SCORE_VERSION = 7
+PAIR_SCORE_VERSION = 8
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
+PSD_TEMPLATE_HFO_WEIGHT = 4.0
+PSD_TEMPLATE_BROAD_WEIGHT = 1.0
+PSD_TEMPLATE_HFO_BLEND = 0.65
 PLAUSIBILITY_SOFT_LIMITS = {
     "kar_mt_gmax": 0.05,
     "kar_gc_gmax": 0.02,
@@ -785,6 +788,19 @@ def _gaussian_on_psd_grid(center_hz: float, sigma_hz: float, weight: float) -> n
     return float(weight) * np.exp(-0.5 * ((grid - float(center_hz)) / max(float(sigma_hz), 1e-9)) ** 2)
 
 
+def _stepwise_on_psd_grid(segments: Sequence[tuple[float, float, float]]) -> np.ndarray:
+    grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    shape = np.zeros_like(grid, dtype=float)
+    for lo_hz, hi_hz, weight in segments:
+        lo = float(lo_hz)
+        hi = float(hi_hz)
+        if hi <= lo:
+            continue
+        mask = (grid >= lo) & (grid < hi)
+        shape[mask] += float(weight)
+    return shape
+
+
 def _theoretical_psd_template(kind: str) -> np.ndarray:
     """Return normalized PSD-shape targets for template-loss scoring."""
     grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
@@ -795,9 +811,16 @@ def _theoretical_psd_template(kind: str) -> np.ndarray:
             + _gaussian_on_psd_grid(24.0, 7.0, 0.055)
             + _gaussian_on_psd_grid(55.0, 13.0, 0.070)
             + _gaussian_on_psd_grid(85.0, 18.0, 0.100)
-            + _gaussian_on_psd_grid(195.0, 18.0, 0.520)
+            + _stepwise_on_psd_grid(
+                (
+                    (150.0, 160.0, 0.080),
+                    (160.0, 175.0, 0.320),
+                    (175.0, 230.0, 0.520),
+                    (230.0, 245.0, 0.140),
+                )
+            )
         )
-        shape = np.where(grid > 240.0, shape * 0.35, shape)
+        shape = np.where(grid >= 245.0, shape * 0.35, shape)
         return _normalize_psd_shape(shape)
     if kind == "control":
         shape = (
@@ -811,10 +834,17 @@ def _theoretical_psd_template(kind: str) -> np.ndarray:
         return _normalize_psd_shape(shape)
     if kind == "contrast":
         shape = (
-            _gaussian_on_psd_grid(195.0, 17.0, 1.0)
+            _stepwise_on_psd_grid(
+                (
+                    (150.0, 160.0, 0.100),
+                    (160.0, 175.0, 0.450),
+                    (175.0, 230.0, 1.000),
+                    (230.0, 245.0, 0.200),
+                )
+            )
             + _gaussian_on_psd_grid(85.0, 22.0, 0.08)
         )
-        shape = np.where(grid > 235.0, shape * 0.20, shape)
+        shape = np.where(grid >= 245.0, shape * 0.20, shape)
         return _normalize_psd_shape(shape)
     raise ValueError(f"Unknown PSD template kind {kind!r}")
 
@@ -825,7 +855,7 @@ def psd_template_curve(
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return a normalized theoretical PSD template for diagnostics.
 
-    The returned curve is the same shape target used by the v6 objective.  It is
+    The returned curve is the same shape target used by the current objective.  It is
     normalized as a discrete probability vector, so callers plotting it on top
     of a measured PSD should scale it to the measured units first.
     """
@@ -939,6 +969,38 @@ def _cosine_similarity(left: np.ndarray, right: np.ndarray) -> float:
     return min(max(value, 0.0), 1.0)
 
 
+def _psd_template_weight_vector() -> np.ndarray:
+    grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
+    weights = np.full_like(grid, PSD_TEMPLATE_BROAD_WEIGHT, dtype=float)
+    target_lo_hz, target_hi_hz = DEFAULT_SCORE_BANDS["target_hfo"]
+    hfo_mask = (grid >= float(target_lo_hz)) & (grid <= float(target_hi_hz))
+    weights[hfo_mask] = float(PSD_TEMPLATE_HFO_WEIGHT)
+    return weights
+
+
+def _weighted_cosine_similarity(
+    left: np.ndarray,
+    right: np.ndarray,
+    weights: np.ndarray,
+) -> float:
+    weights = np.asarray(weights, dtype=float)
+    weights = np.where(np.isfinite(weights) & (weights > 0.0), weights, 0.0)
+    scale = np.sqrt(weights)
+    return _cosine_similarity(np.asarray(left, dtype=float) * scale, np.asarray(right, dtype=float) * scale)
+
+
+def _blended_psd_template_similarity(
+    shape: np.ndarray,
+    template: np.ndarray,
+    weights: np.ndarray,
+) -> tuple[float, float, float]:
+    broad = _cosine_similarity(shape, template)
+    hfo_weighted = _weighted_cosine_similarity(shape, template, weights)
+    blend = float(PSD_TEMPLATE_HFO_BLEND)
+    similarity = (1.0 - blend) * broad + blend * hfo_weighted
+    return float(similarity), float(broad), float(hfo_weighted)
+
+
 def _psd_template_pair_metrics(
     control_metrics: dict[str, Any],
     ketamine_metrics: dict[str, Any],
@@ -949,11 +1011,18 @@ def _psd_template_pair_metrics(
     control_template = _theoretical_psd_template("control")
     contrast_template = _theoretical_psd_template("contrast")
     positive_contrast_shape = _normalize_psd_shape(np.maximum(ketamine_shape - control_shape, 0.0))
+    template_weights = _psd_template_weight_vector()
 
-    ketamine_similarity = _cosine_similarity(ketamine_shape, ketamine_template)
-    control_similarity = _cosine_similarity(control_shape, control_template)
-    contrast_similarity = _cosine_similarity(positive_contrast_shape, contrast_template)
-    control_hfo_similarity = _cosine_similarity(control_shape, ketamine_template)
+    ketamine_similarity, ketamine_broad_similarity, ketamine_hfo_weighted_similarity = (
+        _blended_psd_template_similarity(ketamine_shape, ketamine_template, template_weights)
+    )
+    control_similarity, control_broad_similarity, control_hfo_weighted_similarity = (
+        _blended_psd_template_similarity(control_shape, control_template, template_weights)
+    )
+    contrast_similarity, contrast_broad_similarity, contrast_hfo_weighted_similarity = (
+        _blended_psd_template_similarity(positive_contrast_shape, contrast_template, template_weights)
+    )
+    control_hfo_similarity = _weighted_cosine_similarity(control_shape, ketamine_template, template_weights)
 
     ketamine_loss = 1.0 - ketamine_similarity
     control_loss = 1.0 - control_similarity
@@ -980,6 +1049,14 @@ def _psd_template_pair_metrics(
         "control_psd_template_similarity": float(control_similarity),
         "psd_contrast_template_similarity": float(contrast_similarity),
         "control_hfo_template_similarity": float(control_hfo_similarity),
+        "ketamine_psd_template_broad_similarity": float(ketamine_broad_similarity),
+        "control_psd_template_broad_similarity": float(control_broad_similarity),
+        "psd_contrast_template_broad_similarity": float(contrast_broad_similarity),
+        "ketamine_psd_template_hfo_weighted_similarity": float(ketamine_hfo_weighted_similarity),
+        "control_psd_template_hfo_weighted_similarity": float(control_hfo_weighted_similarity),
+        "psd_contrast_template_hfo_weighted_similarity": float(contrast_hfo_weighted_similarity),
+        "psd_template_hfo_weight": float(PSD_TEMPLATE_HFO_WEIGHT),
+        "psd_template_hfo_blend": float(PSD_TEMPLATE_HFO_BLEND),
     }
 
 
