@@ -10,6 +10,7 @@ review packets.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import html
 import json
 import math
@@ -39,6 +40,7 @@ from regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
 DEFAULT_OUTPUT_SUBDIR = "visual_dashboard"
 DEFAULT_REFRESH_S = 60.0
 DEFAULT_TOP_N = 20
+DEFAULT_PACKET_GENERATION_WORKERS = 0
 SUMMARY_STATUS_PATH = Path("results/notebook_runs/optimization/codex_big_hfo_logs/latest_big_hfo_optimizer_status.json")
 PRIMARY_PSD_NAME_ORDER = (
     "03_psd_overlay.png",
@@ -225,21 +227,57 @@ def _packet_needs_refresh(packet: PacketInfo | None, row: dict[str, Any]) -> boo
     return (has_legacy_kde and not has_pipeline_kde) or not has_notebook_kde_1d
 
 
-def _generate_missing_packets(campaign_dir: Path, rows: list[dict[str, Any]], *, top_n: int) -> list[Path]:
-    if top_n <= 0:
-        return []
+def _effective_packet_generation_workers(requested_workers: int | None, candidate_count: int) -> int:
+    if candidate_count <= 1:
+        return 1
+    if requested_workers is None:
+        requested = 0
+    else:
+        requested = int(requested_workers)
+    if requested <= 0:
+        requested = int(os.cpu_count() or 1)
+    return max(1, min(requested, int(candidate_count)))
+
+
+def _generate_one_packet(task: tuple[str, str]) -> str:
+    campaign_dir_str, candidate_id = task
     from generate_hfo_candidate_packet import generate_packet
 
-    generated: list[Path] = []
+    packet_dir = generate_packet(Path(campaign_dir_str), candidate_id)
+    return str(packet_dir)
+
+
+def _generate_missing_packets(
+    campaign_dir: Path,
+    rows: list[dict[str, Any]],
+    *,
+    top_n: int,
+    workers: int | None = None,
+) -> list[Path]:
+    if top_n <= 0:
+        return []
+
     packets = find_candidate_packets(campaign_dir)
+    missing_candidate_ids: list[str] = []
     for row in rows[: int(top_n)]:
         candidate_id = str(row.get("candidate_id") or "")
         if not candidate_id:
             continue
         if not _packet_needs_refresh(packets.get(candidate_id), row):
             continue
-        generated.append(generate_packet(campaign_dir, candidate_id))
-        packets = find_candidate_packets(campaign_dir)
+        missing_candidate_ids.append(candidate_id)
+    if not missing_candidate_ids:
+        return []
+
+    max_workers = _effective_packet_generation_workers(workers, len(missing_candidate_ids))
+    if max_workers <= 1:
+        return [Path(_generate_one_packet((str(campaign_dir), candidate_id))) for candidate_id in missing_candidate_ids]
+
+    tasks = [(str(campaign_dir), candidate_id) for candidate_id in missing_candidate_ids]
+    generated: list[Path] = []
+    with concurrent.futures.ProcessPoolExecutor(max_workers=max_workers) as pool:
+        for packet_dir in pool.map(_generate_one_packet, tasks):
+            generated.append(Path(packet_dir))
     return generated
 
 
@@ -987,6 +1025,7 @@ def export_visual_dashboard(
     top_n: int = DEFAULT_TOP_N,
     refresh_s: float | None = DEFAULT_REFRESH_S,
     generate_packets_top_n: int = 0,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     status_json: str | Path | None = None,
 ) -> dict[str, Any]:
     """Write ``index.html`` for one campaign and return a small manifest."""
@@ -999,7 +1038,12 @@ def export_visual_dashboard(
     output_path.mkdir(parents=True, exist_ok=True)
 
     rows = _load_ranked_rows(campaign_path)
-    generated_packets = _generate_missing_packets(campaign_path, rows, top_n=int(generate_packets_top_n))
+    generated_packets = _generate_missing_packets(
+        campaign_path,
+        rows,
+        top_n=int(generate_packets_top_n),
+        workers=int(generate_packet_workers),
+    )
     packets = find_candidate_packets(campaign_path)
     status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
     payload = _status_payload(campaign_path, status_path)
@@ -1031,6 +1075,12 @@ def export_visual_dashboard(
         "candidate_rows": len(rows),
         "packet_count": len(packets),
         "generated_packets": [str(path) for path in generated_packets],
+        "generate_packet_workers": _effective_packet_generation_workers(
+            int(generate_packet_workers),
+            min(int(generate_packets_top_n), len(rows)),
+        )
+        if int(generate_packets_top_n) > 0
+        else 0,
         "top_candidate_id": rows[0].get("candidate_id") if rows else None,
         "top_score": rows[0].get("pair_score") if rows else None,
     }
@@ -1048,6 +1098,7 @@ def watch_visual_dashboard(
     top_n: int = DEFAULT_TOP_N,
     refresh_s: float = DEFAULT_REFRESH_S,
     generate_packets_top_n: int = 0,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     status_json: str | Path | None = None,
 ) -> None:
     campaign_path = Path(campaign_dir).expanduser().resolve()
@@ -1067,6 +1118,7 @@ def watch_visual_dashboard(
                 top_n=top_n,
                 refresh_s=refresh_s,
                 generate_packets_top_n=generate_packets_top_n,
+                generate_packet_workers=generate_packet_workers,
                 status_json=status_path,
             )
             print(
@@ -1128,6 +1180,7 @@ def serve_visual_dashboard(
     top_n: int = DEFAULT_TOP_N,
     refresh_s: float = DEFAULT_REFRESH_S,
     generate_packets_top_n: int = 0,
+    generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     host: str = "127.0.0.1",
     port: int = 6006,
 ) -> None:
@@ -1137,6 +1190,7 @@ def serve_visual_dashboard(
         top_n=top_n,
         refresh_s=refresh_s,
         generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
     )
     output_path = Path(manifest["output_dir"])
     campaign_path = Path(manifest["campaign_dir"])
@@ -1175,6 +1229,12 @@ def _build_parser() -> argparse.ArgumentParser:
             default=0,
             help="Generate missing diagnostic packets for the current top N candidates before rendering.",
         )
+        subparser.add_argument(
+            "--generate-packet-workers",
+            type=int,
+            default=DEFAULT_PACKET_GENERATION_WORKERS,
+            help="Worker processes for packet generation. Use 0 to auto-scale to all local CPU cores.",
+        )
         subparser.add_argument("--status-json", type=Path, default=None)
 
     export_parser = subparsers.add_parser("export", help="Write the dashboard once.")
@@ -1200,6 +1260,7 @@ def main(argv: list[str] | None = None) -> None:
             top_n=args.top_n,
             refresh_s=args.refresh_s,
             generate_packets_top_n=args.generate_packets_top_n,
+            generate_packet_workers=args.generate_packet_workers,
             status_json=args.status_json,
         )
         print(json.dumps(manifest, indent=2, sort_keys=True))
@@ -1210,6 +1271,7 @@ def main(argv: list[str] | None = None) -> None:
             top_n=args.top_n,
             refresh_s=args.refresh_s,
             generate_packets_top_n=args.generate_packets_top_n,
+            generate_packet_workers=args.generate_packet_workers,
             status_json=args.status_json,
         )
     elif args.command == "serve":
@@ -1219,6 +1281,7 @@ def main(argv: list[str] | None = None) -> None:
             top_n=args.top_n,
             refresh_s=args.refresh_s,
             generate_packets_top_n=args.generate_packets_top_n,
+            generate_packet_workers=args.generate_packet_workers,
             host=args.host,
             port=args.port,
         )

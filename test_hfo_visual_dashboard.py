@@ -11,6 +11,7 @@ from tools.analysis.generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
 from tools.analysis.hfo_visual_dashboard import (
     PacketInfo,
     _dashboard_server_root_and_url,
+    _effective_packet_generation_workers,
     _load_ranked_rows,
     _packet_needs_refresh,
     _primary_psd_image,
@@ -20,6 +21,12 @@ from tools.analysis.hfo_visual_dashboard import (
     find_candidate_packets,
 )
 from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
+
+assert _effective_packet_generation_workers(0, 0) == 1
+assert _effective_packet_generation_workers(0, 1) == 1
+assert _effective_packet_generation_workers(1, 8) == 1
+assert _effective_packet_generation_workers(2, 8) == 2
+assert _effective_packet_generation_workers(999, 3) == 3
 
 
 with TemporaryDirectory() as tmp:
@@ -34,10 +41,14 @@ with TemporaryDirectory() as tmp:
     raster_k = packet_dir / "08_raster_ketamine.png"
     spec_c = packet_dir / "04_spectrogram_control.png"
     spec_k = packet_dir / "05_spectrogram_ketamine.png"
-    kde1d_c = packet_dir / "13_spike_frequency_kde_1d_control_MT_EPLI.png"
-    kde1d_k = packet_dir / "13_spike_frequency_kde_1d_ketamine_MT_EPLI.png"
-    kde = packet_dir / "13_spike_frequency_kde_2d_control_MT_EPLI.png"
-    kde_k = packet_dir / "13_spike_frequency_kde_2d_ketamine_MT_EPLI.png"
+    kde1d_mt_c = packet_dir / "13_spike_frequency_kde_1d_control_MT.png"
+    kde1d_mt_k = packet_dir / "13_spike_frequency_kde_1d_ketamine_MT.png"
+    kde2d_mt_c = packet_dir / "13_spike_frequency_kde_2d_control_MT.png"
+    kde2d_mt_k = packet_dir / "13_spike_frequency_kde_2d_ketamine_MT.png"
+    kde1d_epli_c = packet_dir / "13_spike_frequency_kde_1d_control_EPLI.png"
+    kde1d_epli_k = packet_dir / "13_spike_frequency_kde_1d_ketamine_EPLI.png"
+    kde2d_epli_c = packet_dir / "13_spike_frequency_kde_2d_control_EPLI.png"
+    kde2d_epli_k = packet_dir / "13_spike_frequency_kde_2d_ketamine_EPLI.png"
     legacy_kde = packet_dir / "kde_control_MC.png"
     contact = packet_dir / "contact_sheet.png"
     for path in (
@@ -47,10 +58,14 @@ with TemporaryDirectory() as tmp:
         raster_k,
         spec_c,
         spec_k,
-        kde1d_c,
-        kde1d_k,
-        kde,
-        kde_k,
+        kde1d_mt_c,
+        kde1d_mt_k,
+        kde2d_mt_c,
+        kde2d_mt_k,
+        kde1d_epli_c,
+        kde1d_epli_k,
+        kde2d_epli_c,
+        kde2d_epli_k,
         legacy_kde,
         contact,
     ):
@@ -83,7 +98,22 @@ with TemporaryDirectory() as tmp:
         candidate_id="C00042",
         packet_dir=packet_dir,
         contact_sheet=contact,
-        images=(psd_overlay, psd_control, raster, raster_k, spec_c, spec_k, kde1d_c, kde1d_k, kde, kde_k),
+        images=(
+            psd_overlay,
+            psd_control,
+            raster,
+            raster_k,
+            spec_c,
+            spec_k,
+            kde1d_mt_c,
+            kde1d_mt_k,
+            kde2d_mt_c,
+            kde2d_mt_k,
+            kde1d_epli_c,
+            kde1d_epli_k,
+            kde2d_epli_c,
+            kde2d_epli_k,
+        ),
         manifest={
             "candidate_id": "C00042",
             "visual_style_version": VISUAL_STYLE_VERSION,
@@ -118,7 +148,10 @@ with TemporaryDirectory() as tmp:
     assert "Control" in html
     assert "Ketamine" in html
     assert "Soma spike frequency 1D KDE" in html
-    assert "13_spike_frequency_kde_1d_control_MT_EPLI.png" in html
+    assert "13_spike_frequency_kde_1d_control_MT.png" in html
+    assert "13_spike_frequency_kde_1d_control_EPLI.png" in html
+    assert "Soma spike frequency 1D KDE: MT" in html
+    assert "Soma spike frequency 1D KDE: EPLI" in html
     assert "09_population_rates.png" not in html
     assert "Contact sheet" in html
     assert html.index("Live PSD overlay with scoring template") < html.index("LFP spectrogram")

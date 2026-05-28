@@ -39,7 +39,7 @@ CELL_COLORS = {
     "PVCRH": "#9333ea",
     "other": "#4b5563",
 }
-VISUAL_STYLE_VERSION = 3
+VISUAL_STYLE_VERSION = 4
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_SPECTROGRAM_MAX_FREQ_HZ = hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
@@ -322,7 +322,8 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
     _save_phase_hist(windowed["control"], "control", packet_dir / files[6])
     _save_phase_hist(windowed["ketamine"], "ketamine", packet_dir / files[7])
     frequency_groups = [
-        ("MT_EPLI", ("MC", "TC", "EPLI", "PVCRH")),
+        ("MT", ("MC", "TC")),
+        ("EPLI", ("EPLI", "PVCRH")),
         ("GC", ("GC",)),
     ]
     for condition in ("control", "ketamine"):
