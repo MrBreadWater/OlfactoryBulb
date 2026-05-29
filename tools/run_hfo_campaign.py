@@ -25,6 +25,7 @@ from olfactorybulb.hfo_optimizer import (
     paramiko_auth_probe,
     propose_elite_batch,
     propose_lhs_batch,
+    resume_pending_batch_name,
     run_hfo_batch,
     score_hfo_batch,
     top_candidate_rows,
@@ -88,6 +89,38 @@ def _load_or_init_campaign(campaign_dir: Path, base_config: dict, search_space):
     return campaign_dir
 
 
+def _batch_plan_path(campaign_dir: Path, batch_name: str) -> Path:
+    return Path(campaign_dir) / "batches" / f"{batch_name}_plan.json"
+
+
+def _batch_run_path(campaign_dir: Path, batch_name: str) -> Path:
+    return Path(campaign_dir) / "batches" / f"{batch_name}_run.json"
+
+
+def _load_batch_plan(campaign_dir: Path, batch_name: str) -> dict:
+    return json.loads(_batch_plan_path(campaign_dir, batch_name).read_text())
+
+
+def _load_batch_run(campaign_dir: Path, batch_name: str) -> dict | None:
+    path = _batch_run_path(campaign_dir, batch_name)
+    if not path.exists():
+        return None
+    return json.loads(path.read_text())
+
+
+def _recent_batch_shape(campaign_dir: Path) -> tuple[int, str]:
+    batch_dir = Path(campaign_dir) / "batches"
+    for plan_path in sorted(batch_dir.glob("batch_*_plan.json"), reverse=True):
+        try:
+            plan = json.loads(plan_path.read_text())
+        except Exception:
+            continue
+        n_candidates = len(plan.get("candidates") or [])
+        if n_candidates > 0:
+            return int(n_candidates), str(plan.get("stage") or "refine")
+    return 8, "refine"
+
+
 def _pick_batch(campaign_dir: Path, search_space, batch_index: int):
     if batch_index == 0:
         return propose_lhs_batch(
@@ -105,14 +138,15 @@ def _pick_batch(campaign_dir: Path, search_space, batch_index: int):
             seed=20260528,
             stage="seed-refine",
         )
+    n_candidates, stage = _recent_batch_shape(campaign_dir)
     return propose_elite_batch(
         campaign_dir,
         search_space=search_space,
-        n_candidates=8,
+        n_candidates=n_candidates,
         seed=20260527 + batch_index,
         elite_frac=0.30,
         explore_frac=0.30,
-        stage="refine",
+        stage=stage,
     )
 
 
@@ -183,6 +217,130 @@ def _annotate_criteria(
     return candidates
 
 
+def _run_one_batch(
+    *,
+    campaign_dir: Path,
+    base_config: dict,
+    batch_plan: dict,
+    min_ketamine_target: float,
+    max_control_target: float,
+    min_ketamine_peak_ratio: float,
+    min_target_contrast_log10: float,
+    max_control_score: float,
+    require_criteria_for_early_stop: bool,
+    early_stop_score: float,
+) -> bool:
+    print(
+        json.dumps(
+            {
+                "status": "launch",
+                "batch": batch_plan["batch_name"],
+                "strategy": batch_plan["strategy"],
+            }
+        )
+    )
+
+    sweep = _load_batch_run(campaign_dir, batch_plan["batch_name"])
+    if sweep is None:
+        sweep = run_hfo_batch(
+            campaign_dir,
+            base_config=base_config,
+            batch_plan=batch_plan,
+            ketamine_block_values={"control": 1.0, "ketamine": 0.0},
+        )
+    else:
+        print(
+            json.dumps(
+                {
+                    "status": "resume_existing_run",
+                    "batch": batch_plan["batch_name"],
+                }
+            )
+        )
+
+    scored = score_hfo_batch(
+        campaign_dir,
+        batch_plan=batch_plan,
+        sweep=sweep,
+    )
+    candidates = _annotate_criteria(
+        scored["candidate_rows"],
+        min_ketamine_target=min_ketamine_target,
+        max_control_target=max_control_target,
+        min_ketamine_peak_ratio=min_ketamine_peak_ratio,
+        min_target_contrast_log10=min_target_contrast_log10,
+        max_control_score=max_control_score,
+    )
+
+    candidates = sorted(
+        candidates,
+        key=lambda row: _candidate_sort_key(
+            row,
+            require_criteria=require_criteria_for_early_stop,
+        ),
+        reverse=True,
+    )
+
+    if candidates:
+        print(
+            json.dumps(
+                {
+                    "status": "batch_completed",
+                    "batch": batch_plan["batch_name"],
+                    "best": candidates[0].get("candidate_id"),
+                    "pair_score": candidates[0].get("pair_score"),
+                    "meets_criteria": candidates[0].get("meets_criteria"),
+                }
+            )
+        )
+        for candidate in candidates[:3]:
+            print(_summary_line(candidate))
+    else:
+        print(json.dumps({"status": "batch_completed", "batch": batch_plan["batch_name"], "note": "no scored candidates"}))
+
+    global_top = top_candidate_rows(campaign_dir, limit=1)
+    if not global_top:
+        return False
+
+    best = global_top[0]
+    best = _annotate_criteria(
+        [best],
+        min_ketamine_target=min_ketamine_target,
+        max_control_target=max_control_target,
+        min_ketamine_peak_ratio=min_ketamine_peak_ratio,
+        min_target_contrast_log10=min_target_contrast_log10,
+        max_control_score=max_control_score,
+    )[0]
+    if not require_criteria_for_early_stop or best.get("meets_criteria", False):
+        best_pair = float(best.get("pair_score", float("-inf")))
+        if best_pair >= early_stop_score:
+            print(
+                json.dumps(
+                    {
+                        "status": "early_stop",
+                        "reason": "pair score reached target",
+                        "pair_score": best_pair,
+                        "candidate_id": best.get("candidate_id"),
+                        "meets_criteria": best.get("meets_criteria"),
+                    }
+                )
+            )
+            return True
+        return False
+
+    print(
+        json.dumps(
+            {
+                "status": "best_candidate_rejected",
+                "reason": "global best fails criteria",
+                "candidate_id": best.get("candidate_id"),
+                "pair_score": best.get("pair_score"),
+            }
+        )
+    )
+    return False
+
+
 def run_campaign(
     *,
     allocation: str,
@@ -223,103 +381,57 @@ def run_campaign(
     state = load_campaign_state(campaign_dir)
     print(json.dumps({"campaign_dir": str(campaign_dir), "state": state}, indent=2))
 
-    completed = len(state.get("completed_batches", []))
-    for batch_idx in range(completed, max_batches):
-        batch_plan = _pick_batch(campaign_dir, search_space, batch_idx)
-        print(
-            json.dumps(
-                {
-                    "status": "launch",
-                    "batch": batch_plan["batch_name"],
-                    "strategy": batch_plan["strategy"],
-                }
-            )
-        )
-
-        sweep = run_hfo_batch(
-            campaign_dir,
+    pending_batch_name = resume_pending_batch_name(campaign_dir)
+    if pending_batch_name is not None:
+        print(json.dumps({"status": "resume_pending_batch", "batch": pending_batch_name}))
+        pending_batch_plan = _load_batch_plan(campaign_dir, pending_batch_name)
+        should_stop = _run_one_batch(
+            campaign_dir=campaign_dir,
             base_config=base_config,
-            batch_plan=batch_plan,
-            ketamine_block_values={"control": 1.0, "ketamine": 0.0},
-        )
-
-        scored = score_hfo_batch(
-            campaign_dir,
-            batch_plan=batch_plan,
-            sweep=sweep,
-        )
-        candidates = _annotate_criteria(
-            scored["candidate_rows"],
+            batch_plan=pending_batch_plan,
             min_ketamine_target=min_ketamine_target,
             max_control_target=max_control_target,
             min_ketamine_peak_ratio=min_ketamine_peak_ratio,
             min_target_contrast_log10=min_target_contrast_log10,
             max_control_score=max_control_score,
+            require_criteria_for_early_stop=require_criteria_for_early_stop,
+            early_stop_score=early_stop_score,
         )
+        if should_stop:
+            return campaign_dir
+        state = load_campaign_state(campaign_dir)
+        print(json.dumps({"status": "pending_batch_resolved", "state": state}, indent=2))
 
-        candidates = sorted(
-            candidates,
-            key=lambda row: _candidate_sort_key(
-                row,
-                require_criteria=require_criteria_for_early_stop,
-            ),
-            reverse=True,
-        )
-
-        if candidates:
-            print(
-                json.dumps(
-                    {
-                        "status": "batch_completed",
-                        "batch": batch_plan["batch_name"],
-                        "best": candidates[0].get("candidate_id"),
-                        "pair_score": candidates[0].get("pair_score"),
-                        "meets_criteria": candidates[0].get("meets_criteria"),
-                    }
-                )
+    start_batch_index = int(state.get("next_batch_index", len(state.get("completed_batches", []))) or 0)
+    if start_batch_index >= max_batches:
+        print(
+            json.dumps(
+                {
+                    "status": "idle",
+                    "reason": "max_batches_already_reached",
+                    "next_batch_index": start_batch_index,
+                    "max_batches": int(max_batches),
+                }
             )
-            for candidate in candidates[:3]:
-                print(_summary_line(candidate))
-        else:
-            print(json.dumps({"status": "batch_completed", "batch": batch_plan["batch_name"], "note": "no scored candidates"}))
+        )
+        return campaign_dir
 
-        global_top = top_candidate_rows(campaign_dir, limit=1)
-        if global_top:
-            best = global_top[0]
-            best = _annotate_criteria(
-                [best],
-                min_ketamine_target=min_ketamine_target,
-                max_control_target=max_control_target,
-                min_ketamine_peak_ratio=min_ketamine_peak_ratio,
-                min_target_contrast_log10=min_target_contrast_log10,
-                max_control_score=max_control_score,
-            )[0]
-            if not require_criteria_for_early_stop or best.get("meets_criteria", False):
-                best_pair = float(best.get("pair_score", float("-inf")))
-                if best_pair >= early_stop_score:
-                    print(
-                        json.dumps(
-                            {
-                                "status": "early_stop",
-                                "reason": "pair score reached target",
-                                "pair_score": best_pair,
-                                "candidate_id": best.get("candidate_id"),
-                                "meets_criteria": best.get("meets_criteria"),
-                            }
-                        )
-                    )
-                    break
-            else:
-                print(
-                    json.dumps(
-                        {
-                            "status": "best_candidate_rejected",
-                            "reason": "global best fails criteria",
-                            "candidate_id": best.get("candidate_id"),
-                            "pair_score": best.get("pair_score"),
-                        }
-                    )
-                )
+    for batch_idx in range(start_batch_index, max_batches):
+        batch_plan = _pick_batch(campaign_dir, search_space, batch_idx)
+        should_stop = _run_one_batch(
+            campaign_dir=campaign_dir,
+            base_config=base_config,
+            batch_plan=batch_plan,
+            min_ketamine_target=min_ketamine_target,
+            max_control_target=max_control_target,
+            min_ketamine_peak_ratio=min_ketamine_peak_ratio,
+            min_target_contrast_log10=min_target_contrast_log10,
+            max_control_score=max_control_score,
+            require_criteria_for_early_stop=require_criteria_for_early_stop,
+            early_stop_score=early_stop_score,
+        )
+        if should_stop:
+            break
 
     return campaign_dir
 
