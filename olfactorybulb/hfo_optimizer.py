@@ -780,15 +780,16 @@ def scaled_psd_template_curve(
     freqs_hz: Sequence[float] | np.ndarray,
     reference_psd: Sequence[float] | np.ndarray,
     *,
-    fit_band_hz: tuple[float, float] = (20.0, 300.0),
+    fit_band_hz: tuple[float, float] = DEFAULT_SCORE_BANDS["target_hfo"],
     method: str = "area",
     floor: float = 0.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return a PSD template scaled onto a measured PSD axis.
 
-    `method="area"` matches integrated power over `fit_band_hz`; `method="peak"`
-    matches the peak height in that band.  This is for visual diagnostics only;
-    scoring still uses the normalized template vectors.
+    `method="area"` matches integrated power over the objective band in
+    `fit_band_hz`; `method="peak"` matches the peak height in that band. This is
+    for visual diagnostics only; scoring still uses the normalized template
+    vectors.
     """
     freqs, template = psd_template_curve(kind, freqs_hz, floor=floor)
     reference = np.asarray(reference_psd, dtype=float)

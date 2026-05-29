@@ -27,8 +27,14 @@ import olfactorybulb.hfo_optimizer as hfo
 import olfactorybulb.hfo_visuals as hv
 
 
-PSD_TARGET_VISUAL_FLOOR = 10 ** -7.5
+PSD_TARGET_VISUAL_FLOOR = hfo.PSD_TEMPLATE_VISUAL_FLOOR
 PSD_PACKET_RENDER_VERSION = hv.PSD_PACKET_RENDER_VERSION
+TARGET_HFO_BAND = tuple(float(value) for value in hfo.DEFAULT_SCORE_BANDS["target_hfo"])
+
+
+def _target_band_label() -> str:
+    lo_hz, hi_hz = TARGET_HFO_BAND
+    return f"{lo_hz:.0f}-{hi_hz:.0f} Hz"
 
 
 def _load_manifest(packet: Path) -> tuple[Path, dict[str, Any]]:
@@ -118,7 +124,7 @@ def _plot_single_psd(
         lw=3.2,
         ls=(0, (6, 2)),
         alpha=0.95,
-        label=f"scoring template ({target_kind}, 20-300 Hz)",
+        label=f"scoring template ({target_kind}, {_target_band_label()})",
         zorder=6,
     )
     valid_target = np.isfinite(target_shape)
@@ -183,7 +189,7 @@ def _plot_overlay_psd(
         lw=2.8,
         ls=(0, (3, 2)),
         alpha=0.88,
-        label="scoring template (control, 20-300 Hz)",
+        label=f"scoring template (control, {_target_band_label()})",
         zorder=6,
     )
     target_ax.plot(
@@ -193,7 +199,7 @@ def _plot_overlay_psd(
         lw=3.2,
         ls=(0, (7, 2)),
         alpha=0.95,
-        label="scoring template (ketamine, 20-300 Hz)",
+        label=f"scoring template (ketamine, {_target_band_label()})",
         zorder=7,
     )
     valid_ketamine_target = np.isfinite(ketamine_target_shape)

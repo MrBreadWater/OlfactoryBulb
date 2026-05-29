@@ -90,10 +90,21 @@ plot_freqs = np.linspace(20.0, 300.0, 141)
 reference_psd = np.ones_like(plot_freqs) * 2.0
 scaled_freqs, scaled_template = scaled_psd_template_curve("ketamine", plot_freqs, reference_psd)
 assert scaled_freqs.shape == scaled_template.shape == reference_psd.shape
-assert np.trapezoid(scaled_template, scaled_freqs) > 0.0
+explicit_freqs, explicit_template = scaled_psd_template_curve(
+    "ketamine",
+    plot_freqs,
+    reference_psd,
+    fit_band_hz=hfo_module.DEFAULT_SCORE_BANDS["target_hfo"],
+)
+assert np.allclose(scaled_freqs, explicit_freqs)
+assert np.allclose(scaled_template, explicit_template)
+band_mask = (scaled_freqs >= hfo_module.DEFAULT_SCORE_BANDS["target_hfo"][0]) & (
+    scaled_freqs <= hfo_module.DEFAULT_SCORE_BANDS["target_hfo"][1]
+)
+assert np.trapezoid(scaled_template[band_mask], scaled_freqs[band_mask]) > 0.0
 assert np.isclose(
-    np.trapezoid(scaled_template, scaled_freqs),
-    np.trapezoid(reference_psd, plot_freqs),
+    np.trapezoid(scaled_template[band_mask], scaled_freqs[band_mask]),
+    np.trapezoid(reference_psd[band_mask], plot_freqs[band_mask]),
     rtol=0.15,
 )
 floor_freqs, floor_scaled_template = scaled_psd_template_curve(

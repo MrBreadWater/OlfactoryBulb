@@ -111,6 +111,7 @@ DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 PRIMARY_CELL_TYPE_ORDER = ("MC", "TC", "GC", "EPLI")
 PLOT_DISPLAY_CELL_GROUPS = ("MT", "GC", "EPLI", "other")
+DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ = (130.0, 230.0)
 CELL_TYPE_ALIASES = {
     # The optional EPLI population currently uses the synthetic PVCRH_FSI1
     # model class. Saved section labels expose that class name, but notebook
@@ -10051,7 +10052,7 @@ def plot_lfp_overview(
     *,
     show_psd_target_template: bool = True,
     psd_template_kind: str = "ketamine",
-    psd_template_fit_band_hz: tuple[float, float] = (20.0, 300.0),
+    psd_template_fit_band_hz: tuple[float, float] = DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ,
     psd_template_scale_method: str = "area",
     psd_template_floor: float = 0.0,
     psd_template_color: str = "tab:orange",
@@ -11644,11 +11645,11 @@ def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = Non
     show_raw_voltage_traces = bool(config.get("show_voltage_traces", False))
     show_psd_template = bool(config.get("lfp_show_psd_target_template", True))
     psd_template_kind = str(config.get("lfp_psd_template_kind", "ketamine"))
-    psd_template_fit = config.get("lfp_psd_template_fit_band_hz", (20.0, 300.0))
+    psd_template_fit = config.get("lfp_psd_template_fit_band_hz", DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ)
     if isinstance(psd_template_fit, (list, tuple)) and len(psd_template_fit) == 2:
         psd_template_fit = (float(psd_template_fit[0]), float(psd_template_fit[1]))
     else:
-        psd_template_fit = (20.0, 300.0)
+        psd_template_fit = DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ
     psd_xlim_hz = config.get("lfp_psd_xlim_hz", (0.0, 300.0))
     if isinstance(psd_xlim_hz, (list, tuple)) and len(psd_xlim_hz) == 2:
         psd_xlim_hz = (float(psd_xlim_hz[0]), float(psd_xlim_hz[1]))
