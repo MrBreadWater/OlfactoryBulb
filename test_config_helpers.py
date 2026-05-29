@@ -7,6 +7,7 @@ Run with:
 import json
 import importlib.util
 import pickle
+import socket
 import subprocess
 import sys
 import tempfile
@@ -224,6 +225,91 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
         hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.update(saved_authenticated)
     print("Paramiko cached auth / EOF guard: OK")
+
+    # --- Paramiko should retry transient SSH banner failures before giving up ---
+    retry_cfg = dict(prompt_cfg)
+    retry_cfg["ssh_connect_retries"] = 2
+    retry_cfg["ssh_connect_retry_backoff_s"] = 0.0
+    retry_key = hlp._paramiko_connection_key(retry_cfg)
+    saved_connections = deepcopy(hlp._LIVE_PARAMIKO_CONNECTIONS)
+    saved_prompt_cache = deepcopy(hlp._LIVE_PARAMIKO_PROMPT_CACHE)
+    saved_authenticated = set(hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS)
+    original_create_connection = socket.create_connection
+    original_sleep = hlp.time.sleep
+    original_transport = hlp.paramiko.Transport
+    attempts = {"start_client": 0, "interactive": 0}
+    sleeps: list[float] = []
+
+    class _FakeSocket:
+        def __init__(self) -> None:
+            self.closed = False
+
+        def close(self) -> None:
+            self.closed = True
+
+    class _FakeTransport:
+        def __init__(self, sock: _FakeSocket) -> None:
+            self.sock = sock
+            self._authenticated = False
+            self._active = True
+
+        def start_client(self, timeout: float = 30.0) -> None:
+            attempts["start_client"] += 1
+            if attempts["start_client"] == 1:
+                self._active = False
+                raise hlp.paramiko.SSHException("Error reading SSH protocol banner")
+
+        def set_keepalive(self, seconds: int) -> None:
+            self.keepalive = seconds
+
+        def auth_none(self, username: str) -> None:
+            raise hlp.paramiko.BadAuthenticationType("auth", ["keyboard-interactive"])
+
+        def auth_interactive(self, username: str, handler) -> None:
+            attempts["interactive"] += 1
+            responses = handler("", "", [("Password for jmpaniag@localhost:", False)])
+            assert responses == ["cached-secret"]
+            self._authenticated = True
+            self._active = True
+
+        def is_authenticated(self) -> bool:
+            return self._authenticated
+
+        def is_active(self) -> bool:
+            return self._active
+
+        def close(self) -> None:
+            self._active = False
+            self.sock.close()
+
+    def _fake_create_connection(_endpoint, timeout: float = 30.0) -> _FakeSocket:
+        return _FakeSocket()
+
+    try:
+        hlp._LIVE_PARAMIKO_CONNECTIONS.clear()
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
+        hlp._cache_paramiko_prompt_response(retry_cfg, "Password for jmpaniag@localhost:", "cached-secret")
+        socket.create_connection = _fake_create_connection
+        hlp.time.sleep = lambda seconds: sleeps.append(float(seconds))
+        hlp.paramiko.Transport = _FakeTransport
+        connection = hlp._connect_paramiko(retry_cfg)
+        assert hlp._LIVE_PARAMIKO_CONNECTIONS[retry_key] is connection
+        assert attempts["start_client"] == 2
+        assert attempts["interactive"] == 1
+        assert sleeps == []
+        assert connection["transport"].is_authenticated() is True
+    finally:
+        socket.create_connection = original_create_connection
+        hlp.time.sleep = original_sleep
+        hlp.paramiko.Transport = original_transport
+        hlp._LIVE_PARAMIKO_CONNECTIONS.clear()
+        hlp._LIVE_PARAMIKO_CONNECTIONS.update(saved_connections)
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.update(saved_prompt_cache)
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
+        hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.update(saved_authenticated)
+    print("Paramiko transient reconnect retry: OK")
 
     # --- Compressed soma trace artifacts should default to float32 NPZ and round-trip cleanly ---
     assert cfg["soma_trace_format"] == DEFAULT_SOMA_TRACE_FORMAT

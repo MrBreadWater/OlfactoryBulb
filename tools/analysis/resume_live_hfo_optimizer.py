@@ -92,9 +92,12 @@ import threading
 import time
 import traceback
 
+import obgpu_experiment_helpers as _hlp
 import tools.run_hfo_campaign as _runner
 import olfactorybulb.hfo_optimizer as _hfo
 
+importlib.reload(_hlp)
+importlib.reload(_hfo)
 importlib.reload(_runner)
 
 _PAYLOAD = json.loads({payload_json!r})
@@ -121,7 +124,22 @@ def _write_status(status: str, **extra):
     status_path.parent.mkdir(parents=True, exist_ok=True)
     status_path.write_text(json.dumps(payload, indent=2) + "\\n")
 
+def _is_retryable_transport_error(exc: BaseException) -> bool:
+    message = str(exc)
+    if exc.__class__.__name__ in {"SSHException", "NoValidConnectionsError", "TimeoutError", "EOFError", "OSError"}:
+        return True
+    needles = (
+        "Error reading SSH protocol banner",
+        "Connection reset by peer",
+        "Unable to connect to port",
+        "timed out",
+        "No existing session",
+        "EOFError",
+    )
+    return any(token in message for token in needles)
+
 def _worker():
+    transport_retry_count = 0
     try:
         remaining = int(_PAYLOAD["batches_to_run"])
         while remaining > 0:
@@ -133,26 +151,47 @@ def _worker():
             next_batch_index = int(state.get("next_batch_index", 0) or 0)
             planned_batch = pending or f"batch_{{next_batch_index:04d}}"
             max_batches = next_batch_index if pending else next_batch_index + 1
-            _write_status("running", batch_name=planned_batch)
-            _runner.run_campaign(
-                allocation=_PAYLOAD["allocation"],
-                campaign_name=campaign_dir.name,
-                max_batches=max_batches,
-                total_tasks=int(_PAYLOAD["total_tasks"]),
-                nranks=int(_PAYLOAD["nranks"]),
-                tstop_ms=float(_PAYLOAD["tstop_ms"]),
-                cell_permute=int(_PAYLOAD["cell_permute"]),
-                early_stop_score=float("inf"),
-                min_ketamine_target=0.0,
-                max_control_target=1.0,
-                min_ketamine_peak_ratio=0.0,
-                min_target_contrast_log10=float("-inf"),
-                max_control_score=float("inf"),
-                require_criteria_for_early_stop=False,
-                require_live_paramiko_session=True,
-                verify_auth=False,
-            )
-            remaining -= 1
+            try:
+                _write_status("running", batch_name=planned_batch)
+                _runner.run_campaign(
+                    allocation=_PAYLOAD["allocation"],
+                    campaign_name=campaign_dir.name,
+                    max_batches=max_batches,
+                    total_tasks=int(_PAYLOAD["total_tasks"]),
+                    nranks=int(_PAYLOAD["nranks"]),
+                    tstop_ms=float(_PAYLOAD["tstop_ms"]),
+                    cell_permute=int(_PAYLOAD["cell_permute"]),
+                    early_stop_score=float("inf"),
+                    min_ketamine_target=0.0,
+                    max_control_target=1.0,
+                    min_ketamine_peak_ratio=0.0,
+                    min_target_contrast_log10=float("-inf"),
+                    max_control_score=float("inf"),
+                    require_criteria_for_early_stop=False,
+                    require_live_paramiko_session=True,
+                    verify_auth=False,
+                )
+                remaining -= 1
+                transport_retry_count = 0
+            except Exception as exc:
+                if _is_retryable_transport_error(exc):
+                    transport_retry_count += 1
+                    max_transport_retries = int(_PAYLOAD.get("max_transport_retries", 12))
+                    if transport_retry_count <= max_transport_retries:
+                        retry_sleep_s = min(
+                            float(_PAYLOAD.get("transport_retry_backoff_s", 10.0)) * transport_retry_count,
+                            60.0,
+                        )
+                        _write_status(
+                            "retrying_after_transport_error",
+                            batch_name=planned_batch,
+                            retry_attempt=transport_retry_count,
+                            error=str(exc),
+                            error_type=exc.__class__.__name__,
+                        )
+                        time.sleep(retry_sleep_s)
+                        continue
+                raise
         _write_status("idle")
     except Exception as exc:
         tb = traceback.format_exc()
@@ -214,6 +253,8 @@ def main() -> None:
         "cell_permute": int(base_config.get("cell_permute") or 0),
         "batches_to_run": int(args.batches_to_run),
         "pending_batch": resume_pending_batch_name(campaign_dir),
+        "max_transport_retries": 12,
+        "transport_retry_backoff_s": 10.0,
     }
     result = _kernel_json(connection_file, _worker_code(payload), timeout_s=20.0)
     result["connection_file"] = str(connection_file)

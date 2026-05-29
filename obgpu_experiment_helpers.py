@@ -222,6 +222,8 @@ CONTROL_HELP = {
     "ssh_options": "Extra SSH options, e.g. ['-J', 'jumphost'].",
     "ssh_transport": "Deprecated compatibility option. Remote notebook runs now always use Paramiko; 'auto' and 'paramiko' are accepted.",
     "ssh_keepalive_s": "Paramiko keepalive interval in seconds for notebook-managed SSH sessions. Higher values reduce background traffic; lower values make idle sessions less likely to die between runs.",
+    "ssh_connect_retries": "How many times notebook-managed Paramiko should retry a fresh SSH connect/handshake before failing. Helps absorb transient banner/read errors on reused notebook tunnels.",
+    "ssh_connect_retry_backoff_s": "Base backoff in seconds between Paramiko reconnect attempts. Later attempts use small multiples of this delay.",
     "add_connections": "Add new connections between existing neurons.",
     "modify_connections": "Modify the synaptic weight between two specific neurons.",
     "swap_cell_types": "A list of cells to swap to another cell type."
@@ -854,6 +856,8 @@ def build_run_config(**overrides: Any) -> dict[str, Any]:
         "ssh_options": [],
         "ssh_transport": "paramiko",
         "ssh_keepalive_s": 30,
+        "ssh_connect_retries": 4,
+        "ssh_connect_retry_backoff_s": 1.0,
         "add_connections": [],
         "modify_connections": [],
         "swap_cell_types": []
@@ -908,6 +912,8 @@ def build_slurm_remote_config(
     slurm_allocation_name: str | None = None,
     ssh_options: list[str] | None = None,
     slurm_extra_args: list[str] | None = None,
+    ssh_connect_retries: int = 4,
+    ssh_connect_retry_backoff_s: float = 1.0,
 ) -> dict[str, Any]:
     """Return a generic remote Slurm config for notebook-driven runs.
 
@@ -984,6 +990,8 @@ def build_slurm_remote_config(
         "ssh_options": list(ssh_options or []),
         "ssh_transport": "paramiko",
         "ssh_keepalive_s": 30,
+        "ssh_connect_retries": max(int(ssh_connect_retries), 1),
+        "ssh_connect_retry_backoff_s": max(float(ssh_connect_retry_backoff_s), 0.0),
     }
     return config
 
@@ -2094,6 +2102,40 @@ def _paramiko_transport_is_usable(transport: Any) -> bool:
         return False
 
 
+def _paramiko_connect_retry_count(config: dict[str, Any]) -> int:
+    """Return how many times one fresh Paramiko connect may be retried."""
+    try:
+        return max(int(config.get("ssh_connect_retries", 4) or 1), 1)
+    except Exception:
+        return 4
+
+
+def _paramiko_connect_retry_backoff_s(config: dict[str, Any]) -> float:
+    """Return the base sleep between fresh Paramiko connect retries."""
+    try:
+        return max(float(config.get("ssh_connect_retry_backoff_s", 1.0) or 0.0), 0.0)
+    except Exception:
+        return 1.0
+
+
+def _paramiko_connect_error_is_retryable(exc: BaseException) -> bool:
+    """Return whether one fresh Paramiko connect failure is transient enough to retry."""
+    try:
+        import socket
+    except Exception:  # pragma: no cover - defensive import fallback
+        socket = None  # type: ignore[assignment]
+
+    if isinstance(exc, EOFError):
+        return True
+    if socket is not None and isinstance(exc, (socket.timeout, TimeoutError, OSError)):
+        return True
+    if paramiko is not None and isinstance(exc, getattr(paramiko, "AuthenticationException", tuple())):
+        return False
+    if paramiko is not None and isinstance(exc, getattr(paramiko, "SSHException", tuple())):
+        return True
+    return False
+
+
 def _paramiko_prompt_key(prompt_text: str) -> str:
     """Normalize one interactive-auth prompt into a stable cache key."""
     return " ".join(str(prompt_text or "").strip().split())
@@ -2386,106 +2428,123 @@ def _connect_paramiko(config: dict[str, Any]) -> Any:
         raise RuntimeError(_paramiko_midrun_reauth_error(config))
 
     hostname, port, username = _remote_endpoint(config)
-    raw_sock = None
-    transport = None
-    try:
-        import socket
-
-        _progress_write(f"[Sol remote] Opening SSH session to {username}@{hostname}:{port}...")
-        raw_sock = socket.create_connection((hostname, port), timeout=30.0)
-        transport = paramiko.Transport(raw_sock)
-        transport.start_client(timeout=30.0)
-        keepalive_seconds = int(config.get("ssh_keepalive_s", 30) or 0)
-        if keepalive_seconds > 0:
-            transport.set_keepalive(keepalive_seconds)
-
-        auth_methods: list[str] = []
+    connect_retries = _paramiko_connect_retry_count(config)
+    backoff_s = _paramiko_connect_retry_backoff_s(config)
+    last_exc: Exception | None = None
+    for attempt in range(connect_retries):
+        raw_sock = None
+        transport = None
         try:
-            transport.auth_none(username)
-        except paramiko.BadAuthenticationType as exc:
-            auth_methods = list(exc.allowed_types)
-        except _PARAMIKO_PARTIAL_AUTH_EXC as exc:  # pragma: no cover - defensive
-            auth_methods = list(exc.allowed_types)
-        except paramiko.AuthenticationException:
-            auth_methods = []
+            import socket
 
-        authenticated = False
-        if "keyboard-interactive" in auth_methods or not auth_methods:
-            _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
-            def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
-                responses: list[str] = []
-                if title:
-                    print(title)
-                if instructions:
-                    print(instructions)
-                for prompt_text, _echo in prompt_list:
-                    responses.append(_paramiko_prompt_response(prompt_text, config=config))
-                return responses
+            _progress_write(f"[Sol remote] Opening SSH session to {username}@{hostname}:{port}...")
+            raw_sock = socket.create_connection((hostname, port), timeout=30.0)
+            transport = paramiko.Transport(raw_sock)
+            transport.start_client(timeout=30.0)
+            keepalive_seconds = int(config.get("ssh_keepalive_s", 30) or 0)
+            if keepalive_seconds > 0:
+                transport.set_keepalive(keepalive_seconds)
 
+            auth_methods: list[str] = []
             try:
+                transport.auth_none(username)
+            except paramiko.BadAuthenticationType as exc:
+                auth_methods = list(exc.allowed_types)
+            except _PARAMIKO_PARTIAL_AUTH_EXC as exc:  # pragma: no cover - defensive
+                auth_methods = list(exc.allowed_types)
+            except paramiko.AuthenticationException:
+                auth_methods = []
+
+            authenticated = False
+            if "keyboard-interactive" in auth_methods or not auth_methods:
+                _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
+                def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
+                    responses: list[str] = []
+                    if title:
+                        print(title)
+                    if instructions:
+                        print(instructions)
+                    for prompt_text, _echo in prompt_list:
+                        responses.append(_paramiko_prompt_response(prompt_text, config=config))
+                    return responses
+
+                try:
+                    transport.auth_interactive(username, handler)
+                    authenticated = transport.is_authenticated()
+                except paramiko.AuthenticationException:
+                    authenticated = False
+
+            if not authenticated and "password" in auth_methods:
+                try:
+                    _progress_write(f"[Sol remote] Waiting for password authentication...")
+                    transport.auth_password(
+                        username,
+                        _paramiko_prompt_response(f"Password for {username}@{hostname}:", config=config),
+                    )
+                    authenticated = transport.is_authenticated()
+                except _PARAMIKO_PARTIAL_AUTH_EXC as exc:
+                    auth_methods = list(exc.allowed_types)
+                    authenticated = False
+
+            if not authenticated and "keyboard-interactive" in auth_methods:
+                _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
+                def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
+                    responses: list[str] = []
+                    if title:
+                        print(title)
+                    if instructions:
+                        print(instructions)
+                    for prompt_text, _echo in prompt_list:
+                        responses.append(_paramiko_prompt_response(prompt_text, config=config))
+                    return responses
+
                 transport.auth_interactive(username, handler)
                 authenticated = transport.is_authenticated()
-            except paramiko.AuthenticationException:
-                authenticated = False
 
-        if not authenticated and "password" in auth_methods:
-            try:
-                _progress_write(f"[Sol remote] Waiting for password authentication...")
-                transport.auth_password(
-                    username,
-                    _paramiko_prompt_response(f"Password for {username}@{hostname}:", config=config),
+            if not authenticated:
+                raise RuntimeError(
+                    "Paramiko could not authenticate to the Sol backend.\n"
+                    f"Host: {username}@{hostname}:{port}\n"
+                    f"Auth methods: {auth_methods}"
                 )
-                authenticated = transport.is_authenticated()
-            except _PARAMIKO_PARTIAL_AUTH_EXC as exc:
-                auth_methods = list(exc.allowed_types)
-                authenticated = False
 
-        if not authenticated and "keyboard-interactive" in auth_methods:
-            _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
-            def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
-                responses: list[str] = []
-                if title:
-                    print(title)
-                if instructions:
-                    print(instructions)
-                for prompt_text, _echo in prompt_list:
-                    responses.append(_paramiko_prompt_response(prompt_text, config=config))
-                return responses
-
-            transport.auth_interactive(username, handler)
-            authenticated = transport.is_authenticated()
-
-        if not authenticated:
-            raise RuntimeError(
-                "Paramiko could not authenticate to the Sol backend.\n"
-                f"Host: {username}@{hostname}:{port}\n"
-                f"Auth methods: {auth_methods}"
+            _progress_write(f"[Sol remote] SSH authentication complete.")
+            connection = {
+                "transport": transport,
+                "sftp": None,
+                "hostname": hostname,
+                "port": port,
+                "username": username,
+            }
+            _LIVE_PARAMIKO_CONNECTIONS[cache_key] = connection
+            _LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
+            _progress_write(f"[Sol remote] SSH session ready for {username}@{hostname}:{port}.")
+            return connection
+        except Exception as exc:
+            last_exc = exc
+            if transport is not None:
+                try:
+                    transport.close()
+                except Exception:
+                    pass
+            if raw_sock is not None:
+                try:
+                    raw_sock.close()
+                except Exception:
+                    pass
+            if attempt + 1 >= connect_retries or not _paramiko_connect_error_is_retryable(exc):
+                raise
+            retry_sleep_s = min(backoff_s * float(attempt + 1), 5.0)
+            _progress_write(
+                "[Sol remote] Fresh SSH connect failed; retrying "
+                f"({attempt + 1}/{connect_retries - 1} retries used). "
+                f"Reason: {exc}"
             )
-
-        _progress_write(f"[Sol remote] SSH authentication complete.")
-        connection = {
-            "transport": transport,
-            "sftp": None,
-            "hostname": hostname,
-            "port": port,
-            "username": username,
-        }
-        _LIVE_PARAMIKO_CONNECTIONS[cache_key] = connection
-        _LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
-        _progress_write(f"[Sol remote] SSH session ready for {username}@{hostname}:{port}.")
-        return connection
-    except Exception:
-        if transport is not None:
-            try:
-                transport.close()
-            except Exception:
-                pass
-        if raw_sock is not None:
-            try:
-                raw_sock.close()
-            except Exception:
-                pass
-        raise
+            if retry_sleep_s > 0:
+                time.sleep(retry_sleep_s)
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("Paramiko connect failed without an exception")
 
 
 def _run_paramiko_shell(
