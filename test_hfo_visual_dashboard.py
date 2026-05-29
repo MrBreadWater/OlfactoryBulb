@@ -51,7 +51,7 @@ assert _effective_packet_generation_workers(0, 1) == 1
 assert _effective_packet_generation_workers(1, 8) == 1
 assert _effective_packet_generation_workers(2, 8) == 2
 assert _effective_packet_generation_workers(999, 3) == 3
-assert hfo_vd.DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N == 5
+assert hfo_vd.DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N == 12
 assert next(spec for spec in hfo_vd.hfo_visuals.dashboard_tabs() if spec.key == "recent").display_limit == 5
 
 recent_fixture_rows = [
@@ -486,6 +486,7 @@ with TemporaryDirectory() as tmp:
         generated_packets=[],
         status_payload={},
         generated_at="2026-05-28T01:23:45",
+        manifest_revision=987654321,
     )
     assert "http-equiv='refresh'" not in dashboard_html
     assert "fetch(\"manifest.json?cache=\" + Date.now()" in dashboard_html
@@ -498,6 +499,7 @@ with TemporaryDirectory() as tmp:
     assert "Best Visual Packets" in dashboard_html
     assert f'fetch("{hfo_vd.GENERATE_PACKET_ENDPOINT}"' in dashboard_html
     assert "setActiveTab(" in dashboard_html
+    assert "data-manifest-revision=\"987654321\"" in dashboard_html
 
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)
@@ -517,6 +519,7 @@ with TemporaryDirectory() as tmp:
         generated_packets=[],
         status_payload={},
         generated_at="2026-05-28T01:23:45",
+        manifest_revision=987654322,
         recent_batch_name="batch_0202",
     )
     assert dashboard_html.count('id="best-candidate-') == 7
@@ -575,6 +578,7 @@ with TemporaryDirectory() as tmp:
     assert payload["packet_dir"] == str(packet_dir)
     generate_mock.assert_called_once()
     export_mock.assert_called_once()
+    assert export_mock.call_args.kwargs["generate_packets_top_n"] == 1
 
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)

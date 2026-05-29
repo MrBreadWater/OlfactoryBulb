@@ -55,7 +55,7 @@ DEFAULT_TOP_N = 20
 DEFAULT_GENERATE_PACKETS_TOP_N = DEFAULT_TOP_N
 DEFAULT_PACKET_GENERATION_WORKERS = 0
 DEFAULT_CLEANUP_STALE_PACKETS = True
-DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N = 5
+DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N = 12
 DEFAULT_WATCHDOG_SUPERVISE_S = 20.0
 DEFAULT_STALE_AFTER_S = 180.0
 GENERATE_PACKET_ENDPOINT = "/__hfo_generate_packet__"
@@ -908,7 +908,7 @@ def _queue_dashboard_packet_generation(
                 generate_packet_workers=generate_packet_workers,
                 cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
                 status_json=status_json,
-                export_generate_packets_top_n=0,
+                export_generate_packets_top_n=generate_packets_top_n,
                 export_cleanup_stale_packets_before_render=False,
                 reload_modules=reload_modules,
             )
@@ -1405,6 +1405,7 @@ def _render_html(
     generated_packets: list[Path],
     status_payload: dict[str, Any],
     generated_at: str,
+    manifest_revision: int | str,
     recent_batch_name: str | None = None,
 ) -> str:
     tab_specs = hfo_visuals.dashboard_tabs()
@@ -1775,7 +1776,7 @@ def _render_html(
     }}
   </style>
 </head>
-<body data-generated-at="{_esc(generated_at)}" data-refresh-s="{_esc(refresh_s or 0)}">
+<body data-generated-at="{_esc(generated_at)}" data-manifest-revision="{_esc(manifest_revision)}" data-refresh-s="{_esc(refresh_s or 0)}">
   <header>
     <h1>HFO Campaign Visual Dashboard</h1>
     <div class="subtle">{_esc(campaign_dir)}{f" | updates in place every {int(refresh_s)} s" if refresh_s and refresh_s > 0 else ""}</div>
@@ -1809,15 +1810,15 @@ def _render_html(
         return new Promise((resolve) => window.setTimeout(resolve, ms));
       }}
 
-      async function pollDashboardManifestUntilUpdated(candidateId, baselineGeneratedAt) {{
+      async function pollDashboardManifestUntilUpdated(candidateId, baselineManifestToken) {{
         const deadline = Date.now() + 10 * 60 * 1000;
         while (Date.now() < deadline) {{
           try {{
             const manifestResp = await fetch("manifest.json?cache=" + Date.now(), {{ cache: "no-store" }});
             if (manifestResp.ok) {{
               const manifest = await manifestResp.json();
-              const generatedAt = String(manifest.generated_at || "");
-              if (generatedAt && generatedAt !== baselineGeneratedAt) {{
+              const manifestToken = String(manifest.manifest_revision || manifest.generated_at || "");
+              if (manifestToken && manifestToken !== baselineManifestToken) {{
                 showIndicator(`Packet ready for ${{candidateId}}. Reloading dashboard...`);
                 window.setTimeout(() => window.location.reload(), 350);
                 return true;
@@ -1865,7 +1866,7 @@ def _render_html(
         if (pendingPacketRequests.has(candidateId)) return;
         pendingPacketRequests.add(candidateId);
         const originalText = button.textContent || "Generate packet";
-        const baselineGeneratedAt = String(document.body.dataset.generatedAt || "");
+        const baselineManifestToken = String(document.body.dataset.manifestRevision || document.body.dataset.generatedAt || "");
         button.dataset.pending = "true";
         button.setAttribute("aria-busy", "true");
         button.textContent = "Queued...";
@@ -1886,7 +1887,7 @@ def _render_html(
               ? `Packet already running for ${{candidateId}}. Watching for completion...`
               : `Packet queued for ${{candidateId}}. Watching for completion...`
           );
-          const updated = await pollDashboardManifestUntilUpdated(candidateId, baselineGeneratedAt);
+          const updated = await pollDashboardManifestUntilUpdated(candidateId, baselineManifestToken);
           if (!updated) {{
             showIndicator(`Packet generation is still running for ${{candidateId}}.`);
             pendingPacketRequests.delete(candidateId);
@@ -1936,8 +1937,9 @@ def _render_html(
             const manifestResp = await fetch("manifest.json?cache=" + Date.now(), {{ cache: "no-store" }});
             if (!manifestResp.ok) return;
             const manifest = await manifestResp.json();
-            const generatedAt = String(manifest.generated_at || "");
-            if (!generatedAt || generatedAt === document.body.dataset.generatedAt) return;
+            const manifestToken = String(manifest.manifest_revision || manifest.generated_at || "");
+            const baselineToken = String(document.body.dataset.manifestRevision || document.body.dataset.generatedAt || "");
+            if (!manifestToken || manifestToken === baselineToken) return;
 
             const state = captureState();
             const htmlResp = await fetch("index.html?cache=" + Date.now(), {{ cache: "no-store" }});
@@ -1948,7 +1950,8 @@ def _render_html(
             const currentMain = document.getElementById("dashboard-main");
             if (!nextMain || !currentMain) return;
             currentMain.replaceWith(document.importNode(nextMain, true));
-            document.body.dataset.generatedAt = generatedAt;
+            document.body.dataset.manifestRevision = manifestToken;
+            document.body.dataset.generatedAt = String(manifest.generated_at || document.body.dataset.generatedAt || "");
             restoreState(state);
             showIndicator("Dashboard updated without changing scroll position.");
           }} catch (exc) {{
@@ -2017,7 +2020,8 @@ def export_visual_dashboard(
         packets = find_candidate_packets(campaign_path)
         status_path = Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH)
         payload = _status_payload(campaign_path, status_path)
-        generated_at = datetime.now().isoformat(timespec="seconds")
+        manifest_revision = time.time_ns()
+        generated_at = datetime.now().isoformat(timespec="microseconds")
         html_text = _render_html(
             campaign_dir=campaign_path,
             output_dir=output_path,
@@ -2028,6 +2032,7 @@ def export_visual_dashboard(
             generated_packets=generated_packets,
             status_payload=payload,
             generated_at=generated_at,
+            manifest_revision=manifest_revision,
             recent_batch_name=recent_batch_name,
         )
         index_path = output_path / "index.html"
@@ -2043,6 +2048,7 @@ def export_visual_dashboard(
             "entrypoint_html": str(entrypoint_path),
             "entrypoint_url_path": url_path,
             "generated_at": generated_at,
+            "manifest_revision": manifest_revision,
             "candidate_rows": len(rows),
             "packet_count": len(packets),
             "generated_packets": [str(path) for path in generated_packets],
