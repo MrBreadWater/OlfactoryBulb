@@ -29,7 +29,7 @@ CELL_COLORS = {
 }
 
 VISUAL_STYLE_VERSION = 13
-PSD_PACKET_RENDER_VERSION = 5
+PSD_PACKET_RENDER_VERSION = 6
 NOTEBOOK_ANALYSIS_DT_MS = 0.1
 NOTEBOOK_TIME_MODULUS_MS = 1e10
 NOTEBOOK_PACKET_TIME_MODULUS_MS = 200.0
@@ -199,6 +199,7 @@ def packet_manifest_files() -> list[str]:
         "01_psd_control.png",
         "01_psd_ketamine.png",
         "03_psd_overlay.png",
+        "03_power_spectrum_control_vs_ketamine.png",
         *PACKET_BASE_FILES,
         *SPECTROGRAM_MOD200_FILE_BY_CONDITION.values(),
         "06_lfp_windows_mod200.png",

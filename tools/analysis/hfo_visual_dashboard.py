@@ -1332,7 +1332,7 @@ def _render_packet_card(
                 primary_psd,
                 output_dir=output_dir,
                 css_class="primary-psd",
-                caption="Live PSD overlay with scoring template",
+                caption="Live PSD scoring diagnostics",
             )
         psd_images = _psd_images(packet.images)
         supporting_psd = [image for image in psd_images if image != primary_psd]

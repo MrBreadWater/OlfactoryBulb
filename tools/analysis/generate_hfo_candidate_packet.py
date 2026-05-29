@@ -171,6 +171,15 @@ def _packet_manifest_is_current(packet_dir: Path, candidate_id: str) -> bool:
         return False
     if int(manifest.get("visual_style_version", -1) or -1) != int(VISUAL_STYLE_VERSION):
         return False
+    overlay = manifest.get("psd_target_overlay") or {}
+    if not isinstance(overlay, dict):
+        return False
+    if int(overlay.get("render_version", -1) or -1) != int(hv.PSD_PACKET_RENDER_VERSION):
+        return False
+    if list(overlay.get("target_hfo_hz") or []) != list(hfo.DEFAULT_SCORE_BANDS["target_hfo"]):
+        return False
+    if list(overlay.get("high_gamma_hz") or []) != list(hfo.DEFAULT_SCORE_BANDS["high_gamma"]):
+        return False
     files = manifest.get("files") or hv.packet_manifest_files()
     if not isinstance(files, list):
         return False

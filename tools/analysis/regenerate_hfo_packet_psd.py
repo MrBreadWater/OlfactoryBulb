@@ -30,6 +30,7 @@ import olfactorybulb.hfo_visuals as hv
 PSD_TARGET_VISUAL_FLOOR = hfo.PSD_TEMPLATE_VISUAL_FLOOR
 PSD_PACKET_RENDER_VERSION = hv.PSD_PACKET_RENDER_VERSION
 TARGET_HFO_BAND = tuple(float(value) for value in hfo.DEFAULT_SCORE_BANDS["target_hfo"])
+MEASURED_OVERLAY_FILE = "03_power_spectrum_control_vs_ketamine.png"
 
 
 def _target_band_label() -> str:
@@ -83,6 +84,116 @@ def _scaled_template_for_plot(kind: str, freqs: np.ndarray, reference_psd: np.nd
         return target
     domain = (freqs >= min(hfo.PSD_TEMPLATE_FREQS_HZ)) & (freqs <= max(hfo.PSD_TEMPLATE_FREQS_HZ))
     return np.where(domain, target, np.nan)
+
+
+def _plot_scoring_residuals(
+    *,
+    manifest: dict[str, Any],
+    diagnostics: dict[str, Any],
+    output_path: Path,
+    bands: dict[str, tuple[float, float]],
+) -> None:
+    freqs = np.asarray(diagnostics["freqs_hz"], dtype=float)
+    panels = (
+        {
+            "prefix": "control",
+            "title": "control",
+            "curve_color": "#2563eb",
+            "template_color": "#7c3aed",
+            "loss_key": "control_psd_template_loss",
+            "similarity_key": "control_psd_template_similarity",
+            "broad_key": "control_psd_template_broad_similarity",
+            "weighted_key": "control_psd_template_hfo_weighted_similarity",
+        },
+        {
+            "prefix": "ketamine",
+            "title": "ketamine",
+            "curve_color": "#dc2626",
+            "template_color": "#a21caf",
+            "loss_key": "ketamine_psd_template_loss",
+            "similarity_key": "ketamine_psd_template_similarity",
+            "broad_key": "ketamine_psd_template_broad_similarity",
+            "weighted_key": "ketamine_psd_template_hfo_weighted_similarity",
+        },
+        {
+            "prefix": "contrast",
+            "title": "positive contrast (ketamine - control)",
+            "curve_color": "#ea580c",
+            "template_color": "#7c3aed",
+            "loss_key": "psd_contrast_template_loss",
+            "similarity_key": "psd_contrast_template_similarity",
+            "broad_key": "psd_contrast_template_broad_similarity",
+            "weighted_key": "psd_contrast_template_hfo_weighted_similarity",
+        },
+    )
+
+    fig = plt.figure(figsize=(14, 11.2), constrained_layout=True)
+    grid = fig.add_gridspec(nrows=len(panels), ncols=2, width_ratios=(3.3, 2.2))
+
+    for row_index, panel in enumerate(panels):
+        prefix = str(panel["prefix"])
+        shape = np.asarray(diagnostics[f"{prefix}_shape"], dtype=float)
+        template = np.asarray(diagnostics[f"{prefix}_template"], dtype=float)
+        residual = np.asarray(diagnostics[f"{prefix}_residual"], dtype=float)
+
+        ax_curve = fig.add_subplot(grid[row_index, 0])
+        ax_residual = fig.add_subplot(grid[row_index, 1], sharex=ax_curve)
+
+        _score_band_patches(ax_curve, bands)
+        _score_band_patches(ax_residual, bands)
+        ax_curve.plot(freqs, shape, color=str(panel["curve_color"]), lw=2.2, label=f"{panel['title']} scoring curve")
+        ax_curve.plot(
+            freqs,
+            template,
+            color=str(panel["template_color"]),
+            lw=2.0,
+            ls=(0, (6, 2)),
+            label=f"{panel['title']} template",
+        )
+        ax_curve.fill_between(freqs, shape, template, where=shape >= template, color=str(panel["curve_color"]), alpha=0.16)
+        ax_curve.fill_between(freqs, shape, template, where=shape < template, color=str(panel["template_color"]), alpha=0.12)
+        ax_curve.set_xlim(20, 300)
+        ax_curve.set_ylim(0.0, max(float(np.max(shape)), float(np.max(template)), 1e-9) * 1.18)
+        ax_curve.set_ylabel("Normalized weight")
+        ax_curve.grid(True, alpha=0.18)
+        ax_curve.legend(loc="upper right", frameon=False, fontsize=9)
+        ax_curve.set_title(
+            f"{panel['title']} template loss {float(diagnostics[panel['loss_key']]):.3f} | "
+            f"blended similarity {float(diagnostics[panel['similarity_key']]):.3f}"
+        )
+        ax_curve.text(
+            0.015,
+            0.93,
+            (
+                f"broad {float(diagnostics[panel['broad_key']]):.3f} | "
+                f"HFO-weighted {float(diagnostics[panel['weighted_key']]):.3f}"
+            ),
+            transform=ax_curve.transAxes,
+            va="top",
+            fontsize=9,
+        )
+
+        residual_limit = max(float(np.max(np.abs(residual))), 1e-9) * 1.15
+        ax_residual.axhline(0.0, color="#111827", lw=1.0, alpha=0.7)
+        ax_residual.fill_between(freqs, 0.0, residual, where=residual >= 0.0, color=str(panel["curve_color"]), alpha=0.22)
+        ax_residual.fill_between(freqs, 0.0, residual, where=residual < 0.0, color=str(panel["template_color"]), alpha=0.20)
+        ax_residual.plot(freqs, residual, color="#111827", lw=1.5)
+        ax_residual.set_xlim(20, 300)
+        ax_residual.set_ylim(-residual_limit, residual_limit)
+        ax_residual.set_ylabel("Residual")
+        ax_residual.grid(True, alpha=0.18)
+        ax_residual.set_title("Residual: scoring curve - template")
+
+        if row_index == len(panels) - 1:
+            ax_curve.set_xlabel("Frequency (Hz)")
+            ax_residual.set_xlabel("Frequency (Hz)")
+
+    fig.suptitle(
+        f"{manifest.get('candidate_id', 'candidate')} exact PSD template-loss curves and residuals",
+        fontsize=15,
+    )
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
 
 
 def _plot_single_psd(
@@ -229,6 +340,10 @@ def regenerate_packet_psd(packet: Path) -> Path:
     bands = dict(hfo.DEFAULT_SCORE_BANDS)
     control_summary = hlp.compute_hfo_power_summary(control, bands=bands, dt_ms=0.1, relative_band=(15.0, 250.0))
     ketamine_summary = hlp.compute_hfo_power_summary(ketamine, bands=bands, dt_ms=0.1, relative_band=(15.0, 250.0))
+    scoring_diagnostics = hfo.psd_template_loss_diagnostics(
+        manifest.get("control_metrics") or {},
+        manifest.get("ketamine_metrics") or {},
+    )
 
     _plot_single_psd(
         manifest=manifest,
@@ -252,6 +367,12 @@ def regenerate_packet_psd(packet: Path) -> Path:
         manifest=manifest,
         control_summary=control_summary,
         ketamine_summary=ketamine_summary,
+        output_path=packet_dir / MEASURED_OVERLAY_FILE,
+        bands=bands,
+    )
+    _plot_scoring_residuals(
+        manifest=manifest,
+        diagnostics=scoring_diagnostics,
         output_path=packet_dir / "03_psd_overlay.png",
         bands=bands,
     )
@@ -259,8 +380,13 @@ def regenerate_packet_psd(packet: Path) -> Path:
     manifest["psd_target_overlay"] = {
         **hv.psd_overlay_contract_snapshot(),
         "updated_at": datetime.now().isoformat(timespec="seconds"),
-        "templates": ["control", "ketamine"],
-        "scaling": f"area-scaled to measured PSD units over {_target_band_label()}",
+        "templates": ["control", "ketamine", "contrast"],
+        "primary_plot": "normalized PSD-shape vectors and residuals on the template-loss grid",
+        "secondary_plot": f"measured PSD overlay with area-scaled templates over {_target_band_label()}",
+        "scaling": (
+            "primary plot: normalized sqrt-PSD-shape vectors on the 20-300 Hz / 5 Hz loss grid; "
+            f"secondary measured overlay: area-scaled to measured PSD units over {_target_band_label()}"
+        ),
         "source": "tools/analysis/regenerate_hfo_packet_psd.py",
     }
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True))

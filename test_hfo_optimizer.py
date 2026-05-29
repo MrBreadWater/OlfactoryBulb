@@ -26,6 +26,7 @@ from olfactorybulb.hfo_optimizer import (
     lfp_source_diagnostic_configs,
     parameter_plausibility_penalty,
     paramiko_auth_probe,
+    psd_template_loss_diagnostics,
     propose_elite_batch,
     psd_template_curve,
     resume_pending_batch_name,
@@ -480,6 +481,8 @@ missing_control_pair = score_candidate_pair(
     control_metrics={"condition_score": float("-inf"), "relative_band_power": {}, "peak_ratio": 0.0},
     ketamine_metrics=target_metrics,
 )
+good_pair_diagnostics = psd_template_loss_diagnostics(flat_metrics, target_metrics)
+flat_pair_diagnostics = psd_template_loss_diagnostics(flat_metrics, flat_metrics)
 
 assert good_pair["pair_score"] > bad_pair["pair_score"]
 assert good_pair["pair_score"] > edge_pair["pair_score"]
@@ -522,6 +525,20 @@ assert bad_pair["target_delta"] == 0.0
 assert artifact_pair["control_wrong_band_penalty"] > 0.0
 assert reversed_pair["negative_delta_penalty"] > 0.0
 assert missing_control_pair["pair_score"] == float("-inf")
+assert good_pair_diagnostics["psd_template_loss"] == good_pair["psd_template_loss"]
+assert good_pair_diagnostics["psd_template_score"] == good_pair["psd_template_score"]
+assert len(good_pair_diagnostics["freqs_hz"]) == len(hfo_module.PSD_TEMPLATE_FREQS_HZ)
+assert np.isclose(np.sum(good_pair_diagnostics["control_shape"]), 1.0)
+assert np.isclose(np.sum(good_pair_diagnostics["ketamine_shape"]), 1.0)
+assert np.allclose(
+    np.asarray(good_pair_diagnostics["ketamine_residual"]),
+    np.asarray(good_pair_diagnostics["ketamine_shape"]) - np.asarray(good_pair_diagnostics["ketamine_template"]),
+)
+assert np.count_nonzero(np.asarray(flat_pair_diagnostics["contrast_shape"])) == 0
+assert np.allclose(
+    np.asarray(flat_pair_diagnostics["contrast_residual"]),
+    -np.asarray(flat_pair_diagnostics["contrast_template"]),
+)
 
 plausible_penalty, plausible_components = parameter_plausibility_penalty(
     {"kar_mt_gmax": 0.03, "kar_osn_weight_scale": 1.0, "kar_gc_gmax": 0.008}

@@ -910,10 +910,11 @@ def _blended_psd_template_similarity(
     return float(similarity), float(broad), float(hfo_weighted)
 
 
-def _psd_template_pair_metrics(
+def psd_template_loss_diagnostics(
     control_metrics: dict[str, Any],
     ketamine_metrics: dict[str, Any],
-) -> dict[str, float]:
+) -> dict[str, Any]:
+    """Return the exact normalized PSD-shape curves used by template scoring."""
     control_shape = _psd_shape_from_metrics(control_metrics)
     ketamine_shape = _psd_shape_from_metrics(ketamine_metrics)
     ketamine_template = _theoretical_psd_template("ketamine")
@@ -949,6 +950,17 @@ def _psd_template_pair_metrics(
         - 0.80 * control_hfo_similarity
     )
     return {
+        "freqs_hz": [float(value) for value in PSD_TEMPLATE_FREQS_HZ],
+        "control_shape": [float(value) for value in control_shape],
+        "ketamine_shape": [float(value) for value in ketamine_shape],
+        "contrast_shape": [float(value) for value in positive_contrast_shape],
+        "control_template": [float(value) for value in control_template],
+        "ketamine_template": [float(value) for value in ketamine_template],
+        "contrast_template": [float(value) for value in contrast_template],
+        "control_residual": [float(value) for value in (control_shape - control_template)],
+        "ketamine_residual": [float(value) for value in (ketamine_shape - ketamine_template)],
+        "contrast_residual": [float(value) for value in (positive_contrast_shape - contrast_template)],
+        "hfo_weight_vector": [float(value) for value in template_weights],
         "psd_template_loss": float(template_loss),
         "psd_template_score": float(template_score),
         "ketamine_psd_template_loss": float(ketamine_loss),
@@ -967,6 +979,33 @@ def _psd_template_pair_metrics(
         "psd_template_hfo_weight": float(PSD_TEMPLATE_HFO_WEIGHT),
         "psd_template_hfo_blend": float(PSD_TEMPLATE_HFO_BLEND),
     }
+
+
+def _psd_template_pair_metrics(
+    control_metrics: dict[str, Any],
+    ketamine_metrics: dict[str, Any],
+) -> dict[str, float]:
+    diagnostics = psd_template_loss_diagnostics(control_metrics, ketamine_metrics)
+    metric_keys = (
+        "psd_template_loss",
+        "psd_template_score",
+        "ketamine_psd_template_loss",
+        "control_psd_template_loss",
+        "psd_contrast_template_loss",
+        "ketamine_psd_template_similarity",
+        "control_psd_template_similarity",
+        "psd_contrast_template_similarity",
+        "control_hfo_template_similarity",
+        "ketamine_psd_template_broad_similarity",
+        "control_psd_template_broad_similarity",
+        "psd_contrast_template_broad_similarity",
+        "ketamine_psd_template_hfo_weighted_similarity",
+        "control_psd_template_hfo_weighted_similarity",
+        "psd_contrast_template_hfo_weighted_similarity",
+        "psd_template_hfo_weight",
+        "psd_template_hfo_blend",
+    )
+    return {key: float(diagnostics[key]) for key in metric_keys}
 
 
 def parameter_plausibility_penalty(parameters: dict[str, Any] | None) -> tuple[float, dict[str, float]]:
@@ -2906,6 +2945,7 @@ __all__ = [
     "mean_firing_rates_by_type",
     "paramiko_auth_probe",
     "parameter_plausibility_penalty",
+    "psd_template_loss_diagnostics",
     "propose_elite_batch",
     "propose_lhs_batch",
     "psd_template_curve",
