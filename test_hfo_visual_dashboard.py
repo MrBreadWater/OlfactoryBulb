@@ -14,6 +14,7 @@ from unittest.mock import patch
 import matplotlib.pyplot as plt
 import numpy as np
 import obgpu_experiment_helpers as hlp
+import tools.analysis.generate_hfo_candidate_packet as packet_mod
 from olfactorybulb.hfo_features import parameter_contract_snapshot
 import olfactorybulb.hfo_optimizer as hfo
 from olfactorybulb.hfo_visuals import visual_contract_snapshot
@@ -98,7 +99,7 @@ freq_bins = int(np.count_nonzero(np.fft.rfftfreq(int(nperseg), d=0.0001) <= floa
 time_bins = 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap))
 assert freq_bins >= time_bins
 assert time_bins <= 16
-assert float(np.nanmin(visual_template[np.isfinite(visual_template)])) >= 1e-7
+assert float(np.nanmin(visual_template[np.isfinite(visual_template)])) >= 1e-5
 band_mask = (visual_freqs >= hfo.DEFAULT_SCORE_BANDS["target_hfo"][0]) & (
     visual_freqs <= hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
 )
@@ -586,8 +587,81 @@ with TemporaryDirectory() as tmp:
     assert payload["candidate_id"] == "C00042"
     assert payload["packet_dir"] == str(packet_dir)
     generate_mock.assert_called_once()
+    assert generate_mock.call_args.kwargs["workers"] == 1
     export_mock.assert_called_once()
     assert export_mock.call_args.kwargs["generate_packets_top_n"] == 1
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    figures = campaign / "figures"
+    figures.mkdir(parents=True)
+    candidate_id = "C00042"
+    result_dir = campaign / "result"
+    result_dir.mkdir()
+    (campaign / "candidate_archive.jsonl").write_text(
+        json.dumps(
+            {
+                "candidate_id": candidate_id,
+                "pair_score": 1.0,
+                "pair_score_version": int(hfo.PAIR_SCORE_VERSION),
+                "parameters": {},
+                "control_metrics": {"result_dir": str(result_dir)},
+                "ketamine_metrics": {"result_dir": str(result_dir)},
+            }
+        )
+        + "\n"
+    )
+    spawned: dict[str, object] = {}
+
+    class FakePool:
+        def __init__(self, max_workers=None, mp_context=None, initializer=None, initargs=()):
+            spawned["max_workers"] = max_workers
+            spawned["start_method"] = getattr(mp_context, "get_start_method", lambda: None)()
+            spawned["initializer"] = initializer
+            spawned["initargs"] = initargs
+            if initializer is not None:
+                initializer(*initargs)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def map(self, fn, iterable):
+            tasks = list(iterable)
+            spawned["task_count"] = len(tasks)
+            spawned["task_kinds"] = [str(task["kind"]) for task in tasks]
+            spawned["task_outs"] = [str(task["out"]) for task in tasks]
+            return [str(task["out"]) for task in tasks]
+
+    def fake_window_result(result, windows, condition):
+        return {
+            "lfp_t": np.array([0.0, 1.0]),
+            "lfp": np.array([0.0, 0.0]),
+            "soma_spikes": {"labels": [], "spike_times": []},
+            "input_times": [],
+        }
+
+    with (
+        patch.object(packet_mod.concurrent.futures, "ProcessPoolExecutor", FakePool),
+        patch.object(packet_mod.os, "cpu_count", return_value=12),
+        patch.object(packet_mod.hlp, "load_result", return_value={"lfp_t": np.array([0.0, 1.0]), "lfp": np.array([0.0, 0.0])}),
+        patch.object(packet_mod.hv, "condition_windows", return_value={"control": (0.0, 1000.0), "ketamine": (1000.0, 2000.0)}),
+        patch.object(packet_mod.hv, "spectrogram_windows", return_value={"control": (0.0, 1000.0), "ketamine": (1000.0, 2000.0)}),
+        patch.object(packet_mod.hv, "spectrogram_switch_time", return_value=1000.0),
+        patch.object(packet_mod.hv, "spectrogram_window_geometry", return_value=(256, 192)),
+        patch.object(packet_mod.hv, "window_result", side_effect=fake_window_result),
+        patch.object(packet_mod, "regenerate_packet_psd", return_value=figures / f"packet_{candidate_id}"),
+        patch.object(packet_mod.hv, "refresh_contact_sheet", return_value=None),
+    ):
+        packet_dir = packet_mod.generate_packet(campaign, candidate_id, workers=0)
+
+    assert packet_dir.exists()
+    assert spawned["max_workers"] == 12
+    assert spawned["task_count"] > 10
+    assert "kde1d" in spawned["task_kinds"]
+    assert "kde2d" in spawned["task_kinds"]
 
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)
@@ -614,6 +688,19 @@ with TemporaryDirectory() as tmp:
 
     ranked_rows = _load_ranked_rows(campaign)
     assert [row["candidate_id"] for row in ranked_rows] == ["C02815"]
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    with patch.object(
+        hfo_vd.packet_generator_module,
+        "generate_packet",
+        return_value=campaign / "figures" / "packet_C00001",
+    ) as generate_mock:
+        packet_dir = hfo_vd._generate_one_packet((str(campaign), "C00001"))
+
+    assert packet_dir.endswith("packet_C00001")
+    generate_mock.assert_called_once()
+    assert generate_mock.call_args.kwargs["workers"] == 1
 
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)

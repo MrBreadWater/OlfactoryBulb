@@ -773,7 +773,7 @@ def _generate_one_packet(task: tuple[str, str]) -> str:
     campaign_dir_str, candidate_id = task
     from generate_hfo_candidate_packet import generate_packet
 
-    packet_dir = generate_packet(Path(campaign_dir_str), candidate_id)
+    packet_dir = generate_packet(Path(campaign_dir_str), candidate_id, workers=1)
     return str(packet_dir)
 
 
@@ -844,7 +844,14 @@ def _generate_dashboard_packet(
 ) -> dict[str, Any]:
     if reload_modules:
         _reload_visual_packet_modules_if_needed()
-    packet_dir = Path(packet_generator_module.generate_packet(campaign_dir, candidate_id, output_dir=packet_output_dir))
+    packet_dir = Path(
+        packet_generator_module.generate_packet(
+            campaign_dir,
+            candidate_id,
+            output_dir=packet_output_dir,
+            workers=generate_packet_workers,
+        )
+    )
     export_top_n = (
         int(generate_packets_top_n)
         if export_generate_packets_top_n is None

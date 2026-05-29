@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import concurrent.futures
 import json
 import fcntl
 import os
 import shutil
+import multiprocessing as mp
 import sys
 import time
 from datetime import datetime
@@ -23,7 +25,7 @@ import obgpu_experiment_helpers as hlp
 from olfactorybulb.hfo_features import parameter_contract_snapshot
 import olfactorybulb.hfo_optimizer as hfo
 import olfactorybulb.hfo_visuals as hv
-from regenerate_hfo_packet_psd import regenerate_packet_psd
+from tools.analysis.regenerate_hfo_packet_psd import regenerate_packet_psd
 
 
 VISUAL_STYLE_VERSION = hv.VISUAL_STYLE_VERSION
@@ -34,6 +36,7 @@ SPECTROGRAM_MOD200_FILE_KETAMINE = hv.SPECTROGRAM_MOD200_FILE_BY_CONDITION["keta
 SPECTROGRAM_PIPELINE = hv.SPECTROGRAM_PIPELINE
 _spectrogram_window_geometry = hv.spectrogram_window_geometry
 _save_spectrogram = hv.save_spectrogram
+_PACKET_RENDER_CONTEXT: dict[str, Any] | None = None
 
 
 def _load_candidate(campaign_dir: Path, candidate_id: str) -> dict[str, Any]:
@@ -67,6 +70,93 @@ def _packet_generation_lock(campaign_dir: Path, candidate_id: str):
             yield
         finally:
             fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+
+
+def _packet_render_worker_init(context: dict[str, Any]) -> None:
+    global _PACKET_RENDER_CONTEXT
+    _PACKET_RENDER_CONTEXT = context
+
+
+def _packet_render_task(task: dict[str, Any]) -> str:
+    if _PACKET_RENDER_CONTEXT is None:
+        raise RuntimeError("Packet render worker context has not been initialized")
+
+    context = _PACKET_RENDER_CONTEXT
+    packet_dir = Path(context["packet_dir"])
+    kind = str(task["kind"])
+    out = packet_dir / str(task["out"])
+
+    if kind == "spectrogram":
+        condition = str(task["condition"])
+        windowed = context["spectrogram_windowed"][condition]
+        nperseg, noverlap = context["spectrogram_geometry"][condition]
+        _save_spectrogram(
+            windowed,
+            condition,
+            out,
+            nperseg=int(nperseg),
+            noverlap=int(noverlap),
+            modulus_ms=task.get("modulus_ms"),
+        )
+    elif kind == "lfp_zoom":
+        hlp.save_lfp_zoom(
+            context["result"],
+            context["windows"],
+            out,
+            modulus_ms=task.get("modulus_ms"),
+        )
+    elif kind == "raster":
+        condition = str(task["condition"])
+        hv.save_raster(
+            context["windowed"][condition],
+            condition,
+            out,
+            modulus_ms=task.get("modulus_ms"),
+        )
+    elif kind == "inputs":
+        hlp.save_input_overview(
+            context["result"],
+            context["windows"],
+            out,
+            modulus_ms=task.get("modulus_ms"),
+        )
+    elif kind == "phase_hist":
+        condition = str(task["condition"])
+        hv.save_phase_hist(
+            context["windowed"][condition],
+            condition,
+            out,
+        )
+    elif kind == "kde1d":
+        condition = str(task["condition"])
+        hv.save_spike_frequency_kde_1d(
+            context["windowed"][condition],
+            condition,
+            str(task["label"]),
+            tuple(task["cell_types"]),
+            out,
+        )
+    elif kind == "kde2d":
+        condition = str(task["condition"])
+        hv.save_spike_frequency_kde_2d(
+            context["windowed"][condition],
+            condition,
+            str(task["label"]),
+            tuple(task["cell_types"]),
+            out,
+            modulus_ms=task.get("modulus_ms"),
+        )
+    else:
+        raise ValueError(f"Unsupported packet render task kind {kind!r}")
+
+    return str(out)
+
+
+def _packet_render_worker_count(workers: int | None) -> int:
+    requested = 0 if workers is None else int(workers)
+    if requested <= 0:
+        requested = int(os.cpu_count() or 1)
+    return max(1, requested)
 
 
 def _packet_manifest_is_current(packet_dir: Path, candidate_id: str) -> bool:
@@ -112,7 +202,13 @@ def _find_current_packet_dir(campaign_dir: Path, candidate_id: str) -> Path | No
     return None
 
 
-def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | None = None) -> Path:
+def generate_packet(
+    campaign_dir: Path,
+    candidate_id: str,
+    output_dir: Path | None = None,
+    *,
+    workers: int | None = None,
+) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     final_packet_dir = output_dir or campaign_dir / "figures" / f"short_expected_{candidate_id}_{timestamp}"
     if output_dir is not None and _packet_manifest_is_current(final_packet_dir, candidate_id):
@@ -151,93 +247,119 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
         tmp_packet_dir = final_packet_dir.parent / f".{final_packet_dir.name}.tmp-{os.getpid()}-{time.time_ns()}"
         tmp_packet_dir.mkdir(parents=True, exist_ok=False)
         try:
-            hv.save_spectrogram(
-                spectrogram_windowed["control"],
-                condition="control",
-                out=tmp_packet_dir / SPECTROGRAM_FILE_CONTROL,
-                nperseg=control_geom[0],
-                noverlap=control_geom[1],
-            )
-            hv.save_spectrogram(
-                spectrogram_windowed["ketamine"],
-                condition="ketamine",
-                out=tmp_packet_dir / SPECTROGRAM_FILE_KETAMINE,
-                nperseg=ketamine_geom[0],
-                noverlap=ketamine_geom[1],
-            )
-            hv.save_spectrogram(
-                spectrogram_windowed["control"],
-                condition="control",
-                out=tmp_packet_dir / SPECTROGRAM_MOD200_FILE_CONTROL,
-                nperseg=control_geom[0],
-                noverlap=control_geom[1],
-                modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
-            )
-            hv.save_spectrogram(
-                spectrogram_windowed["ketamine"],
-                condition="ketamine",
-                out=tmp_packet_dir / SPECTROGRAM_MOD200_FILE_KETAMINE,
-                nperseg=ketamine_geom[0],
-                noverlap=ketamine_geom[1],
-                modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
-            )
-            hv.save_lfp_zoom(result, windows, tmp_packet_dir / "06_lfp_windows.png")
-            hv.save_lfp_zoom(
-                result,
-                windows,
-                tmp_packet_dir / "06_lfp_windows_mod200.png",
-                modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
-            )
-            hv.save_raster(windowed["control"], "control", tmp_packet_dir / "07_raster_control.png")
-            hv.save_raster(windowed["ketamine"], "ketamine", tmp_packet_dir / "08_raster_ketamine.png")
-            hv.save_raster(
-                windowed["control"],
-                "control",
-                tmp_packet_dir / "07_raster_control_mod200.png",
-                modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
-            )
-            hv.save_raster(
-                windowed["ketamine"],
-                "ketamine",
-                tmp_packet_dir / "08_raster_ketamine_mod200.png",
-                modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
-            )
-            hv.save_input_overview(result, windows, tmp_packet_dir / "10_inputs.png")
-            hv.save_input_overview(
-                result,
-                windows,
-                tmp_packet_dir / "10_inputs_mod200.png",
-                modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
-            )
-            hv.save_phase_hist(windowed["control"], "control", tmp_packet_dir / "11_phase_control.png")
-            hv.save_phase_hist(windowed["ketamine"], "ketamine", tmp_packet_dir / "12_phase_ketamine.png")
-
+            render_tasks: list[dict[str, Any]] = [
+                {
+                    "kind": "spectrogram",
+                    "condition": "control",
+                    "out": SPECTROGRAM_FILE_CONTROL,
+                },
+                {
+                    "kind": "spectrogram",
+                    "condition": "ketamine",
+                    "out": SPECTROGRAM_FILE_KETAMINE,
+                },
+                {
+                    "kind": "spectrogram",
+                    "condition": "control",
+                    "out": SPECTROGRAM_MOD200_FILE_CONTROL,
+                    "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                },
+                {
+                    "kind": "spectrogram",
+                    "condition": "ketamine",
+                    "out": SPECTROGRAM_MOD200_FILE_KETAMINE,
+                    "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                },
+                {"kind": "lfp_zoom", "out": "06_lfp_windows.png"},
+                {
+                    "kind": "lfp_zoom",
+                    "out": "06_lfp_windows_mod200.png",
+                    "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                },
+                {"kind": "raster", "condition": "control", "out": "07_raster_control.png"},
+                {"kind": "raster", "condition": "ketamine", "out": "08_raster_ketamine.png"},
+                {
+                    "kind": "raster",
+                    "condition": "control",
+                    "out": "07_raster_control_mod200.png",
+                    "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                },
+                {
+                    "kind": "raster",
+                    "condition": "ketamine",
+                    "out": "08_raster_ketamine_mod200.png",
+                    "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                },
+                {"kind": "inputs", "out": "10_inputs.png"},
+                {
+                    "kind": "inputs",
+                    "out": "10_inputs_mod200.png",
+                    "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                },
+                {"kind": "phase_hist", "condition": "control", "out": "11_phase_control.png"},
+                {"kind": "phase_hist", "condition": "ketamine", "out": "12_phase_ketamine.png"},
+            ]
             for condition in ("control", "ketamine"):
                 for group in hv.frequency_group_specs():
-                    kde_1d = hv.kde_filename("1d", condition, group.label)
-                    hv.save_spike_frequency_kde_1d(
-                        windowed[condition],
-                        condition,
-                        group.label,
-                        group.cell_types,
-                        tmp_packet_dir / kde_1d,
+                    render_tasks.append(
+                        {
+                            "kind": "kde1d",
+                            "condition": condition,
+                            "label": group.label,
+                            "cell_types": list(group.cell_types),
+                            "out": hv.kde_filename("1d", condition, group.label),
+                        }
                     )
-                    kde_2d = hv.kde_filename("2d", condition, group.label)
-                    hv.save_spike_frequency_kde_2d(
-                        windowed[condition],
-                        condition,
-                        group.label,
-                        group.cell_types,
-                        tmp_packet_dir / kde_2d,
+                    render_tasks.append(
+                        {
+                            "kind": "kde2d",
+                            "condition": condition,
+                            "label": group.label,
+                            "cell_types": list(group.cell_types),
+                            "out": hv.kde_filename("2d", condition, group.label),
+                        }
                     )
-                    hv.save_spike_frequency_kde_2d(
-                        windowed[condition],
-                        condition,
-                        group.label,
-                        group.cell_types,
-                        tmp_packet_dir / hv.kde_filename("2d", condition, group.label, suffix="mod200"),
-                        modulus_ms=hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                    render_tasks.append(
+                        {
+                            "kind": "kde2d",
+                            "condition": condition,
+                            "label": group.label,
+                            "cell_types": list(group.cell_types),
+                            "out": hv.kde_filename("2d", condition, group.label, suffix="mod200"),
+                            "modulus_ms": hv.NOTEBOOK_PACKET_TIME_MODULUS_MS,
+                        }
                     )
+
+            render_context = {
+                "packet_dir": tmp_packet_dir,
+                "result": result,
+                "windows": windows,
+                "windowed": windowed,
+                "spectrogram_windowed": spectrogram_windowed,
+                "spectrogram_geometry": {
+                    "control": control_geom,
+                    "ketamine": ketamine_geom,
+                },
+            }
+            render_workers = _packet_render_worker_count(workers)
+            if render_workers > 1 and len(render_tasks) > 1:
+                with concurrent.futures.ProcessPoolExecutor(
+                    max_workers=min(render_workers, len(render_tasks)),
+                    mp_context=mp.get_context("spawn"),
+                    initializer=_packet_render_worker_init,
+                    initargs=(render_context,),
+                ) as pool:
+                    for _ in pool.map(_packet_render_task, render_tasks):
+                        pass
+            else:
+                global _PACKET_RENDER_CONTEXT
+                previous_context = _PACKET_RENDER_CONTEXT
+                _PACKET_RENDER_CONTEXT = render_context
+                try:
+                    for task in render_tasks:
+                        _packet_render_task(task)
+                finally:
+                    _PACKET_RENDER_CONTEXT = previous_context
 
             created_at = datetime.now().isoformat(timespec="seconds")
             manifest = {
@@ -273,6 +395,7 @@ def generate_packet(campaign_dir: Path, candidate_id: str, output_dir: Path | No
                     "generated_at": created_at,
                     "note": "lfp spectrograms produced from 1000 ms visualization windows using dense overlap and the existing helper renderer",
                 },
+                "packet_render_workers": render_workers,
                 "parameters": row.get("parameters"),
                 "control_metrics": row.get("control_metrics"),
                 "ketamine_metrics": row.get("ketamine_metrics"),
@@ -295,8 +418,9 @@ def main() -> None:
     parser.add_argument("campaign_dir", type=Path)
     parser.add_argument("candidate_id")
     parser.add_argument("--output-dir", type=Path, default=None)
+    parser.add_argument("--workers", type=int, default=1, help="Render packet figures in parallel with this many workers.")
     args = parser.parse_args()
-    print(generate_packet(args.campaign_dir, args.candidate_id, args.output_dir))
+    print(generate_packet(args.campaign_dir, args.candidate_id, args.output_dir, workers=args.workers))
 
 
 if __name__ == "__main__":
