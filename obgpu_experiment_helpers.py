@@ -2270,6 +2270,28 @@ def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None
         if cached is not None:
             return cached
     lowered = prompt.lower()
+    kernel_prompt_exc: Exception | None = None
+    try:
+        from IPython import get_ipython as _ipython_getter
+    except Exception:  # pragma: no cover - optional notebook integration
+        _ipython_getter = None
+    if _ipython_getter is not None:
+        shell = _ipython_getter()
+        kernel = getattr(shell, "kernel", None)
+        if kernel is not None:
+            try:
+                if "password" in lowered or "passphrase" in lowered:
+                    response = kernel.getpass(prompt + " ")
+                else:
+                    response = kernel.raw_input(prompt + " ")
+            except EOFError as exc:
+                kernel_prompt_exc = exc
+            except Exception as exc:  # pragma: no cover - frontend-dependent
+                kernel_prompt_exc = exc
+            else:
+                if config is not None:
+                    _cache_paramiko_prompt_response(config, prompt, response)
+                return response
     try:
         if "password" in lowered or "passphrase" in lowered:
             response = getpass(prompt + " ")
@@ -2277,12 +2299,16 @@ def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None
             response = input(prompt + " ")
     except EOFError as exc:
         endpoint = _paramiko_connection_key(config) if isinstance(config, dict) else "<unknown>"
+        frontend_note = ""
+        if kernel_prompt_exc is not None:
+            frontend_note = f"\nKernel input request error: {kernel_prompt_exc}"
         raise RuntimeError(
             "Paramiko authentication could not read notebook input.\n"
             f"Endpoint: {endpoint}\n"
             "This usually means the live notebook kernel cannot service an interactive getpass/input prompt. "
             "Run `paramiko_auth_probe(REMOTE_CONFIG)` in the active kernel to refresh auth, "
             "or rely on cached auth responses for unattended reconnects."
+            f"{frontend_note}"
         ) from exc
     if config is not None:
         _cache_paramiko_prompt_response(config, prompt, response)

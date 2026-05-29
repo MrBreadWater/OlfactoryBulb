@@ -171,6 +171,7 @@ with tempfile.TemporaryDirectory() as tmp:
     saved_prompt_cache = deepcopy(hlp._LIVE_PARAMIKO_PROMPT_CACHE)
     saved_authenticated = set(hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS)
     original_getpass = hlp.getpass
+    original_ipython_module = sys.modules.get("IPython")
     try:
         hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
         hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
@@ -194,8 +195,30 @@ with tempfile.TemporaryDirectory() as tmp:
         except RuntimeError as exc:
             assert "could not read notebook input" in str(exc)
             assert "paramiko_auth_probe(REMOTE_CONFIG)" in str(exc)
+
+        class _FakeKernel:
+            def getpass(self, prompt: str) -> str:
+                assert "Password for jmpaniag@localhost:" in prompt
+                return "kernel-secret"
+
+            def raw_input(self, prompt: str) -> str:
+                assert "OTP code:" in prompt
+                return "123456"
+
+        class _FakeShell:
+            kernel = _FakeKernel()
+
+        sys.modules["IPython"] = SimpleNamespace(get_ipython=lambda: _FakeShell())
+        hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
+        hlp.getpass = _raise_eof
+        assert hlp._paramiko_prompt_response("Password for jmpaniag@localhost:", config=prompt_cfg) == "kernel-secret"
+        assert hlp._paramiko_prompt_response("OTP code:", config=prompt_cfg) == "123456"
     finally:
         hlp.getpass = original_getpass
+        if original_ipython_module is None:
+            sys.modules.pop("IPython", None)
+        else:
+            sys.modules["IPython"] = original_ipython_module
         hlp._LIVE_PARAMIKO_PROMPT_CACHE.clear()
         hlp._LIVE_PARAMIKO_PROMPT_CACHE.update(saved_prompt_cache)
         hlp._LIVE_PARAMIKO_AUTHENTICATED_KEYS.clear()
