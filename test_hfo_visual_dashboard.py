@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import obgpu_experiment_helpers as hlp
 import tools.analysis.generate_hfo_candidate_packet as packet_mod
+import tools.analysis.bring_hfo_campaign_online as bring_online
 from olfactorybulb.hfo_features import parameter_contract_snapshot
 import olfactorybulb.hfo_optimizer as hfo
 from olfactorybulb.hfo_visuals import visual_contract_snapshot
@@ -137,6 +138,7 @@ with TemporaryDirectory() as tmp:
     campaign.mkdir(parents=True)
     helper_spec = packet_dir / "helper_spectrogram.png"
     psd_overlay = packet_dir / "03_psd_overlay.png"
+    psd_measured_overlay = packet_dir / "03_power_spectrum_control_vs_ketamine.png"
     psd_control = packet_dir / "01_psd_control.png"
     raster = packet_dir / "07_raster_control.png"
     raster_k = packet_dir / "08_raster_ketamine.png"
@@ -204,6 +206,7 @@ with TemporaryDirectory() as tmp:
     for path in (
         helper_spec,
         psd_overlay,
+        psd_measured_overlay,
         psd_control,
         raster,
         raster_k,
@@ -291,6 +294,7 @@ with TemporaryDirectory() as tmp:
         contact_sheet=contact,
         images=(
             psd_overlay,
+            psd_measured_overlay,
             psd_control,
             raster,
             raster_k,
@@ -368,8 +372,9 @@ with TemporaryDirectory() as tmp:
     }
 
     html = _render_packet_card(row, packet, output_dir=root, rank=1)
-    assert "Live PSD overlay with scoring template" in html
+    assert "Live PSD scoring diagnostics" in html
     assert "03_psd_overlay.png" in html
+    assert "03_power_spectrum_control_vs_ketamine.png" in html
     assert "LFP spectrogram" in html
     assert "Control" in html
     assert "Ketamine" in html
@@ -387,8 +392,8 @@ with TemporaryDirectory() as tmp:
     assert "gaba_tau2_ms" in html
     assert "input_syn_tau1_ms" in html
     assert "kar_tau2_ms" in html
-    assert html.index("Live PSD overlay with scoring template") < html.index("LFP spectrogram")
-    assert html.index("Live PSD overlay with scoring template") < html.index("Contact sheet")
+    assert html.index("Live PSD scoring diagnostics") < html.index("LFP spectrogram")
+    assert html.index("Live PSD scoring diagnostics") < html.index("Contact sheet")
     assert _packet_needs_refresh(packet, row) is False
 
     missing_html = _render_packet_card(row, None, output_dir=root, rank=1, dom_prefix="recent")
@@ -952,3 +957,72 @@ with TemporaryDirectory() as tmp:
     watchdog_command = spawn_mock.call_args_list[0].args[0]
     watchdog_top_n_index = watchdog_command.index("--generate-packets-top-n")
     assert watchdog_command[watchdog_top_n_index + 1] == str(hfo_vd.DEFAULT_RUNTIME_GENERATE_PACKETS_TOP_N)
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    existing_watchdog = hfo_vd.RuntimeProcessInfo(
+        kind="watchdog",
+        pid=9911,
+        pid_path=output_dir / ".runtime" / "watchdog.pid.json",
+        stdout_path=output_dir / ".runtime" / "watchdog.stdout.log",
+        stderr_path=output_dir / ".runtime" / "watchdog.stderr.log",
+        meta={"kind": "watchdog", "pid": 9911},
+    )
+    with (
+        patch.object(hfo_vd, "_read_runtime_process_info", return_value=existing_watchdog),
+        patch.object(hfo_vd, "_pid_is_alive", return_value=True),
+        patch.object(hfo_vd, "_process_matches_command", return_value=True),
+        patch.object(hfo_vd, "_spawn_detached_process") as spawn_mock,
+        patch.object(hfo_vd, "_ensure_visual_dashboard_sidecars", return_value={"watcher": {"alive": True}, "server": {"alive": True}}),
+    ):
+        payload = ensure_visual_dashboard_runtime(
+            campaign,
+            output_dir=output_dir,
+            status_json=campaign / "status.json",
+            port=6006,
+        )
+    spawn_mock.assert_not_called()
+    assert payload["watchdog"]["alive"] is True
+    assert payload["watchdog"]["pid"] == 9911
+
+with TemporaryDirectory() as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    fake_manifest = {
+        "campaign_dir": str(campaign),
+        "output_dir": str(output_dir),
+        "index_html": str(output_dir / "index.html"),
+        "entrypoint_html": str(output_dir / "index.html"),
+        "entrypoint_url_path": "/",
+        "generated_packets": [],
+    }
+    fake_runtime = {
+        "watchdog": {"alive": True, "pid": 3001},
+        "sidecars": {"watcher": {"alive": True}, "server": {"alive": True}},
+    }
+    with (
+        patch.object(bring_online.hfo_vd, "export_visual_dashboard", return_value=fake_manifest) as export_mock,
+        patch.object(bring_online.hfo_vd, "stop_visual_dashboard_runtime", return_value={"watchdog": {"stopped": True}}) as stop_mock,
+        patch.object(bring_online.hfo_vd, "ensure_visual_dashboard_runtime", return_value=fake_runtime) as ensure_mock,
+        patch.object(bring_online, "_find_available_port", return_value=6012) as port_mock,
+        patch.object(bring_online, "_wait_for_dashboard", return_value=True) as wait_mock,
+    ):
+        payload = bring_online.bring_campaign_online(
+            campaign,
+            output_dir=output_dir,
+            generate_packets_top_n=7,
+            generate_packet_workers=3,
+            restart_runtime=True,
+            wait_timeout_s=5.0,
+        )
+    export_mock.assert_called_once()
+    stop_mock.assert_called_once()
+    ensure_mock.assert_called_once()
+    port_mock.assert_called_once_with("127.0.0.1", 0)
+    wait_mock.assert_called_once_with("http://127.0.0.1:6012/", timeout_s=5.0)
+    assert payload["dashboard_ready"] is True
+    assert payload["port"] == 6012
+    assert payload["runtime"] == fake_runtime

@@ -2426,6 +2426,21 @@ def ensure_visual_dashboard_runtime(
     )
     runtime_dir = _runtime_dir(output_path)
     runtime_dir.mkdir(parents=True, exist_ok=True)
+    command = _dashboard_runtime_command(
+        "watchdog",
+        campaign_path,
+        output_path=output_path,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_path=Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH),
+        host=host,
+        port=port,
+        supervise_s=supervise_s,
+        stale_after_s=stale_after_s,
+    )
     watchdog_info = _read_runtime_process_info(output_path, "watchdog")
     watchdog_alive = (
         watchdog_info is not None
@@ -2434,21 +2449,6 @@ def ensure_visual_dashboard_runtime(
     )
     if not watchdog_alive:
         paths = _runtime_process_paths(output_path, "watchdog")
-        command = _dashboard_runtime_command(
-            "watchdog",
-            campaign_path,
-            output_path=output_path,
-            top_n=top_n,
-            refresh_s=refresh_s,
-            generate_packets_top_n=generate_packets_top_n,
-            generate_packet_workers=generate_packet_workers,
-            cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-            status_path=Path(status_json).expanduser().resolve() if status_json else (REPO_ROOT / SUMMARY_STATUS_PATH),
-            host=host,
-            port=port,
-            supervise_s=supervise_s,
-            stale_after_s=stale_after_s,
-        )
         watchdog_info = _spawn_detached_process(
             command,
             cwd=REPO_ROOT,
