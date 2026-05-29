@@ -44,7 +44,7 @@ from tools.analysis.hfo_visual_dashboard import (
     ensure_visual_dashboard_runtime,
     find_candidate_packets,
 )
-from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION, _normalized_template_for_plot
+from tools.analysis.regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION, _scaled_template_for_plot
 
 assert _effective_packet_generation_workers(0, 0) == 1
 assert _effective_packet_generation_workers(0, 1) == 1
@@ -90,7 +90,8 @@ windowed = {
     "lfp": np.sin(2.0 * np.pi * 180.0 * window_t / 1000.0),
 }
 visual_freqs = np.linspace(20.0, 300.0, 141)
-visual_template = _normalized_template_for_plot("ketamine", visual_freqs)
+reference_psd = np.ones_like(visual_freqs) * 2.0
+visual_template = _scaled_template_for_plot("ketamine", visual_freqs, reference_psd)
 nperseg, noverlap = _spectrogram_window_geometry(windowed)
 assert nperseg >= 128
 freq_bins = int(np.count_nonzero(np.fft.rfftfreq(int(nperseg), d=0.0001) <= float(hfo.DEFAULT_SCORE_BANDS["target_hfo"][1])))
@@ -98,6 +99,14 @@ time_bins = 1 + max(0, (window_t.size - nperseg) // max(1, nperseg - noverlap))
 assert freq_bins >= time_bins
 assert time_bins <= 16
 assert float(np.nanmin(visual_template[np.isfinite(visual_template)])) >= 1e-7
+band_mask = (visual_freqs >= hfo.DEFAULT_SCORE_BANDS["target_hfo"][0]) & (
+    visual_freqs <= hfo.DEFAULT_SCORE_BANDS["target_hfo"][1]
+)
+assert np.isclose(
+    np.trapezoid(visual_template[band_mask], visual_freqs[band_mask]),
+    np.trapezoid(reference_psd[band_mask], visual_freqs[band_mask]),
+    rtol=0.15,
+)
 
 fake_psd_module = types.SimpleNamespace(PSD_PACKET_RENDER_VERSION=123)
 fake_visuals_module = types.SimpleNamespace(VISUAL_STYLE_VERSION=456)

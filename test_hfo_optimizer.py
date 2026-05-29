@@ -76,6 +76,7 @@ assert hfo_module.DEFAULT_OPTIMIZER_SEGMENT_MS == 1000.0
 assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 2000.0
 assert hfo_module.DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS == 100.0
 assert hfo_module.PSD_TEMPLATE_VISUAL_FLOOR == 1e-7
+assert hlp.DEFAULT_PSD_TEMPLATE_FLOOR == hfo_module.PSD_TEMPLATE_VISUAL_FLOOR
 
 template_freqs, ketamine_template = psd_template_curve("ketamine")
 assert template_freqs.shape == ketamine_template.shape
