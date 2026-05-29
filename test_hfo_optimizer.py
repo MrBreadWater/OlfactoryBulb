@@ -304,11 +304,34 @@ def synthetic_result(
     }
 
 
+def synthetic_mixture_result(
+    *,
+    components: list[tuple[float, float]],
+    noise_std: float = 0.15,
+    duration_ms: float = 2000.0,
+    dt_ms: float = 0.1,
+    seed: int = 0,
+):
+    rng = np.random.default_rng(seed)
+    t = np.arange(0.0, duration_ms, dt_ms)
+    y = np.zeros_like(t, dtype=float)
+    for freq_hz, amplitude in components:
+        y = y + float(amplitude) * np.sin(2.0 * np.pi * float(freq_hz) * t / 1000.0)
+    y = y + rng.normal(scale=noise_std, size=len(t))
+    return {
+        "lfp_t": t,
+        "lfp": y,
+        "soma_spikes": {"labels": [], "spike_times": [], "metadata": {}},
+        "summary": {"params": {"tstop": duration_ms}},
+    }
+
+
 target = synthetic_result(freq_hz=180.0, amplitude=1.0, seed=1)
 upper_target = synthetic_result(freq_hz=220.0, amplitude=1.0, seed=4)
 lower_edge_target = synthetic_result(freq_hz=131.0, amplitude=1.0, seed=5)
 off_target = synthetic_result(freq_hz=90.0, amplitude=1.0, seed=2)
 flat = synthetic_result(freq_hz=40.0, amplitude=0.25, noise_std=0.25, seed=3)
+mixed_target = synthetic_mixture_result(components=[(20.0, 1.5), (180.0, 1.0)], noise_std=0.05, seed=6)
 
 switch_t = np.arange(0.0, 4000.0, 0.1)
 switch_lfp = np.where(
@@ -407,13 +430,20 @@ upper_target_metrics = score_condition_result(upper_target, target_hz=180.0, tar
 lower_edge_metrics = score_condition_result(lower_edge_target)
 off_target_metrics = score_condition_result(off_target)
 flat_metrics = score_condition_result(flat)
+mixed_target_metrics = score_condition_result(mixed_target)
 
 assert math.isfinite(target_metrics["condition_score"])
 assert target_metrics["condition_score"] > off_target_metrics["condition_score"]
+assert target_metrics["condition_score"] > mixed_target_metrics["condition_score"]
 assert target_metrics["peak_hz"] > 130.0 and target_metrics["peak_hz"] < 230.0
+assert target_metrics["global_peak_hz"] > 130.0 and target_metrics["global_peak_hz"] < 230.0
 assert target_metrics["target_peak_contrast"] > 1.0
 assert target_metrics["target_centroid_match"] > lower_edge_metrics["target_centroid_match"]
 assert target_metrics["peak_height_score"] > flat_metrics["peak_height_score"]
+assert mixed_target_metrics["peak_hz"] > 130.0 and mixed_target_metrics["peak_hz"] < 230.0
+assert mixed_target_metrics["global_peak_hz"] < 40.0
+assert target_metrics["global_peak_alignment"] > mixed_target_metrics["global_peak_alignment"]
+assert mixed_target_metrics["global_peak_penalty"] > 0.0
 assert upper_target_metrics["target_band_hz"] == [130.0, 230.0]
 assert upper_target_metrics["peak_hz"] > 210.0 and upper_target_metrics["peak_hz"] < 230.0
 
@@ -424,6 +454,7 @@ good_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=
 edge_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=lower_edge_metrics)
 silent_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=silent_epli_target_metrics)
 low_contrast_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=low_contrast_target_metrics)
+mixed_pair = score_candidate_pair(control_metrics=flat_metrics, ketamine_metrics=mixed_target_metrics)
 bad_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=target_metrics)
 upper_bad_pair = score_candidate_pair(control_metrics=upper_target_metrics, ketamine_metrics=upper_target_metrics)
 reversed_pair = score_candidate_pair(control_metrics=target_metrics, ketamine_metrics=flat_metrics)
@@ -454,6 +485,7 @@ assert good_pair["pair_score"] > bad_pair["pair_score"]
 assert good_pair["pair_score"] > edge_pair["pair_score"]
 assert good_pair["pair_score"] > silent_pair["pair_score"]
 assert good_pair["pair_score"] > low_contrast_pair["pair_score"]
+assert good_pair["pair_score"] > mixed_pair["pair_score"]
 assert good_pair["pair_score"] > artifact_pair["pair_score"]
 assert good_pair["control_target_excess_penalty"] == 0.0
 assert bad_pair["pair_score"] > reversed_pair["pair_score"]
@@ -463,8 +495,10 @@ assert good_pair["peak_height_delta"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
 assert good_pair["ketamine_peak_height_score"] > good_pair["control_peak_height_score"]
-assert upper_bad_pair["pair_score_version"] == 10
-assert PAIR_SCORE_VERSION == 10
+assert mixed_pair["ketamine_global_peak_penalty"] > 0.0
+assert mixed_pair["ketamine_global_peak_alignment"] < good_pair["ketamine_global_peak_alignment"]
+assert upper_bad_pair["pair_score_version"] == 11
+assert PAIR_SCORE_VERSION == 11
 assert "psd_shape_power" in target_metrics
 assert len(target_metrics["psd_shape_power"]) > 10
 status_summary = candidate_status_summary(
@@ -472,6 +506,8 @@ status_summary = candidate_status_summary(
 )
 assert status_summary["ketamine_high_gamma_rel"] == target_metrics["relative_band_power"]["high_gamma"]
 assert status_summary["control_high_gamma_rel"] == flat_metrics["relative_band_power"]["high_gamma"]
+assert status_summary["ketamine_global_peak_hz"] == target_metrics["global_peak_hz"]
+assert status_summary["control_global_peak_hz"] == flat_metrics["global_peak_hz"]
 assert good_pair["psd_template_loss"] < bad_pair["psd_template_loss"]
 assert good_pair["psd_contrast_template_loss"] < bad_pair["psd_contrast_template_loss"]
 assert bad_pair["control_hfo_template_similarity"] > good_pair["control_hfo_template_similarity"]

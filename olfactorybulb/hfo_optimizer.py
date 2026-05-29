@@ -58,7 +58,7 @@ DEFAULT_SCORE_BANDS = {
 PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
 PSD_TEMPLATE_VISUAL_FLOOR = 1e-5
 
-PAIR_SCORE_VERSION = 10
+PAIR_SCORE_VERSION = 11
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 PSD_TEMPLATE_HFO_WEIGHT = 4.0
 PSD_TEMPLATE_BROAD_WEIGHT = 1.0
@@ -2147,7 +2147,12 @@ def score_condition_result(
         return {
             "condition_score": float("-inf"),
             "peak_hz": math.nan,
+            "global_peak_hz": math.nan,
             "peak_ratio": 0.0,
+            "global_peak_target_ratio": 0.0,
+            "global_peak_band_match": 0.0,
+            "global_peak_alignment": 0.0,
+            "global_peak_penalty": 0.0,
             "target_peak_contrast": 0.0,
             "peak_height_sharpness": 0.0,
             "peak_height_score": 0.0,
@@ -2172,6 +2177,8 @@ def score_condition_result(
     target_freqs = freqs[target_mask]
     target_psd = psd[target_mask]
     broad_mask = (freqs >= 15.0) & (freqs <= 250.0)
+    broad_freqs = freqs[broad_mask]
+    broad_psd = psd[broad_mask]
     if not np.any(target_mask):
         peak_hz = math.nan
         peak_power = 0.0
@@ -2179,6 +2186,13 @@ def score_condition_result(
         local_index = int(np.argmax(target_psd))
         peak_hz = float(target_freqs[local_index])
         peak_power = float(target_psd[local_index])
+    if not np.any(broad_mask):
+        global_peak_hz = math.nan
+        global_peak_power = 0.0
+    else:
+        global_index = int(np.argmax(broad_psd))
+        global_peak_hz = float(broad_freqs[global_index])
+        global_peak_power = float(broad_psd[global_index])
 
     background_mask = broad_mask & ~target_mask
     shoulder_mask = ((freqs >= 100.0) & (freqs < target_lo)) | ((freqs > target_hi) & (freqs <= 240.0))
@@ -2201,6 +2215,18 @@ def score_condition_result(
     target_peak_contrast = peak_power / max(target_floor, shoulder_floor, background_floor, 1e-18)
     peak_height_sharpness = peak_power / max(target_density, 1e-18) if target_density > 0.0 else 0.0
     peak_height_score = math.log10(1.0 + peak_height_sharpness)
+    global_peak_target_ratio = min(peak_power / max(global_peak_power, 1e-18), 1.0) if global_peak_power > 0.0 else 0.0
+    if not np.isfinite(global_peak_hz):
+        global_peak_band_match = 0.0
+    elif target_lo <= global_peak_hz <= target_hi:
+        global_peak_band_match = 1.0
+    else:
+        nearest_edge_hz = target_lo if global_peak_hz < target_lo else target_hi
+        distance_to_band_hz = abs(global_peak_hz - nearest_edge_hz)
+        band_edge_sigma_hz = max(15.0, 0.15 * max(target_hi - target_lo, 1e-9))
+        global_peak_band_match = math.exp(-0.5 * ((distance_to_band_hz / band_edge_sigma_hz) ** 2))
+    global_peak_alignment = global_peak_target_ratio * global_peak_band_match
+    global_peak_penalty = 1.5 * max(0.75 - global_peak_alignment, 0.0)
 
     freq_match = math.exp(-0.5 * ((peak_hz - target_hz) / max(float(target_half_width_hz), 1e-9)) ** 2) if np.isfinite(peak_hz) else 0.0
     if np.any(target_mask):
@@ -2269,9 +2295,11 @@ def score_condition_result(
         + 2.2 * math.log10(1.0 + dominance)
         + 1.2 * target_clean_fraction
         + 0.8 * target_centroid_match
+        + 1.2 * global_peak_alignment
         + 0.5 * min(beta_gamma, 0.30)
         + 0.5 * phase_lock
         - 1.5 * supra_hfo_relative
+        - global_peak_penalty
         - rate_penalty
         - spike_support_penalty
         - input_dropout_penalty
@@ -2279,7 +2307,12 @@ def score_condition_result(
     return {
         "condition_score": float(condition_score),
         "peak_hz": float(peak_hz),
+        "global_peak_hz": float(global_peak_hz),
         "peak_ratio": float(peak_ratio),
+        "global_peak_target_ratio": float(global_peak_target_ratio),
+        "global_peak_band_match": float(global_peak_band_match),
+        "global_peak_alignment": float(global_peak_alignment),
+        "global_peak_penalty": float(global_peak_penalty),
         "target_peak_contrast": float(target_peak_contrast),
         "peak_height_sharpness": float(peak_height_sharpness),
         "peak_height_score": float(peak_height_score),
@@ -2348,6 +2381,8 @@ def score_candidate_pair(
     ketamine_epli_rate = float(ketamine_metrics.get("epli_rate_hz", (ketamine_metrics.get("mean_firing_rate_by_type") or {}).get("EPLI", 0.0)))
     control_peak_height_score = float(control_metrics.get("peak_height_score", 0.0))
     ketamine_peak_height_score = float(ketamine_metrics.get("peak_height_score", 0.0))
+    control_global_peak_alignment = float(control_metrics.get("global_peak_alignment", 0.0))
+    ketamine_global_peak_alignment = float(ketamine_metrics.get("global_peak_alignment", 0.0))
     peak_height_delta = ketamine_peak_height_score - control_peak_height_score
     target_lo_hz, target_hi_hz = _target_band_for_pair(control_metrics, ketamine_metrics)
     psd_template_metrics = _psd_template_pair_metrics(control_metrics, ketamine_metrics)
@@ -2386,6 +2421,7 @@ def score_candidate_pair(
     ketamine_epli_silence_penalty = 8.0 * max(2.0 - ketamine_epli_rate, 0.0) / 2.0
     ketamine_epli_low_support_penalty = 2.0 * max(5.0 - ketamine_epli_rate, 0.0) / 5.0
     epli_dropout_penalty = 0.5 * max(control_epli_rate - ketamine_epli_rate, 0.0) / 5.0
+    ketamine_global_peak_penalty = 3.0 * max(0.75 - ketamine_global_peak_alignment, 0.0)
     ketamine_wrong_band_penalty = (
         8.0 * max(ketamine_supra - 0.45 * max(ketamine_target, 1e-12), 0.0)
         + 3.0 * max(0.45 - ketamine_clean, 0.0)
@@ -2415,6 +2451,7 @@ def score_candidate_pair(
         - ketamine_epli_silence_penalty
         - ketamine_epli_low_support_penalty
         - epli_dropout_penalty
+        - ketamine_global_peak_penalty
         - 1.5 * psd_template_metrics["psd_template_loss"]
         - ketamine_wrong_band_penalty
         - control_wrong_band_penalty
@@ -2447,6 +2484,9 @@ def score_candidate_pair(
         "ketamine_epli_silence_penalty": float(ketamine_epli_silence_penalty),
         "ketamine_epli_low_support_penalty": float(ketamine_epli_low_support_penalty),
         "epli_dropout_penalty": float(epli_dropout_penalty),
+        "ketamine_global_peak_alignment": float(ketamine_global_peak_alignment),
+        "control_global_peak_alignment": float(control_global_peak_alignment),
+        "ketamine_global_peak_penalty": float(ketamine_global_peak_penalty),
         "ketamine_epli_rate_hz": float(ketamine_epli_rate),
         "control_epli_rate_hz": float(control_epli_rate),
         "ketamine_wrong_band_penalty": float(ketamine_wrong_band_penalty),
@@ -2469,7 +2509,12 @@ def _empty_condition_metrics() -> dict[str, Any]:
     return {
         "condition_score": float("-inf"),
         "peak_hz": math.nan,
+        "global_peak_hz": math.nan,
         "peak_ratio": 0.0,
+        "global_peak_target_ratio": 0.0,
+        "global_peak_band_match": 0.0,
+        "global_peak_alignment": 0.0,
+        "global_peak_penalty": 0.0,
         "target_peak_contrast": 0.0,
         "target_density_ratio": 0.0,
         "freq_match": 0.0,
@@ -2803,7 +2848,9 @@ def candidate_status_summary(row: dict[str, Any]) -> dict[str, Any]:
         "candidate_id": row.get("candidate_id"),
         "pair_score": row.get("pair_score"),
         "ketamine_peak_hz": ketamine.get("peak_hz"),
+        "ketamine_global_peak_hz": ketamine.get("global_peak_hz"),
         "control_peak_hz": control.get("peak_hz"),
+        "control_global_peak_hz": control.get("global_peak_hz"),
         "ketamine_peak_height_score": ketamine.get("peak_height_score"),
         "control_peak_height_score": control.get("peak_height_score"),
         "ketamine_target_rel": _metrics_relative_band(ketamine, "target_hfo"),
