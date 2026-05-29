@@ -99,7 +99,7 @@ def _packet_render_task(task: dict[str, Any]) -> str:
             modulus_ms=task.get("modulus_ms"),
         )
     elif kind == "lfp_zoom":
-        hlp.save_lfp_zoom(
+        hv.save_lfp_zoom(
             context["result"],
             context["windows"],
             out,
@@ -114,7 +114,7 @@ def _packet_render_task(task: dict[str, Any]) -> str:
             modulus_ms=task.get("modulus_ms"),
         )
     elif kind == "inputs":
-        hlp.save_input_overview(
+        hv.save_input_overview(
             context["result"],
             context["windows"],
             out,

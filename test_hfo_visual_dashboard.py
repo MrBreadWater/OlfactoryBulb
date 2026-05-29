@@ -664,6 +664,28 @@ with TemporaryDirectory() as tmp:
     assert "kde2d" in spawned["task_kinds"]
 
 with TemporaryDirectory() as tmp:
+    packet_dir = Path(tmp) / "packet"
+    packet_dir.mkdir()
+    fake_context = {
+        "packet_dir": packet_dir,
+        "result": {"lfp_t": np.array([0.0, 1.0]), "lfp": np.array([0.0, 0.0])},
+        "windows": {"control": (0.0, 1000.0), "ketamine": (1000.0, 2000.0)},
+        "windowed": {"control": {}, "ketamine": {}},
+        "spectrogram_windowed": {"control": {}, "ketamine": {}},
+        "spectrogram_geometry": {"control": (256, 192), "ketamine": (256, 192)},
+    }
+    with (
+        patch.object(packet_mod, "_PACKET_RENDER_CONTEXT", fake_context),
+        patch.object(packet_mod.hv, "save_lfp_zoom") as zoom_mock,
+        patch.object(packet_mod.hv, "save_input_overview") as inputs_mock,
+    ):
+        packet_mod._packet_render_task({"kind": "lfp_zoom", "out": "lfp.png"})
+        packet_mod._packet_render_task({"kind": "inputs", "out": "inputs.png"})
+
+    zoom_mock.assert_called_once()
+    inputs_mock.assert_called_once()
+
+with TemporaryDirectory() as tmp:
     campaign = Path(tmp)
     archive_path = campaign / "candidate_archive.jsonl"
     rows = [
