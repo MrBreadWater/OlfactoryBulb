@@ -112,7 +112,7 @@ TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 PRIMARY_CELL_TYPE_ORDER = ("MC", "TC", "GC", "EPLI")
 PLOT_DISPLAY_CELL_GROUPS = ("MT", "GC", "EPLI", "other")
 DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ = (130.0, 230.0)
-DEFAULT_PSD_TEMPLATE_FLOOR = 1e-7
+DEFAULT_PSD_TEMPLATE_FLOOR = 1e-5
 CELL_TYPE_ALIASES = {
     # The optional EPLI population currently uses the synthetic PVCRH_FSI1
     # model class. Saved section labels expose that class name, but notebook

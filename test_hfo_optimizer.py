@@ -75,7 +75,7 @@ assert hfo_module.DEFAULT_SCORE_BANDS["high_gamma"] == (65.0, 100.0)
 assert hfo_module.DEFAULT_OPTIMIZER_SEGMENT_MS == 1000.0
 assert hfo_module.DEFAULT_OPTIMIZER_TSTOP_MS == 2000.0
 assert hfo_module.DEFAULT_OPTIMIZER_SWITCH_WASHOUT_MS == 100.0
-assert hfo_module.PSD_TEMPLATE_VISUAL_FLOOR == 1e-7
+assert hfo_module.PSD_TEMPLATE_VISUAL_FLOOR == 1e-5
 assert hlp.DEFAULT_PSD_TEMPLATE_FLOOR == hfo_module.PSD_TEMPLATE_VISUAL_FLOOR
 
 template_freqs, ketamine_template = psd_template_curve("ketamine")
@@ -463,8 +463,8 @@ assert good_pair["peak_height_delta"] > 0.0
 assert bad_pair["same_peak_penalty"] > 0.0
 assert upper_bad_pair["same_peak_penalty"] > 0.0
 assert good_pair["ketamine_peak_height_score"] > good_pair["control_peak_height_score"]
-assert upper_bad_pair["pair_score_version"] == 9
-assert PAIR_SCORE_VERSION == 9
+assert upper_bad_pair["pair_score_version"] == 10
+assert PAIR_SCORE_VERSION == 10
 assert "psd_shape_power" in target_metrics
 assert len(target_metrics["psd_shape_power"]) > 10
 status_summary = candidate_status_summary(

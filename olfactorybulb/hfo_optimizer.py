@@ -56,9 +56,9 @@ DEFAULT_SCORE_BANDS = {
     "supra_hfo": (230.0, 260.0),
 }
 PSD_TEMPLATE_FREQS_HZ = tuple(float(value) for value in np.arange(20.0, 301.0, 5.0))
-PSD_TEMPLATE_VISUAL_FLOOR = 1e-7
+PSD_TEMPLATE_VISUAL_FLOOR = 1e-5
 
-PAIR_SCORE_VERSION = 9
+PAIR_SCORE_VERSION = 10
 ARCHIVE_FILTER_FILENAME = "objective_filter.json"
 PSD_TEMPLATE_HFO_WEIGHT = 4.0
 PSD_TEMPLATE_BROAD_WEIGHT = 1.0
@@ -686,25 +686,25 @@ def _stepwise_on_psd_grid(segments: Sequence[tuple[float, float, float]]) -> np.
 def _theoretical_psd_template(kind: str) -> np.ndarray:
     """Return normalized PSD-shape targets for template-loss scoring."""
     grid = np.asarray(PSD_TEMPLATE_FREQS_HZ, dtype=float)
-    baseline = np.full_like(grid, 0.010, dtype=float)
+    baseline = np.full_like(grid, 0.006, dtype=float)
     if kind == "ketamine":
         shape = (
             baseline
-            + _gaussian_on_psd_grid(24.0, 7.0, 0.055)
-            + _gaussian_on_psd_grid(55.0, 13.0, 0.070)
-            + _gaussian_on_psd_grid(85.0, 18.0, 0.100)
+            + _gaussian_on_psd_grid(24.0, 7.0, 0.045)
+            + _gaussian_on_psd_grid(55.0, 13.0, 0.060)
+            + _gaussian_on_psd_grid(85.0, 18.0, 0.090)
             + _stepwise_on_psd_grid(
                 (
-                    (130.0, 145.0, 0.075),
-                    (145.0, 160.0, 0.185),
-                    (160.0, 175.0, 0.330),
-                    (175.0, 190.0, 0.520),
-                    (190.0, 205.0, 0.680),
-                    (205.0, 230.0, 0.430),
-                    (230.0, 245.0, 0.130),
+                    (130.0, 145.0, 0.105),
+                    (145.0, 160.0, 0.245),
+                    (160.0, 175.0, 0.395),
+                    (175.0, 190.0, 0.625),
+                    (190.0, 205.0, 0.835),
+                    (205.0, 230.0, 0.545),
+                    (230.0, 245.0, 0.170),
                 )
             )
-            + _gaussian_on_psd_grid(192.0, 15.0, 0.115)
+            + _gaussian_on_psd_grid(192.0, 15.0, 0.140)
         )
         shape = np.where(grid >= 245.0, shape * 0.35, shape)
         return _normalize_psd_shape(shape)
