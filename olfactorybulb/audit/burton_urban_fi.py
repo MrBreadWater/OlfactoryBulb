@@ -73,13 +73,11 @@ class ReferenceStat:
     source: str
     units: str
 
-    @property
-    def low(self) -> float:
-        return self.mean - self.std
+    def low(self, sigma_multiplier: float = 1.0) -> float:
+        return self.mean - self.std * float(sigma_multiplier)
 
-    @property
-    def high(self) -> float:
-        return self.mean + self.std
+    def high(self, sigma_multiplier: float = 1.0) -> float:
+        return self.mean + self.std * float(sigma_multiplier)
 
 
 TABLE4_REFERENCE = {
@@ -555,6 +553,7 @@ def _single_cell_type_reference_evidence(
     metric_key: str,
     accepted_low: float,
     accepted_high: float,
+    reference_sigma_multiplier: float,
 ) -> dict[str, Any]:
     reference = _reference_for_metric(metric_key, cell_type)
     label_key = f"{cell_type}_mean"
@@ -563,6 +562,7 @@ def _single_cell_type_reference_evidence(
             label_key: observed_value,
             "accepted_low": accepted_low,
             "accepted_high": accepted_high,
+            "accepted_sigma_multiplier": reference_sigma_multiplier,
         }
     )
     if reference is not None:
@@ -574,12 +574,27 @@ def _cell_label(cell_type: str) -> str:
     return "mitral cell" if cell_type == "MC" else "tufted cell"
 
 
-def _build_burton_reference_fit_items(summary: dict[str, dict[str, float]]) -> list[AuditItem]:
+def _sigma_phrase(sigma_multiplier: float) -> str:
+    if np.isclose(float(sigma_multiplier), 2.0):
+        return "two standard deviations"
+    if np.isclose(float(sigma_multiplier), 1.0):
+        return "one standard deviation"
+    return f"{rounded(float(sigma_multiplier), 3)} standard deviations"
+
+
+def _build_burton_reference_fit_items(
+    summary: dict[str, dict[str, float]],
+    *,
+    reference_sigma_multiplier: float,
+) -> list[AuditItem]:
     items: list[AuditItem] = []
+    sigma_phrase = _sigma_phrase(reference_sigma_multiplier)
     for cell_type in ("MC", "TC"):
         for metric_key, reference in BURTON_CSV_REFERENCES.get(cell_type, {}).items():
             observed_value = float(summary.get(cell_type, {}).get(metric_key, float("nan")))
-            in_range = np.isfinite(observed_value) and reference.low <= observed_value <= reference.high
+            accepted_low = reference.low(reference_sigma_multiplier)
+            accepted_high = reference.high(reference_sigma_multiplier)
+            in_range = np.isfinite(observed_value) and accepted_low <= observed_value <= accepted_high
             metric_label = BURTON_PROPERTY_LABELS.get(metric_key, metric_key)
             items.append(
                 AuditItem(
@@ -587,7 +602,7 @@ def _build_burton_reference_fit_items(summary: dict[str, dict[str, float]]) -> l
                     status="PASS" if in_range else "FAIL",
                     title=f"{_cell_label(cell_type).capitalize()} {metric_label} stays within the uploaded Burton and Urban 2014 reference band",
                     criterion=(
-                        f"The {_cell_label(cell_type)} mean {metric_label} should remain within one standard deviation "
+                        f"The {_cell_label(cell_type)} mean {metric_label} should remain within {sigma_phrase} "
                         f"of the uploaded Burton and Urban 2014 reference value."
                     ),
                     description=(
@@ -595,19 +610,20 @@ def _build_burton_reference_fit_items(summary: dict[str, dict[str, float]]) -> l
                         f"reference tables rather than from a cross-cell-type ordering heuristic."
                     ),
                     acceptable=(
-                        f"The observed {_cell_label(cell_type)} mean must lie between {rounded(reference.low)} and "
-                        f"{rounded(reference.high)} {reference.units}."
+                        f"The observed {_cell_label(cell_type)} mean must lie between {rounded(accepted_low)} and "
+                        f"{rounded(accepted_high)} {reference.units}, which corresponds to mean plus or minus {sigma_phrase}."
                     ),
                     acceptable_basis=(
-                        f"The accepted interval is the uploaded Burton and Urban 2014 mean plus or minus one standard deviation "
-                        f"for {_cell_label(cell_type)} {metric_label}."
+                        f"The accepted interval is the uploaded Burton and Urban 2014 mean plus or minus {sigma_phrase} "
+                        f"for {_cell_label(cell_type)} {metric_label}. The sigma multiplier is configurable, and the default is 2.0 to approximate a ninety-five-percent-style interval rather than a one-standard-deviation band."
                     ),
                     evidence=_single_cell_type_reference_evidence(
                         observed_value=observed_value,
                         cell_type=cell_type,
                         metric_key=metric_key,
-                        accepted_low=reference.low,
-                        accepted_high=reference.high,
+                        accepted_low=accepted_low,
+                        accepted_high=accepted_high,
+                        reference_sigma_multiplier=reference_sigma_multiplier,
                     ),
                 )
             )
@@ -638,7 +654,12 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
     )
 
 
-def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanProtocol) -> list[AuditItem]:
+def build_validation_items(
+    metrics: list[dict[str, Any]],
+    protocol: BurtonUrbanProtocol,
+    *,
+    reference_sigma_multiplier: float = 2.0,
+) -> list[AuditItem]:
     summary = summarize_metrics(metrics)
     items: list[AuditItem] = []
 
@@ -836,7 +857,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         )
     )
 
-    items.extend(_build_burton_reference_fit_items(summary))
+    items.extend(_build_burton_reference_fit_items(summary, reference_sigma_multiplier=reference_sigma_multiplier))
 
     return items
 
@@ -1138,6 +1159,12 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--dt-ms", type=float, default=0.1, help="Fixed integration time step in ms.")
     parser.add_argument("--bias-max-iterations", type=int, default=24, help="Binary-search iterations for -58 mV bias current.")
     parser.add_argument("--jobs", type=int, default=0, help="Worker processes. 0 uses all local CPU cores unless --use-gpu is set.")
+    parser.add_argument(
+        "--reference-sigma-multiplier",
+        type=float,
+        default=2.0,
+        help="Width of the Burton reference acceptance band in standard deviations. Default: 2.0.",
+    )
 
 
 def run(args: argparse.Namespace) -> AuditReport:
@@ -1159,10 +1186,11 @@ def run(args: argparse.Namespace) -> AuditReport:
                     description="This item reports that the computationally expensive electrophysiology validation was intentionally skipped, so no conclusions should be drawn about whether the current mitral-cell and tufted-cell models match the Burton and Urban firing phenotypes.",
                     acceptable="This is an informational warning only. It clears once the audit is rerun without the skip flag.",
                     acceptable_basis="This item is generated by command-line control flow rather than by scientific data. Its purpose is to explain why there are no measured validation results in the current report.",
-                    evidence={
+                evidence={
                         "cell_count": int(getattr(args, "cell_count", 5)),
                         "cell_types": getattr(args, "cell_types", "MC,TC"),
                         "jobs": int(getattr(args, "jobs", 0)),
+                        "reference_sigma_multiplier": float(getattr(args, "reference_sigma_multiplier", 2.0)),
                     },
                 )
             ],
@@ -1185,5 +1213,9 @@ def run(args: argparse.Namespace) -> AuditReport:
     return AuditReport(
         audit_id="burton_urban_fi",
         title="Burton & Urban f-I validation audit",
-        items=build_validation_items(metrics, protocol),
+        items=build_validation_items(
+            metrics,
+            protocol,
+            reference_sigma_multiplier=float(getattr(args, "reference_sigma_multiplier", 2.0)),
+        ),
     )
