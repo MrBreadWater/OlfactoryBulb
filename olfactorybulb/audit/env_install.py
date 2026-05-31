@@ -19,6 +19,7 @@ from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MECHANISM_SOURCE_DIR = REPO_ROOT / "prev_ob_models" / "Birgiolas2020" / "Mechanisms"
 VERIFY_IMPORTS_SCRIPT = REPO_ROOT / "tools" / "setup" / "verify_obgpu_python_imports.py"
+FIX_NVHPC_LIBNRNMECH = REPO_ROOT / "tools" / "setup" / "fix_nvhpc_libnrnmech.sh"
 
 REQUIRED_REPO_FILES = [
     "install-obgpu.sh",
@@ -68,6 +69,24 @@ def _first_command(command: str | None) -> str | None:
 
 def _command_paths(commands: Iterable[str]) -> dict[str, str | None]:
     return {command: shutil.which(command) for command in commands}
+
+
+def _print_needed(shared_object: Path) -> tuple[str, list[str]]:
+    patchelf = shutil.which("patchelf")
+    if not patchelf:
+        return ("WARN", [])
+    if not shared_object.exists():
+        return ("FAIL", [])
+    result = subprocess.run(
+        [patchelf, "--print-needed", str(shared_object)],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ("FAIL", [])
+    needed = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return ("PASS", needed)
 
 
 def audit_repo_layout() -> list[AuditItem]:
@@ -216,6 +235,62 @@ def audit_mechanism_outputs() -> list[AuditItem]:
                 "required_outputs": {name: str(path) for name, path in required_outputs.items()},
                 "output_presence": output_presence,
             },
+        )
+    ]
+
+
+def audit_nvhpc_transient_dependencies() -> list[AuditItem]:
+    mechanism_root = Path(os.environ.get("OBGPU_MECHANISM_ROOT") or REPO_ROOT).expanduser().resolve()
+    arch_dir = mechanism_root / platform.machine()
+    targets = {
+        "libnrnmech": arch_dir / "libnrnmech.so",
+        "libcorenrnmech": arch_dir / "libcorenrnmech.so",
+    }
+    evidence: dict[str, object] = {
+        "arch_dir": str(arch_dir),
+        "repair_script": str(FIX_NVHPC_LIBNRNMECH),
+        "targets": {name: str(path) for name, path in targets.items()},
+    }
+    bad_needed: dict[str, list[str]] = {}
+    unavailable = False
+    failed = False
+
+    for name, path in targets.items():
+        state, needed = _print_needed(path)
+        evidence[f"{name}_needed"] = needed
+        bogus = [entry for entry in needed if entry.startswith("/tmp/pgcudafat")]
+        if bogus:
+            bad_needed[name] = bogus
+        if state == "WARN":
+            unavailable = True
+        elif state == "FAIL":
+            failed = True
+
+    if bad_needed:
+        status = "FAIL"
+        note = (
+            "Run tools/setup/fix_nvhpc_libnrnmech.sh on the affected library to "
+            "remove stale /tmp/pgcudafat NEEDED entries."
+        )
+    elif failed:
+        status = "FAIL"
+        note = "Could not inspect shared-library dependencies with patchelf."
+    elif unavailable:
+        status = "WARN"
+        note = "Install patchelf to inspect libnrnmech/libcorenrnmech NEEDED entries directly."
+    else:
+        status = "PASS"
+        note = ""
+
+    evidence["bad_needed"] = bad_needed
+    return [
+        AuditItem(
+            check_id="nvhpc_transient_dependencies",
+            status=status,
+            title="Mechanism libraries are free of stale NVHPC temp-object dependencies",
+            criterion="libnrnmech.so and libcorenrnmech.so should not embed /tmp/pgcudafat* loader paths.",
+            evidence=evidence,
+            note=note,
         )
     ]
 
@@ -381,6 +456,7 @@ def run(args: argparse.Namespace) -> AuditReport:
         audit_activation_hooks(),
         audit_command_line_tools(require_gpu=bool(getattr(args, "require_gpu", False))),
         audit_mechanism_outputs(),
+        audit_nvhpc_transient_dependencies(),
         audit_legacy_nmodl_path(),
         audit_python_imports(
             skip_imports=bool(getattr(args, "skip_imports", False)),

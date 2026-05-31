@@ -10,7 +10,11 @@ import json
 import subprocess
 import sys
 
-from olfactorybulb.audit.env_install import audit_repo_layout, audit_mechanism_outputs
+from olfactorybulb.audit.env_install import (
+    audit_mechanism_outputs,
+    audit_nvhpc_transient_dependencies,
+    audit_repo_layout,
+)
 
 
 repo_items = {item.check_id: item for item in audit_repo_layout()}
@@ -18,6 +22,9 @@ assert repo_items["repo_layout"].status == "PASS"
 
 mechanism_items = {item.check_id: item for item in audit_mechanism_outputs()}
 assert "mechanism_build_outputs" in mechanism_items
+
+nvhpc_items = {item.check_id: item for item in audit_nvhpc_transient_dependencies()}
+assert "nvhpc_transient_dependencies" in nvhpc_items
 
 
 def _assert_exit_matches_summary(run: subprocess.CompletedProcess[str]) -> dict:
@@ -43,6 +50,7 @@ assert {
     "activation_runtime_hooks",
     "command_line_tools",
     "mechanism_build_outputs",
+    "nvhpc_transient_dependencies",
     "legacy_nrn_nmodl_path",
     "python_import_surface_skipped",
     "nrniv_launcher_smoke_skipped",
