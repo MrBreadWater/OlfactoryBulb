@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import concurrent.futures
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import repeat
 import multiprocessing as mp
 import os
+from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
+from scipy.optimize import curve_fit
 
 from olfactorybulb.audit.core import AuditItem, AuditReport, rounded
 
@@ -44,6 +47,23 @@ class BurtonUrbanProtocol:
             self.step_stop_nA + self.step_increment_nA * 0.5,
             self.step_increment_nA,
         )
+
+
+@dataclass(frozen=True)
+class ReferenceStat:
+    mean: float
+    std: float
+    n: int
+    source: str
+    units: str
+
+    @property
+    def low(self) -> float:
+        return self.mean - self.std
+
+    @property
+    def high(self) -> float:
+        return self.mean + self.std
 
 
 TABLE4_REFERENCE = {
@@ -82,6 +102,50 @@ TABLE5_REFERENCE = {
         "FI_gain_Hz_per_50pA": 20.3,
         "CV_ISI": 0.80,
     },
+}
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CELL_TYPE_REFERENCE_CSVS = {
+    "MC": REPO_ROOT / "MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv",
+    "TC": REPO_ROOT / "MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv",
+}
+BURTON_REFERENCE_SOURCE = "Burton & Urban (2014)"
+BURTON_CSV_PROPERTY_MAP = {
+    "AHP Amplitude": ("AHP_amplitude_mV", "millivolts", lambda value: value),
+    "AHP Duration": ("T_AHP50_ms", "milliseconds", lambda value: value),
+    "AP Amplitude": ("Amplitude_mV", "millivolts", lambda value: value),
+    "AP Threshold": ("AP_onset_mV", "millivolts", lambda value: value),
+    "AP Width at Half-height": ("FWHM_ms", "milliseconds", lambda value: value),
+    "AP Half-Width": ("FWHM_ms", "milliseconds", lambda value: value),
+    "Capacitance": ("cell_capacitance_pF", "picofarads", lambda value: value),
+    "FI Curve Slope": ("fi_gain_Hz_per_50pA", "hertz per fifty picoamperes", lambda value: value / 20.0),
+    "ISI Coefficient of Variation": ("cv_isi", "dimensionless", lambda value: value),
+    "Input Resistance": ("input_resistance_MOhm", "megaohms", lambda value: value),
+    "Membrane Resting Voltage": ("resting_potential_mV", "millivolts", lambda value: value),
+    "Membrane Time Constant": ("membrane_time_constant_ms", "milliseconds", lambda value: value),
+    "Rebound Potential Presence": ("rebound_potential_presence", "dimensionless", lambda value: value),
+    "Rheobase Current": ("rheobase_pA", "picoamperes", lambda value: value),
+    "Sag Amplitude": ("sag_amplitude_mV", "millivolts", lambda value: value),
+    "Spiking Rate Accommodation": ("spike_accommodation_hz", "hertz", lambda value: value),
+    "Spiking Rate Accom. Time Constant": ("spike_accommodation_time_constant_ms", "milliseconds", lambda value: value),
+}
+BURTON_PROPERTY_LABELS = {
+    "AHP_amplitude_mV": "afterhyperpolarization amplitude",
+    "T_AHP50_ms": "afterhyperpolarization half-decay time",
+    "Amplitude_mV": "action-potential amplitude",
+    "AP_onset_mV": "action-potential threshold",
+    "FWHM_ms": "action-potential half-width",
+    "cell_capacitance_pF": "membrane capacitance",
+    "fi_gain_Hz_per_50pA": "firing-rate-versus-current gain",
+    "cv_isi": "coefficient of variation of interspike intervals",
+    "input_resistance_MOhm": "input resistance",
+    "resting_potential_mV": "resting membrane potential",
+    "membrane_time_constant_ms": "membrane time constant",
+    "rebound_potential_presence": "rebound potential presence",
+    "rheobase_pA": "rheobase current",
+    "sag_amplitude_mV": "sag amplitude",
+    "spike_accommodation_hz": "spiking-rate accommodation",
+    "spike_accommodation_time_constant_ms": "spiking-rate accommodation time constant",
 }
 
 
@@ -126,6 +190,76 @@ def _rounded_dict(values: dict[str, Any], digits: int = 3) -> dict[str, Any]:
     return rounded_values
 
 
+def _parse_mean_plus_minus_std(text: str) -> tuple[float, float]:
+    mean_text, std_text = [part.strip() for part in str(text).split("+/-", 1)]
+    return float(mean_text), float(std_text)
+
+
+def _load_burton_csv_references() -> dict[str, dict[str, ReferenceStat]]:
+    reference_by_cell_type: dict[str, dict[str, ReferenceStat]] = {"MC": {}, "TC": {}}
+    for cell_type, csv_path in CELL_TYPE_REFERENCE_CSVS.items():
+        with csv_path.open(newline="") as handle:
+            for row in csv.DictReader(handle):
+                if str(row.get("Source", "")).strip() != BURTON_REFERENCE_SOURCE:
+                    continue
+                property_name = str(row.get("Property", "")).strip()
+                if property_name not in BURTON_CSV_PROPERTY_MAP:
+                    continue
+                metric_key, units_label, transform = BURTON_CSV_PROPERTY_MAP[property_name]
+                mean_value, std_value = _parse_mean_plus_minus_std(row["mean +/- sd"])
+                reference_by_cell_type[cell_type][metric_key] = ReferenceStat(
+                    mean=transform(mean_value),
+                    std=abs(transform(std_value)),
+                    n=int(float(row["n"])),
+                    source=BURTON_REFERENCE_SOURCE,
+                    units=units_label,
+                )
+    return reference_by_cell_type
+
+
+BURTON_CSV_REFERENCES = _load_burton_csv_references()
+
+
+def _reference_annotation(reference: ReferenceStat) -> str:
+    return (
+        f"reference: {rounded(reference.mean)} +/- {rounded(reference.std)} "
+        f"{reference.units} from {reference.source} (n={reference.n})"
+    )
+
+
+def _reference_for_metric(metric_key: str, cell_type: str) -> ReferenceStat | None:
+    return BURTON_CSV_REFERENCES.get(cell_type, {}).get(metric_key)
+
+
+def _pair_reference_annotations(key: str) -> dict[str, str]:
+    annotations: dict[str, str] = {}
+    for cell_type, evidence_key in (("MC", "MC_mean"), ("TC", "TC_mean")):
+        reference = _reference_for_metric(key, cell_type)
+        if reference is not None:
+            annotations[evidence_key] = _reference_annotation(reference)
+    return annotations
+
+
+def _comparison_evidence(
+    summary: dict[str, dict[str, float]],
+    key: str,
+    *,
+    include_difference: bool = True,
+) -> dict[str, Any]:
+    mc_value, tc_value = _type_pair(summary, key)
+    evidence = _rounded_dict(
+        {
+            "MC_mean": mc_value,
+            "TC_mean": tc_value,
+            **({"TC_minus_MC": tc_value - mc_value} if include_difference else {}),
+        }
+    )
+    annotations = _pair_reference_annotations(key)
+    if annotations:
+        evidence["__reference_annotations__"] = annotations
+    return evidence
+
+
 def _resolved_jobs(cell_total: int, requested_jobs: int, *, use_gpu: bool = False) -> int:
     if cell_total <= 1:
         return 1
@@ -158,10 +292,16 @@ def summarize_metrics(metrics: list[dict[str, Any]]) -> dict[str, dict[str, floa
         "resting_potential_mV",
         "bias_current_pA",
         "zero_step_rate_Hz",
+        "membrane_time_constant_ms",
+        "cell_capacitance_pF",
+        "sag_amplitude_mV",
+        "rebound_potential_presence",
         "rheobase_pA",
         "spike_latency_ms",
         "peak_rate_Hz",
         "fi_gain_Hz_per_50pA",
+        "spike_accommodation_hz",
+        "spike_accommodation_time_constant_ms",
         "cv_isi",
         "cv_isi_step_pA",
         "cv_isi_mean_rate_Hz",
@@ -181,24 +321,312 @@ def summarize_metrics(metrics: list[dict[str, Any]]) -> dict[str, dict[str, floa
     }
 
 
+def _steady_state_voltage_millivolts(
+    trace_result: dict[str, Any],
+    *,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+    window_milliseconds: float = 10.0,
+) -> float:
+    time_array = np.asarray(trace_result["t"], dtype=float)
+    voltage_array = np.asarray(trace_result["v_soma"], dtype=float)
+    step_end = step_delay_milliseconds + step_duration_milliseconds
+    mask = (time_array >= max(step_delay_milliseconds, step_end - window_milliseconds)) & (time_array <= step_end)
+    if not np.any(mask):
+        return float("nan")
+    return float(np.median(voltage_array[mask]))
+
+
+def _trace_nearest_steady_state_voltage(
+    traces_list: list[dict[str, Any]],
+    *,
+    target_voltage_millivolts: float,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+) -> tuple[dict[str, Any] | None, float]:
+    best_trace: dict[str, Any] | None = None
+    best_voltage = float("nan")
+    best_distance = float("inf")
+    for trace_result in traces_list:
+        steady_state_voltage = _steady_state_voltage_millivolts(
+            trace_result,
+            step_delay_milliseconds=step_delay_milliseconds,
+            step_duration_milliseconds=step_duration_milliseconds,
+        )
+        if not np.isfinite(steady_state_voltage):
+            continue
+        distance = abs(steady_state_voltage - target_voltage_millivolts)
+        if distance < best_distance:
+            best_trace = trace_result
+            best_voltage = steady_state_voltage
+            best_distance = distance
+    return best_trace, best_voltage
+
+
+def _membrane_time_constant_milliseconds(
+    trace_result: dict[str, Any],
+    *,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+) -> float:
+    time_array = np.asarray(trace_result["t"], dtype=float)
+    voltage_array = np.asarray(trace_result["v_soma"], dtype=float)
+    step_end = step_delay_milliseconds + step_duration_milliseconds
+    mask = time_array > step_end
+    if np.count_nonzero(mask) < 2:
+        return float("nan")
+    post_time = time_array[mask] - step_end
+    post_voltage = voltage_array[mask]
+    start_voltage = float(post_voltage[0])
+    end_voltage = float(post_voltage[-1])
+    delta_voltage = end_voltage - start_voltage
+    if not np.isfinite(delta_voltage) or delta_voltage <= 0.0:
+        return float("nan")
+    threshold_voltage = start_voltage + 0.6321206 * delta_voltage
+    indices = np.where(post_voltage >= threshold_voltage)[0]
+    if len(indices) == 0:
+        return float("nan")
+    return float(post_time[indices[0]])
+
+
+def _sag_amplitude_millivolts(
+    trace_result: dict[str, Any],
+    *,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+    sag_window_milliseconds: float = 100.0,
+) -> float:
+    time_array = np.asarray(trace_result["t"], dtype=float)
+    voltage_array = np.asarray(trace_result["v_soma"], dtype=float)
+    step_end = step_delay_milliseconds + step_duration_milliseconds
+    mask = (time_array > step_delay_milliseconds) & (time_array <= step_end)
+    if np.count_nonzero(mask) == 0:
+        return float("nan")
+    roi_time = time_array[mask]
+    roi_voltage = voltage_array[mask]
+    steady_state_voltage = float(roi_voltage[-1])
+    minimum_voltage = float(np.min(roi_voltage))
+    if minimum_voltage < steady_state_voltage:
+        return -(steady_state_voltage - minimum_voltage)
+    alt_mask = (
+        (time_array > step_delay_milliseconds + sag_window_milliseconds - 1.0)
+        & (time_array < step_delay_milliseconds + sag_window_milliseconds + 1.0)
+    )
+    if not np.any(alt_mask):
+        return float("nan")
+    return -(steady_state_voltage - float(np.median(voltage_array[alt_mask])))
+
+
+def _rebound_potential_presence(
+    trace_result: dict[str, Any],
+    *,
+    spike_threshold_millivolts: float,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+) -> float:
+    spike_times = find_spike_times_milliseconds(
+        trace_result,
+        spike_threshold_millivolts=spike_threshold_millivolts,
+        step_onset_milliseconds=step_delay_milliseconds + step_duration_milliseconds,
+    )
+    return 1.0 if len(spike_times) > 0 else 0.0
+
+
+def _trace_near_target_mean_rate(
+    traces_list: list[dict[str, Any]],
+    *,
+    target_rate_hertz: float,
+    spike_threshold_millivolts: float,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+) -> tuple[dict[str, Any] | None, float]:
+    step_end = step_delay_milliseconds + step_duration_milliseconds
+    best_trace: dict[str, Any] | None = None
+    best_rate = float("nan")
+    best_distance = float("inf")
+    for trace_result in traces_list:
+        spike_count = len(
+            find_spike_times_milliseconds(
+                trace_result,
+                spike_threshold_millivolts,
+                step_delay_milliseconds,
+                step_end,
+            )
+        )
+        if spike_count < 2:
+            continue
+        mean_rate = spike_count / (step_duration_milliseconds * 1e-3)
+        distance = abs(mean_rate - target_rate_hertz)
+        if distance < best_distance:
+            best_trace = trace_result
+            best_rate = float(mean_rate)
+            best_distance = distance
+    return best_trace, best_rate
+
+
+def _spike_accommodation_hertz(
+    trace_result: dict[str, Any],
+    *,
+    spike_threshold_millivolts: float,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+) -> float:
+    spike_times = find_spike_times_milliseconds(
+        trace_result,
+        spike_threshold_millivolts,
+        step_delay_milliseconds,
+        step_delay_milliseconds + step_duration_milliseconds,
+    )
+    if len(spike_times) < 3:
+        return 0.0
+    isis_milliseconds = np.diff(spike_times)
+    ifr_first = 1000.0 / float(isis_milliseconds[0])
+    ifr_last = 1000.0 / float(isis_milliseconds[-1])
+    return ifr_last - ifr_first
+
+
+def _spike_accommodation_time_constant_milliseconds(
+    trace_result: dict[str, Any],
+    *,
+    spike_threshold_millivolts: float,
+    step_delay_milliseconds: float,
+    step_duration_milliseconds: float,
+) -> float:
+    spike_times = find_spike_times_milliseconds(
+        trace_result,
+        spike_threshold_millivolts,
+        step_delay_milliseconds,
+        step_delay_milliseconds + step_duration_milliseconds,
+    )
+    if len(spike_times) < 4:
+        return step_duration_milliseconds
+    crossing_times = spike_times - spike_times[0]
+    isis_milliseconds = np.diff(crossing_times)
+    ifr_hertz = 1000.0 / isis_milliseconds
+    ifr_time_milliseconds = (crossing_times - crossing_times[1])[1:]
+    if len(ifr_hertz) < 3:
+        return step_duration_milliseconds
+
+    def ifr_curve(time_value: np.ndarray, start_value: float, finish_value: float, tau_value: float) -> np.ndarray:
+        return (start_value - finish_value) * np.exp(-time_value / tau_value) + finish_value
+
+    try:
+        params, _ = curve_fit(
+            ifr_curve,
+            ifr_time_milliseconds,
+            ifr_hertz,
+            p0=(float(ifr_hertz[0]), float(ifr_hertz[-1]), 10.0),
+            bounds=([-np.inf, -np.inf, 0.0], [np.inf, np.inf, np.inf]),
+            maxfev=10000,
+        )
+    except Exception:
+        return step_duration_milliseconds
+    return float(params[2])
+
+
 def _type_pair(summary: dict[str, dict[str, float]], key: str) -> tuple[float, float]:
     return float(summary.get("MC", {}).get(key, float("nan"))), float(summary.get("TC", {}).get(key, float("nan")))
 
 
 def _evidence_for_pair(summary: dict[str, dict[str, float]], key: str) -> dict[str, Any]:
-    mc_value, tc_value = _type_pair(summary, key)
-    return _rounded_dict(
+    return _comparison_evidence(summary, key)
+
+
+def _single_cell_type_reference_evidence(
+    *,
+    observed_value: float,
+    cell_type: str,
+    metric_key: str,
+    accepted_low: float,
+    accepted_high: float,
+) -> dict[str, Any]:
+    reference = _reference_for_metric(metric_key, cell_type)
+    label_key = f"{cell_type}_mean"
+    evidence = _rounded_dict(
         {
-            "MC_mean": mc_value,
-            "TC_mean": tc_value,
-            "TC_minus_MC": tc_value - mc_value,
+            label_key: observed_value,
+            "accepted_low": accepted_low,
+            "accepted_high": accepted_high,
         }
+    )
+    if reference is not None:
+        evidence["__reference_annotations__"] = {label_key: _reference_annotation(reference)}
+    return evidence
+
+
+def _cell_label(cell_type: str) -> str:
+    return "mitral cell" if cell_type == "MC" else "tufted cell"
+
+
+def _build_burton_reference_fit_items(summary: dict[str, dict[str, float]]) -> list[AuditItem]:
+    items: list[AuditItem] = []
+    for cell_type in ("MC", "TC"):
+        for metric_key, reference in BURTON_CSV_REFERENCES.get(cell_type, {}).items():
+            observed_value = float(summary.get(cell_type, {}).get(metric_key, float("nan")))
+            in_range = np.isfinite(observed_value) and reference.low <= observed_value <= reference.high
+            metric_label = BURTON_PROPERTY_LABELS.get(metric_key, metric_key)
+            items.append(
+                AuditItem(
+                    check_id=f"{cell_type.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
+                    status="PASS" if in_range else "FAIL",
+                    title=f"{_cell_label(cell_type).capitalize()} {metric_label} stays within the uploaded Burton and Urban 2014 reference band",
+                    criterion=(
+                        f"The {_cell_label(cell_type)} mean {metric_label} should remain within one standard deviation "
+                        f"of the uploaded Burton and Urban 2014 reference value."
+                    ),
+                    description=(
+                        f"This is the direct single-cell-type reference check derived from the uploaded Burton and Urban 2014 "
+                        f"reference tables rather than from a cross-cell-type ordering heuristic."
+                    ),
+                    acceptable=(
+                        f"The observed {_cell_label(cell_type)} mean must lie between {rounded(reference.low)} and "
+                        f"{rounded(reference.high)} {reference.units}."
+                    ),
+                    acceptable_basis=(
+                        f"The accepted interval is the uploaded Burton and Urban 2014 mean plus or minus one standard deviation "
+                        f"for {_cell_label(cell_type)} {metric_label}."
+                    ),
+                    evidence=_single_cell_type_reference_evidence(
+                        observed_value=observed_value,
+                        cell_type=cell_type,
+                        metric_key=metric_key,
+                        accepted_low=reference.low,
+                        accepted_high=reference.high,
+                    ),
+                )
+            )
+    return items
+
+
+def _build_uploaded_reference_coverage_item() -> AuditItem:
+    supported_metric_keys = set(BURTON_CSV_REFERENCES.get("MC", {})) | set(BURTON_CSV_REFERENCES.get("TC", {}))
+    uploaded_property_names = sorted(
+        {
+            property_name
+            for property_name, (metric_key, _units, _transform) in BURTON_CSV_PROPERTY_MAP.items()
+            if metric_key in supported_metric_keys
+        }
+    )
+    return AuditItem(
+        check_id="uploaded_burton_reference_coverage",
+        status="PASS",
+        title="Uploaded Burton and Urban 2014 reference CSV properties are all represented in the audit",
+        criterion="Every Burton and Urban 2014 property from the uploaded mitral-cell and tufted-cell reference CSV files should map to an explicit audit metric.",
+        description="This is a coverage check over the uploaded reference files. It prevents the audit from silently ignoring a Burton and Urban property that was present in the supplied CSV data.",
+        acceptable="All Burton and Urban 2014 CSV property names must have a corresponding audit metric and reference-backed audit item.",
+        acceptable_basis="The property list is parsed directly from the uploaded mitral-cell and tufted-cell CSV files and compared against the audit's explicit property map.",
+        evidence={
+            "covered_property_count": len(uploaded_property_names),
+            "covered_properties": uploaded_property_names,
+        },
     )
 
 
 def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanProtocol) -> list[AuditItem]:
     summary = summarize_metrics(metrics)
     items: list[AuditItem] = []
+
+    items.append(_build_uploaded_reference_coverage_item())
 
     protocol_evidence = {
         "target_vm_mV": protocol.target_vm_mV,
@@ -277,10 +705,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             description="This check isolates spike-threshold placement. The reference data suggest that mitral cells and tufted cells differ more strongly in firing patterns than in the voltage at which action potentials begin.",
             acceptable="The absolute difference between the tufted-cell mean and mitral-cell mean action-potential onset must be less than or equal to five millivolts.",
             acceptable_basis="The paper reports similar threshold means rather than a formal confidence interval. The audit therefore uses a pragmatic similarity tolerance of five millivolts to encode 'similar' as an explicit numeric decision rule.",
-            evidence={
-                **_evidence_for_pair(summary, "AP_onset_mV"),
-                "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["AP_onset_mV"] for cell_type in ("MC", "TC")},
-            },
+            evidence=_evidence_for_pair(summary, "AP_onset_mV"),
         )
     )
 
@@ -293,10 +718,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             description="Action-potential width is a compact readout of spike-shape kinetics. The reference result says tufted cells should repolarize through a narrower spike waveform than mitral cells.",
             acceptable="The tufted-cell mean full width at half maximum must be strictly smaller than the mitral-cell mean. No minimum size of the separation is currently enforced.",
             acceptable_basis="The paper clearly supports the direction of the effect, but this audit does not currently encode a table-derived numeric band or ratio. It uses the sign of the mean difference as the pass-fail rule.",
-            evidence={
-                **_evidence_for_pair(summary, "FWHM_ms"),
-                "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["FWHM_ms"] for cell_type in ("MC", "TC")},
-            },
+            evidence=_evidence_for_pair(summary, "FWHM_ms"),
         )
     )
 
@@ -310,8 +732,8 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             acceptable="The tufted-cell mean falling slope must be numerically smaller, meaning more negative, than the mitral-cell mean. No minimum slope gap is currently enforced.",
             acceptable_basis="The paper supports the ordering but does not supply a directly encoded acceptance band in the audit. The present implementation therefore checks only whether the tufted-cell mean is on the faster side of the mitral-cell mean.",
             evidence={
-                **_evidence_for_pair(summary, "Fall_slope_mV_per_ms"),
-                "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["Fall_slope_mV_per_ms"] for cell_type in ("MC", "TC")},
+                **_comparison_evidence(summary, "Fall_slope_mV_per_ms"),
+                "table_4_reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["Fall_slope_mV_per_ms"] for cell_type in ("MC", "TC")},
             },
         )
     )
@@ -325,10 +747,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             description="The afterhyperpolarization recovery time influences how quickly a cell can support the next spike. The reference phenotype expects tufted cells to recover more quickly than mitral cells.",
             acceptable="The tufted-cell mean afterhyperpolarization half-decay time must be strictly smaller than the mitral-cell mean. No minimum separation is currently enforced.",
             acceptable_basis="As with the other ordering checks, the literature supports the direction of the effect more clearly than a strict numeric window. The current audit therefore uses a sign-only comparison of the group means.",
-            evidence={
-                **_evidence_for_pair(summary, "T_AHP50_ms"),
-                "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["T_AHP50_ms"] for cell_type in ("MC", "TC")},
-            },
+            evidence=_evidence_for_pair(summary, "T_AHP50_ms"),
         )
     )
 
@@ -342,8 +761,8 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             acceptable="The tufted-cell mean peak instantaneous firing rate must be strictly larger than the mitral-cell mean. The current implementation does not require a specific fold increase beyond that ordering.",
             acceptable_basis="The reference table suggests a sizable separation, but the audit currently encodes only the direction of the effect. It does not yet impose a minimum ratio or distance from the reference means.",
             evidence={
-                **_evidence_for_pair(summary, "peak_rate_Hz"),
-                "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["Peak_rate_Hz"] for cell_type in ("MC", "TC")},
+                **_comparison_evidence(summary, "peak_rate_Hz"),
+                "table_5_reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["Peak_rate_Hz"] for cell_type in ("MC", "TC")},
             },
         )
     )
@@ -357,10 +776,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             description="Firing-rate-versus-current gain is the slope that converts added injected current into added firing rate. The reference expectation is that tufted cells respond more steeply to depolarizing current than mitral cells.",
             acceptable="The tufted-cell mean firing-rate-versus-current gain must be strictly larger than the mitral-cell mean. The current implementation does not require the literature’s approximate twofold ratio.",
             acceptable_basis="The paper describes the effect as roughly twofold, but this audit currently treats that as qualitative support for the ordering rather than as a hard ratio threshold. That is why modest separations can still pass.",
-            evidence={
-                **_evidence_for_pair(summary, "fi_gain_Hz_per_50pA"),
-                "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["FI_gain_Hz_per_50pA"] for cell_type in ("MC", "TC")},
-            },
+            evidence=_evidence_for_pair(summary, "fi_gain_Hz_per_50pA"),
         )
     )
 
@@ -374,10 +790,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             description="Rheobase is the smallest depolarizing current step that evokes a spike. Positive rheobases are a basic sanity check that the model is not already above threshold at the held membrane potential.",
             acceptable="Both the mitral-cell mean rheobase and the tufted-cell mean rheobase must be strictly greater than zero picoamperes.",
             acceptable_basis="This threshold comes directly from the qualitative regime reported in the paper: both cell classes should require a depolarizing step before spiking. The audit therefore uses positivity, not closeness to the paper mean, as the required condition.",
-            evidence={
-                **_evidence_for_pair(summary, "rheobase_pA"),
-                "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["Rheobase_pA"] for cell_type in ("MC", "TC")},
-            },
+            evidence=_evidence_for_pair(summary, "rheobase_pA"),
         )
     )
 
@@ -390,10 +803,7 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             description="The coefficient of variation of interspike intervals is the standard deviation of the interspike intervals divided by their mean. A larger value means more irregular spike timing, which the reference data attribute more strongly to tufted cells than mitral cells.",
             acceptable="The tufted-cell mean coefficient of variation of interspike intervals must be strictly larger than the mitral-cell mean. The current implementation does not enforce a minimum ratio or minimum absolute gap.",
             acceptable_basis="The paper supports greater tufted-cell irregularity, but the audit currently encodes only the ordering of the group means. It does not yet require a specific ratio or match to the reported reference values.",
-            evidence={
-                **_evidence_for_pair(summary, "cv_isi"),
-                "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["CV_ISI"] for cell_type in ("MC", "TC")},
-            },
+            evidence=_evidence_for_pair(summary, "cv_isi"),
         )
     )
 
@@ -409,6 +819,8 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
             evidence={cell_type: _rounded_dict(summary.get(cell_type, {})) for cell_type in sorted(summary)},
         )
     )
+
+    items.extend(_build_burton_reference_fit_items(summary))
 
     return items
 
@@ -556,6 +968,72 @@ def _run_burton_urban_cell(
         step_duration_milliseconds=protocol.step_duration_ms,
         delay_milliseconds=protocol.step_delay_ms,
     )
+    target_hyperpolarizing_trace, _ = _trace_nearest_steady_state_voltage(
+        hyperpolarizing_traces,
+        target_voltage_millivolts=-103.0,
+        step_delay_milliseconds=protocol.step_delay_ms,
+        step_duration_milliseconds=protocol.step_duration_ms,
+    )
+    membrane_time_constant_ms = (
+        _membrane_time_constant_milliseconds(
+            target_hyperpolarizing_trace,
+            step_delay_milliseconds=protocol.step_delay_ms,
+            step_duration_milliseconds=protocol.step_duration_ms,
+        )
+        if target_hyperpolarizing_trace is not None
+        else float("nan")
+    )
+    cell_capacitance_pF = (
+        membrane_time_constant_ms / input_resistance_MOhm * 1000.0
+        if np.isfinite(membrane_time_constant_ms) and np.isfinite(input_resistance_MOhm) and input_resistance_MOhm > 0.0
+        else float("nan")
+    )
+    sag_amplitude_mV = (
+        _sag_amplitude_millivolts(
+            target_hyperpolarizing_trace,
+            step_delay_milliseconds=protocol.step_delay_ms,
+            step_duration_milliseconds=protocol.step_duration_ms,
+        )
+        if target_hyperpolarizing_trace is not None
+        else float("nan")
+    )
+    rebound_potential_presence = (
+        _rebound_potential_presence(
+            target_hyperpolarizing_trace,
+            spike_threshold_millivolts=protocol.spike_threshold_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+            step_duration_milliseconds=protocol.step_duration_ms,
+        )
+        if target_hyperpolarizing_trace is not None
+        else float("nan")
+    )
+    target_rate_trace, _ = _trace_near_target_mean_rate(
+        step_traces,
+        target_rate_hertz=protocol.cv_isi_target_rate_hz,
+        spike_threshold_millivolts=protocol.spike_threshold_mV,
+        step_delay_milliseconds=protocol.step_delay_ms,
+        step_duration_milliseconds=protocol.step_duration_ms,
+    )
+    spike_accommodation_hz = (
+        _spike_accommodation_hertz(
+            target_rate_trace,
+            spike_threshold_millivolts=protocol.spike_threshold_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+            step_duration_milliseconds=protocol.step_duration_ms,
+        )
+        if target_rate_trace is not None
+        else float("nan")
+    )
+    spike_accommodation_time_constant_ms = (
+        _spike_accommodation_time_constant_milliseconds(
+            target_rate_trace,
+            spike_threshold_millivolts=protocol.spike_threshold_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+            step_duration_milliseconds=protocol.step_duration_ms,
+        )
+        if target_rate_trace is not None
+        else float("nan")
+    )
 
     zero_step_rate_hz = float(firing_rates_hz[0]) if len(firing_rates_hz) else float("nan")
     return {
@@ -564,10 +1042,16 @@ def _run_burton_urban_cell(
         "resting_potential_mV": resting_potential_mV,
         "bias_current_pA": bias_current_nA * 1000.0,
         "zero_step_rate_Hz": zero_step_rate_hz,
+        "membrane_time_constant_ms": membrane_time_constant_ms,
+        "cell_capacitance_pF": cell_capacitance_pF,
+        "sag_amplitude_mV": sag_amplitude_mV,
+        "rebound_potential_presence": rebound_potential_presence,
         "rheobase_pA": rheobase_nA * 1000.0 if np.isfinite(rheobase_nA) else float("nan"),
         "spike_latency_ms": spike_latency_ms,
         "peak_rate_Hz": peak_rate_hz,
         "fi_gain_Hz_per_50pA": fi_gain_hz_per_50pA,
+        "spike_accommodation_hz": spike_accommodation_hz,
+        "spike_accommodation_time_constant_ms": spike_accommodation_time_constant_ms,
         "fi_gain_segment_start_index": gain_segment_index,
         "cv_isi": isi_stats["coefficient_of_variation_interspike_interval"],
         "cv_isi_step_pA": (

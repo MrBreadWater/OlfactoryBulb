@@ -17,7 +17,11 @@ sample_report = AuditReport(
             status="PASS",
             title="Pass item",
             criterion="A passing criterion should render cleanly.",
-            evidence={"count": 3, "names": ["a", "b"]},
+            evidence={
+                "count": 3,
+                "names": ["a", "b"],
+                "__reference_annotations__": {"count": "reference: 4 +/- 1 counts from Demo Source (n=8)"},
+            },
         ),
         AuditItem(
             check_id="demo_warn",
@@ -40,7 +44,7 @@ assert "Evidence" in plain
 assert "Description" in plain
 assert "Acceptable result" in plain
 assert "How Acceptable Result Was Determined" in plain
-assert "count: 3" in plain
+assert "count: 3 (reference: 4 +/- 1 counts from Demo Source (n=8))" in plain
 assert "Tufted cell coefficient of variation of interspike intervals item" in plain
 assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain

@@ -25,10 +25,16 @@ fixture_metrics = [
         "resting_potential_mV": -66.0,
         "bias_current_pA": 100.0,
         "zero_step_rate_Hz": 0.0,
+        "membrane_time_constant_ms": 21.3,
+        "cell_capacitance_pF": 236.4,
+        "sag_amplitude_mV": -2.0,
+        "rebound_potential_presence": 0.0,
         "rheobase_pA": 100.0,
         "spike_latency_ms": 500.0,
         "peak_rate_Hz": 60.0,
         "fi_gain_Hz_per_50pA": 10.0,
+        "spike_accommodation_hz": -9.0,
+        "spike_accommodation_time_constant_ms": 398.0,
         "cv_isi": 0.4,
         "cv_isi_step_pA": 150.0,
         "cv_isi_mean_rate_Hz": 20.0,
@@ -47,10 +53,16 @@ fixture_metrics = [
         "resting_potential_mV": -64.0,
         "bias_current_pA": 150.0,
         "zero_step_rate_Hz": 0.0,
+        "membrane_time_constant_ms": 18.8,
+        "cell_capacitance_pF": 188.8,
+        "sag_amplitude_mV": -4.4,
+        "rebound_potential_presence": 1.0,
         "rheobase_pA": 90.0,
         "spike_latency_ms": 400.0,
         "peak_rate_Hz": 120.0,
         "fi_gain_Hz_per_50pA": 20.0,
+        "spike_accommodation_hz": -20.0,
+        "spike_accommodation_time_constant_ms": 585.0,
         "cv_isi": 0.8,
         "cv_isi_step_pA": 100.0,
         "cv_isi_mean_rate_Hz": 20.0,
@@ -71,9 +83,11 @@ assert summary["TC"]["peak_rate_Hz"] == 120.0
 
 items = build_validation_items(fixture_metrics, BurtonUrbanProtocol())
 item_by_id = {item.check_id: item for item in items}
+assert item_by_id["uploaded_burton_reference_coverage"].status == "PASS"
 assert item_by_id["tc_fi_gain_higher"].status == "PASS"
 assert item_by_id["rheobase_in_paper_regime"].status == "PASS"
 assert item_by_id["tc_cv_isi_higher"].status == "PASS"
+assert item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].status == "PASS"
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1
 assert _resolved_jobs(10, 99, use_gpu=False) == 10
 assert _resolved_jobs(10, 8, use_gpu=True) == 1

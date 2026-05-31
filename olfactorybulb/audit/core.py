@@ -61,6 +61,7 @@ SPECIAL_EVIDENCE_LABELS = {
     "Rheobase_pA": "rheobase in picoamperes",
     "cell_types": "cell types",
 }
+INTERNAL_EVIDENCE_KEYS = {"__reference_annotations__"}
 
 
 @dataclass
@@ -166,14 +167,20 @@ def _pretty_evidence_lines(payload: Any, *, indent: int = 0) -> list[str]:
     prefix = " " * indent
     if isinstance(payload, dict):
         lines: list[str] = []
+        annotations = payload.get("__reference_annotations__", {}) if isinstance(payload.get("__reference_annotations__", {}), dict) else {}
         for key, value in payload.items():
             key_text = str(key)
+            if key_text in INTERNAL_EVIDENCE_KEYS:
+                continue
             label = _humanize_identifier(key_text)
             if isinstance(value, (dict, list)):
                 lines.append(f"{prefix}{label}:")
                 lines.extend(_pretty_evidence_lines(value, indent=indent + 2))
             else:
-                lines.append(f"{prefix}{label}: {_format_scalar(value, key=key_text)}")
+                annotation_suffix = ""
+                if key_text in annotations:
+                    annotation_suffix = f" ({annotations[key_text]})"
+                lines.append(f"{prefix}{label}: {_format_scalar(value, key=key_text)}{annotation_suffix}")
         return lines
     if isinstance(payload, list):
         lines = []
