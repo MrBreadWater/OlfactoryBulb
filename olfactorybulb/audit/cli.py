@@ -6,6 +6,7 @@ import argparse
 import sys
 
 from olfactorybulb.audit import AuditItem, AuditReport, format_report, get_audit_spec, iter_audit_specs
+from olfactorybulb.audit.core import _expand_terms
 
 
 def _build_root_parser() -> argparse.ArgumentParser:
@@ -38,8 +39,8 @@ def list_audits(*, color: bool = True) -> int:
     print(_paint("=" * (id_width + title_width + 5), "2", enabled=color))
     for spec in specs:
         audit_id = _paint(spec.audit_id.ljust(id_width), "1;36", enabled=color)
-        title = _paint(spec.title.ljust(title_width), "1", enabled=color)
-        print(f"{audit_id}  {title}  {spec.description}")
+        title = _paint(_expand_terms(spec.title, sentence_case=True).ljust(title_width), "1", enabled=color)
+        print(f"{audit_id}  {title}  {_expand_terms(spec.description, sentence_case=True)}")
     return 0
 
 

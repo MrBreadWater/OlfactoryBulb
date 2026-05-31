@@ -22,8 +22,9 @@ sample_report = AuditReport(
         AuditItem(
             check_id="demo_warn",
             status="WARN",
-            title="Warn item",
-            criterion="A warning criterion should render cleanly.",
+            title="TC CV_ISI item",
+            criterion="TC CV_ISI should render cleanly.",
+            description="CV_ISI should be expanded so the reader does not have to infer it.",
             note="This is only a note.",
         ),
     ],
@@ -34,7 +35,10 @@ assert "\033[" not in plain
 assert "Summary" in plain
 assert "[PASS] demo_pass" in plain
 assert "Evidence" in plain
-assert "\"count\": 3" in plain
+assert "Description" in plain
+assert "count: 3" in plain
+assert "Tufted cell coefficient of variation of interspike intervals item" in plain
+assert "coefficient of variation of interspike intervals" in plain
 
 colored = format_report(sample_report, color=True)
 assert "\033[" in colored

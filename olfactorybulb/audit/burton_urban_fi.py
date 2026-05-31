@@ -219,8 +219,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="burton_urban_protocol_executed",
             status="PASS" if metrics else "FAIL",
-            title="Burton & Urban MC/TC f-I protocol executed",
-            criterion="Run 2 s somatic current steps from 0 to 300 pA in 50 pA increments after normalizing Vm to -58 mV.",
+            title="Burton and Urban mitral-cell and tufted-cell firing-rate-versus-current protocol executed",
+            criterion="Run two-second somatic current steps from zero to three hundred picoamperes in fifty-picoampere increments after normalizing membrane potential to minus fifty-eight millivolts.",
+            description="This is the top-level protocol check. It confirms that the audit actually ran the same family of current-clamp experiments used to compare mitral-cell and tufted-cell excitability in the Burton and Urban reference data.",
             evidence=protocol_evidence,
         )
     )
@@ -230,8 +231,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="holding_current_normalization",
             status="PASS" if len(bias_currents) == len(metrics) else "FAIL",
-            title="Holding currents were computed for -58 mV normalization",
-            criterion="Every audited model should have a finite DC bias current before f-I and AP/spike-train measurements.",
+            title="Holding currents were computed for normalization to minus fifty-eight millivolts",
+            criterion="Every audited model should have a finite direct-current bias current before firing-rate-versus-current and action-potential or spike-train measurements.",
+            description="Burton and Urban compared cells at a shared held membrane potential. Without a valid bias current for each cell, the downstream excitability comparisons are not on a common voltage baseline.",
             evidence=_rounded_dict(
                 {
                     metric["cell_name"]: metric["bias_current_pA"]
@@ -250,8 +252,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="zero_current_quiescence_at_normalized_vm",
             status="PASS" if not zero_step_spiking else "FAIL",
-            title="Cells are quiescent during the 0 pA step at normalized Vm",
-            criterion="A model should not fire during the 0 pA f-I step after holding-current normalization.",
+            title="Cells remain quiescent during the zero-picoampere step at the normalized membrane potential",
+            criterion="A model should not fire during the zero-picoampere firing-rate-versus-current step after holding-current normalization.",
+            description="If a cell spikes with no depolarizing step current after normalization, the model is already too excitable at the comparison voltage. That distorts rheobase and makes the firing-rate-versus-current curve hard to interpret.",
             evidence=_rounded_dict(zero_step_spiking),
             note="Nonzero rates here explain zero-pA rheobases and indicate excessive excitability at the paper holding potential.",
         )
@@ -263,8 +266,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="ap_threshold_similarity",
             status="PASS" if threshold_diff <= 5.0 else "FAIL",
-            title="MC and TC AP thresholds remain similar",
-            criterion="Burton & Urban Table 4 reports similar MC and TC AP thresholds; model means should differ by <= 5 mV.",
+            title="Mitral-cell and tufted-cell action-potential thresholds remain similar",
+            criterion="Burton and Urban Table 4 reports similar mitral-cell and tufted-cell action-potential thresholds, so the model means should differ by no more than five millivolts.",
+            description="This check isolates spike-threshold placement. The reference data suggest that mitral cells and tufted cells differ more strongly in firing patterns than in the voltage at which action potentials begin.",
             evidence={
                 **_evidence_for_pair(summary, "AP_onset_mV"),
                 "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["AP_onset_mV"] for cell_type in ("MC", "TC")},
@@ -276,8 +280,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="tc_action_potentials_narrower",
             status="PASS" if _type_pair(summary, "FWHM_ms")[1] < _type_pair(summary, "FWHM_ms")[0] else "FAIL",
-            title="TC action potentials are narrower than MC action potentials",
-            criterion="Burton & Urban Table 4 reports lower FWHM in TCs than MCs.",
+            title="Tufted-cell action potentials are narrower than mitral-cell action potentials",
+            criterion="Burton and Urban Table 4 reports lower full width at half maximum in tufted cells than in mitral cells.",
+            description="Action-potential width is a compact readout of spike-shape kinetics. The reference result says tufted cells should repolarize through a narrower spike waveform than mitral cells.",
             evidence={
                 **_evidence_for_pair(summary, "FWHM_ms"),
                 "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["FWHM_ms"] for cell_type in ("MC", "TC")},
@@ -289,8 +294,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="tc_repolarization_faster",
             status="PASS" if _type_pair(summary, "Fall_slope_mV_per_ms")[1] < _type_pair(summary, "Fall_slope_mV_per_ms")[0] else "FAIL",
-            title="TC AP falling slope is faster than MC falling slope",
-            criterion="Burton & Urban Table 4 reports a more negative AP falling slope in TCs than MCs.",
+            title="Tufted-cell action-potential repolarization slope is faster than the mitral-cell repolarization slope",
+            criterion="Burton and Urban Table 4 reports a more negative action-potential falling slope in tufted cells than in mitral cells.",
+            description="This check is a second spike-shape discriminator. A steeper negative falling slope means the tufted-cell spike shuts down faster after its peak.",
             evidence={
                 **_evidence_for_pair(summary, "Fall_slope_mV_per_ms"),
                 "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["Fall_slope_mV_per_ms"] for cell_type in ("MC", "TC")},
@@ -302,8 +308,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="tc_ahp_decay_faster",
             status="PASS" if _type_pair(summary, "T_AHP50_ms")[1] < _type_pair(summary, "T_AHP50_ms")[0] else "FAIL",
-            title="TC AHP half-decay is faster than MC AHP half-decay",
-            criterion="Burton & Urban Table 4 reports lower T_AHP50% in TCs than MCs.",
+            title="Tufted-cell afterhyperpolarization half-decay is faster than the mitral-cell afterhyperpolarization half-decay",
+            criterion="Burton and Urban Table 4 reports a shorter afterhyperpolarization half-decay time in tufted cells than in mitral cells.",
+            description="The afterhyperpolarization recovery time influences how quickly a cell can support the next spike. The reference phenotype expects tufted cells to recover more quickly than mitral cells.",
             evidence={
                 **_evidence_for_pair(summary, "T_AHP50_ms"),
                 "reference_means": {cell_type: TABLE4_REFERENCE[cell_type]["T_AHP50_ms"] for cell_type in ("MC", "TC")},
@@ -315,8 +322,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="tc_peak_instantaneous_rate_higher",
             status="PASS" if _type_pair(summary, "peak_rate_Hz")[1] > _type_pair(summary, "peak_rate_Hz")[0] else "FAIL",
-            title="TC peak instantaneous firing rate is higher than MC peak rate",
-            criterion="Burton & Urban Table 5 reports substantially higher TC peak instantaneous rate.",
+            title="Tufted-cell peak instantaneous firing rate is higher than the mitral-cell peak instantaneous firing rate",
+            criterion="Burton and Urban Table 5 reports a substantially higher tufted-cell peak instantaneous firing rate.",
+            description="This checks how rapidly the models can fire at their fastest interspike interval. The reference data expect tufted cells to reach a more rapid peak spiking regime than mitral cells.",
             evidence={
                 **_evidence_for_pair(summary, "peak_rate_Hz"),
                 "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["Peak_rate_Hz"] for cell_type in ("MC", "TC")},
@@ -328,8 +336,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="tc_fi_gain_higher",
             status="PASS" if _type_pair(summary, "fi_gain_Hz_per_50pA")[1] > _type_pair(summary, "fi_gain_Hz_per_50pA")[0] else "FAIL",
-            title="TC f-I gain is higher than MC f-I gain",
-            criterion="Burton & Urban Table 5 reports roughly twofold higher TC f-I gain.",
+            title="Tufted-cell firing-rate-versus-current gain is higher than mitral-cell firing-rate-versus-current gain",
+            criterion="Burton and Urban Table 5 reports a roughly twofold higher firing-rate-versus-current gain in tufted cells.",
+            description="Firing-rate-versus-current gain is the slope that converts added injected current into added firing rate. The reference expectation is that tufted cells respond more steeply to depolarizing current than mitral cells.",
             evidence={
                 **_evidence_for_pair(summary, "fi_gain_Hz_per_50pA"),
                 "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["FI_gain_Hz_per_50pA"] for cell_type in ("MC", "TC")},
@@ -342,8 +351,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="rheobase_in_paper_regime",
             status="PASS" if mc_rheobase > 0.0 and tc_rheobase > 0.0 else "FAIL",
-            title="MC and TC rheobases remain in a depolarizing-step regime",
-            criterion="Burton & Urban Table 5 reports positive rheobases for both MCs and TCs, not firing at the 0 pA step.",
+            title="Mitral-cell and tufted-cell rheobases remain in a depolarizing-step regime",
+            criterion="Burton and Urban Table 5 reports positive rheobases for both mitral cells and tufted cells, rather than spiking during the zero-picoampere step.",
+            description="Rheobase is the smallest depolarizing current step that evokes a spike. Positive rheobases are a basic sanity check that the model is not already above threshold at the held membrane potential.",
             evidence={
                 **_evidence_for_pair(summary, "rheobase_pA"),
                 "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["Rheobase_pA"] for cell_type in ("MC", "TC")},
@@ -355,8 +365,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="tc_cv_isi_higher",
             status="PASS" if _type_pair(summary, "cv_isi")[1] > _type_pair(summary, "cv_isi")[0] else "FAIL",
-            title="TC CV_ISI near 20 Hz is higher than MC CV_ISI",
-            criterion="Burton & Urban Table 5 and Figure 6 report higher TC firing irregularity.",
+            title="Tufted-cell coefficient of variation of interspike intervals near twenty hertz is higher than the mitral-cell value",
+            criterion="Burton and Urban Table 5 and Figure 6 report higher tufted-cell firing irregularity, measured as the coefficient of variation of interspike intervals near twenty hertz.",
+            description="The coefficient of variation of interspike intervals is the standard deviation of the interspike intervals divided by their mean. A larger value means more irregular spike timing, which the reference data attribute more strongly to tufted cells than mitral cells.",
             evidence={
                 **_evidence_for_pair(summary, "cv_isi"),
                 "reference_means": {cell_type: TABLE5_REFERENCE[cell_type]["CV_ISI"] for cell_type in ("MC", "TC")},
@@ -368,8 +379,9 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
         AuditItem(
             check_id="input_resistance_recorded",
             status="PASS" if all(np.isfinite(float(metric["input_resistance_MOhm"])) for metric in metrics) else "FAIL",
-            title="Input resistance was measured for f-I gain comparison",
-            criterion="Figure 5F-style gain/resistance comparison requires finite input resistance estimates for every audited model.",
+            title="Input resistance was measured for the firing-rate-versus-current gain comparison",
+            criterion="A Figure 5F-style gain-versus-resistance comparison requires finite input-resistance estimates for every audited model.",
+            description="Input resistance is part of the explanatory comparison between passive membrane response and excitability. The audit cannot support that interpretation if any cell is missing a finite resistance estimate.",
             evidence={cell_type: _rounded_dict(summary.get(cell_type, {})) for cell_type in sorted(summary)},
         )
     )
@@ -618,8 +630,9 @@ def run(args: argparse.Namespace) -> AuditReport:
                 AuditItem(
                     check_id="burton_urban_fi_skipped",
                     status="WARN",
-                    title="Burton & Urban f-I validation skipped",
-                    criterion="Run this audit without --skip-neuron to execute the MC/TC current-clamp validation.",
+                    title="Burton and Urban firing-rate-versus-current validation skipped",
+                    criterion="Run this audit without --skip-neuron to execute the mitral-cell and tufted-cell current-clamp validation.",
+                    description="This item reports that the computationally expensive electrophysiology validation was intentionally skipped, so no conclusions should be drawn about whether the current mitral-cell and tufted-cell models match the Burton and Urban firing phenotypes.",
                     evidence={
                         "cell_count": int(getattr(args, "cell_count", 5)),
                         "cell_types": getattr(args, "cell_types", "MC,TC"),
