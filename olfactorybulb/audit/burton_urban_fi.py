@@ -19,6 +19,22 @@ from scipy.optimize import curve_fit
 from olfactorybulb.audit.core import AuditItem, AuditReport, rounded
 
 
+def _configure_parent_cache_dirs() -> None:
+    user = os.environ.get("USER") or "obgpu"
+    base_dir = os.path.join("/tmp", f"obgpu-audit-cache-{user}")
+    mpl_dir = os.path.join(base_dir, "matplotlib")
+    xdg_dir = os.path.join(base_dir, "xdg")
+    font_dir = os.path.join(xdg_dir, "fontconfig")
+    os.makedirs(mpl_dir, exist_ok=True)
+    os.makedirs(font_dir, exist_ok=True)
+    os.environ.setdefault("MPLCONFIGDIR", mpl_dir)
+    os.environ.setdefault("XDG_CACHE_HOME", xdg_dir)
+
+
+_configure_parent_cache_dirs()
+from fi_curve_utils import find_spike_times_milliseconds
+
+
 @dataclass(frozen=True)
 class BurtonUrbanProtocol:
     target_vm_mV: float = -58.0

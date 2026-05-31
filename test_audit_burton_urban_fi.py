@@ -14,6 +14,7 @@ from olfactorybulb.audit.burton_urban_fi import (
     BurtonUrbanProtocol,
     _resolved_jobs,
     build_validation_items,
+    find_spike_times_milliseconds,
     summarize_metrics,
 )
 
@@ -88,6 +89,7 @@ assert item_by_id["tc_fi_gain_higher"].status == "PASS"
 assert item_by_id["rheobase_in_paper_regime"].status == "PASS"
 assert item_by_id["tc_cv_isi_higher"].status == "PASS"
 assert item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].status == "PASS"
+assert callable(find_spike_times_milliseconds)
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1
 assert _resolved_jobs(10, 99, use_gpu=False) == 10
 assert _resolved_jobs(10, 8, use_gpu=True) == 1
