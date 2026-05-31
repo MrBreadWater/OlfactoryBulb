@@ -41,6 +41,31 @@ def _status(ok: bool, failure_status: str = "FAIL") -> str:
     return "PASS" if ok else failure_status
 
 
+def _env_item(
+    *,
+    check_id: str,
+    status: str,
+    title: str,
+    criterion: str,
+    description: str,
+    acceptable: str,
+    acceptable_basis: str,
+    evidence: dict[str, object] | None = None,
+    note: str = "",
+) -> AuditItem:
+    return AuditItem(
+        check_id=check_id,
+        status=status,
+        title=title,
+        criterion=criterion,
+        description=description,
+        acceptable=acceptable,
+        acceptable_basis=acceptable_basis,
+        evidence=evidence or {},
+        note=note,
+    )
+
+
 def _resolved_path(value: str | None) -> str | None:
     if not value:
         return None
@@ -93,22 +118,28 @@ def audit_repo_layout() -> list[AuditItem]:
     missing = [relative for relative in REQUIRED_REPO_FILES if not (REPO_ROOT / relative).exists()]
     cwd_matches = Path.cwd().resolve() == REPO_ROOT.resolve()
     return [
-        AuditItem(
+        _env_item(
             check_id="repo_layout",
             status=_status(not missing),
             title="Maintained OBGPU install files are present",
             criterion="A machine install should use the maintained setup, activation, environment, patch, mechanism, and benchmark files.",
+            description="This check verifies that the repository contains the required installation, activation, benchmark, environment, and mechanism files that define the maintained OBGPU workflow.",
+            acceptable="Every path in the required-repository-file list exists under the repository root. The missing-file list must be empty.",
+            acceptable_basis="The acceptance list is a curated set of files that the maintained OBGPU installation and benchmark workflow depends on directly.",
             evidence={
                 "repo_root": str(REPO_ROOT),
                 "missing": missing,
                 "checked": REQUIRED_REPO_FILES,
             },
         ),
-        AuditItem(
+        _env_item(
             check_id="repo_root_cwd",
             status=_status(cwd_matches, "WARN"),
             title="Audit is running from the repository root",
             criterion="The maintained workflow expects commands to run from the repository root.",
+            description="This check confirms that the current working directory matches the maintained repository root, which reduces path-resolution mistakes in setup and benchmark commands.",
+            acceptable="The current working directory resolves to the same absolute path as the repository root. A mismatch is a warning rather than a hard failure.",
+            acceptable_basis="The rule is a direct path comparison between Path.cwd() and the repository root resolved from the audit module location.",
             evidence={"cwd": str(Path.cwd()), "repo_root": str(REPO_ROOT)},
         ),
     ]
@@ -119,11 +150,14 @@ def audit_python_environment() -> list[AuditItem]:
     env_name = conda_env or Path(sys.prefix).name
     env_ok = bool(env_name and env_name.startswith("OBGPU"))
     return [
-        AuditItem(
+        _env_item(
             check_id="python_environment",
             status=_status(env_ok),
             title="Python is running inside an OBGPU conda environment",
             criterion="The maintained install should run from an OBGPU or OBGPU-portable conda environment, not base/system Python.",
+            description="This check confirms that the active Python interpreter comes from an OBGPU-prefixed conda environment, which is the supported runtime for repository-local scripts and audits.",
+            acceptable="The active environment name begins with OBGPU. Base or unrelated Python environments do not satisfy this requirement.",
+            acceptable_basis="The rule is derived from CONDA_DEFAULT_ENV when available, otherwise from the interpreter prefix name, because those are the canonical markers of the maintained environment choice.",
             evidence={
                 "python_executable": sys.executable,
                 "sys_prefix": sys.prefix,
@@ -150,11 +184,14 @@ def audit_activation_hooks() -> list[AuditItem]:
     ld_has_conda = _path_contains(ld_path, Path(conda_prefix) / "lib") if conda_prefix else False
 
     return [
-        AuditItem(
+        _env_item(
             check_id="activation_runtime_hooks",
             status=_status(repo_root_ok and mechanism_root_ok and corenrn_ok and ld_has_arch and ld_has_conda),
             title="Repo activation hooks are active",
             criterion="source tools/setup/activate_obgpu.sh should export repo, mechanism, CoreNEURON, and library-path settings.",
+            description="This check validates that the activation script has populated the runtime environment variables and library paths that the maintained NEURON and CoreNEURON workflows expect.",
+            acceptable="The shared repo root matches this checkout, the mechanism root exists, the CoreNEURON mechanism library matches the expected architecture path when present, and LD_LIBRARY_PATH contains both the architecture directory and the active conda lib directory.",
+            acceptable_basis="The rule is taken from the maintained activate_obgpu.sh contract: these variables and path entries are the minimum environment hooks needed for the repo-local NEURON runtime to resolve the correct mechanism libraries.",
             evidence={
                 "OBGPU_SHARED_REPO_ROOT": os.environ.get("OBGPU_SHARED_REPO_ROOT"),
                 "OBGPU_MECHANISM_ROOT": os.environ.get("OBGPU_MECHANISM_ROOT"),
@@ -177,11 +214,14 @@ def audit_command_line_tools(*, require_gpu: bool = False) -> list[AuditItem]:
     required_ok = all(command_paths.values())
 
     items = [
-        AuditItem(
+        _env_item(
             check_id="command_line_tools",
             status=_status(required_ok and mpi_ok),
             title="NEURON and MPI launcher commands are available",
             criterion="A runnable machine install needs nrniv, nrnivmodl, and either OB_MPIEXEC, mpiexec, or srun on PATH.",
+            description="This check verifies that the core NEURON executables and at least one usable MPI launcher are available on the active PATH.",
+            acceptable="Both nrniv and nrnivmodl resolve on PATH, and at least one of OB_MPIEXEC, mpiexec, or srun resolves to an executable command.",
+            acceptable_basis="The rule comes from the maintained simulation entrypoints, which depend on the NEURON executables plus an MPI launcher for distributed or remote benchmark runs.",
             evidence={
                 "required": command_paths,
                 "OB_MPIEXEC": mpi_exec,
@@ -194,11 +234,14 @@ def audit_command_line_tools(*, require_gpu: bool = False) -> list[AuditItem]:
     if require_gpu:
         gpu_paths = _command_paths(OPTIONAL_GPU_COMMANDS)
         items.append(
-            AuditItem(
+            _env_item(
                 check_id="gpu_build_tools",
                 status=_status(all(gpu_paths.values())),
                 title="GPU build tools are available",
                 criterion="GPU-enabled OBGPU installs require NVIDIA HPC SDK compilers and nvcc.",
+                description="This check verifies that the GPU compiler toolchain required for GPU-enabled builds is installed and reachable on PATH.",
+                acceptable="nvc, nvc++, and nvcc all resolve on PATH when GPU capability is required.",
+                acceptable_basis="The rule follows the maintained GPU build workflow, which depends on the NVIDIA HPC SDK compilers plus nvcc for compatible mechanism compilation and runtime support.",
                 evidence=gpu_paths,
             )
         )
@@ -220,11 +263,14 @@ def audit_mechanism_outputs() -> list[AuditItem]:
     output_presence = {name: path.exists() for name, path in required_outputs.items()}
 
     return [
-        AuditItem(
+        _env_item(
             check_id="mechanism_build_outputs",
             status=_status(bool(source_mods) and all(output_presence.values()) and not missing_compiled),
             title="Birgiolas mechanism outputs are compiled for this architecture",
             criterion="The active mechanism root should contain special, libnrnmech.so, libcorenrnmech.so, and generated code for every maintained .mod file.",
+            description="This check confirms that the maintained Birgiolas mechanism source set has been compiled for the current architecture and produced the expected NEURON and CoreNEURON outputs.",
+            acceptable="The special executable, libnrnmech.so, and libcorenrnmech.so all exist, and every maintained .mod source file has a generated compiled-code counterpart for the active architecture.",
+            acceptable_basis="The rule is derived from the maintained nrnivmodl build products and the full set of .mod files under prev_ob_models/Birgiolas2020/Mechanisms.",
             evidence={
                 "mechanism_source_dir": str(MECHANISM_SOURCE_DIR),
                 "mechanism_root": str(mechanism_root),
@@ -284,11 +330,14 @@ def audit_nvhpc_transient_dependencies() -> list[AuditItem]:
 
     evidence["bad_needed"] = bad_needed
     return [
-        AuditItem(
+        _env_item(
             check_id="nvhpc_transient_dependencies",
             status=status,
             title="Mechanism libraries are free of stale NVHPC temp-object dependencies",
             criterion="libnrnmech.so and libcorenrnmech.so should not embed /tmp/pgcudafat* loader paths.",
+            description="This check scans the built mechanism libraries for stale NVIDIA HPC SDK temporary object dependencies that can break dlopen at runtime.",
+            acceptable="The ideal result is that neither shared library contains a /tmp/pgcudafat* dependency. If patchelf is unavailable the result is downgraded to a warning because the check cannot be completed.",
+            acceptable_basis="The rule is based on patchelf --print-needed output. A stale /tmp/pgcudafat dependency is a known broken build artifact in this repository's OBGPU workflow.",
             evidence=evidence,
             note=note,
         )
@@ -298,11 +347,14 @@ def audit_nvhpc_transient_dependencies() -> list[AuditItem]:
 def audit_legacy_nmodl_path() -> list[AuditItem]:
     value = os.environ.get("NRN_NMODL_PATH")
     return [
-        AuditItem(
+        _env_item(
             check_id="legacy_nrn_nmodl_path",
             status=_status(not value, "WARN"),
             title="Legacy NRN_NMODL_PATH is not forcing stale mechanism autoloads",
             criterion="The maintained runtime should not rely on NRN_NMODL_PATH auto-loading repo-root mechanisms.",
+            description="This check warns when the legacy NRN_NMODL_PATH variable is still set, because it can autoload the wrong mechanisms and mask the maintained explicit mechanism path.",
+            acceptable="The preferred state is that NRN_NMODL_PATH is unset. If it is set, the audit warns rather than fails because the runtime may still work but is more fragile.",
+            acceptable_basis="The rule comes from earlier repository activation behavior that used NRN_NMODL_PATH, which can now conflict with the explicit Birgiolas mechanism loading strategy.",
             evidence={"NRN_NMODL_PATH": value},
             note="Older activation hooks used this variable; it can collide with the explicit Birgiolas mechanism load path.",
         )
@@ -312,11 +364,14 @@ def audit_legacy_nmodl_path() -> list[AuditItem]:
 def audit_python_imports(*, skip_imports: bool = False, timeout_seconds: float = 120.0) -> list[AuditItem]:
     if skip_imports:
         return [
-            AuditItem(
+            _env_item(
                 check_id="python_import_surface_skipped",
                 status="WARN",
                 title="Maintained Python import surface check skipped",
                 criterion="Run without --skip-imports to verify third-party and repo imports.",
+                description="This item records that the maintained Python import smoke test was intentionally skipped, so the report does not currently confirm third-party and repository import health.",
+                acceptable="This is an informational warning only. It clears once the audit is rerun without the skip flag.",
+                acceptable_basis="The item is emitted by command-line control flow rather than by scientific or runtime measurements. It exists to explain the missing import verification step.",
             )
         ]
 
@@ -334,11 +389,14 @@ def audit_python_imports(*, skip_imports: bool = False, timeout_seconds: float =
         )
     except subprocess.TimeoutExpired as exc:
         return [
-            AuditItem(
+            _env_item(
                 check_id="python_import_surface",
                 status="FAIL",
                 title="Maintained Python import surface check timed out",
                 criterion="tools/setup/verify_obgpu_python_imports.py should complete and report import failures without hanging.",
+                description="This check failed because the maintained import verification subprocess did not finish within the configured timeout.",
+                acceptable="The verification subprocess completes within the timeout and returns a structured result instead of hanging.",
+                acceptable_basis="The rule comes from the dedicated verify_obgpu_python_imports.py probe, which is the maintained import-health smoke test for this repository.",
                 evidence={"command": command, "timeout_seconds": timeout_seconds, "error": repr(exc)},
             )
         ]
@@ -368,11 +426,14 @@ def audit_python_imports(*, skip_imports: bool = False, timeout_seconds: float =
         evidence["stderr_tail"] = result.stderr.strip()[-2000:]
 
     return [
-        AuditItem(
+        _env_item(
             check_id="python_import_surface",
             status=_status(ok),
             title="Maintained OBGPU Python import surface loads",
             criterion="The same Python import surface checked by tools/setup/verify_obgpu_python_imports.py should import cleanly.",
+            description="This check runs the maintained import-health probe and records whether the third-party and repository import surface loads successfully in the active OBGPU environment.",
+            acceptable="The subprocess returns successfully, reports ok=true, and records no import failures.",
+            acceptable_basis="The rule is the structured JSON result produced by verify_obgpu_python_imports.py, which is the maintained import smoke test for this repository.",
             evidence=evidence,
         )
     ]
@@ -381,22 +442,28 @@ def audit_python_imports(*, skip_imports: bool = False, timeout_seconds: float =
 def audit_launcher_smoke(*, run_launcher_smoke: bool = False, timeout_seconds: float = 20.0) -> list[AuditItem]:
     if not run_launcher_smoke:
         return [
-            AuditItem(
+            _env_item(
                 check_id="nrniv_launcher_smoke_skipped",
                 status="WARN",
                 title="nrniv launcher smoke skipped",
                 criterion="Run with --run-launcher-smoke to execute a cheap nrniv subprocess.",
+                description="This item records that the cheap nrniv subprocess smoke test was intentionally skipped, so the report does not currently confirm that the NEURON launcher itself starts cleanly.",
+                acceptable="This is an informational warning only. It clears once the audit is rerun with --run-launcher-smoke.",
+                acceptable_basis="The item is emitted by command-line control flow to explain why launcher health was not measured during this audit invocation.",
             )
         ]
 
     nrniv = shutil.which("nrniv")
     if not nrniv:
         return [
-            AuditItem(
+            _env_item(
                 check_id="nrniv_launcher_smoke",
                 status="FAIL",
                 title="nrniv launcher is unavailable",
                 criterion="nrniv must be on PATH before a launcher smoke can run.",
+                description="This check failed before running the smoke test because the nrniv executable could not be resolved on PATH.",
+                acceptable="The nrniv executable resolves on PATH so the launcher smoke test can actually run.",
+                acceptable_basis="The maintained runtime enters NEURON through nrniv, so its absence is an immediate hard failure for this smoke path.",
             )
         ]
 
@@ -411,11 +478,14 @@ def audit_launcher_smoke(*, run_launcher_smoke: bool = False, timeout_seconds: f
         )
     except subprocess.TimeoutExpired as exc:
         return [
-            AuditItem(
+            _env_item(
                 check_id="nrniv_launcher_smoke",
                 status="FAIL",
                 title="nrniv launcher smoke timed out",
                 criterion="A cheap nrniv version probe should complete quickly.",
+                description="This check failed because a minimal nrniv subprocess did not finish within the configured timeout, indicating a launcher or runtime hang.",
+                acceptable="A minimal nrniv invocation completes within the timeout and returns a version probe result.",
+                acceptable_basis="The rule is based on a cheap NEURON version command that should finish quickly on any healthy install.",
                 evidence={"command": command, "timeout_seconds": timeout_seconds, "error": repr(exc)},
             )
         ]
@@ -424,11 +494,14 @@ def audit_launcher_smoke(*, run_launcher_smoke: bool = False, timeout_seconds: f
     has_native_warning = "dlopen failed" in stderr.lower()
     status = "FAIL" if result.returncode != 0 else ("WARN" if has_native_warning else "PASS")
     return [
-        AuditItem(
+        _env_item(
             check_id="nrniv_launcher_smoke",
             status=status,
             title="nrniv can launch a NEURON Python probe",
             criterion="The nrniv executable should be able to start NEURON and report its version.",
+            description="This check launches a minimal NEURON Python probe through nrniv to confirm that the launcher itself can start the runtime successfully.",
+            acceptable="The subprocess exits with return code 0. Native dlopen warnings are downgraded to a warning because they indicate a compromised but still starting runtime.",
+            acceptable_basis="The rule is based on the observed return code and stderr of a minimal 'from neuron import h; print(h.nrnversion())' probe launched through nrniv.",
             evidence={
                 "command": command,
                 "returncode": result.returncode,

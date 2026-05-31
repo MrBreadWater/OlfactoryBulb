@@ -63,8 +63,11 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
         AuditItem(
             check_id=f"{report.audit_id}.{item.check_id}",
             status=item.status,
-            title=f"{report.audit_id}: {item.title}",
+            title=f"{report.title}: {item.title}",
             criterion=item.criterion,
+            description=item.description,
+            acceptable=item.acceptable,
+            acceptable_basis=item.acceptable_basis,
             evidence={"audit_id": report.audit_id, **item.evidence},
             note=item.note,
         )
