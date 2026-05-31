@@ -12,6 +12,7 @@ import sys
 
 from olfactorybulb.audit.burton_urban_fi import (
     BurtonUrbanProtocol,
+    _resolved_jobs,
     build_validation_items,
     summarize_metrics,
 )
@@ -73,9 +74,12 @@ item_by_id = {item.check_id: item for item in items}
 assert item_by_id["tc_fi_gain_higher"].status == "PASS"
 assert item_by_id["rheobase_in_paper_regime"].status == "PASS"
 assert item_by_id["tc_cv_isi_higher"].status == "PASS"
+assert _resolved_jobs(10, 0, use_gpu=False) >= 1
+assert _resolved_jobs(10, 99, use_gpu=False) == 10
+assert _resolved_jobs(10, 8, use_gpu=True) == 1
 
 skip = subprocess.run(
-    [sys.executable, "tools/audit_burton_urban_fi.py", "--skip-neuron", "--json"],
+    [sys.executable, "tools/audit_burton_urban_fi.py", "--skip-neuron", "--jobs", "4", "--json"],
     capture_output=True,
     text=True,
     check=False,
@@ -84,6 +88,7 @@ assert skip.returncode == 0, skip
 payload = json.loads(skip.stdout)
 assert payload["audit_id"] == "burton_urban_fi"
 assert payload["summary"]["WARN"] == 1
+assert payload["items"][0]["evidence"]["jobs"] == 4
 
 generic = subprocess.run(
     [sys.executable, "tools/run_audit.py", "burton_urban_fi", "--skip-neuron", "--json"],

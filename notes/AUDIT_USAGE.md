@@ -58,7 +58,11 @@ python -m olfactorybulb.audit.cli epli_correctness --candidate-slice 0
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.audit.cli burton_urban_fi --cell-count 8 --cell-types MC TC --dt-ms 0.025
+python -m olfactorybulb.audit.cli burton_urban_fi --cell-count 5 --cell-types MC,TC --jobs 0
 ```
+
+`--jobs 0` means "use all local CPU cores" for the Burton/Urban audit unless
+`--use-gpu` is set, in which case the audit is forced back to a single worker.
 
 ## Interpreting results
 

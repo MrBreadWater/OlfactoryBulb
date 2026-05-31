@@ -29,14 +29,17 @@ def list_audits() -> int:
     return 0
 
 
-def _run_one_audit(spec, argv: list[str]) -> AuditReport:
+def _run_one_audit(spec, argv: list[str], *, allow_unknown: bool = False) -> AuditReport:
     module = spec.load_module()
 
     audit_parser = argparse.ArgumentParser(description=spec.description)
     audit_parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     if hasattr(module, "configure_parser"):
         module.configure_parser(audit_parser)
-    audit_args = audit_parser.parse_args(argv)
+    if allow_unknown:
+        audit_args, _ignored = audit_parser.parse_known_args(argv)
+    else:
+        audit_args = audit_parser.parse_args(argv)
     return module.run(audit_args)
 
 
@@ -55,7 +58,7 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
 
 
 def run_new_sweep(argv: list[str]) -> AuditReport:
-    reports = [_run_one_audit(spec, argv) for spec in iter_audit_specs()]
+    reports = [_run_one_audit(spec, argv, allow_unknown=True) for spec in iter_audit_specs()]
     items = [item for report in reports for item in _prefixed_items(report)]
     return AuditReport(
         audit_id="new_sweep",

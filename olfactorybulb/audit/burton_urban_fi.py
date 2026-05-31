@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 from collections import defaultdict
 from dataclasses import dataclass
+from itertools import repeat
+import multiprocessing as mp
+import os
 from typing import Any, Iterable
 
 import numpy as np
@@ -120,6 +124,28 @@ def _rounded_dict(values: dict[str, Any], digits: int = 3) -> dict[str, Any]:
         else:
             rounded_values[key] = value
     return rounded_values
+
+
+def _resolved_jobs(cell_total: int, requested_jobs: int, *, use_gpu: bool = False) -> int:
+    if cell_total <= 1:
+        return 1
+    if use_gpu:
+        return 1
+    if requested_jobs <= 0:
+        requested_jobs = os.cpu_count() or 1
+    return max(1, min(int(requested_jobs), int(cell_total)))
+
+
+def _ensure_worker_cache_dirs() -> None:
+    user = os.environ.get("USER") or "obgpu"
+    base_dir = os.path.join("/tmp", f"obgpu-audit-cache-{user}")
+    mpl_dir = os.path.join(base_dir, "matplotlib")
+    xdg_dir = os.path.join(base_dir, "xdg")
+    font_dir = os.path.join(xdg_dir, "fontconfig")
+    os.makedirs(mpl_dir, exist_ok=True)
+    os.makedirs(font_dir, exist_ok=True)
+    os.environ.setdefault("MPLCONFIGDIR", mpl_dir)
+    os.environ.setdefault("XDG_CACHE_HOME", xdg_dir)
 
 
 def summarize_metrics(metrics: list[dict[str, Any]]) -> dict[str, dict[str, float]]:
@@ -351,15 +377,13 @@ def build_validation_items(metrics: list[dict[str, Any]], protocol: BurtonUrbanP
     return items
 
 
-def run_burton_urban_protocol(
-    *,
-    cell_types: list[str],
-    cell_count: int,
+def _run_burton_urban_cell(
+    cell_name: str,
     protocol: BurtonUrbanProtocol,
     use_coreneuron: bool = False,
     use_gpu: bool = False,
-) -> list[dict[str, Any]]:
-    """Run the Burton & Urban step protocol and return per-cell metrics."""
+) -> dict[str, Any]:
+    _ensure_worker_cache_dirs()
     from single_cell_utils import (
         find_bias_current,
         run_current_clamp,
@@ -377,161 +401,196 @@ def run_burton_urban_protocol(
         traces_to_fi,
     )
 
-    metrics: list[dict[str, Any]] = []
-    for cell_name in _cell_names(cell_types, cell_count):
-        zero_current_trace = run_current_clamp(
-            cell_name,
-            amp_nA=0.0,
-            duration_ms=500.0,
-            delay_ms=0.0,
-            tail_ms=0.0,
-            dt=protocol.dt_ms,
-            celsius=protocol.celsius,
-            use_coreneuron=use_coreneuron,
-            use_gpu=use_gpu,
-        )
-        resting_potential_mV = float(zero_current_trace["v_soma"][-1])
+    zero_current_trace = run_current_clamp(
+        cell_name,
+        amp_nA=0.0,
+        duration_ms=500.0,
+        delay_ms=0.0,
+        tail_ms=0.0,
+        dt=protocol.dt_ms,
+        celsius=protocol.celsius,
+        use_coreneuron=use_coreneuron,
+        use_gpu=use_gpu,
+    )
+    resting_potential_mV = float(zero_current_trace["v_soma"][-1])
 
-        bias_current_nA = find_bias_current(
-            cell_name,
-            target_membrane_potential_millivolts=protocol.target_vm_mV,
-            settle_duration_milliseconds=protocol.bias_settle_ms,
-            tolerance_millivolts=protocol.bias_tolerance_mV,
-            max_iterations=protocol.bias_max_iterations,
-            timestep_milliseconds=protocol.dt_ms,
-            temperature_celsius=protocol.celsius,
-        )
+    bias_current_nA = find_bias_current(
+        cell_name,
+        target_membrane_potential_millivolts=protocol.target_vm_mV,
+        settle_duration_milliseconds=protocol.bias_settle_ms,
+        tolerance_millivolts=protocol.bias_tolerance_mV,
+        max_iterations=protocol.bias_max_iterations,
+        timestep_milliseconds=protocol.dt_ms,
+        temperature_celsius=protocol.celsius,
+    )
 
-        step_traces = run_current_clamp_series(
-            cell_name,
-            amps_nA=protocol.current_steps_nA,
-            duration_ms=protocol.step_duration_ms,
-            delay_ms=protocol.step_delay_ms,
-            tail_ms=protocol.tail_ms,
-            dt=protocol.dt_ms,
-            celsius=protocol.celsius,
-            use_coreneuron=use_coreneuron,
-            use_gpu=use_gpu,
-            bias_current_nA=bias_current_nA,
-            v_init_mV=protocol.target_vm_mV,
+    step_traces = run_current_clamp_series(
+        cell_name,
+        amps_nA=protocol.current_steps_nA,
+        duration_ms=protocol.step_duration_ms,
+        delay_ms=protocol.step_delay_ms,
+        tail_ms=protocol.tail_ms,
+        dt=protocol.dt_ms,
+        celsius=protocol.celsius,
+        use_coreneuron=use_coreneuron,
+        use_gpu=use_gpu,
+        bias_current_nA=bias_current_nA,
+        v_init_mV=protocol.target_vm_mV,
+    )
+    current_amplitudes_nA, firing_rates_hz = traces_to_fi(
+        step_traces,
+        protocol.step_duration_ms,
+        threshold_mV=protocol.spike_threshold_mV,
+        delay_ms=protocol.step_delay_ms,
+    )
+    fi_slope_hz_per_nA, _, _, gain_segment_index = compute_fi_maximum_linear_slope(
+        current_amplitudes_nA,
+        firing_rates_hz,
+    )
+    fi_gain_hz_per_50pA = (
+        fi_slope_hz_per_nA / 20.0
+        if np.isfinite(fi_slope_hz_per_nA)
+        else float("nan")
+    )
+
+    rheobase_nA = compute_rheobase_nanoamps(
+        step_traces,
+        protocol.spike_threshold_mV,
+        step_delay_milliseconds=protocol.step_delay_ms,
+        step_duration_milliseconds=protocol.step_duration_ms,
+    )
+    spike_latency_ms = compute_rheobase_spike_latency_milliseconds(
+        step_traces,
+        protocol.spike_threshold_mV,
+        protocol.step_delay_ms,
+        protocol.step_duration_ms,
+    )
+    peak_rate_hz = compute_peak_instantaneous_firing_rate_hertz(
+        step_traces,
+        protocol.spike_threshold_mV,
+        protocol.step_delay_ms,
+        protocol.step_duration_ms,
+    )
+    isi_stats = compute_isi_statistics_near_rate(
+        step_traces,
+        target_rate_hertz=protocol.cv_isi_target_rate_hz,
+        spike_threshold_millivolts=protocol.spike_threshold_mV,
+        step_delay_milliseconds=protocol.step_delay_ms,
+        step_duration_milliseconds=protocol.step_duration_ms,
+    )
+
+    if np.isfinite(rheobase_nA):
+        rheobase_trace = next(
+            (
+                trace
+                for trace in step_traces
+                if np.isclose(float(trace["amp_nA"]), rheobase_nA)
+            ),
+            None,
         )
-        current_amplitudes_nA, firing_rates_hz = traces_to_fi(
-            step_traces,
-            protocol.step_duration_ms,
-            threshold_mV=protocol.spike_threshold_mV,
-            delay_ms=protocol.step_delay_ms,
+        ap_props = (
+            compute_action_potential_properties(
+                rheobase_trace,
+                protocol.ap_derivative_threshold_mV_per_ms,
+                protocol.step_delay_ms,
+            )
+            if rheobase_trace is not None
+            else {}
         )
-        fi_slope_hz_per_nA, _, _, gain_segment_index = compute_fi_maximum_linear_slope(
-            current_amplitudes_nA,
-            firing_rates_hz,
-        )
-        fi_gain_hz_per_50pA = (
-            fi_slope_hz_per_nA / 20.0
-            if np.isfinite(fi_slope_hz_per_nA)
+    else:
+        ap_props = {}
+
+    hyperpolarizing_traces = run_hyperpolarizing_steps(
+        cell_name,
+        current_start_nanoamps=protocol.hyperpolarizing_start_nA,
+        current_stop_nanoamps=protocol.hyperpolarizing_stop_nA,
+        current_step_nanoamps=protocol.hyperpolarizing_increment_nA,
+        step_duration_milliseconds=protocol.step_duration_ms,
+        delay_milliseconds=protocol.step_delay_ms,
+        tail_duration_milliseconds=protocol.tail_ms,
+        timestep_milliseconds=protocol.dt_ms,
+        temperature_celsius=protocol.celsius,
+        use_coreneuron=use_coreneuron,
+        use_gpu=use_gpu,
+        bias_current_nA=bias_current_nA,
+        v_init_mV=protocol.target_vm_mV,
+    )
+    input_resistance_MOhm = compute_input_resistance_megaohms(
+        hyperpolarizing_traces,
+        step_duration_milliseconds=protocol.step_duration_ms,
+        delay_milliseconds=protocol.step_delay_ms,
+    )
+
+    zero_step_rate_hz = float(firing_rates_hz[0]) if len(firing_rates_hz) else float("nan")
+    return {
+        "cell_name": cell_name,
+        "cell_type": _cell_type_from_name(cell_name),
+        "resting_potential_mV": resting_potential_mV,
+        "bias_current_pA": bias_current_nA * 1000.0,
+        "zero_step_rate_Hz": zero_step_rate_hz,
+        "rheobase_pA": rheobase_nA * 1000.0 if np.isfinite(rheobase_nA) else float("nan"),
+        "spike_latency_ms": spike_latency_ms,
+        "peak_rate_Hz": peak_rate_hz,
+        "fi_gain_Hz_per_50pA": fi_gain_hz_per_50pA,
+        "fi_gain_segment_start_index": gain_segment_index,
+        "cv_isi": isi_stats["coefficient_of_variation_interspike_interval"],
+        "cv_isi_step_pA": (
+            isi_stats["selected_current_nanoamps"] * 1000.0
+            if np.isfinite(isi_stats["selected_current_nanoamps"])
             else float("nan")
-        )
+        ),
+        "cv_isi_mean_rate_Hz": isi_stats["selected_mean_rate_hertz"],
+        "input_resistance_MOhm": input_resistance_MOhm,
+        "firing_rates_by_step_Hz": [float(value) for value in firing_rates_hz],
+        "AP_onset_mV": ap_props.get("ap_onset_millivolts", float("nan")),
+        "Amplitude_mV": ap_props.get("ap_amplitude_millivolts", float("nan")),
+        "FWHM_ms": ap_props.get("ap_full_width_half_maximum_milliseconds", float("nan")),
+        "Rise_slope_mV_per_ms": ap_props.get("ap_rise_slope_millivolts_per_millisecond", float("nan")),
+        "Fall_slope_mV_per_ms": ap_props.get("ap_fall_slope_millivolts_per_millisecond", float("nan")),
+        "AHP_amplitude_mV": ap_props.get("ahp_amplitude_millivolts", float("nan")),
+        "T_AHP50_ms": ap_props.get("ahp_half_decay_time_milliseconds", float("nan")),
+    }
 
-        rheobase_nA = compute_rheobase_nanoamps(
-            step_traces,
-            protocol.spike_threshold_mV,
-            step_delay_milliseconds=protocol.step_delay_ms,
-            step_duration_milliseconds=protocol.step_duration_ms,
-        )
-        spike_latency_ms = compute_rheobase_spike_latency_milliseconds(
-            step_traces,
-            protocol.spike_threshold_mV,
-            protocol.step_delay_ms,
-            protocol.step_duration_ms,
-        )
-        peak_rate_hz = compute_peak_instantaneous_firing_rate_hertz(
-            step_traces,
-            protocol.spike_threshold_mV,
-            protocol.step_delay_ms,
-            protocol.step_duration_ms,
-        )
-        isi_stats = compute_isi_statistics_near_rate(
-            step_traces,
-            target_rate_hertz=protocol.cv_isi_target_rate_hz,
-            spike_threshold_millivolts=protocol.spike_threshold_mV,
-            step_delay_milliseconds=protocol.step_delay_ms,
-            step_duration_milliseconds=protocol.step_duration_ms,
-        )
 
-        if np.isfinite(rheobase_nA):
-            rheobase_trace = next(
-                (
-                    trace
-                    for trace in step_traces
-                    if np.isclose(float(trace["amp_nA"]), rheobase_nA)
-                ),
-                None,
+def run_burton_urban_protocol(
+    *,
+    cell_types: list[str],
+    cell_count: int,
+    protocol: BurtonUrbanProtocol,
+    use_coreneuron: bool = False,
+    use_gpu: bool = False,
+    jobs: int = 0,
+) -> list[dict[str, Any]]:
+    """Run the Burton & Urban step protocol and return per-cell metrics."""
+    cell_names = _cell_names(cell_types, cell_count)
+    worker_count = _resolved_jobs(len(cell_names), jobs, use_gpu=use_gpu)
+    if worker_count == 1:
+        metrics = [
+            _run_burton_urban_cell(
+                cell_name,
+                protocol,
+                use_coreneuron=use_coreneuron,
+                use_gpu=use_gpu,
             )
-            ap_props = (
-                compute_action_potential_properties(
-                    rheobase_trace,
-                    protocol.ap_derivative_threshold_mV_per_ms,
-                    protocol.step_delay_ms,
+            for cell_name in cell_names
+        ]
+    else:
+        context = mp.get_context("spawn")
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=worker_count,
+            mp_context=context,
+        ) as pool:
+            metrics = list(
+                pool.map(
+                    _run_burton_urban_cell,
+                    cell_names,
+                    repeat(protocol),
+                    repeat(use_coreneuron),
+                    repeat(use_gpu),
                 )
-                if rheobase_trace is not None
-                else {}
             )
-        else:
-            ap_props = {}
 
-        hyperpolarizing_traces = run_hyperpolarizing_steps(
-            cell_name,
-            current_start_nanoamps=protocol.hyperpolarizing_start_nA,
-            current_stop_nanoamps=protocol.hyperpolarizing_stop_nA,
-            current_step_nanoamps=protocol.hyperpolarizing_increment_nA,
-            step_duration_milliseconds=protocol.step_duration_ms,
-            delay_milliseconds=protocol.step_delay_ms,
-            tail_duration_milliseconds=protocol.tail_ms,
-            timestep_milliseconds=protocol.dt_ms,
-            temperature_celsius=protocol.celsius,
-            use_coreneuron=use_coreneuron,
-            use_gpu=use_gpu,
-            bias_current_nA=bias_current_nA,
-            v_init_mV=protocol.target_vm_mV,
-        )
-        input_resistance_MOhm = compute_input_resistance_megaohms(
-            hyperpolarizing_traces,
-            step_duration_milliseconds=protocol.step_duration_ms,
-            delay_milliseconds=protocol.step_delay_ms,
-        )
-
-        zero_step_rate_hz = float(firing_rates_hz[0]) if len(firing_rates_hz) else float("nan")
-        metrics.append(
-            {
-                "cell_name": cell_name,
-                "cell_type": _cell_type_from_name(cell_name),
-                "resting_potential_mV": resting_potential_mV,
-                "bias_current_pA": bias_current_nA * 1000.0,
-                "zero_step_rate_Hz": zero_step_rate_hz,
-                "rheobase_pA": rheobase_nA * 1000.0 if np.isfinite(rheobase_nA) else float("nan"),
-                "spike_latency_ms": spike_latency_ms,
-                "peak_rate_Hz": peak_rate_hz,
-                "fi_gain_Hz_per_50pA": fi_gain_hz_per_50pA,
-                "fi_gain_segment_start_index": gain_segment_index,
-                "cv_isi": isi_stats["coefficient_of_variation_interspike_interval"],
-                "cv_isi_step_pA": (
-                    isi_stats["selected_current_nanoamps"] * 1000.0
-                    if np.isfinite(isi_stats["selected_current_nanoamps"])
-                    else float("nan")
-                ),
-                "cv_isi_mean_rate_Hz": isi_stats["selected_mean_rate_hertz"],
-                "input_resistance_MOhm": input_resistance_MOhm,
-                "firing_rates_by_step_Hz": [float(value) for value in firing_rates_hz],
-                "AP_onset_mV": ap_props.get("ap_onset_millivolts", float("nan")),
-                "Amplitude_mV": ap_props.get("ap_amplitude_millivolts", float("nan")),
-                "FWHM_ms": ap_props.get("ap_full_width_half_maximum_milliseconds", float("nan")),
-                "Rise_slope_mV_per_ms": ap_props.get("ap_rise_slope_millivolts_per_millisecond", float("nan")),
-                "Fall_slope_mV_per_ms": ap_props.get("ap_fall_slope_millivolts_per_millisecond", float("nan")),
-                "AHP_amplitude_mV": ap_props.get("ahp_amplitude_millivolts", float("nan")),
-                "T_AHP50_ms": ap_props.get("ahp_half_decay_time_milliseconds", float("nan")),
-            }
-        )
-
-    return metrics
+    return sorted(metrics, key=lambda metric: metric["cell_name"])
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
@@ -542,6 +601,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--use-gpu", action="store_true", help="Enable GPU mode when --use-coreneuron is set.")
     parser.add_argument("--dt-ms", type=float, default=0.1, help="Fixed integration time step in ms.")
     parser.add_argument("--bias-max-iterations", type=int, default=24, help="Binary-search iterations for -58 mV bias current.")
+    parser.add_argument("--jobs", type=int, default=0, help="Worker processes. 0 uses all local CPU cores unless --use-gpu is set.")
 
 
 def run(args: argparse.Namespace) -> AuditReport:
@@ -563,6 +623,7 @@ def run(args: argparse.Namespace) -> AuditReport:
                     evidence={
                         "cell_count": int(getattr(args, "cell_count", 5)),
                         "cell_types": getattr(args, "cell_types", "MC,TC"),
+                        "jobs": int(getattr(args, "jobs", 0)),
                     },
                 )
             ],
@@ -579,6 +640,7 @@ def run(args: argparse.Namespace) -> AuditReport:
         protocol=protocol,
         use_coreneuron=bool(getattr(args, "use_coreneuron", False)),
         use_gpu=bool(getattr(args, "use_gpu", False)),
+        jobs=int(getattr(args, "jobs", 0)),
     )
 
     return AuditReport(
