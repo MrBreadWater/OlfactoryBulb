@@ -20,12 +20,26 @@ def _build_root_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--list", action="store_true", help="List available audits and exit.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI color output for text reports.")
     return parser
 
 
-def list_audits() -> int:
-    for spec in iter_audit_specs():
-        print(f"{spec.audit_id}\t{spec.title}\t{spec.description}")
+def _paint(text: str, code: str, *, enabled: bool) -> str:
+    if not enabled:
+        return text
+    return f"\033[{code}m{text}\033[0m"
+
+
+def list_audits(*, color: bool = True) -> int:
+    specs = list(iter_audit_specs())
+    id_width = max(len(spec.audit_id) for spec in specs)
+    title_width = max(len(spec.title) for spec in specs)
+    print(_paint("Available audits", "1;96", enabled=color))
+    print(_paint("=" * (id_width + title_width + 5), "2", enabled=color))
+    for spec in specs:
+        audit_id = _paint(spec.audit_id.ljust(id_width), "1;36", enabled=color)
+        title = _paint(spec.title.ljust(title_width), "1", enabled=color)
+        print(f"{audit_id}  {title}  {spec.description}")
     return 0
 
 
@@ -71,16 +85,17 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     root_parser = _build_root_parser()
     root_args, remainder = root_parser.parse_known_args(argv)
+    use_color = not bool(root_args.no_color)
 
     if root_args.list:
-        return list_audits()
+        return list_audits(color=use_color)
 
     if not root_args.audit_id or root_args.audit_id in {"new_sweep", "new-sweep", "all"}:
         report = run_new_sweep(remainder)
         if root_args.json:
             print(report.to_json())
         else:
-            print(format_report(report), end="")
+            print(format_report(report, color=use_color), end="")
         return report.exit_code
 
     spec = get_audit_spec(root_args.audit_id)
@@ -88,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     if root_args.json:
         print(report.to_json())
     else:
-        print(format_report(report), end="")
+        print(format_report(report, color=use_color), end="")
     return report.exit_code
 
 

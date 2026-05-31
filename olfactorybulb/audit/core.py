@@ -3,10 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
 STATUS_RANK = {"FAIL": 3, "WARN": 2, "PASS": 1}
+STATUS_ORDER = ("FAIL", "WARN", "PASS")
+STATUS_COLOR = {"FAIL": "31", "WARN": "33", "PASS": "32"}
+LABEL_COLOR = "36"
+TITLE_COLOR = "96"
+NOTE_COLOR = "35"
+DIM = "2"
+RESET = "\033[0m"
 
 
 @dataclass
@@ -59,24 +67,60 @@ def rounded(value: float | None, digits: int = 3) -> float | None:
     return round(float(value), digits)
 
 
-def format_report(report: AuditReport) -> str:
+def _color_enabled(explicit: bool | None = None) -> bool:
+    if explicit is not None:
+        return bool(explicit)
+    if os.environ.get("NO_COLOR"):
+        return False
+    return True
+
+
+def _paint(text: str, *codes: str, enabled: bool) -> str:
+    if not enabled or not codes:
+        return text
+    return f"\033[{';'.join(codes)}m{text}{RESET}"
+
+
+def _pretty_json_lines(payload: dict[str, Any]) -> list[str]:
+    return json.dumps(payload, indent=2, sort_keys=True).splitlines()
+
+
+def _summary_chunks(summary: dict[str, int], *, enabled: bool) -> list[str]:
+    parts: list[str] = []
+    for status in STATUS_ORDER:
+        value = int(summary.get(status, 0))
+        codes = [STATUS_COLOR[status]] if value > 0 else [DIM]
+        parts.append(_paint(f"{status}={value}", *codes, enabled=enabled))
+    return parts
+
+
+def format_report(report: AuditReport, *, color: bool | None = None) -> str:
+    enabled = _color_enabled(color)
     lines: list[str] = []
-    lines.append(report.title)
-    lines.append("=" * len(report.title))
+    title = _paint(report.title, "1", TITLE_COLOR, enabled=enabled)
+    subtitle = _paint(f"audit_id={report.audit_id}", DIM, enabled=enabled)
+    lines.append(title)
+    lines.append(subtitle)
+    lines.append(_paint("=" * max(len(report.title), len(f"audit_id={report.audit_id}")), DIM, enabled=enabled))
     lines.append(
-        "Summary: "
-        + ", ".join(f"{key}={value}" for key, value in report.summary.items())
-        + f" (worst={report.worst_status})"
+        f"{_paint('Summary', '1', LABEL_COLOR, enabled=enabled)}  "
+        + "  ".join(_summary_chunks(report.summary, enabled=enabled))
+        + f"  {_paint('worst=', DIM, enabled=enabled)}{_paint(report.worst_status, STATUS_COLOR[report.worst_status], '1', enabled=enabled)}"
     )
     lines.append("")
 
     for item in report.items:
-        lines.append(f"[{item.status}] {item.check_id}: {item.title}")
-        lines.append(f"  Criterion: {item.criterion}")
+        status_tag = _paint(f"[{item.status}]", STATUS_COLOR.get(item.status, "37"), "1", enabled=enabled)
+        check_id = _paint(item.check_id, "1", enabled=enabled)
+        lines.append(f"{status_tag} {check_id}")
+        lines.append(f"  {_paint(item.title, '1', enabled=enabled)}")
+        lines.append(f"  {_paint('Criterion', LABEL_COLOR, enabled=enabled)}  {item.criterion}")
         if item.evidence:
-            lines.append(f"  Evidence: {json.dumps(item.evidence, sort_keys=True)}")
+            lines.append(f"  {_paint('Evidence', LABEL_COLOR, enabled=enabled)}")
+            for evidence_line in _pretty_json_lines(item.evidence):
+                lines.append(f"    {evidence_line}")
         if item.note:
-            lines.append(f"  Note: {item.note}")
+            lines.append(f"  {_paint('Note', NOTE_COLOR, enabled=enabled)}  {_paint(item.note, DIM, enabled=enabled)}")
         lines.append("")
 
     return "\n".join(lines).rstrip() + "\n"
@@ -87,4 +131,3 @@ def collect_items(*groups: Iterable[AuditItem]) -> list[AuditItem]:
     for group in groups:
         items.extend(group)
     return items
-
