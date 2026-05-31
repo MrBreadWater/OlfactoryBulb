@@ -70,6 +70,8 @@ class AuditItem:
     title: str
     criterion: str
     description: str = ""
+    acceptable: str = ""
+    acceptable_basis: str = ""
     evidence: dict[str, Any] = field(default_factory=dict)
     note: str = ""
 
@@ -202,6 +204,20 @@ def _default_description(item: AuditItem) -> str:
     )
 
 
+def _default_acceptable(item: AuditItem) -> str:
+    return (
+        "This audit item does not define a separate numeric tolerance beyond the stated criterion. "
+        "Interpret the criterion text as the acceptance rule for this check."
+    )
+
+
+def _default_acceptable_basis(item: AuditItem) -> str:
+    return (
+        "This audit item does not define a separate provenance note for its acceptance rule. "
+        "Treat the criterion and description as the source of the decision logic."
+    )
+
+
 def format_report(report: AuditReport, *, color: bool | None = None) -> str:
     enabled = _color_enabled(color)
     lines: list[str] = []
@@ -226,6 +242,14 @@ def format_report(report: AuditReport, *, color: bool | None = None) -> str:
         lines.append(
             f"  {_paint('Description', LABEL_COLOR, enabled=enabled)}  "
             f"{_expand_terms(item.description or _default_description(item), sentence_case=True)}"
+        )
+        lines.append(
+            f"  {_paint('Acceptable result', LABEL_COLOR, enabled=enabled)}  "
+            f"{_expand_terms(item.acceptable or _default_acceptable(item), sentence_case=True)}"
+        )
+        lines.append(
+            f"  {_paint('How Acceptable Result Was Determined', LABEL_COLOR, enabled=enabled)}  "
+            f"{_expand_terms(item.acceptable_basis or _default_acceptable_basis(item), sentence_case=True)}"
         )
         if item.evidence:
             lines.append(f"  {_paint('Evidence', LABEL_COLOR, enabled=enabled)}")

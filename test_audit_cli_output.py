@@ -25,6 +25,8 @@ sample_report = AuditReport(
             title="TC CV_ISI item",
             criterion="TC CV_ISI should render cleanly.",
             description="CV_ISI should be expanded so the reader does not have to infer it.",
+            acceptable="The tufted-cell value must exceed the mitral-cell value.",
+            acceptable_basis="This simplified sample uses an ordering rule instead of a numeric range.",
             note="This is only a note.",
         ),
     ],
@@ -36,9 +38,12 @@ assert "Summary" in plain
 assert "[PASS] demo_pass" in plain
 assert "Evidence" in plain
 assert "Description" in plain
+assert "Acceptable result" in plain
+assert "How Acceptable Result Was Determined" in plain
 assert "count: 3" in plain
 assert "Tufted cell coefficient of variation of interspike intervals item" in plain
 assert "coefficient of variation of interspike intervals" in plain
+assert "ordering rule instead of a numeric range" in plain
 
 colored = format_report(sample_report, color=True)
 assert "\033[" in colored
@@ -64,5 +69,6 @@ assert text_report.returncode == 0, text_report
 assert "\033[" not in text_report.stdout
 assert "Summary" in text_report.stdout
 assert "[WARN] burton_urban_fi_skipped" in text_report.stdout
+assert "How Acceptable Result Was Determined" in text_report.stdout
 
 print("audit_cli_output: OK")
