@@ -159,6 +159,9 @@ Current progress:
   for upload is now standardized under `neuroinfra.remote.helper_bundle`
 - the local command builders that launch uploaded or inline helper scripts are
   now standardized under `neuroinfra.remote.command_launch`
+- the higher-level argv and helper-launch assembly for allocation submit, run
+  submit, stale-allocation cleanup, and polling now live under
+  `neuroinfra.remote.slurm_launch`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

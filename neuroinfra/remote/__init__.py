@@ -58,6 +58,14 @@ from .command_launch import (
     remote_helper_script_path,
     remote_python_exec_prefix,
 )
+from .slurm_launch import (
+    build_allocation_discovery_command,
+    build_cleanup_stale_allocations_argv,
+    build_poll_sol_run_argv,
+    build_remote_helper_launch_command,
+    build_submit_slurm_allocation_argv,
+    build_submit_sol_run_argv,
+)
 
 __all__ = [
     "build_remote_archive_command",
@@ -103,7 +111,13 @@ __all__ = [
     "execute_transfer_plan",
     "build_remote_python_file_command",
     "build_remote_python_inline_command",
+    "build_remote_helper_launch_command",
     "build_remote_touch_command",
+    "build_allocation_discovery_command",
+    "build_cleanup_stale_allocations_argv",
+    "build_poll_sol_run_argv",
+    "build_submit_slurm_allocation_argv",
+    "build_submit_sol_run_argv",
     "remote_helper_script_path",
     "remote_python_exec_prefix",
 ]

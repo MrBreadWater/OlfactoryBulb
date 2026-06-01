@@ -24,7 +24,6 @@ import threading
 import time
 import builtins
 import warnings
-from base64 import b64encode
 from collections import Counter
 from copy import deepcopy
 from dataclasses import asdict, dataclass, is_dataclass, replace
@@ -155,6 +154,14 @@ from neuroinfra.remote.sftp_sync import (
     SFTPSyncHooks as _NeuroinfraSFTPSyncHooks,
     sftp_copy_files as _neuroinfra_sftp_copy_files,
     sftp_copy_tree as _neuroinfra_sftp_copy_tree,
+)
+from neuroinfra.remote.slurm_launch import (
+    build_allocation_discovery_command as _neuroinfra_build_allocation_discovery_command,
+    build_cleanup_stale_allocations_argv as _neuroinfra_build_cleanup_stale_allocations_argv,
+    build_poll_sol_run_argv as _neuroinfra_build_poll_sol_run_argv,
+    build_remote_helper_launch_command as _neuroinfra_build_remote_helper_launch_command,
+    build_submit_slurm_allocation_argv as _neuroinfra_build_submit_slurm_allocation_argv,
+    build_submit_sol_run_argv as _neuroinfra_build_submit_sol_run_argv,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -3868,38 +3875,23 @@ def _build_remote_allocation_submit_command(
     allocation_name_base = str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc")
     allocation_name = f"{allocation_name_base[:100]}_{allocation_key[:8]}"
     allocation_time = config.get("slurm_allocation_time") or config.get("slurm_time")
-    argv = [
-        "--alloc-root",
-        allocation_root.as_posix(),
-        "--name",
-        allocation_name,
-    ]
-    for key, flag in (
-        ("slurm_partition", "--partition"),
-        ("slurm_account", "--account"),
-        ("slurm_mem", "--mem"),
-    ):
-        value = config.get(key)
-        if value not in (None, ""):
-            argv.extend([flag, str(value)])
-    if allocation_time not in (None, ""):
-        argv.extend(["--time", str(allocation_time)])
-    argv.extend(["--heartbeat-timeout-s", str(_remote_heartbeat_timeout_s(config))])
-    for key, flag in (
-        ("slurm_gpus", "--gpus"),
-        ("slurm_cpus_per_task", "--cpus-per-task"),
-    ):
-        value = config.get(key)
-        if value not in (None, ""):
-            argv.extend([flag, str(int(value))])
-    for extra in config.get("slurm_extra_args", []):
-        argv.append("--sbatch-arg={}".format(str(extra)))
-
-    remote_helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
-    if remote_helper_path is not None:
-        command = _build_remote_python_file_command(remote_helper_path, argv)
-    else:
-        command = _build_remote_python_inline_command(remote_helper, argv)
+    argv = _neuroinfra_build_submit_slurm_allocation_argv(
+        allocation_root=allocation_root,
+        allocation_name=allocation_name,
+        heartbeat_timeout_s=_remote_heartbeat_timeout_s(config),
+        partition=config.get("slurm_partition"),
+        account=config.get("slurm_account"),
+        time_limit=allocation_time,
+        mem=config.get("slurm_mem"),
+        gpus=config.get("slurm_gpus"),
+        cpus_per_task=config.get("slurm_cpus_per_task"),
+        sbatch_args=config.get("slurm_extra_args", []),
+    )
+    command = _neuroinfra_build_remote_helper_launch_command(
+        remote_helper,
+        argv,
+        remote_helper_dir=remote_helper_dir,
+    )
     return command, allocation_root, allocation_name
 
 
@@ -3943,17 +3935,15 @@ def _build_remote_cleanup_allocations_command(
     """Build a remote command that cancels stale notebook-managed allocations."""
     cleanup_root = _remote_results_root(config) / ".obgpu-allocations"
     remote_helper = REPO_ROOT / "tools" / "remote" / "cleanup_stale_allocations.py"
-    argv = [
-        "--root",
-        cleanup_root.as_posix(),
-        "--default-timeout-s",
-        str(_remote_heartbeat_timeout_s(config)),
-    ]
-    if remote_helper_dir is not None:
-        helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
-        if helper_path is not None:
-            return _build_remote_python_file_command(helper_path, argv)
-    return _build_remote_python_inline_command(remote_helper, argv)
+    argv = _neuroinfra_build_cleanup_stale_allocations_argv(
+        cleanup_root=cleanup_root,
+        default_timeout_s=_remote_heartbeat_timeout_s(config),
+    )
+    return _neuroinfra_build_remote_helper_launch_command(
+        remote_helper,
+        argv,
+        remote_helper_dir=remote_helper_dir,
+    )
 
 
 def _cleanup_stale_remote_slurm_allocations(
@@ -4019,11 +4009,7 @@ def _build_remote_allocation_discovery_command(
         remote_helper_dir=remote_helper_dir,
     )
     allocation_json = allocation_root / "allocation.json"
-    command = (
-        f"if test -f {shlex.quote(allocation_json.as_posix())}; then "
-        f"cat {shlex.quote(allocation_json.as_posix())}; "
-        "fi"
-    )
+    command = _neuroinfra_build_allocation_discovery_command(allocation_json)
     return command, allocation_root, allocation_name
 
 
@@ -4050,78 +4036,38 @@ def _build_remote_submit_command(
         else:
             resolved_step_ntasks = max(int(step_ntasks or 1), 1)
     remote_helper = REPO_ROOT / "tools" / "remote" / "submit_sol_run.py"
-    benchmark_b64 = b64encode(json.dumps(benchmark_command).encode("utf-8")).decode("ascii")
-    argv = [
-        "--repo-root",
-        remote_repo_root.as_posix(),
-        "--results-base",
-        remote_results_root.as_posix(),
-        "--label",
-        label,
-        "--benchmark-command-b64",
-        benchmark_b64,
-        "--repo-mode",
-        str(config.get("remote_repo_mode", "shared")),
-        "--mpi-exec",
-        str(remote_mpi_exec),
-        "--conda-activate-cmd",
-        str(config.get("remote_conda_activate_cmd")),
-        "--heartbeat-timeout-s",
-        str(_remote_heartbeat_timeout_s(config)),
-    ]
-
-    fallback_conda_activate_cmd = config.get("remote_fallback_conda_activate_cmd")
-    runtime_profiles = config.get("remote_runtime_profiles") or []
-    if runtime_profiles:
-        profiles_b64 = b64encode(json.dumps(runtime_profiles, sort_keys=True).encode("utf-8")).decode("ascii")
-        argv.extend(["--runtime-profiles-b64", profiles_b64])
-    if fallback_conda_activate_cmd not in (None, ""):
-        argv.extend(["--fallback-conda-activate-cmd", str(fallback_conda_activate_cmd)])
-    fast_node_feature = config.get("remote_fast_node_feature")
-    if fast_node_feature not in (None, ""):
-        argv.extend(["--fast-node-feature", str(fast_node_feature)])
-    mechanism_profile = config.get("remote_mechanism_profile")
-    if mechanism_profile not in (None, ""):
-        argv.extend(["--mechanism-profile", str(mechanism_profile)])
-    fallback_mechanism_profile = config.get("remote_fallback_mechanism_profile")
-    if fallback_mechanism_profile not in (None, ""):
-        argv.extend(["--fallback-mechanism-profile", str(fallback_mechanism_profile)])
-
-    if remote_git_ref:
-        argv.extend(["--git-ref", remote_git_ref])
-    if bool(config.get("remote_git_fetch", False)):
-        argv.append("--git-fetch")
-        argv.extend(["--git-remote", str(config.get("remote_git_remote", "origin"))])
-    allocation_job_id = config.get("slurm_allocation_job_id")
-    if allocation_job_id not in (None, ""):
-        argv.extend(["--allocation-job-id", str(allocation_job_id)])
-        argv.extend(["--step-ntasks", str(resolved_step_ntasks)])
-
-    for key, flag in (
-        ("slurm_partition", "--partition"),
-        ("slurm_account", "--account"),
-        ("slurm_time", "--time"),
-        ("slurm_mem", "--mem"),
-    ):
-        value = config.get(key)
-        if value not in (None, ""):
-            argv.extend([flag, str(value)])
-
-    for key, flag in (
-        ("slurm_gpus", "--gpus"),
-        ("slurm_cpus_per_task", "--cpus-per-task"),
-    ):
-        value = config.get(key)
-        if value not in (None, ""):
-            argv.extend([flag, str(int(value))])
-
-    for extra in config.get("slurm_extra_args", []):
-        argv.append("--sbatch-arg={}".format(str(extra)))
-
-    remote_helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
-    if remote_helper_path is not None:
-        return _build_remote_python_file_command(remote_helper_path, argv)
-    return _build_remote_python_inline_command(remote_helper, argv)
+    argv = _neuroinfra_build_submit_sol_run_argv(
+        remote_repo_root=remote_repo_root,
+        remote_results_root=remote_results_root,
+        label=label,
+        benchmark_command=benchmark_command,
+        repo_mode=str(config.get("remote_repo_mode", "shared")),
+        remote_mpi_exec=str(remote_mpi_exec),
+        conda_activate_cmd=str(config.get("remote_conda_activate_cmd")),
+        heartbeat_timeout_s=_remote_heartbeat_timeout_s(config),
+        runtime_profiles=config.get("remote_runtime_profiles") or [],
+        fallback_conda_activate_cmd=config.get("remote_fallback_conda_activate_cmd"),
+        fast_node_feature=config.get("remote_fast_node_feature"),
+        mechanism_profile=config.get("remote_mechanism_profile"),
+        fallback_mechanism_profile=config.get("remote_fallback_mechanism_profile"),
+        remote_git_ref=remote_git_ref,
+        remote_git_fetch=bool(config.get("remote_git_fetch", False)),
+        remote_git_remote=str(config.get("remote_git_remote", "origin")),
+        allocation_job_id=config.get("slurm_allocation_job_id"),
+        step_ntasks=resolved_step_ntasks if config.get("slurm_allocation_job_id") not in (None, "") else None,
+        partition=config.get("slurm_partition"),
+        account=config.get("slurm_account"),
+        time_limit=config.get("slurm_time"),
+        mem=config.get("slurm_mem"),
+        gpus=config.get("slurm_gpus"),
+        cpus_per_task=config.get("slurm_cpus_per_task"),
+        sbatch_args=config.get("slurm_extra_args", []),
+    )
+    return _neuroinfra_build_remote_helper_launch_command(
+        remote_helper,
+        argv,
+        remote_helper_dir=remote_helper_dir,
+    )
 
 
 def _build_remote_poll_command(
@@ -4138,31 +4084,20 @@ def _build_remote_poll_command(
 ) -> str:
     """Build the remote `poll_sol_run.py` invocation shell line."""
     remote_helper = REPO_ROOT / "tools" / "remote" / "poll_sol_run.py"
-    argv = [
-        "--job-id",
-        str(job_id),
-        "--result-dir",
-        remote_result_dir.as_posix(),
-    ]
-    if wrapper_dir not in (None, ""):
-        argv.extend(["--wrapper-dir", str(wrapper_dir)])
-    if worktree_path not in (None, ""):
-        argv.extend(
-            [
-                "--repo-root",
-                remote_repo_root.as_posix(),
-                "--worktree-path",
-                str(worktree_path),
-            ]
-        )
-    if not include_sacct:
-        argv.append("--skip-sacct")
-    if not include_tails:
-        argv.append("--skip-tails")
-    remote_helper_path = _remote_helper_script_path(remote_helper_dir, remote_helper.name)
-    if remote_helper_path is not None:
-        return _build_remote_python_file_command(remote_helper_path, argv)
-    return _build_remote_python_inline_command(remote_helper, argv)
+    argv = _neuroinfra_build_poll_sol_run_argv(
+        job_id=str(job_id),
+        remote_result_dir=remote_result_dir,
+        wrapper_dir=wrapper_dir,
+        remote_repo_root=remote_repo_root if worktree_path not in (None, "") else None,
+        worktree_path=worktree_path,
+        include_sacct=include_sacct,
+        include_tails=include_tails,
+    )
+    return _neuroinfra_build_remote_helper_launch_command(
+        remote_helper,
+        argv,
+        remote_helper_dir=remote_helper_dir,
+    )
 
 
 def _build_remote_preflight_command(
