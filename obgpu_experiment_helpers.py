@@ -1881,12 +1881,16 @@ def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any
 def _remote_helper_bundle_entries() -> tuple[HelperBundleEntry, ...]:
     """Return the helper-bundle entries that should be cached on the remote host."""
     helper_dir = REPO_ROOT / "tools" / "remote"
+    neuroinfra_dir = REPO_ROOT / "neuroinfra"
     return (
         HelperBundleEntry("slurm_common.py", helper_dir / "slurm_common.py"),
         HelperBundleEntry("submit_sol_run.py", helper_dir / "submit_sol_run.py"),
         HelperBundleEntry("submit_slurm_allocation.py", helper_dir / "submit_slurm_allocation.py"),
         HelperBundleEntry("poll_sol_run.py", helper_dir / "poll_sol_run.py"),
         HelperBundleEntry("cleanup_stale_allocations.py", helper_dir / "cleanup_stale_allocations.py"),
+        HelperBundleEntry("neuroinfra/__init__.py", neuroinfra_dir / "__init__.py"),
+        HelperBundleEntry("neuroinfra/inventory.py", neuroinfra_dir / "inventory.py"),
+        HelperBundleEntry("neuroinfra/remote_script_common.py", neuroinfra_dir / "remote_script_common.py"),
     )
 
 

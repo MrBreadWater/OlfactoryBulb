@@ -165,6 +165,9 @@ Current progress:
 - the remote preflight command builder, one-session preflight cache policy,
   result-directory listing command, cancel command builder, and Slurm state
   query normalization now live under `neuroinfra.remote.slurm_state`
+- the remote-safe common helpers shared by uploaded Slurm wrapper scripts now
+  live under `neuroinfra.remote_script_common`, while
+  `tools/remote/slurm_common.py` remains as a compatibility bootstrap
 - the local Git publication/base-resolution helpers that support notebook-
   driven remote syncs now live under `neuroinfra.remote.git_sync`
 - the helper-cache runtime key, cache directory layout, manifest probe logic,
