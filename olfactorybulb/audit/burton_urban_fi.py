@@ -16,7 +16,9 @@ from typing import Any, Iterable
 import numpy as np
 from scipy.optimize import curve_fit
 
-from olfactorybulb.audit.core import AuditItem, AuditReport, rounded
+from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded
+from olfactorybulb.slice_connectivity_optimizer import load_slice_geometry, observed_metrics_for_synapse_set, resolve_slice_dir
+from prev_ob_models.cell_registry import get_cell_model_spec
 
 
 def _configure_parent_cache_dirs() -> None:
@@ -163,6 +165,31 @@ BURTON_PROPERTY_LABELS = {
 }
 
 
+def _burton_item(
+    *,
+    check_id: str,
+    status: str,
+    title: str,
+    criterion: str,
+    description: str,
+    acceptable: str,
+    acceptable_basis: str,
+    evidence: dict[str, Any] | None = None,
+    note: str = "",
+) -> AuditItem:
+    return AuditItem(
+        check_id=check_id,
+        status=status,
+        title=title,
+        criterion=criterion,
+        description=description,
+        acceptable=acceptable,
+        acceptable_basis=acceptable_basis,
+        evidence=evidence or {},
+        note=note,
+    )
+
+
 def _cell_type_from_name(cell_name: str) -> str:
     return "".join(character for character in cell_name if character.isalpha())
 
@@ -173,6 +200,224 @@ def _cell_names(cell_types: Iterable[str], cell_count: int) -> list[str]:
         for cell_type in cell_types
         for cell_number in range(1, cell_count + 1)
     ]
+
+
+def audit_baseline_slice_context() -> list[AuditItem]:
+    items: list[AuditItem] = []
+    groups = load_slice_geometry("DorsalColumnSlice")
+
+    counts = {
+        "MCs": len(groups["MCs"].cell_names),
+        "TCs": len(groups["TCs"].cell_names),
+        "GCs": len(groups["GCs"].cell_names),
+    }
+    items.append(
+        _burton_item(
+            check_id="baseline_slice_population_counts",
+            status="PASS" if all(counts.values()) else "FAIL",
+            title="Baseline dorsal slice contains nonzero mitral-cell, tufted-cell, and granule-cell populations",
+            criterion="The canonical maintained slice used by the current network should export MC, TC, and GC populations with nonzero geometry counts.",
+            description="This check establishes the network context for the Burton and Urban physiology audit. It confirms that the maintained slice actually contains the principal-cell and granule-cell populations that the fitted Birgiolas cells are meant to support.",
+            acceptable="All three population counts are greater than zero.",
+            acceptable_basis="The rule is a direct nonzero-count check over the exported DorsalColumnSlice geometry groups, because a missing canonical population would undermine the relevance of the MC/TC physiology audit to the maintained network.",
+            evidence=counts,
+        )
+    )
+
+    for synapse_set in ("GCs__MCs", "GCs__TCs"):
+        metrics = observed_metrics_for_synapse_set("DorsalColumnSlice", synapse_set, groups=groups)
+        items.append(
+            _burton_item(
+                check_id=f"baseline_{synapse_set}",
+                status="PASS" if metrics.entry_count > 0 else "FAIL",
+                title=f"Canonical {synapse_set} reciprocal set is populated",
+                criterion="The canonical maintained slice should export nonzero reciprocal granule-cell connectivity for both principal-cell families.",
+                description="This check confirms that the canonical slice already contains the reciprocal GC connectivity used by the maintained MC/TC/GC network. It makes the intrinsic MC/TC physiology audit easier to interpret in the context of the actual slice runtime.",
+                acceptable="The exported synapse set contains at least one entry.",
+                acceptable_basis="The rule is a direct entry-count check on the canonical slice export. If the reciprocal sets are empty, the slice context for the MC/TC physiology audit is incomplete.",
+                evidence={
+                    "entry_count": metrics.entry_count,
+                    "source_coverage": rounded(metrics.source_coverage),
+                    "target_coverage": rounded(metrics.target_coverage),
+                    "median_distance_um": rounded(metrics.median_distance_um),
+                    "target_family_fraction": metrics.target_family_fraction,
+                },
+            )
+        )
+
+    return items
+
+
+def audit_registered_birgiolas_models(cell_types: list[str], cell_count: int) -> list[AuditItem]:
+    requested_names = _cell_names(cell_types, cell_count)
+    missing_specs: list[str] = []
+    wrong_family: list[str] = []
+    wrong_role: list[str] = []
+    not_network_ready: list[str] = []
+    citations: dict[str, str] = {}
+
+    for cell_name in requested_names:
+        try:
+            spec = get_cell_model_spec(f"Birgiolas2020.{cell_name}")
+        except Exception:
+            missing_specs.append(cell_name)
+            continue
+        citations[cell_name] = spec.citation
+        if spec.family != "Birgiolas2020":
+            wrong_family.append(f"{cell_name}:{spec.family}")
+        if spec.role != _cell_type_from_name(cell_name):
+            wrong_role.append(f"{cell_name}:{spec.role}")
+        if not spec.network_ready:
+            not_network_ready.append(cell_name)
+
+    ok = not (missing_specs or wrong_family or wrong_role or not_network_ready)
+    return [
+        _burton_item(
+            check_id="requested_birgiolas_models_registered",
+            status="PASS" if ok else "FAIL",
+            title="Requested mitral-cell and tufted-cell models are registered Birgiolas network models",
+            criterion="The Burton and Urban audit should run against the Birgiolas 2020 MC and TC models that are registered as network-ready in the repository cell registry.",
+            description="This check verifies that every requested audited cell resolves through the central cell-model registry to the Birgiolas 2020 family with the expected principal-cell role and network-ready flag.",
+            acceptable="Every requested cell name resolves to a Birgiolas2020 registry entry with the matching role and network_ready=True.",
+            acceptable_basis="The rule is derived from the repository cell registry, which is the canonical source of truth for whether a cell family is considered network-ready and what role it serves.",
+            evidence={
+                "requested_cell_names": requested_names,
+                "missing_specs": missing_specs,
+                "wrong_family": wrong_family,
+                "wrong_role": wrong_role,
+                "not_network_ready": not_network_ready,
+                "citations": citations,
+            },
+        )
+    ]
+
+
+def audit_birgiolas_model_morphology(cell_types: list[str], cell_count: int, *, skip_neuron: bool = False) -> list[AuditItem]:
+    if skip_neuron:
+        return [
+            _burton_item(
+                check_id="birgiolas_model_morphology_skipped",
+                status="WARN",
+                title="Birgiolas mitral-cell and tufted-cell morphology sanity check skipped",
+                criterion="Run this audit without --skip-neuron to instantiate the audited Birgiolas MC and TC models and verify basic multicompartment morphology structure.",
+                description="This item reports that the lightweight NEURON-backed morphology sanity pass for the audited principal-cell models was intentionally skipped.",
+                acceptable="This is an informational warning only. It clears once the audit is rerun without the skip flag in a NEURON-capable environment.",
+                acceptable_basis="The item is emitted by audit control flow to explain why the report does not include direct model-instantiation morphology checks.",
+            )
+        ]
+
+    requested_names = _cell_names(cell_types, cell_count)
+    failures: dict[str, list[str]] = {}
+    summaries: dict[str, dict[str, Any]] = {}
+
+    for cell_name in requested_names:
+        spec = get_cell_model_spec(f"Birgiolas2020.{cell_name}")
+        issues: list[str] = []
+        try:
+            cell_model = spec.instantiate()
+        except Exception as exc:
+            failures[cell_name] = [f"instantiate:{exc!r}"]
+            continue
+
+        h = cell_model.h
+        sec_list = h.SectionList()
+        sec_list.wholetree(sec=cell_model.soma)
+        all_sections = list(sec_list)
+        total_sections = len(all_sections)
+        apical_sections = list(getattr(cell_model.cell, "apical", [])) if hasattr(cell_model.cell, "apical") else []
+        somatic_sections = list(getattr(cell_model.cell, "somatic", [])) if hasattr(cell_model.cell, "somatic") else []
+
+        if total_sections <= 1:
+            issues.append("single_section_tree")
+        if not somatic_sections:
+            issues.append("missing_somatic_list")
+        if not apical_sections:
+            issues.append("missing_apical_list")
+
+        summaries[cell_name] = {
+            "total_sections": total_sections,
+            "somatic_section_count": len(somatic_sections),
+            "apical_section_count": len(apical_sections),
+            "soma_diameter_um": rounded(float(cell_model.soma.diam)) if hasattr(cell_model.soma, "diam") else None,
+        }
+        if issues:
+            failures[cell_name] = issues
+
+    return [
+        _burton_item(
+            check_id="birgiolas_model_morphology_sanity",
+            status="PASS" if not failures else "FAIL",
+            title="Audited Birgiolas mitral-cell and tufted-cell models instantiate with multicompartment morphology",
+            criterion="Each requested Birgiolas MC and TC model should instantiate successfully and expose a soma plus nonempty somatic and apical section trees.",
+            description="This check adds the morphology-instantiation layer that the EPLI audit already had. It confirms that the audited principal-cell templates are not only registered, but can actually be created and inspected as multicompartment neurons.",
+            acceptable="Every requested cell instantiates successfully, has more than one section in its tree, and exposes nonempty somatic and apical section lists.",
+            acceptable_basis="The rule is a structural sanity requirement for the specific Birgiolas principal-cell templates used by the Burton and Urban audit. It is not a literature tolerance band; it ensures the audit is evaluating real multicompartment cells rather than broken templates.",
+            evidence={
+                "requested_cell_names": requested_names,
+                "failures": failures,
+                "model_summaries": summaries,
+            },
+        )
+    ]
+
+
+def audit_candidate_slice(candidate_slice: str | None) -> list[AuditItem]:
+    if not candidate_slice:
+        return []
+
+    items: list[AuditItem] = []
+    slice_dir = resolve_slice_dir(candidate_slice)
+    exists = slice_dir.exists()
+    items.append(
+        _burton_item(
+            check_id="candidate_slice_exists",
+            status="PASS" if exists else "FAIL",
+            title="Candidate principal-cell slice exists on disk",
+            criterion="A candidate slice can only be checked for Burton-audited principal-cell context if the exported slice directory exists.",
+            description="This check verifies that the requested slice export path exists before the audit inspects its group and reciprocal-connectivity assets.",
+            acceptable="The candidate slice directory exists on disk.",
+            acceptable_basis="The rule is a prerequisite filesystem check. Without a real slice directory, no further slice-context audit is meaningful.",
+            evidence={"slice_dir": str(slice_dir)},
+        )
+    )
+    if not exists:
+        return items
+
+    group_presence = {name: (slice_dir / f"{name}.json").exists() for name in ("MCs", "TCs", "GCs")}
+    items.append(
+        _burton_item(
+            check_id="candidate_slice_group_presence",
+            status="PASS" if all(group_presence.values()) else "FAIL",
+            title="Candidate principal-cell slice includes canonical MC, TC, and GC group exports",
+            criterion="A candidate slice used to contextualize the Burton and Urban audit should export MC, TC, and GC geometry groups.",
+            description="This check verifies that the candidate slice contains the same core population exports as the maintained canonical slice.",
+            acceptable="MCs.json, TCs.json, and GCs.json are all present.",
+            acceptable_basis="The rule is a direct file-presence check on the exported slice contents because these three groups are the minimum population context for the fitted principal-cell audit.",
+            evidence=group_presence,
+        )
+    )
+
+    for synapse_set in ("GCs__MCs", "GCs__TCs"):
+        syn_path = slice_dir / f"{synapse_set}.json"
+        entry_count = None
+        if syn_path.exists():
+            import json
+
+            data = json.loads(syn_path.read_text())
+            entry_count = len(data.get("entries", []))
+        items.append(
+            _burton_item(
+                check_id=f"candidate_{synapse_set}",
+                status="PASS" if (entry_count or 0) > 0 else "FAIL",
+                title=f"Candidate slice exports nonzero {synapse_set} entries",
+                criterion="A candidate slice should export nonzero reciprocal GC connectivity onto both mitral cells and tufted cells.",
+                description="This check verifies that the candidate slice carries explicit reciprocal granule-cell connectivity for the principal-cell populations that the Burton and Urban audit validates intrinsically.",
+                acceptable="The exported synapse-set JSON exists and contains at least one entry.",
+                acceptable_basis="The rule is a direct entry-count check on the candidate slice export because the maintained principal-cell network context relies on nonzero reciprocal GC connectivity.",
+                evidence={"path": str(syn_path), "entry_count": entry_count},
+            )
+        )
+    return items
 
 
 def _finite_values(metrics: list[dict[str, Any]], key: str) -> list[float]:
@@ -1154,6 +1399,7 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--skip-neuron", action="store_true", help="Skip expensive NEURON-backed f-I validation.")
     parser.add_argument("--cell-count", type=int, default=5, help="Run models 1..N for each requested cell type.")
     parser.add_argument("--cell-types", default="MC,TC", help="Comma-separated cell type prefixes to audit.")
+    parser.add_argument("--candidate-slice", default=None, help="Optional exported slice name or path to check for MC/TC/GC context alongside the physiology audit.")
     parser.add_argument("--use-coreneuron", action="store_true", help="Run current-clamp sweeps with CoreNEURON.")
     parser.add_argument("--use-gpu", action="store_true", help="Enable GPU mode when --use-coreneuron is set.")
     parser.add_argument("--dt-ms", type=float, default=0.1, help="Fixed integration time step in ms.")
@@ -1172,13 +1418,25 @@ def run(args: argparse.Namespace) -> AuditReport:
         dt_ms=float(getattr(args, "dt_ms", 0.1)),
         bias_max_iterations=int(getattr(args, "bias_max_iterations", 24)),
     )
+    cell_types = [
+        cell_type.strip().upper()
+        for cell_type in str(getattr(args, "cell_types", "MC,TC")).split(",")
+        if cell_type.strip()
+    ]
+    cell_count = int(getattr(args, "cell_count", 5))
+    reference_sigma_multiplier = float(getattr(args, "reference_sigma_multiplier", 2.0))
+    candidate_slice = getattr(args, "candidate_slice", None)
+
+    items = collect_items(
+        audit_baseline_slice_context(),
+        audit_registered_birgiolas_models(cell_types, cell_count),
+        audit_birgiolas_model_morphology(cell_types, cell_count, skip_neuron=bool(getattr(args, "skip_neuron", False))),
+        audit_candidate_slice(candidate_slice),
+    )
 
     if bool(getattr(args, "skip_neuron", False)):
-        return AuditReport(
-            audit_id="burton_urban_fi",
-            title="Burton & Urban f-I validation audit",
-            items=[
-                AuditItem(
+        items.append(
+            AuditItem(
                     check_id="burton_urban_fi_skipped",
                     status="WARN",
                     title="Burton and Urban firing-rate-versus-current validation skipped",
@@ -1186,36 +1444,39 @@ def run(args: argparse.Namespace) -> AuditReport:
                     description="This item reports that the computationally expensive electrophysiology validation was intentionally skipped, so no conclusions should be drawn about whether the current mitral-cell and tufted-cell models match the Burton and Urban firing phenotypes.",
                     acceptable="This is an informational warning only. It clears once the audit is rerun without the skip flag.",
                     acceptable_basis="This item is generated by command-line control flow rather than by scientific data. Its purpose is to explain why there are no measured validation results in the current report.",
-                evidence={
-                        "cell_count": int(getattr(args, "cell_count", 5)),
+                    evidence={
+                        "cell_count": cell_count,
                         "cell_types": getattr(args, "cell_types", "MC,TC"),
                         "jobs": int(getattr(args, "jobs", 0)),
-                        "reference_sigma_multiplier": float(getattr(args, "reference_sigma_multiplier", 2.0)),
+                        "reference_sigma_multiplier": reference_sigma_multiplier,
+                        "candidate_slice": candidate_slice,
                     },
                 )
-            ],
+        )
+        return AuditReport(
+            audit_id="burton_urban_fi",
+            title="Burton & Urban f-I validation audit",
+            items=items,
         )
 
-    cell_types = [
-        cell_type.strip().upper()
-        for cell_type in str(getattr(args, "cell_types", "MC,TC")).split(",")
-        if cell_type.strip()
-    ]
     metrics = run_burton_urban_protocol(
         cell_types=cell_types,
-        cell_count=int(getattr(args, "cell_count", 5)),
+        cell_count=cell_count,
         protocol=protocol,
         use_coreneuron=bool(getattr(args, "use_coreneuron", False)),
         use_gpu=bool(getattr(args, "use_gpu", False)),
         jobs=int(getattr(args, "jobs", 0)),
     )
+    items.extend(
+        build_validation_items(
+            metrics,
+            protocol,
+            reference_sigma_multiplier=reference_sigma_multiplier,
+        )
+    )
 
     return AuditReport(
         audit_id="burton_urban_fi",
         title="Burton & Urban f-I validation audit",
-        items=build_validation_items(
-            metrics,
-            protocol,
-            reference_sigma_multiplier=float(getattr(args, "reference_sigma_multiplier", 2.0)),
-        ),
+        items=items,
     )

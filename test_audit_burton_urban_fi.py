@@ -119,9 +119,14 @@ skip = subprocess.run(
 assert skip.returncode == 0, skip
 payload = json.loads(skip.stdout)
 assert payload["audit_id"] == "burton_urban_fi"
-assert payload["summary"]["WARN"] == 1
-assert payload["items"][0]["evidence"]["jobs"] == 4
-assert payload["items"][0]["evidence"]["reference_sigma_multiplier"] == 2.0
+item_by_id_json = {item["check_id"]: item for item in payload["items"]}
+assert payload["summary"]["WARN"] == 2
+assert payload["summary"]["PASS"] >= 4
+assert item_by_id_json["baseline_slice_population_counts"]["status"] == "PASS"
+assert item_by_id_json["requested_birgiolas_models_registered"]["status"] == "PASS"
+assert item_by_id_json["birgiolas_model_morphology_skipped"]["status"] == "WARN"
+assert item_by_id_json["burton_urban_fi_skipped"]["evidence"]["jobs"] == 4
+assert item_by_id_json["burton_urban_fi_skipped"]["evidence"]["reference_sigma_multiplier"] == 2.0
 
 generic = subprocess.run(
     [sys.executable, "tools/run_audit.py", "burton_urban_fi", "--skip-neuron", "--json"],
@@ -141,6 +146,8 @@ def _assert_new_sweep_payload(run: subprocess.CompletedProcess[str]) -> None:
     check_ids = {item["check_id"] for item in payload["items"]}
     assert any(check_id.startswith("env_install.") for check_id in check_ids)
     assert "burton_urban_fi.burton_urban_fi_skipped" in check_ids
+    assert "burton_urban_fi.baseline_slice_population_counts" in check_ids
+    assert "burton_urban_fi.requested_birgiolas_models_registered" in check_ids
     assert any(check_id.startswith("epli_correctness.") for check_id in check_ids)
     expected_code = 1 if payload["summary"]["FAIL"] else 0
     assert run.returncode == expected_code
