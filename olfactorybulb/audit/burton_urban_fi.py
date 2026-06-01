@@ -3,20 +3,25 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import concurrent.futures
 from collections import defaultdict
 from dataclasses import dataclass
 from itertools import repeat
 import multiprocessing as mp
 import os
-from pathlib import Path
 from typing import Any, Iterable
 
 import numpy as np
 from scipy.optimize import curve_fit
 
 from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded
+from olfactorybulb.audit.reference_data import (
+    BMU2024_EPL_FSI_PROTOCOL_ID,
+    BU2014_MC_TC_PROTOCOL_ID,
+    load_normalized_legacy_mc_tc_rows,
+    load_pv_crh_epl_fsi_protocol_rows,
+)
+from olfactorybulb.audit.reference_notes import notes_for_rows
 from olfactorybulb.slice_connectivity_optimizer import load_slice_geometry, observed_metrics_for_synapse_set, resolve_slice_dir
 from prev_ob_models.cell_registry import get_cell_model_spec
 
@@ -120,11 +125,6 @@ TABLE5_REFERENCE = {
     },
 }
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
-CELL_TYPE_REFERENCE_CSVS = {
-    "MC": REPO_ROOT / "MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv",
-    "TC": REPO_ROOT / "MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv",
-}
 BURTON_REFERENCE_SOURCE = "Burton & Urban (2014)"
 BURTON_CSV_PROPERTY_MAP = {
     "AHP Amplitude": ("AHP_amplitude_mV", "millivolts", lambda value: value),
@@ -449,30 +449,27 @@ def _rounded_dict(values: dict[str, Any], digits: int = 3) -> dict[str, Any]:
     return rounded_values
 
 
-def _parse_mean_plus_minus_std(text: str) -> tuple[float, float]:
-    mean_text, std_text = [part.strip() for part in str(text).split("+/-", 1)]
-    return float(mean_text), float(std_text)
-
-
 def _load_burton_csv_references() -> dict[str, dict[str, ReferenceStat]]:
     reference_by_cell_type: dict[str, dict[str, ReferenceStat]] = {"MC": {}, "TC": {}}
-    for cell_type, csv_path in CELL_TYPE_REFERENCE_CSVS.items():
-        with csv_path.open(newline="") as handle:
-            for row in csv.DictReader(handle):
-                if str(row.get("Source", "")).strip() != BURTON_REFERENCE_SOURCE:
-                    continue
-                property_name = str(row.get("Property", "")).strip()
-                if property_name not in BURTON_CSV_PROPERTY_MAP:
-                    continue
-                metric_key, units_label, transform = BURTON_CSV_PROPERTY_MAP[property_name]
-                mean_value, std_value = _parse_mean_plus_minus_std(row["mean +/- sd"])
-                reference_by_cell_type[cell_type][metric_key] = ReferenceStat(
-                    mean=transform(mean_value),
-                    std=abs(transform(std_value)),
-                    n=int(float(row["n"])),
-                    source=BURTON_REFERENCE_SOURCE,
-                    units=units_label,
-                )
+    for row in load_normalized_legacy_mc_tc_rows():
+        if str(row.get("Source", "")).strip() != BURTON_REFERENCE_SOURCE:
+            continue
+        cell_type = str(row.get("cell_type", "")).strip()
+        property_name = str(row.get("Property", "")).strip()
+        if property_name not in BURTON_CSV_PROPERTY_MAP:
+            continue
+        metric_key, units_label, transform = BURTON_CSV_PROPERTY_MAP[property_name]
+        mean_value = row.get("mean")
+        std_value = row.get("sd")
+        if mean_value in ("", None) or std_value in ("", None):
+            continue
+        reference_by_cell_type[cell_type][metric_key] = ReferenceStat(
+            mean=transform(float(mean_value)),
+            std=abs(transform(float(std_value))),
+            n=int(float(row["n"])),
+            source=BURTON_REFERENCE_SOURCE,
+            units=units_label,
+        )
     return reference_by_cell_type
 
 
@@ -879,9 +876,10 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
     supported_metric_keys = set(BURTON_CSV_REFERENCES.get("MC", {})) | set(BURTON_CSV_REFERENCES.get("TC", {}))
     uploaded_property_names = sorted(
         {
-            property_name
-            for property_name, (metric_key, _units, _transform) in BURTON_CSV_PROPERTY_MAP.items()
-            if metric_key in supported_metric_keys
+            str(row.get("Property", "")).strip()
+            for row in load_normalized_legacy_mc_tc_rows()
+            if str(row.get("Source", "")).strip() == BURTON_REFERENCE_SOURCE
+            if BURTON_CSV_PROPERTY_MAP.get(str(row.get("Property", "")).strip(), (None, None, None))[0] in supported_metric_keys
         }
     )
     return AuditItem(
@@ -899,6 +897,50 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
     )
 
 
+def _build_fi_protocol_caveat_item() -> AuditItem:
+    fi_rows = [
+        row
+        for row in load_normalized_legacy_mc_tc_rows()
+        if str(row.get("protocol_id", "")).strip() == BU2014_MC_TC_PROTOCOL_ID
+    ]
+    epl_protocol_rows = [
+        {
+            "protocol_id": row["protocol_id"],
+            "note_ids": "",
+            "Property": "FI Protocol",
+            "source": row["source"],
+        }
+        for row in load_pv_crh_epl_fsi_protocol_rows()
+        if str(row.get("protocol_id", "")).strip() == BMU2024_EPL_FSI_PROTOCOL_ID
+    ]
+    matched_notes = notes_for_rows(fi_rows + epl_protocol_rows, scope="fI_validation")
+    if not matched_notes:
+        return AuditItem(
+            check_id="fi_protocol_caveats",
+            status="PASS",
+            title="Notes / protocol caveats",
+            criterion="Protocol caveats should be loaded whenever firing-rate-versus-current reference outputs are rendered.",
+            description="This section exists to prevent silent protocol mismatches when principal-cell and external-plexiform-layer fast-spiking-interneuron firing-rate-versus-current references are reviewed in the same workflow.",
+            acceptable="Relevant protocol caveats are displayed whenever matching notes exist for the protocol set in scope.",
+            acceptable_basis="The note set is resolved from validation_notes.csv against the current protocol identifiers in scope.",
+            evidence={"protocol_ids_in_scope": [BU2014_MC_TC_PROTOCOL_ID, BMU2024_EPL_FSI_PROTOCOL_ID], "notes": []},
+        )
+    return AuditItem(
+        check_id="fi_protocol_caveats",
+        status="WARN",
+        title="Notes / protocol caveats",
+        criterion="Protocol caveats should be loaded whenever firing-rate-versus-current reference outputs are rendered.",
+        description="This section makes protocol mismatch notes visible instead of burying them in raw CSV text. It is especially important when the principal-cell Burton 2014 protocol and the external-plexiform-layer fast-spiking-interneuron Burton/Malyshko/Urban 2024 protocol coexist in the same reference workflow.",
+        acceptable="All protocol caveats relevant to the current firing-rate-versus-current reference context are displayed here.",
+        acceptable_basis="The messages are loaded from validation_notes.csv by matching the set of protocol identifiers currently in scope, rather than by ad hoc print statements in the extraction path.",
+        evidence={
+            "protocol_ids_in_scope": [BU2014_MC_TC_PROTOCOL_ID, BMU2024_EPL_FSI_PROTOCOL_ID],
+            "notes": [note.message for note in matched_notes],
+            "note_ids": [note.note_id for note in matched_notes],
+        },
+    )
+
+
 def build_validation_items(
     metrics: list[dict[str, Any]],
     protocol: BurtonUrbanProtocol,
@@ -909,6 +951,7 @@ def build_validation_items(
     items: list[AuditItem] = []
 
     items.append(_build_uploaded_reference_coverage_item())
+    items.append(_build_fi_protocol_caveat_item())
 
     protocol_evidence = {
         "target_vm_mV": protocol.target_vm_mV,

@@ -1,0 +1,1 @@
+source,source_file,source_location,cell_type,cell_id,marker_profile,protocol_id,current_pA,firing_rate_Hz,rate_definition,step_duration_ms,current_start_pA,current_stop_pA,current_step_pA,baseline_or_holding_vm_mV,synaptic_blockers,temperature_C,sample_scope,extraction_method,include_in_validation,confidence,note_ids,notes

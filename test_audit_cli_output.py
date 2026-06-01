@@ -75,4 +75,7 @@ assert "Summary" in text_report.stdout
 assert "[WARN] burton_urban_fi_skipped" in text_report.stdout
 assert "How Acceptable Result Was Determined" in text_report.stdout
 
+sample_fi_report = format_report(sample_report, color=False)
+assert "Acceptable result" in sample_fi_report
+
 print("audit_cli_output: OK")

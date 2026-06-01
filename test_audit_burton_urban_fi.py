@@ -86,11 +86,13 @@ assert summary["TC"]["peak_rate_Hz"] == 120.0
 items = build_validation_items(fixture_metrics, BurtonUrbanProtocol())
 item_by_id = {item.check_id: item for item in items}
 assert item_by_id["uploaded_burton_reference_coverage"].status == "PASS"
+assert item_by_id["fi_protocol_caveats"].status == "WARN"
 assert item_by_id["tc_fi_gain_higher"].status == "PASS"
 assert item_by_id["rheobase_in_paper_regime"].status == "PASS"
 assert item_by_id["tc_cv_isi_higher"].status == "PASS"
 assert item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].status == "PASS"
 assert "two standard deviations" in item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].acceptable_basis
+assert "N_FI_PROTOCOL_DIFFERENCE" in item_by_id["fi_protocol_caveats"].evidence["note_ids"]
 assert callable(find_spike_times_milliseconds)
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1
 assert _resolved_jobs(10, 99, use_gpu=False) == 10
