@@ -8,6 +8,13 @@ from .helper_bundle import (
     helper_bundle_signature,
     normalize_helper_relative_path,
 )
+from .command_launch import (
+    build_remote_python_file_command,
+    build_remote_python_inline_command,
+    build_remote_touch_command,
+    remote_helper_script_path,
+    remote_python_exec_prefix,
+)
 
 __all__ = [
     "HelperBundleEntry",
@@ -16,4 +23,9 @@ __all__ = [
     "helper_bundle_parent_dirs",
     "helper_bundle_signature",
     "normalize_helper_relative_path",
+    "build_remote_python_file_command",
+    "build_remote_python_inline_command",
+    "build_remote_touch_command",
+    "remote_helper_script_path",
+    "remote_python_exec_prefix",
 ]

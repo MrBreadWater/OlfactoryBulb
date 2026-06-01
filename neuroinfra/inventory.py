@@ -95,6 +95,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",
         source_paths=(
+            "neuroinfra/remote/command_launch.py",
             "neuroinfra/remote/helper_bundle.py",
             "tools/remote/slurm_common.py",
             "tools/remote/submit_sol_run.py",
@@ -116,8 +117,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=2,
-        current_status="helper_bundle_standardized",
-        recommended_action="The helper-bundle manifest/signature layer is now standardized under neuroinfra; next extract shared launcher logic without breaking the live remote entrypoints.",
+        current_status="local_seams_standardized",
+        recommended_action="The helper-bundle packaging and local command-building seams are now standardized under neuroinfra; next extract shared launcher logic without breaking the live remote entrypoints.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",

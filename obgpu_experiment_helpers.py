@@ -111,6 +111,13 @@ from neuroinfra.remote.helper_bundle import (
     helper_bundle_parent_dirs,
     helper_bundle_signature,
 )
+from neuroinfra.remote.command_launch import (
+    build_remote_python_file_command as _neuroinfra_build_remote_python_file_command,
+    build_remote_python_inline_command as _neuroinfra_build_remote_python_inline_command,
+    build_remote_touch_command as _neuroinfra_build_remote_touch_command,
+    remote_helper_script_path as _neuroinfra_remote_helper_script_path,
+    remote_python_exec_prefix as _neuroinfra_remote_python_exec_prefix,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -4138,41 +4145,22 @@ def _synthesize_partial_sync_summary(
 
 def _remote_helper_script_path(remote_helper_dir: PurePosixPath | None, script_name: str) -> PurePosixPath | None:
     """Return one uploaded remote-helper path when a cache directory is available."""
-    if remote_helper_dir is None:
-        return None
-    return remote_helper_dir / str(script_name)
+    return _neuroinfra_remote_helper_script_path(remote_helper_dir, script_name)
 
 
 def _remote_python_exec_prefix() -> str:
     """Return the remote shell prefix that resolves python3/python and execs it."""
-    return (
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"'
-        ' && test -n "$REMOTE_PYTHON"'
-        ' && exec "$REMOTE_PYTHON"'
-    )
+    return _neuroinfra_remote_python_exec_prefix()
 
 
 def _build_remote_python_file_command(script_path: PurePosixPath, argv: list[str]) -> str:
     """Build a remote shell command that executes one uploaded helper script."""
-    return _remote_python_exec_prefix() + " " + _shell_join([script_path.as_posix(), *argv])
+    return _neuroinfra_build_remote_python_file_command(script_path, argv)
 
 
 def _build_remote_python_inline_command(script_path: Path, argv: list[str]) -> str:
     """Build a remote shell command that executes one helper script inline."""
-    helper_b64 = b64encode(script_path.read_bytes()).decode("ascii")
-    python_exec = (
-        _remote_python_exec_prefix()
-        + " -c "
-        + shlex.quote(
-            'import base64,sys; '
-            'script_b64=sys.argv[1]; '
-            'script_path=sys.argv[2]; '
-            'sys.argv=sys.argv[2:]; '
-            'namespace={"__name__":"__main__","__file__":script_path}; '
-            'exec(compile(base64.b64decode(script_b64).decode("utf-8"), script_path, "exec"), namespace)'
-        )
-    )
-    return python_exec + " " + _shell_join([helper_b64, str(script_path), *argv])
+    return _neuroinfra_build_remote_python_inline_command(script_path, argv)
 
 
 def _build_remote_allocation_submit_command(
@@ -4224,11 +4212,7 @@ def _build_remote_allocation_submit_command(
 
 def _build_remote_touch_command(path_value: str | PurePosixPath) -> str:
     """Build a remote command that refreshes one heartbeat path."""
-    path = PurePosixPath(str(path_value))
-    return (
-        f"mkdir -p {shlex.quote(path.parent.as_posix())} && "
-        f"touch {shlex.quote(path.as_posix())}"
-    )
+    return _neuroinfra_build_remote_touch_command(path_value)
 
 
 def _refresh_remote_heartbeat(

@@ -23,6 +23,7 @@ The first live internal extraction is now also present:
 The next standardized seam is also in place:
 
 - `neuroinfra.remote.helper_bundle`
+- `neuroinfra.remote.command_launch`
 
 It captures:
 
@@ -61,8 +62,9 @@ The result-artifact and output-path helpers have already been mirrored into
 `olfactorybulb.*`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
-manifest/signature protocol that packages those scripts for remote upload now
-has a standardized home under `neuroinfra.remote`.
+manifest/signature protocol that packages those scripts for remote upload, plus
+the local command builders that launch uploaded or inline helpers, now have a
+standardized home under `neuroinfra.remote`.
 
 The main file blocking deeper extraction is still:
 
