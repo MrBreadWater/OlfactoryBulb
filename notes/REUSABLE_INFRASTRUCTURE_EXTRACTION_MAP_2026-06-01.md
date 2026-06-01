@@ -189,6 +189,13 @@ Best split:
 - generic `CampaignStore`, `BatchPlan`, `BatchResult`, proposal engine APIs
 - domain-specific scorer/proposer implementations live in the plugin repo
 
+Current progress:
+
+- the generic campaign filesystem/state/archive layer now lives under
+  `neuroinfra.campaigns.store`
+- HFO-specific scoring and proposal logic still lives in
+  `olfactorybulb.hfo_optimizer`
+
 ### 5. Metadata registry / contract system
 
 Current files:

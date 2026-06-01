@@ -125,6 +125,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Campaign and optimizer archive framework",
         target_module="neuroinfra.campaigns",
         source_paths=(
+            "neuroinfra/campaigns/store.py",
             "olfactorybulb/hfo_optimizer.py",
             "tools/run_hfo_campaign.py",
         ),
@@ -142,8 +143,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium",
         proposed_phase=4,
-        current_status="candidate",
-        recommended_action="Split generic campaign storage and proposal interfaces from domain-specific scorer and candidate metrics.",
+        current_status="store_seams_standardized",
+        recommended_action="The generic campaign filesystem/state/archive layer now lives under neuroinfra.campaigns; next separate proposal/storage interfaces from the HFO-specific scorer and candidate metrics.",
     ),
     ExtractionCandidate(
         key="contracts_and_registries",

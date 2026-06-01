@@ -25,6 +25,17 @@ import numpy as np
 from scipy.stats import qmc
 
 import obgpu_experiment_helpers as hlp
+from neuroinfra.campaigns.store import (
+    append_jsonl as _campaign_append_jsonl,
+    archive_path as _campaign_archive_path,
+    batch_artifact_path as _campaign_batch_artifact_path,
+    batch_index_from_name as _campaign_batch_index_from_name,
+    ensure_campaign_dir as _campaign_ensure_dir,
+    read_json as _campaign_read_json,
+    safe_campaign_slug as _campaign_safe_slug,
+    state_path as _campaign_state_path,
+    write_json as _campaign_write_json,
+)
 from olfactorybulb.hfo_features import (
     DEFAULT_TIME_CONSTANTS_MS,
     TIME_CONSTANT_FRACTIONAL_VARIATION,
@@ -394,9 +405,7 @@ def lfp_source_diagnostic_configs(
 
 
 def _safe_slug(text: str) -> str:
-    cleaned = "".join(ch if (ch.isalnum() or ch in "-_.") else "_" for ch in str(text).strip())
-    cleaned = cleaned.strip("._")
-    return cleaned or "campaign"
+    return _campaign_safe_slug(text)
 
 
 def ensure_campaign_dir(
@@ -404,28 +413,19 @@ def ensure_campaign_dir(
     *,
     base_dir: str | Path = DEFAULT_CAMPAIGNS_BASE,
 ) -> Path:
-    campaign_dir = Path(base_dir) / _safe_slug(campaign_name)
-    campaign_dir.mkdir(parents=True, exist_ok=True)
-    (campaign_dir / "batches").mkdir(exist_ok=True)
-    return campaign_dir
+    return _campaign_ensure_dir(campaign_name, base_dir=base_dir, batch_dir_name="batches")
 
 
 def _state_path(campaign_dir: Path) -> Path:
-    return campaign_dir / "state.json"
+    return _campaign_state_path(campaign_dir, filename="state.json")
 
 
 def _archive_path(campaign_dir: Path, *, kind: str) -> Path:
-    return campaign_dir / f"{kind}_archive.jsonl"
+    return _campaign_archive_path(campaign_dir, kind=kind)
 
 
 def _batch_index_from_name(batch_name: Any) -> int | None:
-    text = str(batch_name or "")
-    if "_" not in text:
-        return None
-    tail = text.rsplit("_", 1)[-1]
-    if not tail.isdigit():
-        return None
-    return int(tail)
+    return _campaign_batch_index_from_name(batch_name)
 
 
 def _archive_filter_path(campaign_dir: Path) -> Path:
@@ -490,15 +490,11 @@ def _target_band_bounds(
 
 
 def _read_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    return json.loads(path.read_text())
+    return _campaign_read_json(path, default)
 
 
 def _write_json(path: Path, payload: Any) -> Path:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True))
-    return path
+    return _campaign_write_json(path, payload)
 
 
 def initialize_campaign(
@@ -1732,7 +1728,7 @@ def propose_lhs_batch(
         "candidate_ids": candidate_ids,
         "candidates": candidates,
     }
-    _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)
+    _write_json(_campaign_batch_artifact_path(campaign_dir, batch_name, "plan"), batch_plan)
 
     state["next_batch_index"] = int(state["next_batch_index"]) + 1
     state["next_candidate_index"] = int(state["next_candidate_index"]) + int(n_candidates)
@@ -1995,7 +1991,7 @@ def propose_elite_batch(
             "available_after_global": int(available_after_global),
         },
     }
-    _write_json(campaign_dir / "batches" / f"{batch_name}_plan.json", batch_plan)
+    _write_json(_campaign_batch_artifact_path(campaign_dir, batch_name, "plan"), batch_plan)
 
     state["next_batch_index"] = int(state["next_batch_index"]) + 1
     state["next_candidate_index"] = int(state["next_candidate_index"]) + int(n_candidates)
@@ -2115,7 +2111,10 @@ def run_hfo_batch(
         "sweep_dir": str(sweep_dir),
         "item_count": len(sweep.get("items", [])),
     }
-    _write_json(campaign_dir / "batches" / f"{batch_plan['batch_name']}_run.json", metadata)
+    _write_json(
+        _campaign_batch_artifact_path(campaign_dir, batch_plan["batch_name"], "run"),
+        metadata,
+    )
     return sweep
 
 
@@ -2538,10 +2537,7 @@ def score_candidate_pair(
 
 
 def _append_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as handle:
-        for row in rows:
-            handle.write(json.dumps(hlp._json_ready(row), sort_keys=True) + "\n")
+    _campaign_append_jsonl(path, rows, prepare_row=hlp._json_ready)
 
 
 def _empty_condition_metrics() -> dict[str, Any]:
@@ -2847,7 +2843,10 @@ def score_hfo_batch(
         "candidate_rows": candidate_rows,
         "item_rows": item_rows,
     }
-    _write_json(campaign_dir / "batches" / f"{batch_plan['batch_name']}_scored.json", scored_payload)
+    _write_json(
+        _campaign_batch_artifact_path(campaign_dir, batch_plan["batch_name"], "scored"),
+        scored_payload,
+    )
 
     state = load_campaign_state(campaign_dir)
     completed = list(state.get("completed_batches", []))
