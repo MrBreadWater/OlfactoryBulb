@@ -151,6 +151,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Metadata contract and registry pattern",
         target_module="neuroinfra.contracts",
         source_paths=(
+            "neuroinfra/contracts/parameters.py",
             "olfactorybulb/hfo_features.py",
             "olfactorybulb/hfo_visuals.py",
             "olfactorybulb/audit/hfo_feature_contracts.py",
@@ -168,8 +169,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="high",
         proposed_phase=3,
-        current_status="candidate",
-        recommended_action="Extract the pattern first, then let this repo keep supplying domain-specific registry contents.",
+        current_status="internal_shim_extracted",
+        recommended_action="The generic parameter-space and contract helpers now live under neuroinfra.contracts; next extract the remaining visual-contract pattern so the repo keeps only domain-specific registry contents.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",

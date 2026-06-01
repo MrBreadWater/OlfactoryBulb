@@ -218,6 +218,13 @@ What is domain-specific:
 - specific HFO parameters and plot families
 - olfactory-bulb cell-model catalog
 
+Current progress:
+
+- the generic parameter-space and contract helpers that back the HFO optimizer
+  now live under `neuroinfra.contracts.parameters`
+- `olfactorybulb.hfo_features` still owns the concrete HFO parameter catalog,
+  runtime defaults, and override wiring
+
 Extraction confidence:
 
 - **High for the pattern**

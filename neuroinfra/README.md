@@ -26,6 +26,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.command_launch`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
+- `neuroinfra.contracts.parameters`
 
 It captures:
 
@@ -67,6 +68,10 @@ The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus
 the local command builders that launch uploaded or inline helpers, now have a
 standardized home under `neuroinfra.remote`.
+
+The generic parameter-space and contract helpers that back the HFO optimizer's
+search-space registry now live under `neuroinfra.contracts.parameters`, while
+the HFO-specific parameter catalog remains in `olfactorybulb.hfo_features`.
 
 The main file blocking deeper extraction is still:
 
