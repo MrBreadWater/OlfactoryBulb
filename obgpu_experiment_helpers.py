@@ -104,6 +104,13 @@ from olfactorybulb.hfo_features import (
     hfo_control_help,
     hfo_run_config_defaults,
 )
+from neuroinfra.remote.helper_bundle import (
+    HelperBundleEntry,
+    bundle_entries_by_path,
+    helper_bundle_manifest,
+    helper_bundle_parent_dirs,
+    helper_bundle_signature,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -1821,27 +1828,26 @@ def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any
     run_info_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
 
 
+def _remote_helper_bundle_entries() -> tuple[HelperBundleEntry, ...]:
+    """Return the helper-bundle entries that should be cached on the remote host."""
+    helper_dir = REPO_ROOT / "tools" / "remote"
+    return (
+        HelperBundleEntry("slurm_common.py", helper_dir / "slurm_common.py"),
+        HelperBundleEntry("submit_sol_run.py", helper_dir / "submit_sol_run.py"),
+        HelperBundleEntry("submit_slurm_allocation.py", helper_dir / "submit_slurm_allocation.py"),
+        HelperBundleEntry("poll_sol_run.py", helper_dir / "poll_sol_run.py"),
+        HelperBundleEntry("cleanup_stale_allocations.py", helper_dir / "cleanup_stale_allocations.py"),
+    )
+
+
 def _remote_helper_sources() -> dict[str, Path]:
     """Return the helper scripts that should be cached on the remote host."""
-    helper_dir = REPO_ROOT / "tools" / "remote"
-    return {
-        "slurm_common.py": helper_dir / "slurm_common.py",
-        "submit_sol_run.py": helper_dir / "submit_sol_run.py",
-        "submit_slurm_allocation.py": helper_dir / "submit_slurm_allocation.py",
-        "poll_sol_run.py": helper_dir / "poll_sol_run.py",
-        "cleanup_stale_allocations.py": helper_dir / "cleanup_stale_allocations.py",
-    }
+    return bundle_entries_by_path(_remote_helper_bundle_entries())
 
 
 def _remote_helper_signature() -> str:
     """Return a content signature for the current remote-helper set."""
-    digest = sha256()
-    for name, path in sorted(_remote_helper_sources().items()):
-        digest.update(name.encode("utf-8"))
-        digest.update(b"\0")
-        digest.update(path.read_bytes())
-        digest.update(b"\0")
-    return digest.hexdigest()[:20]
+    return helper_bundle_signature(_remote_helper_bundle_entries())[:20]
 
 
 def _remote_helper_cache_runtime_key(config: dict[str, Any]) -> str:
@@ -3144,13 +3150,18 @@ def _ensure_remote_helper_cache(config: dict[str, Any]) -> PurePosixPath | None:
             return remote_dir
 
     _progress_write("[Sol remote] Uploading remote helper cache...")
-    helper_sources = _remote_helper_sources()
+    helper_entries = _remote_helper_bundle_entries()
+    helper_sources = bundle_entries_by_path(helper_entries)
     upload_started = time.perf_counter()
     sftp = _get_paramiko_sftp(config)
     try:
+        mkdir_targets = [
+            remote_dir.as_posix(),
+            *[(remote_dir / parent).as_posix() for parent in helper_bundle_parent_dirs(helper_entries)],
+        ]
         mkdir_completed = _run_paramiko_shell(
             config,
-            "mkdir -p {}".format(shlex.quote(remote_dir.as_posix())),
+            "mkdir -p {}".format(" ".join(shlex.quote(target) for target in mkdir_targets)),
         )
         if mkdir_completed.returncode != 0:
             raise RuntimeError(
@@ -3160,12 +3171,9 @@ def _ensure_remote_helper_cache(config: dict[str, Any]) -> PurePosixPath | None:
                 f"Stderr:\n{mkdir_completed.stderr}"
             )
         for name, path in helper_sources.items():
-            with sftp.open((remote_dir / name).as_posix(), "wb") as handle:
+            with sftp.open((remote_dir / PurePosixPath(name)).as_posix(), "wb") as handle:
                 handle.write(path.read_bytes())
-        manifest_payload = {
-            "signature": expected_signature,
-            "files": sorted(helper_sources.keys()),
-        }
+        manifest_payload = helper_bundle_manifest(helper_entries, signature=expected_signature)
         with sftp.open(manifest_path.as_posix(), "wb") as handle:
             handle.write(json.dumps(manifest_payload, indent=2, sort_keys=True).encode("utf-8"))
     finally:

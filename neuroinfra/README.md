@@ -20,6 +20,10 @@ The first live internal extraction is now also present:
 - `neuroinfra.artifacts.output_paths`
 - `neuroinfra.artifacts.result_artifacts`
 
+The next standardized seam is also in place:
+
+- `neuroinfra.remote.helper_bundle`
+
 It captures:
 
 - candidate reusable subsystems
@@ -55,6 +59,10 @@ The expected first-wave extractions are:
 The result-artifact and output-path helpers have already been mirrored into
 `neuroinfra.artifacts` and left behind compatibility wrappers under
 `olfactorybulb.*`.
+
+The remote Slurm layer is not extracted yet, but the helper-bundle
+manifest/signature protocol that packages those scripts for remote upload now
+has a standardized home under `neuroinfra.remote`.
 
 The main file blocking deeper extraction is still:
 

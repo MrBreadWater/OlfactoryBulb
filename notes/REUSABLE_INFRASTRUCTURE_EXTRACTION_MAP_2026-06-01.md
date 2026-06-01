@@ -142,6 +142,12 @@ This layer is already close to reusable, but it should be extracted as a
 general "remote command campaign" framework rather than as an olfactory-bulb
 runner.
 
+Current progress:
+
+- the helper-bundle manifest/signature protocol that packages remote scripts
+  for upload is now standardized under `neuroinfra.remote.helper_bundle`
+- the launcher scripts themselves still live under `tools/remote/`
+
 ### 4. Campaign / optimizer archive framework
 
 Current files:

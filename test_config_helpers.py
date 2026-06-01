@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import obgpu_experiment_helpers as hlp
+from neuroinfra.remote.helper_bundle import helper_bundle_manifest
 
 REMOTE_TOOLS_DIR = Path(__file__).resolve().parent / "tools" / "remote"
 if str(REMOTE_TOOLS_DIR) not in sys.path:
@@ -787,6 +788,12 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "/remote/OlfactoryBulb/results/notebook_runs/.obgpu-helper-cache/test/submit_sol_run.py" in remote_submit_cached
     helper_sources = hlp._remote_helper_sources()
     assert helper_sources["slurm_common.py"] == hlp.REPO_ROOT / "tools" / "remote" / "slurm_common.py"
+    helper_manifest = helper_bundle_manifest(
+        hlp._remote_helper_bundle_entries(),
+        signature=hlp._remote_helper_signature(),
+    )
+    assert helper_manifest["files"] == sorted(helper_sources.keys())
+    assert helper_manifest["parent_dirs"] == []
     remote_poll_cached = hlp._build_remote_poll_command(
         remote_cfg,
         remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
