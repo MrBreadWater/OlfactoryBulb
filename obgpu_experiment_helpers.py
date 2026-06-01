@@ -163,6 +163,20 @@ from neuroinfra.remote.slurm_launch import (
     build_submit_slurm_allocation_argv as _neuroinfra_build_submit_slurm_allocation_argv,
     build_submit_sol_run_argv as _neuroinfra_build_submit_sol_run_argv,
 )
+from neuroinfra.remote.git_sync import (
+    build_remote_git_bundle_fetch_command as _neuroinfra_build_remote_git_bundle_fetch_command,
+    build_remote_git_repo_probe_command as _neuroinfra_build_remote_git_repo_probe_command,
+    create_git_bundle_for_commit as _neuroinfra_create_git_bundle_for_commit,
+    git_merged_ref_shas as _neuroinfra_git_merged_ref_shas,
+    git_ref_is_ancestor as _neuroinfra_git_ref_is_ancestor,
+    git_ref_points_to_commit as _neuroinfra_git_ref_points_to_commit,
+    git_rev_parse as _neuroinfra_git_rev_parse,
+    local_git_sync_base_candidates as _neuroinfra_local_git_sync_base_candidates,
+    remote_notebook_tracking_ref_for_source as _neuroinfra_remote_notebook_tracking_ref_for_source,
+    resolve_local_git_branch as _neuroinfra_resolve_local_git_branch,
+    resolve_local_git_head as _neuroinfra_resolve_local_git_head,
+    resolve_local_git_upstream_ref as _neuroinfra_resolve_local_git_upstream_ref,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -1900,144 +1914,42 @@ _REMOTE_SLURM_TERMINAL_FAIL = {
 
 def _resolve_local_git_head() -> str | None:
     """Return the current local git HEAD commit or ``None`` when unavailable."""
-    completed = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        return None
-    head = (completed.stdout or "").strip()
-    return head or None
+    return _neuroinfra_resolve_local_git_head(REPO_ROOT)
 
 
 def _resolve_local_git_branch() -> str | None:
     """Return the current local branch name or ``None`` when detached."""
-    completed = subprocess.run(
-        ["git", "branch", "--show-current"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        return None
-    branch = (completed.stdout or "").strip()
-    return branch or None
+    return _neuroinfra_resolve_local_git_branch(REPO_ROOT)
 
 
 def _resolve_local_git_upstream_ref() -> str | None:
     """Return the current branch upstream ref, or ``None`` when unavailable."""
-    completed = subprocess.run(
-        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        return None
-    upstream = (completed.stdout or "").strip()
-    return upstream or None
+    return _neuroinfra_resolve_local_git_upstream_ref(REPO_ROOT)
 
 
 def _git_rev_parse(ref_name: str) -> str | None:
     """Resolve one local git ref to a commit SHA."""
-    completed = subprocess.run(
-        ["git", "rev-parse", ref_name],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        return None
-    sha = (completed.stdout or "").strip()
-    return sha or None
+    return _neuroinfra_git_rev_parse(REPO_ROOT, ref_name)
 
 
 def _git_ref_points_to_commit(ref_name: str, commit_sha: str) -> bool:
     """Return whether one local git ref currently resolves to the requested commit."""
-    return _git_rev_parse(ref_name) == commit_sha
+    return _neuroinfra_git_ref_points_to_commit(REPO_ROOT, ref_name, commit_sha)
 
 
 def _git_ref_is_ancestor(ancestor_ref: str, descendant_ref: str) -> bool:
     """Return whether one git ref is an ancestor of another."""
-    completed = subprocess.run(
-        ["git", "merge-base", "--is-ancestor", ancestor_ref, descendant_ref],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    return completed.returncode == 0
+    return _neuroinfra_git_ref_is_ancestor(REPO_ROOT, ancestor_ref, descendant_ref)
 
 
 def _git_merged_ref_shas(commit_sha: str, *, max_count: int = 128) -> list[str]:
     """Return ancestor ref tips already merged into one commit."""
-    completed = subprocess.run(
-        [
-            "git",
-            "for-each-ref",
-            f"--merged={commit_sha}",
-            "--format=%(objectname)",
-            "refs/heads",
-            "refs/remotes",
-        ],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode != 0:
-        return []
-    shas: list[str] = []
-    seen: set[str] = set()
-    for line in (completed.stdout or "").splitlines():
-        sha = line.strip()
-        if not sha or sha == commit_sha or sha in seen:
-            continue
-        seen.add(sha)
-        shas.append(sha)
-        if len(shas) >= int(max_count):
-            break
-    return shas
+    return _neuroinfra_git_merged_ref_shas(REPO_ROOT, commit_sha, max_count=max_count)
 
 
 def _local_git_sync_base_candidates(commit_sha: str, *, max_count: int = 500) -> list[str]:
     """Return local ancestor SHAs to test as possible remote bundle bases."""
-    candidates: list[str] = []
-    seen: set[str] = set()
-
-    def add_candidate(ref_name: str | None) -> None:
-        if not ref_name:
-            return
-        sha = _git_rev_parse(ref_name)
-        if not sha or sha == commit_sha or sha in seen:
-            return
-        if not _git_ref_is_ancestor(sha, commit_sha):
-            return
-        seen.add(sha)
-        candidates.append(sha)
-
-    for sha in _git_merged_ref_shas(commit_sha, max_count=min(int(max_count), 128)):
-        add_candidate(sha)
-
-    completed = subprocess.run(
-        ["git", "rev-list", "--first-parent", f"--max-count={int(max_count)}", f"{commit_sha}^"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if completed.returncode == 0:
-        for line in (completed.stdout or "").splitlines():
-            add_candidate(line.strip())
-
-    add_candidate(_resolve_local_git_upstream_ref())
-    return candidates
+    return _neuroinfra_local_git_sync_base_candidates(REPO_ROOT, commit_sha, max_count=max_count)
 
 
 def _resolve_remote_git_ref(config: dict[str, Any]) -> str | None:
@@ -2174,15 +2086,7 @@ def _remote_git_ref_cache_key(config: dict[str, Any], remote_repo_root: PurePosi
 
 def _build_remote_git_repo_probe_command(remote_repo_root: PurePosixPath) -> str:
     """Build a remote shell command that verifies the configured repo exists."""
-    repo_root = remote_repo_root.as_posix()
-    quoted_repo = shlex.quote(repo_root)
-    missing_message = shlex.quote(f"remote_repo_root does not exist: {repo_root}")
-    not_git_message = shlex.quote(f"remote_repo_root is not a git work tree: {repo_root}")
-    return (
-        f"if ! test -d {quoted_repo}; then printf '%s\\n' {missing_message} >&2; exit 2; fi; "
-        f"if ! git -C {quoted_repo} rev-parse --is-inside-work-tree >/dev/null 2>&1; "
-        f"then printf '%s\\n' {not_git_message} >&2; exit 3; fi"
-    )
+    return _neuroinfra_build_remote_git_repo_probe_command(remote_repo_root)
 
 
 def _normalize_slurm_state(raw_state: str) -> str:
@@ -4544,81 +4448,12 @@ def _remote_status_has_artifacts(status: dict[str, Any] | None) -> bool:
 
 def _create_git_bundle_for_commit(commit_sha: str, *, exclude_ref: str | None = None) -> tuple[Path, str]:
     """Create a temporary git bundle for the requested commit."""
-    branch_name = _resolve_local_git_branch()
-    temp_ref: str | None = None
-    source_ref: str
-
-    if branch_name and _git_ref_points_to_commit(branch_name, commit_sha):
-        source_ref = f"refs/heads/{branch_name}"
-    else:
-        temp_ref = f"refs/obgpu-notebook-sync/{commit_sha}"
-        updated = subprocess.run(
-            ["git", "update-ref", temp_ref, commit_sha],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if updated.returncode != 0:
-            raise RuntimeError(
-                "Could not create a temporary git ref for the Sol sync bundle.\n"
-                f"Commit: {commit_sha}\n"
-                f"Stderr:\n{updated.stderr}"
-            )
-        source_ref = temp_ref
-
-    bundle_handle = tempfile.NamedTemporaryFile(prefix="obgpu-sol-sync-", suffix=".bundle", delete=False)
-    bundle_path = Path(bundle_handle.name)
-    bundle_handle.close()
-
-    try:
-        bundle_args = ["git", "bundle", "create", str(bundle_path), source_ref]
-        if (
-            exclude_ref
-            and not _git_ref_points_to_commit(exclude_ref, commit_sha)
-            and _git_ref_is_ancestor(exclude_ref, commit_sha)
-        ):
-            bundle_args.append(f"^{exclude_ref}")
-        created = subprocess.run(
-            bundle_args,
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if created.returncode != 0:
-            raise RuntimeError(
-                "Could not create a git bundle for the Sol backend.\n"
-                f"Source ref: {source_ref}\n"
-                f"Stderr:\n{created.stderr}"
-            )
-        return bundle_path, source_ref
-    except Exception:
-        try:
-            bundle_path.unlink(missing_ok=True)
-        except Exception:
-            pass
-        raise
-    finally:
-        if temp_ref is not None:
-            subprocess.run(
-                ["git", "update-ref", "-d", temp_ref],
-                cwd=REPO_ROOT,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
+    return _neuroinfra_create_git_bundle_for_commit(REPO_ROOT, commit_sha, exclude_ref=exclude_ref)
 
 
 def _remote_notebook_tracking_ref_for_source(source_ref: str) -> str | None:
     """Return the stable remote notebook ref for one published local branch tip."""
-    branch_prefix = "refs/heads/"
-    if not source_ref.startswith(branch_prefix):
-        return None
-    branch_name = source_ref[len(branch_prefix):].strip("/")
-    if not branch_name:
-        return None
-    return f"refs/obgpu-notebook-sync/heads/{branch_name}"
+    return _neuroinfra_remote_notebook_tracking_ref_for_source(source_ref)
 
 
 def _resolve_remote_tracking_bundle_base(
@@ -4660,25 +4495,11 @@ def _build_remote_git_bundle_fetch_command(
     remote_git_ref: str,
 ) -> str:
     """Build the remote git fetch command used to publish one local bundle."""
-    remote_private_ref = f"refs/obgpu-notebook-sync/{remote_git_ref}"
-    fetch_refspecs = [f"{source_ref}:{remote_private_ref}"]
-    tracking_ref = _remote_notebook_tracking_ref_for_source(source_ref)
-    if tracking_ref and tracking_ref != remote_private_ref:
-        fetch_refspecs.append(f"{source_ref}:{tracking_ref}")
-    fetch_refspec_args = " ".join(shlex.quote(refspec) for refspec in fetch_refspecs)
-    remote_git_lock = shlex.quote((remote_repo_root / ".obgpu-git.lock").as_posix())
-    fetch_body = (
-        f"git -C {shlex.quote(remote_repo_root.as_posix())} fetch --force --no-tags "
-        f"{shlex.quote(remote_bundle_path)} "
-        f"{fetch_refspec_args}"
-        f" && git -C {shlex.quote(remote_repo_root.as_posix())} "
-        f"cat-file -e {shlex.quote(remote_git_ref + '^{commit}')}"
-        f" && rm -f {shlex.quote(remote_bundle_path)}"
-    )
-    return (
-        f"if command -v flock >/dev/null 2>&1; then "
-        f"touch {remote_git_lock} && flock {remote_git_lock} bash -lc {shlex.quote(fetch_body)}; "
-        f"else {fetch_body}; fi"
+    return _neuroinfra_build_remote_git_bundle_fetch_command(
+        remote_repo_root=remote_repo_root,
+        remote_bundle_path=remote_bundle_path,
+        source_ref=source_ref,
+        remote_git_ref=remote_git_ref,
     )
 
 

@@ -29,6 +29,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.sftp_sync`
 - `neuroinfra.remote.archive_stream`
 - `neuroinfra.remote.slurm_launch`
+- `neuroinfra.remote.git_sync`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -100,6 +101,11 @@ The higher-level argv and helper-launch assembly for allocation submit, run
 submit, stale-allocation cleanup, and polling now also live under
 `neuroinfra.remote.slurm_launch`, while the repo-specific config mapping and
 live orchestration still remain in `obgpu_experiment_helpers.py`.
+
+The local Git publication/base-resolution helpers that support notebook-driven
+remote syncs now also live under `neuroinfra.remote.git_sync`, while the live
+Paramiko upload/orchestration path still remains in
+`obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while

@@ -162,6 +162,8 @@ Current progress:
 - the higher-level argv and helper-launch assembly for allocation submit, run
   submit, stale-allocation cleanup, and polling now live under
   `neuroinfra.remote.slurm_launch`
+- the local Git publication/base-resolution helpers that support notebook-
+  driven remote syncs now live under `neuroinfra.remote.git_sync`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework
