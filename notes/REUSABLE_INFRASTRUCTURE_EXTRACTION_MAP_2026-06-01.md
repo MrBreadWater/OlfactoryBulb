@@ -147,6 +147,9 @@ Current progress:
 - the remote endpoint parsing, timeout normalization, retry policy, and
   generic Paramiko-backed Slurm config builder that the notebook layer uses
   now live under `neuroinfra.remote.config`
+- the notebook-shared remote runtime keys, Paramiko prompt-cache handling,
+  and fail-closed reconnect policy that sit underneath the live notebook SSH
+  path now live under `neuroinfra.remote.notebook_runtime`
 - the helper-bundle manifest/signature protocol that packages remote scripts
   for upload is now standardized under `neuroinfra.remote.helper_bundle`
 - the local command builders that launch uploaded or inline helper scripts are

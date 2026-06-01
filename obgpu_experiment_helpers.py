@@ -131,6 +131,17 @@ from neuroinfra.remote.config import (
     ssh_exec_timeout_s as _neuroinfra_ssh_exec_timeout_s,
     ssh_upload_timeout_s as _neuroinfra_ssh_upload_timeout_s,
 )
+from neuroinfra.remote.notebook_runtime import (
+    cache_prompt_response as _neuroinfra_cache_prompt_response,
+    cached_prompt_responses as _neuroinfra_cached_prompt_responses,
+    can_reconnect as _neuroinfra_can_reconnect,
+    ensure_notebook_remote_runtime as _neuroinfra_ensure_notebook_remote_runtime,
+    get_cached_prompt_response as _neuroinfra_get_cached_prompt_response,
+    has_cached_auth as _neuroinfra_has_cached_auth,
+    midrun_reauth_error as _neuroinfra_midrun_reauth_error,
+    prompt_key as _neuroinfra_prompt_key,
+    transport_is_usable as _neuroinfra_transport_is_usable,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -690,16 +701,7 @@ _LIVE_INSPECTION_MODEL = None
 _LIVE_INSPECTION_SIGNATURE = None
 if not hasattr(builtins, "_OBGPU_NOTEBOOK_RUNTIME"):
     builtins._OBGPU_NOTEBOOK_RUNTIME = {}
-_NOTEBOOK_RUNTIME = builtins._OBGPU_NOTEBOOK_RUNTIME
-_NOTEBOOK_RUNTIME.setdefault("paramiko_connections", {})
-_NOTEBOOK_RUNTIME.setdefault("paramiko_authenticated_keys", set())
-_NOTEBOOK_RUNTIME.setdefault("paramiko_prompt_cache", {})
-_NOTEBOOK_RUNTIME.setdefault("slurm_allocations", {})
-_NOTEBOOK_RUNTIME.setdefault("remote_git_refs", {})
-_NOTEBOOK_RUNTIME.setdefault("remote_helper_caches", {})
-_NOTEBOOK_RUNTIME.setdefault("remote_preflight", {})
-_NOTEBOOK_RUNTIME.setdefault("remote_stale_cleanup", {})
-_NOTEBOOK_RUNTIME.setdefault("slurm_allocation_atexit_registered", False)
+_NOTEBOOK_RUNTIME = _neuroinfra_ensure_notebook_remote_runtime(builtins._OBGPU_NOTEBOOK_RUNTIME)
 _LIVE_PARAMIKO_CONNECTIONS: dict[str, Any] = _NOTEBOOK_RUNTIME["paramiko_connections"]
 _LIVE_PARAMIKO_AUTHENTICATED_KEYS: set[str] = _NOTEBOOK_RUNTIME["paramiko_authenticated_keys"]
 _LIVE_PARAMIKO_PROMPT_CACHE: dict[str, dict[str, str]] = _NOTEBOOK_RUNTIME["paramiko_prompt_cache"]
@@ -2063,12 +2065,7 @@ def _paramiko_connection_key(config: dict[str, Any]) -> str:
 
 def _paramiko_transport_is_usable(transport: Any) -> bool:
     """Return whether one cached Paramiko transport still looks authenticated and alive."""
-    if transport is None:
-        return False
-    try:
-        return bool(transport.is_active() and transport.is_authenticated())
-    except Exception:
-        return False
+    return _neuroinfra_transport_is_usable(transport)
 
 
 def _paramiko_connect_retry_count(config: dict[str, Any]) -> int:
@@ -2101,52 +2098,52 @@ def _paramiko_connect_error_is_retryable(exc: BaseException) -> bool:
 
 def _paramiko_prompt_key(prompt_text: str) -> str:
     """Normalize one interactive-auth prompt into a stable cache key."""
-    return " ".join(str(prompt_text or "").strip().split())
+    return _neuroinfra_prompt_key(prompt_text)
 
 
 def _paramiko_cached_prompt_responses(config: dict[str, Any]) -> dict[str, str]:
     """Return the cached auth-prompt responses for one endpoint."""
-    cache_key = _paramiko_connection_key(config)
-    cached = _LIVE_PARAMIKO_PROMPT_CACHE.get(cache_key)
-    if cached is None:
-        cached = {}
-        _LIVE_PARAMIKO_PROMPT_CACHE[cache_key] = cached
-    return cached
+    return _neuroinfra_cached_prompt_responses(_LIVE_PARAMIKO_PROMPT_CACHE, _paramiko_connection_key(config))
 
 
 def _get_cached_paramiko_prompt_response(config: dict[str, Any], prompt_text: str) -> str | None:
     """Return one remembered auth response for this endpoint, if available."""
-    return _paramiko_cached_prompt_responses(config).get(_paramiko_prompt_key(prompt_text))
+    return _neuroinfra_get_cached_prompt_response(
+        _LIVE_PARAMIKO_PROMPT_CACHE,
+        _paramiko_connection_key(config),
+        prompt_text,
+    )
 
 
 def _cache_paramiko_prompt_response(config: dict[str, Any], prompt_text: str, response: str) -> None:
     """Remember one auth response for later noninteractive reconnects."""
-    _paramiko_cached_prompt_responses(config)[_paramiko_prompt_key(prompt_text)] = str(response)
+    _neuroinfra_cache_prompt_response(
+        _LIVE_PARAMIKO_PROMPT_CACHE,
+        _paramiko_connection_key(config),
+        prompt_text,
+        response,
+    )
 
 
 def _paramiko_has_cached_auth(config: dict[str, Any]) -> bool:
     """Return whether one endpoint has cached auth responses for silent reconnect."""
-    return bool(_LIVE_PARAMIKO_PROMPT_CACHE.get(_paramiko_connection_key(config)))
+    return _neuroinfra_has_cached_auth(_LIVE_PARAMIKO_PROMPT_CACHE, _paramiko_connection_key(config))
 
 
 def _paramiko_can_reconnect(config: dict[str, Any]) -> bool:
     """Return whether one dead transport may be recovered automatically."""
-    cache_key = _paramiko_connection_key(config)
-    preserve_session = bool(config.get("remote_preserve_paramiko_session", True))
-    allow_reauth = bool(config.get("remote_allow_paramiko_reauth", False))
-    if not preserve_session or cache_key not in _LIVE_PARAMIKO_AUTHENTICATED_KEYS:
-        return True
-    return allow_reauth or _paramiko_has_cached_auth(config)
+    return _neuroinfra_can_reconnect(
+        connection_key=_paramiko_connection_key(config),
+        preserve_session=bool(config.get("remote_preserve_paramiko_session", True)),
+        allow_reauth=bool(config.get("remote_allow_paramiko_reauth", False)),
+        authenticated_keys=_LIVE_PARAMIKO_AUTHENTICATED_KEYS,
+        prompt_cache=_LIVE_PARAMIKO_PROMPT_CACHE,
+    )
 
 
 def _paramiko_midrun_reauth_error(config: dict[str, Any]) -> str:
     """Explain why a fresh Paramiko login is being refused mid-run."""
-    return (
-        "The cached Paramiko SSH session is no longer usable, and "
-        "remote_preserve_paramiko_session=True is preventing an automatic re-login.\n"
-        f"Endpoint: {_paramiko_connection_key(config)}\n"
-        "This is intentional so notebook runs fail closed instead of prompting for password/2FA mid-run."
-    )
+    return _neuroinfra_midrun_reauth_error(_paramiko_connection_key(config))
 
 
 def _remote_git_ref_cache_key(config: dict[str, Any], remote_repo_root: PurePosixPath) -> str:

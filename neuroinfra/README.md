@@ -25,6 +25,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
+- `neuroinfra.remote.notebook_runtime`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -77,6 +78,11 @@ The remote endpoint parsing, timeout normalization, retry policy, and generic
 Paramiko-backed Slurm config builder that the notebook layer uses now also live
 under `neuroinfra.remote.config`, while the notebook-facing wrappers remain in
 `obgpu_experiment_helpers.py`.
+
+The notebook-shared remote runtime keys, Paramiko prompt-cache handling, and
+fail-closed reconnect policy that sit underneath the live notebook SSH path now
+also live under `neuroinfra.remote.notebook_runtime`, while the transport I/O
+and prompt plumbing still remain in `obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
