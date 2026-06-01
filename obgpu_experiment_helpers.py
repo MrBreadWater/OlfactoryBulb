@@ -105,9 +105,16 @@ from olfactorybulb.hfo_features import (
 from neuroinfra.remote.helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
-    helper_bundle_manifest,
-    helper_bundle_parent_dirs,
     helper_bundle_signature,
+)
+from neuroinfra.remote.helper_cache import (
+    helper_cache_dir as _neuroinfra_helper_cache_dir,
+    helper_cache_manifest_path as _neuroinfra_helper_cache_manifest_path,
+    helper_cache_mkdir_targets as _neuroinfra_helper_cache_mkdir_targets,
+    helper_cache_probe_command as _neuroinfra_helper_cache_probe_command,
+    helper_cache_probe_matches as _neuroinfra_helper_cache_probe_matches,
+    helper_cache_runtime_key as _neuroinfra_helper_cache_runtime_key,
+    helper_cache_upload_payload as _neuroinfra_helper_cache_upload_payload,
 )
 from neuroinfra.remote.command_launch import (
     build_remote_python_file_command as _neuroinfra_build_remote_python_file_command,
@@ -1885,16 +1892,19 @@ def _remote_helper_signature() -> str:
 
 def _remote_helper_cache_runtime_key(config: dict[str, Any]) -> str:
     """Return the runtime cache key for one uploaded remote helper directory."""
-    return (
-        f"{_paramiko_connection_key(config)}::"
-        f"{_remote_results_root(config).as_posix()}::"
-        f"{_remote_helper_signature()}"
+    return _neuroinfra_helper_cache_runtime_key(
+        connection_key=_paramiko_connection_key(config),
+        results_root=_remote_results_root(config),
+        signature=_remote_helper_signature(),
     )
 
 
 def _remote_helper_cache_dir(config: dict[str, Any]) -> PurePosixPath:
     """Return the remote directory that stores cached notebook helper scripts."""
-    return _remote_results_root(config) / ".obgpu-helper-cache" / _remote_helper_signature()
+    return _neuroinfra_helper_cache_dir(
+        results_root=_remote_results_root(config),
+        signature=_remote_helper_signature(),
+    )
 
 
 _REMOTE_SLURM_TERMINAL_OK = {"COMPLETED"}
@@ -2751,37 +2761,39 @@ def _ensure_remote_helper_cache(config: dict[str, Any]) -> PurePosixPath | None:
         return PurePosixPath(str(cached["remote_dir"]))
 
     remote_dir = _remote_helper_cache_dir(config)
-    manifest_path = remote_dir / "manifest.json"
+    manifest_path = _neuroinfra_helper_cache_manifest_path(remote_dir)
     expected_signature = _remote_helper_signature()
     probe_started = time.perf_counter()
     probe_completed = _run_paramiko_shell(
         config,
-        f"if test -f {shlex.quote(manifest_path.as_posix())}; then cat {shlex.quote(manifest_path.as_posix())}; fi",
+        _neuroinfra_helper_cache_probe_command(manifest_path),
     )
-    if probe_completed.returncode == 0 and (probe_completed.stdout or "").strip():
-        try:
-            manifest_payload = json.loads((probe_completed.stdout or "").strip())
-        except json.JSONDecodeError:
-            manifest_payload = None
-        if isinstance(manifest_payload, dict) and manifest_payload.get("signature") == expected_signature:
-            _LIVE_REMOTE_HELPER_CACHES[cache_key] = {
-                "remote_dir": remote_dir.as_posix(),
-                "signature": expected_signature,
-                "cache_hit": True,
-                "probe_s": round(time.perf_counter() - probe_started, 3),
-            }
-            return remote_dir
+    if probe_completed.returncode == 0 and _neuroinfra_helper_cache_probe_matches(
+        probe_completed.stdout or "",
+        expected_signature=expected_signature,
+    ):
+        _LIVE_REMOTE_HELPER_CACHES[cache_key] = {
+            "remote_dir": remote_dir.as_posix(),
+            "signature": expected_signature,
+            "cache_hit": True,
+            "probe_s": round(time.perf_counter() - probe_started, 3),
+        }
+        return remote_dir
 
     _progress_write("[Sol remote] Uploading remote helper cache...")
     helper_entries = _remote_helper_bundle_entries()
-    helper_sources = bundle_entries_by_path(helper_entries)
+    helper_sources, manifest_payload, manifest_path = _neuroinfra_helper_cache_upload_payload(
+        remote_dir=remote_dir,
+        entries=helper_entries,
+        signature=expected_signature,
+    )
     upload_started = time.perf_counter()
     sftp = _get_paramiko_sftp(config)
     try:
-        mkdir_targets = [
-            remote_dir.as_posix(),
-            *[(remote_dir / parent).as_posix() for parent in helper_bundle_parent_dirs(helper_entries)],
-        ]
+        mkdir_targets = _neuroinfra_helper_cache_mkdir_targets(
+            remote_dir=remote_dir,
+            entries=helper_entries,
+        )
         mkdir_completed = _run_paramiko_shell(
             config,
             "mkdir -p {}".format(" ".join(shlex.quote(target) for target in mkdir_targets)),
@@ -2796,7 +2808,6 @@ def _ensure_remote_helper_cache(config: dict[str, Any]) -> PurePosixPath | None:
         for name, path in helper_sources.items():
             with sftp.open((remote_dir / PurePosixPath(name)).as_posix(), "wb") as handle:
                 handle.write(path.read_bytes())
-        manifest_payload = helper_bundle_manifest(helper_entries, signature=expected_signature)
         with sftp.open(manifest_path.as_posix(), "wb") as handle:
             handle.write(json.dumps(manifest_payload, indent=2, sort_keys=True).encode("utf-8"))
     finally:

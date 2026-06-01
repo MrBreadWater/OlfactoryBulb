@@ -51,6 +51,15 @@ from .helper_bundle import (
     helper_bundle_signature,
     normalize_helper_relative_path,
 )
+from .helper_cache import (
+    helper_cache_dir,
+    helper_cache_manifest_path,
+    helper_cache_mkdir_targets,
+    helper_cache_probe_command,
+    helper_cache_probe_matches,
+    helper_cache_runtime_key,
+    helper_cache_upload_payload,
+)
 from .git_sync import (
     build_remote_git_bundle_fetch_command,
     build_remote_git_repo_probe_command,
@@ -111,6 +120,13 @@ __all__ = [
     "helper_bundle_manifest",
     "helper_bundle_parent_dirs",
     "helper_bundle_signature",
+    "helper_cache_dir",
+    "helper_cache_manifest_path",
+    "helper_cache_mkdir_targets",
+    "helper_cache_probe_command",
+    "helper_cache_probe_matches",
+    "helper_cache_runtime_key",
+    "helper_cache_upload_payload",
     "heartbeat_timeout_s",
     "midrun_reauth_error",
     "normalize_helper_relative_path",
