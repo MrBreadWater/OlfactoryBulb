@@ -33,7 +33,7 @@ python -m olfactorybulb.audit.cli all --json
 
 - `env_install`: environment, activation hooks, mechanism outputs, loader issues, imports, optional launcher smoke
 - `burton_urban_fi`: FI-style cell-behavior audit
-- `epli_correctness`: EPLI integration/correctness checks
+- `epli_correctness`: external plexiform layer interneuron integration/correctness checks
 - `hfo_feature_contracts`: optimizer/search-space/dashboard/packet contract checks
 
 ## Useful options

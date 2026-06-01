@@ -381,11 +381,11 @@ with TemporaryDirectory() as tmp:
     assert "Soma spike frequency 1D KDE" in html
     assert "13_spike_frequency_kde_1d_control_MT.png" in html
     assert "13_spike_frequency_kde_1d_control_EPLI.png" in html
-    assert "Soma spike frequency 1D KDE: MT" in html
-    assert "Soma spike frequency 1D KDE: EPLI" in html
+    assert "Soma spike frequency 1D KDE: Mitral Cell / Tufted Cell" in html
+    assert "Soma spike frequency 1D KDE: External Plexiform Layer Interneuron" in html
     assert "LFP spectrogram (mod 200 ms)" in html
     assert "Soma spike raster (mod 200 ms)" in html
-    assert "Soma spike time/frequency 2D KDE: MT (mod 200 ms)" in html
+    assert "Soma spike time/frequency 2D KDE: Mitral Cell / Tufted Cell (mod 200 ms)" in html
     assert "13_spike_frequency_kde_2d_control_MT_mod200.png" in html
     assert "09_population_rates.png" not in html
     assert "Contact sheet" in html

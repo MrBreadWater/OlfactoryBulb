@@ -113,7 +113,7 @@ def default_hfo_search_space() -> list[ParameterSpec]:
             high=8.0,
             scale="log",
             default=1.0,
-            description="MC/TC->EPLI reciprocal excitation weight scale",
+            description="Mitral-cell / tufted-cell to external plexiform layer interneuron reciprocal excitation weight scale",
         ),
         ParameterSpec(
             path="epli_gaba_weight_scale",
@@ -121,7 +121,7 @@ def default_hfo_search_space() -> list[ParameterSpec]:
             high=8.0,
             scale="log",
             default=1.0,
-            description="EPLI->MC/TC reciprocal inhibition weight scale",
+            description="External plexiform layer interneuron to mitral-cell / tufted-cell reciprocal inhibition weight scale",
         ),
         ParameterSpec(
             path="gap_tc",
@@ -286,8 +286,12 @@ HFO_CONTROL_HELP: dict[str, str] = {
     "gaba_tau2_ms": "Global GabaSyn tau2.",
     "gc_gaba_weight_scale": "Multiplier applied to GC->MC/TC reciprocal GABA NetCon weights.",
     "gc_ampa_weight_scale": "Multiplier applied to MC/TC->GC reciprocal AMPA/NMDA NetCon weights.",
-    "epli_gaba_weight_scale": "Multiplier applied to EPLI->MC/TC reciprocal GABA NetCon weights.",
-    "epli_ampa_weight_scale": "Multiplier applied to MC/TC->EPLI reciprocal AMPA/NMDA NetCon weights.",
+    "epli_gaba_weight_scale": (
+        "Multiplier applied to external plexiform layer interneuron to mitral-cell / tufted-cell reciprocal GABA NetCon weights."
+    ),
+    "epli_ampa_weight_scale": (
+        "Multiplier applied to mitral-cell / tufted-cell to external plexiform layer interneuron reciprocal AMPA/NMDA NetCon weights."
+    ),
     "kar_mt_gmax": "Slow OSN-glutamate KAR conductance on MC/TC tuft inputs.",
     "enable_gc_kar": "Enable optional MC/TC->GC KAR conductance at reciprocal excitation sites.",
     "kar_gc_gmax": "Optional slow MC/TC-glutamate KAR conductance on GCs.",

@@ -1135,9 +1135,10 @@ def _condition_comparison_sections(
             ketamine_image = pair.get("ketamine")
             used.update(path for path in (control_image, ketamine_image) if path is not None)
             suffix = " (mod 200 ms)" if variant == "mod200" else ""
+            display_group = hfo_visuals.frequency_group_display_label(group)
             sections.append(
                 _condition_pair_html(
-                    f"{title}: {group}{suffix}",
+                    f"{title}: {display_group}{suffix}",
                     control_image,
                     ketamine_image,
                     output_dir=output_dir,
@@ -1199,10 +1200,10 @@ def _render_top_table(rows: list[dict[str, Any]], *, top_n: int) -> str:
         "C peak",
         "K high-gamma",
         "C high-gamma",
-        "K EPLI",
-        "C EPLI",
-        "K TC",
-        "C TC",
+        "Ketamine external plexiform layer interneuron",
+        "Control external plexiform layer interneuron",
+        "Ketamine tufted cell",
+        "Control tufted cell",
     ]
     body = []
     for index, row in enumerate(rows[: int(top_n)], start=1):
@@ -1249,10 +1250,10 @@ def _render_recent_table(
         "C peak",
         "K high-gamma",
         "C high-gamma",
-        "K EPLI",
-        "C EPLI",
-        "K TC",
-        "C TC",
+        "Ketamine external plexiform layer interneuron",
+        "Control external plexiform layer interneuron",
+        "Ketamine tufted cell",
+        "Control tufted cell",
     ]
     body = []
     for index, row in enumerate(
@@ -1370,11 +1371,11 @@ def _render_packet_card(
         f"K target {_fmt(s['ketamine_target'], 4)}",
         f"C target {_fmt(s['control_target'], 4)}",
         f"K peak {_fmt(s['ketamine_peak'], 1)} Hz",
-        f"EPLI {_fmt(s['ketamine_epli'], 2)} Hz",
+        f"External plexiform layer interneuron {_fmt(s['ketamine_epli'], 2)} Hz",
     ]
     penalty_rows = [
-        ("K low EPLI penalty", s["ketamine_low_support_penalty"]),
-        ("K silence penalty", s["ketamine_silence_penalty"]),
+        ("Ketamine low external plexiform layer interneuron support penalty", s["ketamine_low_support_penalty"]),
+        ("Ketamine external plexiform layer interneuron silence penalty", s["ketamine_silence_penalty"]),
         ("Control leak penalty", s["control_leak_penalty"]),
         ("Center penalty", s["center_penalty"]),
     ]

@@ -69,6 +69,7 @@ PRIMARY_PSD_NAME_ORDER = (
 @dataclass(frozen=True)
 class FrequencyGroupSpec:
     label: str
+    display_label: str
     cell_types: tuple[str, ...]
 
 
@@ -91,9 +92,13 @@ class DashboardTabSpec:
 
 
 FREQUENCY_GROUPS = (
-    FrequencyGroupSpec(label="MT", cell_types=("MC", "TC")),
-    FrequencyGroupSpec(label="EPLI", cell_types=("EPLI", "PVCRH")),
-    FrequencyGroupSpec(label="GC", cell_types=("GC",)),
+    FrequencyGroupSpec(label="MT", display_label="Mitral Cell / Tufted Cell", cell_types=("MC", "TC")),
+    FrequencyGroupSpec(
+        label="EPLI",
+        display_label="External Plexiform Layer Interneuron",
+        cell_types=("EPLI", "PVCRH"),
+    ),
+    FrequencyGroupSpec(label="GC", display_label="Granule Cell", cell_types=("GC",)),
 )
 
 FIXED_CONDITION_PAIR_SPECS = (
@@ -188,6 +193,13 @@ def dashboard_tabs() -> tuple[DashboardTabSpec, ...]:
 
 def frequency_group_specs() -> tuple[FrequencyGroupSpec, ...]:
     return FREQUENCY_GROUPS
+
+
+def frequency_group_display_label(label: str) -> str:
+    for group in FREQUENCY_GROUPS:
+        if group.label == label:
+            return group.display_label
+    return label
 
 
 def fixed_condition_pair_specs() -> tuple[ConditionPairSpec, ...]:
@@ -610,7 +622,9 @@ def save_phase_hist(windowed: dict[str, Any], condition: str, out: Path) -> None
         counts, edges = np.histogram(spike_phases, bins=bins)
         centers = edges[:-1] + np.diff(edges) / 2
         ax.bar(centers, counts, width=np.diff(edges), color="#a21caf", alpha=0.75)
-    ax.set_title(f"{condition} M/T/EPLI phase to target-HFO LFP")
+    ax.set_title(
+        f"{condition} Mitral Cell / Tufted Cell / External Plexiform Layer Interneuron phase to target-HFO LFP"
+    )
     fig.savefig(out, dpi=160)
     plt.close(fig)
 
