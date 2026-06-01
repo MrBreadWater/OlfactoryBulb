@@ -32,6 +32,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.slurm_state`
 - `neuroinfra.remote_script_common`
 - `neuroinfra.remote_script_polling`
+- `neuroinfra.remote_script_allocations`
 - `neuroinfra.remote.git_sync`
 - `neuroinfra.remote.helper_cache`
 - `neuroinfra.remote.allocation_cache`
@@ -120,6 +121,12 @@ both repo and helper-cache execution roots.
 The remote-safe polling helpers shared by uploaded Slurm wrapper scripts now
 live under `neuroinfra.remote_script_polling`, while `tools/remote/poll_sol_run.py`
 remains as a compatibility bootstrap/CLI wrapper around that module.
+
+The remote-safe allocation lifecycle helpers shared by uploaded Slurm wrapper
+scripts now live under `neuroinfra.remote_script_allocations`, while
+`tools/remote/submit_slurm_allocation.py` and
+`tools/remote/cleanup_stale_allocations.py` remain as compatibility
+bootstrap/CLI wrappers.
 
 The local Git publication/base-resolution helpers that support notebook-driven
 remote syncs now also live under `neuroinfra.remote.git_sync`, while the live
