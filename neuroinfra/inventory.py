@@ -152,6 +152,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.contracts",
         source_paths=(
             "neuroinfra/contracts/parameters.py",
+            "neuroinfra/contracts/visuals.py",
             "olfactorybulb/hfo_features.py",
             "olfactorybulb/hfo_visuals.py",
             "olfactorybulb/audit/hfo_feature_contracts.py",
@@ -170,7 +171,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="high",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic parameter-space and contract helpers now live under neuroinfra.contracts; next extract the remaining visual-contract pattern so the repo keeps only domain-specific registry contents.",
+        recommended_action="The generic parameter-space and visual-contract helpers now live under neuroinfra.contracts; next reduce the remaining HFO-specific coupling by separating concrete plot families from the shared manifest schema.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",

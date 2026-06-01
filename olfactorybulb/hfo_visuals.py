@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import math
 from pathlib import Path
 from typing import Any
@@ -15,6 +14,12 @@ import numpy as np
 from PIL import Image, ImageDraw
 from scipy import signal
 
+from neuroinfra.contracts.visuals import (
+    ConditionPairSpec,
+    DashboardTabSpec,
+    FrequencyGroupSpec,
+    build_visual_contract_snapshot,
+)
 import obgpu_experiment_helpers as hlp
 import olfactorybulb.hfo_optimizer as hfo
 
@@ -64,32 +69,6 @@ PRIMARY_PSD_NAME_ORDER = (
     "01_lfp_psd_control.png",
     "01_psd_control.png",
 )
-
-
-@dataclass(frozen=True)
-class FrequencyGroupSpec:
-    label: str
-    display_label: str
-    cell_types: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class ConditionPairSpec:
-    title: str
-    control_file: str
-    ketamine_file: str
-    dom_id_suffix: str
-    open_by_default: bool = False
-
-
-@dataclass(frozen=True)
-class DashboardTabSpec:
-    key: str
-    label: str
-    table_heading: str
-    packet_heading: str
-    display_limit: int | None = None
-
 
 FREQUENCY_GROUPS = (
     FrequencyGroupSpec(label="MT", display_label="Mitral Cell / Tufted Cell", cell_types=("MC", "TC")),
@@ -229,17 +208,17 @@ def packet_manifest_files() -> list[str]:
 
 
 def visual_contract_snapshot() -> dict[str, Any]:
-    return {
-        "style_version": VISUAL_STYLE_VERSION,
-        "frequency_groups": [asdict(group) for group in FREQUENCY_GROUPS],
-        "fixed_condition_pairs": [asdict(pair) for pair in FIXED_CONDITION_PAIR_SPECS],
-        "dashboard_tabs": [asdict(tab) for tab in DASHBOARD_TABS],
-        "primary_psd_name_order": list(PRIMARY_PSD_NAME_ORDER),
-        "packet_files": packet_manifest_files(),
-        "spectrogram_pipeline": dict(SPECTROGRAM_PIPELINE),
-        "spectrogram_window_ms": NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
-        "time_modulus_ms": NOTEBOOK_PACKET_TIME_MODULUS_MS,
-    }
+    return build_visual_contract_snapshot(
+        style_version=VISUAL_STYLE_VERSION,
+        frequency_groups=FREQUENCY_GROUPS,
+        fixed_condition_pairs=FIXED_CONDITION_PAIR_SPECS,
+        dashboard_tabs=DASHBOARD_TABS,
+        primary_psd_name_order=PRIMARY_PSD_NAME_ORDER,
+        packet_files=packet_manifest_files(),
+        spectrogram_pipeline=SPECTROGRAM_PIPELINE,
+        spectrogram_window_ms=NOTEBOOK_SPECTROGRAM_VISUAL_WINDOW_MS,
+        time_modulus_ms=NOTEBOOK_PACKET_TIME_MODULUS_MS,
+    )
 
 
 def psd_overlay_contract_snapshot() -> dict[str, Any]:

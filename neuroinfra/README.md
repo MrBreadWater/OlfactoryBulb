@@ -27,6 +27,7 @@ The next standardized seam is also in place:
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
+- `neuroinfra.contracts.visuals`
 
 It captures:
 
@@ -72,6 +73,11 @@ standardized home under `neuroinfra.remote`.
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
 the HFO-specific parameter catalog remains in `olfactorybulb.hfo_features`.
+
+The generic visualization-contract metadata types and snapshot builder that
+back the HFO packet/dashboard schema now live under
+`neuroinfra.contracts.visuals`, while the concrete HFO plot families and
+render helpers remain in `olfactorybulb.hfo_visuals`.
 
 The main file blocking deeper extraction is still:
 

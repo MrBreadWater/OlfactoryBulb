@@ -222,8 +222,13 @@ Current progress:
 
 - the generic parameter-space and contract helpers that back the HFO optimizer
   now live under `neuroinfra.contracts.parameters`
+- the generic visualization-contract metadata types and snapshot builder that
+  back the HFO packet/dashboard schema now live under
+  `neuroinfra.contracts.visuals`
 - `olfactorybulb.hfo_features` still owns the concrete HFO parameter catalog,
   runtime defaults, and override wiring
+- `olfactorybulb.hfo_visuals` still owns the concrete HFO plot families,
+  filenames, and render helpers
 
 Extraction confidence:
 
