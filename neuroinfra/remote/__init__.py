@@ -13,6 +13,16 @@ from .config import (
     ssh_exec_timeout_s,
     ssh_upload_timeout_s,
 )
+from .archive_stream import (
+    build_remote_archive_command,
+    build_remote_archive_probe_command,
+    build_remote_selected_archive_probe_command,
+    build_remote_selected_stream_archive_command,
+    build_remote_stream_archive_command,
+    build_remote_sweep_compact_stream_archive_command,
+    local_archive_decompress_command,
+    paramiko_channel_stream_finished,
+)
 from .notebook_runtime import (
     cache_prompt_response,
     cached_prompt_responses,
@@ -50,6 +60,12 @@ from .command_launch import (
 )
 
 __all__ = [
+    "build_remote_archive_command",
+    "build_remote_archive_probe_command",
+    "build_remote_selected_archive_probe_command",
+    "build_remote_selected_stream_archive_command",
+    "build_remote_stream_archive_command",
+    "build_remote_sweep_compact_stream_archive_command",
     "build_remote_slurm_config",
     "connect_retry_backoff_s",
     "connect_retry_count",
@@ -69,6 +85,8 @@ __all__ = [
     "heartbeat_timeout_s",
     "midrun_reauth_error",
     "normalize_helper_relative_path",
+    "local_archive_decompress_command",
+    "paramiko_channel_stream_finished",
     "poll_command_timeout_s",
     "prompt_key",
     "remote_connection_key",

@@ -27,6 +27,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.command_launch`
 - `neuroinfra.remote.notebook_runtime`
 - `neuroinfra.remote.sftp_sync`
+- `neuroinfra.remote.archive_stream`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -88,6 +89,11 @@ and prompt plumbing still remain in `obgpu_experiment_helpers.py`.
 The SFTP transfer planning and copy loops that power selected-file and full
 result syncs now live under `neuroinfra.remote.sftp_sync`, while the notebook
 progress-bar wiring still remains in `obgpu_experiment_helpers.py`.
+
+The remote archive probe/stream command builders and local decompressor helpers
+that power compressed Paramiko syncs now also live under
+`neuroinfra.remote.archive_stream`, while the live transport plumbing remains
+in `obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
