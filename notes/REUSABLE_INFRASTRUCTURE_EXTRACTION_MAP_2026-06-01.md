@@ -166,6 +166,9 @@ Current progress:
   driven remote syncs now live under `neuroinfra.remote.git_sync`
 - the helper-cache runtime key, cache directory layout, manifest probe logic,
   and upload-plan assembly now live under `neuroinfra.remote.helper_cache`
+- the reusable-allocation cache signature, cache key, runtime-config subset,
+  and normalized allocation record shape now live under
+  `neuroinfra.remote.allocation_cache`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

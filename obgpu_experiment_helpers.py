@@ -116,6 +116,14 @@ from neuroinfra.remote.helper_cache import (
     helper_cache_runtime_key as _neuroinfra_helper_cache_runtime_key,
     helper_cache_upload_payload as _neuroinfra_helper_cache_upload_payload,
 )
+from neuroinfra.remote.allocation_cache import (
+    allocation_cache_key as _neuroinfra_allocation_cache_key,
+    allocation_record as _neuroinfra_allocation_record,
+    allocation_runtime_config as _neuroinfra_allocation_runtime_config,
+    allocation_signature as _neuroinfra_allocation_signature,
+    disabled_allocation_record as _neuroinfra_disabled_allocation_record,
+    manual_allocation_record as _neuroinfra_manual_allocation_record,
+)
 from neuroinfra.remote.command_launch import (
     build_remote_python_file_command as _neuroinfra_build_remote_python_file_command,
     build_remote_python_inline_command as _neuroinfra_build_remote_python_inline_command,
@@ -760,17 +768,7 @@ class _SSHCommandTimeoutError(TimeoutError):
 
 def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
     """Return the SSH/runtime subset needed to rediscover or cancel one allocation."""
-    keys = (
-        "remote_host",
-        "remote_results_root",
-        "remote_heartbeat_timeout_s",
-        "runner_backend",
-        "ssh_options",
-        "ssh_transport",
-        "ssh_keepalive_s",
-        "remote_preserve_paramiko_session",
-    )
-    return {key: deepcopy(config.get(key)) for key in keys if key in config}
+    return _neuroinfra_allocation_runtime_config(config)
 
 
 def _cleanup_notebook_remote_allocations() -> None:
@@ -2131,30 +2129,29 @@ def _remote_poll_command_timeout_s(config: dict[str, Any]) -> float | None:
 
 def _slurm_allocation_signature(config: dict[str, Any]) -> dict[str, Any]:
     """Return the cache signature for one reusable remote Slurm allocation."""
-    return {
-        "remote_host": _paramiko_connection_key(config),
-        "remote_results_root": _remote_results_root(config).as_posix(),
-        "partition": None if config.get("slurm_partition") in (None, "") else str(config.get("slurm_partition")),
-        "account": None if config.get("slurm_account") in (None, "") else str(config.get("slurm_account")),
-        "time": str(config.get("slurm_allocation_time") or config.get("slurm_time") or ""),
-        "gpus": None if config.get("slurm_gpus") in (None, "") else int(config.get("slurm_gpus")),
-        "cpus_per_task": None if config.get("slurm_cpus_per_task") in (None, "") else int(config.get("slurm_cpus_per_task")),
-        "mem": None if config.get("slurm_mem") in (None, "") else str(config.get("slurm_mem")),
-        "extra_args": [str(arg) for arg in config.get("slurm_extra_args", [])],
-        "remote_conda_activate_cmd": str(config.get("remote_conda_activate_cmd") or ""),
-        "remote_runtime_profiles": _json_ready(config.get("remote_runtime_profiles") or []),
-        "remote_fallback_conda_activate_cmd": str(config.get("remote_fallback_conda_activate_cmd") or ""),
-        "remote_fast_node_feature": str(config.get("remote_fast_node_feature") or ""),
-        "remote_mechanism_profile": str(config.get("remote_mechanism_profile") or "default"),
-        "remote_fallback_mechanism_profile": str(config.get("remote_fallback_mechanism_profile") or "portable"),
-        "name": str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc"),
-    }
+    return _neuroinfra_allocation_signature(
+        connection_key=_paramiko_connection_key(config),
+        results_root=_remote_results_root(config),
+        partition=config.get("slurm_partition"),
+        account=config.get("slurm_account"),
+        time_limit=str(config.get("slurm_allocation_time") or config.get("slurm_time") or ""),
+        gpus=config.get("slurm_gpus"),
+        cpus_per_task=config.get("slurm_cpus_per_task"),
+        mem=config.get("slurm_mem"),
+        extra_args=[str(arg) for arg in config.get("slurm_extra_args", [])],
+        remote_conda_activate_cmd=str(config.get("remote_conda_activate_cmd") or ""),
+        remote_runtime_profiles=_json_ready(config.get("remote_runtime_profiles") or []),
+        remote_fallback_conda_activate_cmd=str(config.get("remote_fallback_conda_activate_cmd") or ""),
+        remote_fast_node_feature=str(config.get("remote_fast_node_feature") or ""),
+        remote_mechanism_profile=str(config.get("remote_mechanism_profile") or "default"),
+        remote_fallback_mechanism_profile=str(config.get("remote_fallback_mechanism_profile") or "portable"),
+        name=str(config.get("slurm_allocation_name") or "obgpu_notebook_alloc"),
+    )
 
 
 def _slurm_allocation_cache_key(config: dict[str, Any]) -> str:
     """Return the runtime cache key for one reusable remote Slurm allocation."""
-    payload = json.dumps(_slurm_allocation_signature(config), sort_keys=True, separators=(",", ":"))
-    return sha1(payload.encode("utf-8")).hexdigest()[:16]
+    return _neuroinfra_allocation_cache_key(_slurm_allocation_signature(config))
 
 
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
@@ -4170,23 +4167,9 @@ def _ensure_cached_remote_slurm_allocation(
     """Acquire or reuse one notebook-cached remote Slurm allocation."""
     manual_job_id = config.get("slurm_allocation_job_id")
     if manual_job_id not in (None, ""):
-        return {
-            "job_id": str(manual_job_id),
-            "cached": False,
-            "manual": True,
-            "state": "",
-            "reason": "",
-            "location": "",
-        }
+        return _neuroinfra_manual_allocation_record(str(manual_job_id))
     if not bool(config.get("slurm_reuse_allocation", False)):
-        return {
-            "job_id": None,
-            "cached": False,
-            "manual": False,
-            "state": "",
-            "reason": "",
-            "location": "",
-        }
+        return _neuroinfra_disabled_allocation_record()
 
     cache_key = _slurm_allocation_cache_key(config)
     allocation = _LIVE_SLURM_ALLOCATIONS.get(cache_key)
@@ -4240,19 +4223,19 @@ def _ensure_cached_remote_slurm_allocation(
                         _run_ssh_shell(config, _build_remote_cancel_command(job_id=discovered_job_id))
                     else:
                         _refresh_remote_heartbeat(config, heartbeat_path, warn=True)
-                        allocation = {
-                            "job_id": discovered_job_id,
-                            "cache_key": cache_key,
-                            "allocation_root": str(discovered.get("allocation_root") or allocation_root.as_posix()),
-                            "batch_script": str(discovered.get("batch_script") or ""),
-                            "heartbeat_path": heartbeat_path,
-                            "heartbeat_timeout_s": discovered.get("heartbeat_timeout_s"),
-                            "slurm_log_pattern": str(discovered.get("slurm_log_pattern") or ""),
-                            "name": str(discovered.get("name") or allocation_name),
-                            "cached": True,
-                            "manual": False,
-                            "config": runtime_config,
-                        }
+                        allocation = _neuroinfra_allocation_record(
+                            job_id=discovered_job_id,
+                            cache_key=cache_key,
+                            allocation_root=str(discovered.get("allocation_root") or allocation_root.as_posix()),
+                            batch_script=str(discovered.get("batch_script") or ""),
+                            heartbeat_path=heartbeat_path,
+                            heartbeat_timeout_s=discovered.get("heartbeat_timeout_s"),
+                            slurm_log_pattern=str(discovered.get("slurm_log_pattern") or ""),
+                            name=str(discovered.get("name") or allocation_name),
+                            cached=True,
+                            manual=False,
+                            config=runtime_config,
+                        )
                         _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
                         print(f"[Sol remote] Reusing discovered allocation {allocation['job_id']}.", flush=True)
 
@@ -4275,19 +4258,19 @@ def _ensure_cached_remote_slurm_allocation(
                 "Remote Slurm allocation submission did not return valid JSON.\n"
                 f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
             ) from exc
-        allocation = {
-            "job_id": str(submission["job_id"]),
-            "cache_key": cache_key,
-            "allocation_root": str(submission.get("allocation_root") or allocation_root.as_posix()),
-            "batch_script": str(submission.get("batch_script") or ""),
-            "heartbeat_path": str(submission.get("heartbeat_path") or allocation_root / "notebook-heartbeat.txt"),
-            "heartbeat_timeout_s": submission.get("heartbeat_timeout_s"),
-            "slurm_log_pattern": str(submission.get("slurm_log_pattern") or ""),
-            "name": str(submission.get("name") or allocation_name),
-            "cached": True,
-            "manual": False,
-            "config": runtime_config,
-        }
+        allocation = _neuroinfra_allocation_record(
+            job_id=str(submission["job_id"]),
+            cache_key=cache_key,
+            allocation_root=str(submission.get("allocation_root") or allocation_root.as_posix()),
+            batch_script=str(submission.get("batch_script") or ""),
+            heartbeat_path=str(submission.get("heartbeat_path") or allocation_root / "notebook-heartbeat.txt"),
+            heartbeat_timeout_s=submission.get("heartbeat_timeout_s"),
+            slurm_log_pattern=str(submission.get("slurm_log_pattern") or ""),
+            name=str(submission.get("name") or allocation_name),
+            cached=True,
+            manual=False,
+            config=runtime_config,
+        )
         _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
         created_now = True
 
@@ -4314,12 +4297,22 @@ def _ensure_cached_remote_slurm_allocation(
 
             if state == "RUNNING":
                 allocation.update(
-                    {
-                        "state": state,
-                        "reason": reason,
-                        "location": location,
-                        "config": runtime_config,
-                    }
+                    _neuroinfra_allocation_record(
+                        job_id=str(allocation["job_id"]),
+                        cache_key=str(allocation["cache_key"]),
+                        allocation_root=str(allocation["allocation_root"]),
+                        batch_script=str(allocation["batch_script"]),
+                        heartbeat_path=str(allocation["heartbeat_path"]),
+                        heartbeat_timeout_s=allocation.get("heartbeat_timeout_s"),
+                        slurm_log_pattern=str(allocation.get("slurm_log_pattern") or ""),
+                        name=str(allocation.get("name") or ""),
+                        cached=bool(allocation.get("cached", False)),
+                        manual=bool(allocation.get("manual", False)),
+                        config=runtime_config,
+                        state=state,
+                        reason=reason,
+                        location=location,
+                    )
                 )
                 _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
                 return allocation

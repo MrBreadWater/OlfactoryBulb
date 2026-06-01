@@ -23,6 +23,14 @@ from .archive_stream import (
     local_archive_decompress_command,
     paramiko_channel_stream_finished,
 )
+from .allocation_cache import (
+    allocation_cache_key,
+    allocation_record,
+    allocation_runtime_config,
+    allocation_signature,
+    disabled_allocation_record,
+    manual_allocation_record,
+)
 from .notebook_runtime import (
     cache_prompt_response,
     cached_prompt_responses,
@@ -98,6 +106,10 @@ __all__ = [
     "build_remote_stream_archive_command",
     "build_remote_sweep_compact_stream_archive_command",
     "build_remote_slurm_config",
+    "allocation_cache_key",
+    "allocation_record",
+    "allocation_runtime_config",
+    "allocation_signature",
     "connect_retry_backoff_s",
     "connect_retry_count",
     "collect_selected_transfer_items",
@@ -105,6 +117,7 @@ __all__ = [
     "cache_prompt_response",
     "cached_prompt_responses",
     "can_reconnect",
+    "disabled_allocation_record",
     "ensure_notebook_remote_runtime",
     "get_cached_prompt_response",
     "HelperBundleEntry",
@@ -128,6 +141,7 @@ __all__ = [
     "helper_cache_runtime_key",
     "helper_cache_upload_payload",
     "heartbeat_timeout_s",
+    "manual_allocation_record",
     "midrun_reauth_error",
     "normalize_helper_relative_path",
     "local_archive_decompress_command",

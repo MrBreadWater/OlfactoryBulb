@@ -31,6 +31,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.slurm_launch`
 - `neuroinfra.remote.git_sync`
 - `neuroinfra.remote.helper_cache`
+- `neuroinfra.remote.allocation_cache`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -111,6 +112,10 @@ Paramiko upload/orchestration path still remains in
 The helper-cache runtime key, remote cache directory layout, manifest probe
 logic, and upload-plan assembly that sit between helper-bundle metadata and the
 live Paramiko transport now also live under `neuroinfra.remote.helper_cache`.
+
+The reusable-allocation cache signature, cache key, runtime-config subset, and
+normalized allocation record shape that sit underneath notebook-managed
+allocation reuse now also live under `neuroinfra.remote.allocation_cache`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while

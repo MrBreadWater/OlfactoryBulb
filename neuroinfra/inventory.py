@@ -104,6 +104,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/remote/slurm_launch.py",
             "neuroinfra/remote/git_sync.py",
             "neuroinfra/remote/helper_cache.py",
+            "neuroinfra/remote/allocation_cache.py",
             "tools/remote/slurm_common.py",
             "tools/remote/submit_sol_run.py",
             "tools/remote/submit_slurm_allocation.py",
@@ -124,8 +125,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=2,
-        current_status="config_sync_launch_git_and_helper_cache_seams_standardized",
-        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, notebook runtime/session policy, SFTP sync loops, archive-stream builders, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract the shared remote-script logic from tools/remote without breaking the live entrypoints.",
+        current_status="config_sync_launch_git_helper_cache_and_allocation_seams_standardized",
+        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook runtime/session policy, SFTP sync loops, archive-stream builders, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract the shared remote-script logic from tools/remote without breaking the live entrypoints.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",
