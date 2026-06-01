@@ -45,6 +45,13 @@ from olfactorybulb.hfo_features import PARAMETER_CONTRACT_VERSION, parameter_dis
 import olfactorybulb.hfo_visuals as hfo_visuals
 import generate_hfo_candidate_packet as packet_generator_module
 import regenerate_hfo_packet_psd as psd_packet_module
+from neuroinfra.dashboard.packets import (
+    PacketInfo,
+    candidate_id_from_path as _candidate_id_from_path_generic,
+    cleanup_packet_dirs as _cleanup_packet_dirs,
+    discover_packets as _discover_packets,
+    read_json_dict as _read_json,
+)
 from generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
 from regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
 
@@ -69,17 +76,6 @@ RUNTIME_SUBDIR = ".runtime"
 EXPORT_LOCK_NAME = "export.lock"
 _PACKET_GENERATION_JOBS: dict[tuple[str, str], threading.Thread] = {}
 _PACKET_GENERATION_JOBS_LOCK = threading.Lock()
-
-
-@dataclass(frozen=True)
-class PacketInfo:
-    candidate_id: str
-    packet_dir: Path
-    contact_sheet: Path | None
-    images: tuple[Path, ...]
-    manifest: dict[str, Any]
-    mtime: float
-
 
 @dataclass(frozen=True)
 class RuntimeProcessInfo:
@@ -118,15 +114,6 @@ def _esc(value: Any) -> str:
 
 def _relpath(path: Path, *, from_dir: Path) -> str:
     return os.path.relpath(path.resolve(), from_dir.resolve()).replace(os.sep, "/")
-
-
-def _read_json(path: Path) -> dict[str, Any]:
-    try:
-        payload = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
-        return {}
-    return payload if isinstance(payload, dict) else {}
-
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -326,8 +313,7 @@ def _dashboard_outputs_mtime(output_path: Path) -> float:
 
 
 def _candidate_id_from_path(path: Path) -> str | None:
-    match = re.search(r"(C\d+)", path.name)
-    return match.group(1) if match else None
+    return _candidate_id_from_path_generic(path)
 
 
 def _is_legacy_ad_hoc_kde_image(path: Path) -> bool:
@@ -478,17 +464,6 @@ def _recent_rows(
     return ranked[: int(limit)]
 
 
-def _packet_mtime(paths: list[Path]) -> float:
-    mtimes: list[float] = []
-    for path in paths:
-        try:
-            if path.exists():
-                mtimes.append(path.stat().st_mtime)
-        except (FileNotFoundError, OSError):
-            continue
-    return max(mtimes) if mtimes else 0.0
-
-
 def _path_mtime_ns(path: Path) -> int:
     try:
         return int(path.stat().st_mtime_ns)
@@ -534,49 +509,18 @@ def find_candidate_packets(
 ) -> dict[str, PacketInfo]:
     """Return the newest diagnostic packet per candidate ID."""
     campaign_path = Path(campaign_dir)
-    figures_dir = campaign_path / "figures"
-    if not figures_dir.exists():
-        return {}
-
-    packets: dict[str, PacketInfo] = {}
-    for packet_dir in sorted(path for path in figures_dir.iterdir() if path.is_dir()):
-        if _is_hidden_packet_dir(packet_dir):
-            continue
-        manifest_path = packet_dir / "manifest.json"
-        manifest = _read_json(manifest_path) if manifest_path.exists() else {}
-        if not _is_current_visual_style_manifest(
-            manifest, allow_legacy=(not require_current_visual_style)
-        ):
-            continue
-        candidate_id = str(manifest.get("candidate_id") or _candidate_id_from_path(packet_dir) or "")
-        if not candidate_id:
-            continue
-        contact_sheet = None
-        for name in ("contact_sheet.png", "00_contact_sheet.png"):
-            candidate = packet_dir / name
-            if candidate.exists():
-                contact_sheet = candidate
-                break
-        images = tuple(
-            sorted(
-                path
-                for path in packet_dir.glob("*.png")
-                if not _is_hidden_packet_image(path) and not _is_legacy_ad_hoc_kde_image(path)
-            )
-        )
-        mtime = _packet_mtime([manifest_path, contact_sheet or packet_dir, *images])
-        packet = PacketInfo(
-            candidate_id=candidate_id,
-            packet_dir=packet_dir,
-            contact_sheet=contact_sheet,
-            images=images,
-            manifest=manifest,
-            mtime=mtime,
-        )
-        previous = packets.get(candidate_id)
-        if previous is None or packet.mtime >= previous.mtime:
-            packets[candidate_id] = packet
-    return packets
+    return _discover_packets(
+        campaign_path / "figures",
+        packet_keep_predicate=lambda _packet_dir, manifest: _is_current_visual_style_manifest(
+            manifest,
+            allow_legacy=(not require_current_visual_style),
+        ),
+        hidden_dir_predicate=_is_hidden_packet_dir,
+        exclude_image_predicate=lambda path: _is_hidden_packet_image(path) or _is_legacy_ad_hoc_kde_image(path),
+        candidate_id_resolver=lambda packet_dir, manifest: str(
+            manifest.get("candidate_id") or _candidate_id_from_path(packet_dir) or ""
+        ),
+    )
 
 
 def cleanup_stale_packets(
@@ -587,25 +531,15 @@ def cleanup_stale_packets(
 ) -> tuple[int, list[str]]:
     """Delete stale packet directories and return (removed_count, removed_names)."""
     campaign_path = Path(campaign_dir)
-    figures_dir = campaign_path / "figures"
-    if not figures_dir.exists():
-        return 0, []
-
-    removed: list[str] = []
-    for packet_dir in sorted(path for path in figures_dir.iterdir() if path.is_dir()):
-        if _is_hidden_packet_dir(packet_dir):
-            continue
-        manifest = _read_json(packet_dir / "manifest.json") if (packet_dir / "manifest.json").exists() else {}
-        if _is_current_visual_style_manifest(manifest, allow_legacy=(not require_current_visual_style)):
-            continue
-        removed.append(packet_dir.name)
-        if dry_run:
-            continue
-        try:
-            shutil.rmtree(packet_dir)
-        except FileNotFoundError:
-            continue
-    return len(removed), removed
+    return _cleanup_packet_dirs(
+        campaign_path / "figures",
+        keep_packet_predicate=lambda _packet_dir, manifest: _is_current_visual_style_manifest(
+            manifest,
+            allow_legacy=(not require_current_visual_style),
+        ),
+        hidden_dir_predicate=_is_hidden_packet_dir,
+        dry_run=dry_run,
+    )
 
 
 @contextlib.contextmanager

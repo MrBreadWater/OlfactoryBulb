@@ -28,6 +28,7 @@ The next standardized seam is also in place:
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
 - `neuroinfra.contracts.visuals`
+- `neuroinfra.dashboard.packets`
 
 It captures:
 
@@ -78,6 +79,11 @@ The generic visualization-contract metadata types and snapshot builder that
 back the HFO packet/dashboard schema now live under
 `neuroinfra.contracts.visuals`, while the concrete HFO plot families and
 render helpers remain in `olfactorybulb.hfo_visuals`.
+
+The generic manifest-backed packet discovery and stale-packet cleanup helpers
+that the HFO dashboard uses now live under `neuroinfra.dashboard.packets`,
+while the HFO-specific packet freshness rules and HTML rendering remain in
+`tools.analysis.hfo_visual_dashboard`.
 
 The main file blocking deeper extraction is still:
 

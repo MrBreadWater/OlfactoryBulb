@@ -246,6 +246,7 @@ This is one of the most valuable general patterns in the repo.
 
 Current files:
 
+- `neuroinfra/dashboard/packets.py`
 - `tools/analysis/hfo_visual_dashboard.py`
 - `tools/analysis/generate_hfo_candidate_packet.py`
 - `tools/analysis/regenerate_hfo_packet_psd.py`
@@ -253,6 +254,9 @@ Current files:
 
 What is already generic:
 
+- packet manifest directory scanning
+- latest-packet selection per candidate
+- stale packet cleanup
 - packet manifest pattern
 - background packet generation
 - runtime supervision
@@ -275,6 +279,13 @@ Recommended public package target:
 
 - generic layer: `neuroinfra.dashboard`
 - domain plugin layer: packet schema + renderers supplied by caller
+
+Current progress:
+
+- the generic packet manifest discovery and stale-packet cleanup helpers now
+  live under `neuroinfra.dashboard.packets`
+- the HFO dashboard still owns the HFO-specific packet freshness rules,
+  packet-generation queueing, and HTML/runtime behavior
 
 ### 7. Cell-model registry
 
