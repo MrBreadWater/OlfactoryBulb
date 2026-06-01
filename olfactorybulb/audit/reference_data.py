@@ -22,6 +22,7 @@ PV_CRH_EPL_FSI_IDENTITY_FILENAME = "PV_CRH_EPL_FSI_identity.csv"
 VALIDATION_NOTES_FILENAME = "validation_notes.csv"
 PV_CRH_EPL_FSI_EXTRACTION_README_FILENAME = "PV_CRH_EPL_FSI_extraction_README.md"
 NEEDS_MANUAL_EXTRACTION_FILENAME = "needs_manual_extraction.csv"
+SOURCE_MANIFEST_FILENAME = "source_manifest_epl_fsi.json"
 
 BU2014_MC_TC_PROTOCOL_ID = "BU2014_MC_TC_2s_0_300pA_50pA"
 BMU2024_EPL_FSI_PROTOCOL_ID = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
@@ -81,6 +82,7 @@ PV_CRH_EPL_FSI_EPHYS_COLUMNS = [
     "unit",
     "source_file",
     "source_location",
+    "source_url",
     "data_kind",
     "extraction_method",
     "include_in_validation",
@@ -98,6 +100,7 @@ PV_CRH_EPL_FSI_FI_CURVE_COLUMNS = [
     "cell_id",
     "marker_profile",
     "protocol_id",
+    "source_url",
     "current_pA",
     "firing_rate_Hz",
     "rate_definition",
@@ -144,6 +147,7 @@ PV_CRH_EPL_FSI_IDENTITY_COLUMNS = [
     "marker_profile",
     "identity_kind",
     "Property",
+    "source_url",
     "mean",
     "sd",
     "sem",
@@ -235,6 +239,7 @@ def _normalized_legacy_row(cell_type: str, csv_path: Path, row: dict[str, str]) 
         "unit": PROPERTY_UNITS.get(property_name, ""),
         "source_file": csv_path.name,
         "source_location": "legacy MC/TC electrophysiology reference CSV",
+        "source_url": "",
         "data_kind": "fI_summary_metric" if fi_related else "intrinsic_property",
         "extraction_method": "legacy_csv",
         "include_in_validation": _bool_csv(True),
@@ -329,4 +334,3 @@ def filter_reference_rows(
             continue
         filtered.append(dict(row))
     return filtered
-

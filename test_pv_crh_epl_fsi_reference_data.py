@@ -30,6 +30,12 @@ from olfactorybulb.audit.reference_data import (
     load_pv_crh_epl_fsi_protocol_rows,
 )
 from olfactorybulb.audit.reference_notes import notes_for_rows, render_notes
+from olfactorybulb.audit.reference_sources import (
+    BURTON2024_S15_DATA_SOURCE_ID,
+    BURTON2024_S8_DATA_SOURCE_ID,
+    local_source_path,
+    stable_source_url,
+)
 from tools.extract_pv_crh_epl_fsi_reference_data import main as extract_reference_data
 
 
@@ -61,6 +67,7 @@ assert list(identity_df.columns) == PV_CRH_EPL_FSI_IDENTITY_COLUMNS
 assert list(notes_df.columns) == VALIDATION_NOTES_COLUMNS
 
 assert not ephys_df.empty
+assert not fi_curve_df.empty
 assert not protocols_df.empty
 assert not identity_df.empty
 assert not notes_df.empty
@@ -71,6 +78,12 @@ assert not fi_summary_rows.empty
 assert fi_summary_rows["protocol_id"].fillna("").ne("").all()
 assert fi_summary_rows["source_file"].fillna("").ne("").all()
 assert fi_summary_rows["source_location"].fillna("").ne("").all()
+assert fi_summary_rows["source_url"].fillna("").ne("").all()
+
+for df, name in ((ephys_df, "ephys"), (fi_curve_df, "fi_curve"), (identity_df, "identity")):
+    assert df["source_file"].fillna("").ne("").all(), name
+    assert df["source_location"].fillna("").ne("").all(), name
+    assert df["source_url"].fillna("").ne("").all(), name
 
 numeric_columns = ("mean", "sd", "sem", "n")
 for df in (ephys_df, identity_df):
@@ -98,6 +111,22 @@ legacy_columns = ["Property", "mean +/- sd", "n", "Source", "Notes"]
 for filename in LEGACY_MC_TC_EPHYS_FILENAMES.values():
     legacy_df = pd.read_csv(REFERENCE_DATA_DIR / filename)
     assert list(legacy_df.columns) == legacy_columns
+
+s8_path = local_source_path(BURTON2024_S8_DATA_SOURCE_ID)
+assert s8_path.exists() and s8_path.stat().st_size > 0
+s8_rows = fi_curve_df[fi_curve_df["source_file"] == s8_path.name]
+assert not s8_rows.empty
+assert (s8_rows["protocol_id"] == BMU2024_EPL_FSI_PROTOCOL_ID).all()
+assert (s8_rows["source_url"] == stable_source_url(BURTON2024_S8_DATA_SOURCE_ID)).all()
+assert (s8_rows["sample_scope"] == "example_cell").all()
+assert s8_rows["current_pA"].between(50.0, 600.0).all()
+
+s15_path = local_source_path(BURTON2024_S15_DATA_SOURCE_ID)
+assert s15_path.exists() and s15_path.stat().st_size > 0
+s15_rows = ephys_df[ephys_df["source_file"] == s15_path.name]
+assert not s15_rows.empty
+assert (s15_rows["Source"] == "Burton, Malyshko & Urban (2024)").all()
+assert (s15_rows["source_url"] == stable_source_url(BURTON2024_S15_DATA_SOURCE_ID)).all()
 
 normalized_legacy_rows = [
     row for row in load_normalized_legacy_mc_tc_rows() if row["protocol_id"] == BU2014_MC_TC_PROTOCOL_ID
