@@ -286,6 +286,11 @@ Recommended public package target:
 - generic layer: `neuroinfra.models`
 - repo-specific registry contents remain here
 
+Current progress:
+
+- the generic registry skeleton now lives under `neuroinfra.models.registry`
+- `prev_ob_models.cell_registry` remains the first concrete provider/catalog
+
 ### 8. Slice geometry / connectivity evaluation
 
 Current files:

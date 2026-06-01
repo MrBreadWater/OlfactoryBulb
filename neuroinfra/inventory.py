@@ -202,6 +202,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Cell-model registry",
         target_module="neuroinfra.models",
         source_paths=(
+            "neuroinfra/models/registry.py",
             "prev_ob_models/cell_registry.py",
             "prev_ob_models/utils.py",
         ),
@@ -217,8 +218,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=3,
-        current_status="candidate",
-        recommended_action="Extract the registry skeleton and keep the olfactory-bulb catalog as the first concrete provider.",
+        current_status="internal_shim_extracted",
+        recommended_action="The generic registry skeleton now lives under neuroinfra.models; next move more concrete catalogs behind provider interfaces instead of direct repo imports.",
     ),
     ExtractionCandidate(
         key="slice_geometry_connectivity",

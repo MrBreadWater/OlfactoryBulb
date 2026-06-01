@@ -24,6 +24,7 @@ The next standardized seam is also in place:
 
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
+- `neuroinfra.models.registry`
 
 It captures:
 

@@ -1,46 +1,12 @@
-"""Registry of locally available olfactory bulb cell model families.
-
-The current network runtime is built around Birgiolas 2020 slice JSON files,
-but the repo also contains several published single-cell templates that are
-useful as candidate interneuron models. This registry provides a stable,
-string-keyed way to discover and instantiate them without hard-coded imports.
-"""
+"""Registry of locally available olfactory bulb cell model families."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from importlib import import_module
-from typing import Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
+from neuroinfra.models.registry import CellModelRegistry, CellModelSpec
 
 
-@dataclass(frozen=True)
-class CellModelSpec:
-    key: str
-    family: str
-    role: str
-    source_title: str
-    citation: str
-    module_path: str
-    class_name: str
-    morphology_style: str
-    target_use: str
-    network_ready: bool
-    notes: str = ""
-
-    @property
-    def import_path(self) -> str:
-        return f"{self.module_path}.{self.class_name}"
-
-    def load_class(self):
-        module = import_module(self.module_path)
-        return getattr(module, self.class_name)
-
-    def instantiate(self):
-        return self.load_class()()
-
-
-def _birgiolas_specs() -> List[CellModelSpec]:
-    models: List[CellModelSpec] = []
+def _birgiolas_specs() -> list[CellModelSpec]:
+    models: list[CellModelSpec] = []
     for role, count in (("MC", 5), ("TC", 5), ("GC", 5)):
         for index in range(1, count + 1):
             class_name = f"{role}{index}"
@@ -62,7 +28,7 @@ def _birgiolas_specs() -> List[CellModelSpec]:
     return models
 
 
-CELL_MODEL_SPECS: Tuple[CellModelSpec, ...] = tuple(
+CELL_MODEL_SPECS: tuple[CellModelSpec, ...] = tuple(
     _birgiolas_specs()
     + [
         CellModelSpec(
@@ -143,15 +109,13 @@ CELL_MODEL_SPECS: Tuple[CellModelSpec, ...] = tuple(
     ]
 )
 
-CELL_MODELS_BY_KEY: Dict[str, CellModelSpec] = {spec.key: spec for spec in CELL_MODEL_SPECS}
-
-CELL_MODEL_ALIASES: Dict[str, str] = {
+CELL_MODEL_ALIASES: dict[str, str] = {
     spec.class_name: spec.key
     for spec in CELL_MODEL_SPECS
     if spec.family == "Birgiolas2020"
 }
 
-DEFAULT_FAMILY_MODELS: Dict[Tuple[str, str], str] = {
+DEFAULT_FAMILY_MODELS: dict[tuple[str, str], str] = {
     ("Birgiolas2020", "MC"): "Birgiolas2020.MC1",
     ("Birgiolas2020", "TC"): "Birgiolas2020.TC1",
     ("Birgiolas2020", "GC"): "Birgiolas2020.GC1",
@@ -162,99 +126,79 @@ DEFAULT_FAMILY_MODELS: Dict[Tuple[str, str], str] = {
     ("SyntheticEPL2026", "EPLI"): "SyntheticEPL2026.PVCRH_FSI1",
 }
 
+CELL_MODEL_REGISTRY = CellModelRegistry(
+    CELL_MODEL_SPECS,
+    aliases=CELL_MODEL_ALIASES,
+    default_models=DEFAULT_FAMILY_MODELS,
+)
+
+CELL_MODELS_BY_KEY = CELL_MODEL_REGISTRY.by_key
+
 
 def canonical_cell_model_key(cell_model: str) -> str:
-    if cell_model in CELL_MODELS_BY_KEY:
-        return cell_model
-    if cell_model in CELL_MODEL_ALIASES:
-        return CELL_MODEL_ALIASES[cell_model]
-    raise KeyError(f"Unknown cell model {cell_model!r}")
+    return CELL_MODEL_REGISTRY.canonical_model_key(cell_model)
 
 
 def get_cell_model_spec(cell_model: str) -> CellModelSpec:
-    return CELL_MODELS_BY_KEY[canonical_cell_model_key(cell_model)]
+    return CELL_MODEL_REGISTRY.get_spec(cell_model)
 
 
 def load_cell_class(cell_model: str):
-    return get_cell_model_spec(cell_model).load_class()
+    return CELL_MODEL_REGISTRY.load_class(cell_model)
 
 
 def instantiate_cell(cell_model: str):
-    return get_cell_model_spec(cell_model).instantiate()
+    return CELL_MODEL_REGISTRY.instantiate(cell_model)
 
 
 def list_cell_models(
     *,
-    family: Optional[str] = None,
-    role: Optional[str] = None,
-    target_use: Optional[str] = None,
-    network_ready: Optional[bool] = None,
-) -> List[CellModelSpec]:
-    result = []
-    for spec in CELL_MODEL_SPECS:
-        if family is not None and spec.family != family:
-            continue
-        if role is not None and spec.role != role:
-            continue
-        if target_use is not None and spec.target_use != target_use:
-            continue
-        if network_ready is not None and spec.network_ready != network_ready:
-            continue
-        result.append(spec)
-    return result
+    family: str | None = None,
+    role: str | None = None,
+    target_use: str | None = None,
+    network_ready: bool | None = None,
+) -> list[CellModelSpec]:
+    return CELL_MODEL_REGISTRY.list_models(
+        family=family,
+        role=role,
+        target_use=target_use,
+        network_ready=network_ready,
+    )
 
 
-def list_cell_families() -> List[str]:
-    return sorted({spec.family for spec in CELL_MODEL_SPECS})
+def list_cell_families() -> list[str]:
+    return CELL_MODEL_REGISTRY.list_families()
 
 
 def resolve_family_role_model(family: str, role: str) -> CellModelSpec:
-    key = DEFAULT_FAMILY_MODELS.get((family, role))
-    if key is None:
-        raise KeyError(f"No default model registered for family={family!r}, role={role!r}")
-    return get_cell_model_spec(key)
+    return CELL_MODEL_REGISTRY.resolve_family_role_model(family, role)
 
 
 def resolve_cell_choice(
     *,
-    model: Optional[str] = None,
-    family: Optional[str] = None,
-    role: Optional[str] = None,
+    model: str | None = None,
+    family: str | None = None,
+    role: str | None = None,
 ) -> CellModelSpec:
-    if model:
-        return get_cell_model_spec(model)
-    if family and role:
-        return resolve_family_role_model(family, role)
-    raise ValueError("Provide either model=<key> or both family=<family> and role=<role>")
+    return CELL_MODEL_REGISTRY.resolve_cell_choice(model=model, family=family, role=role)
 
 
 def describe_cell_models(
-    specs: Optional[Sequence[CellModelSpec]] = None,
-) -> List[Mapping[str, str]]:
-    specs = list(CELL_MODEL_SPECS if specs is None else specs)
-    return [
-        {
-            "key": spec.key,
-            "family": spec.family,
-            "role": spec.role,
-            "source_title": spec.source_title,
-            "citation": spec.citation,
-            "morphology_style": spec.morphology_style,
-            "target_use": spec.target_use,
-            "network_ready": str(spec.network_ready),
-            "notes": spec.notes,
-        }
-        for spec in specs
-    ]
+    specs: list[CellModelSpec] | tuple[CellModelSpec, ...] | None = None,
+) -> list[dict[str, str]]:
+    return list(CELL_MODEL_REGISTRY.describe_models(specs))
 
 
-def list_fast_inhibitory_proxy_models() -> List[CellModelSpec]:
-    return list_cell_models(target_use="fast_inhibitory_proxy")
+def list_fast_inhibitory_proxy_models() -> list[CellModelSpec]:
+    return CELL_MODEL_REGISTRY.list_by_target_use("fast_inhibitory_proxy")
 
 
 __all__ = [
+    "CELL_MODEL_ALIASES",
+    "CELL_MODEL_REGISTRY",
     "CELL_MODEL_SPECS",
     "CELL_MODELS_BY_KEY",
+    "DEFAULT_FAMILY_MODELS",
     "CellModelSpec",
     "canonical_cell_model_key",
     "describe_cell_models",
