@@ -17,7 +17,6 @@ import re
 import shlex
 import shutil
 import socket
-import stat
 import subprocess
 import sys
 import tempfile
@@ -141,6 +140,11 @@ from neuroinfra.remote.notebook_runtime import (
     midrun_reauth_error as _neuroinfra_midrun_reauth_error,
     prompt_key as _neuroinfra_prompt_key,
     transport_is_usable as _neuroinfra_transport_is_usable,
+)
+from neuroinfra.remote.sftp_sync import (
+    SFTPSyncHooks as _NeuroinfraSFTPSyncHooks,
+    sftp_copy_files as _neuroinfra_sftp_copy_files,
+    sftp_copy_tree as _neuroinfra_sftp_copy_tree,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -2568,105 +2572,26 @@ def _run_paramiko_shell(
 
 def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:
     """Recursively copy one remote directory tree through SFTP with progress output."""
-
-    def collect_files(current_remote_dir: str, current_local_dir: Path) -> list[tuple[str, Path, int]]:
-        current_local_dir.mkdir(parents=True, exist_ok=True)
-        files: list[tuple[str, Path, int]] = []
-        for entry in sftp.listdir_attr(current_remote_dir):
-            remote_path = f"{current_remote_dir.rstrip('/')}/{entry.filename}"
-            local_path = current_local_dir / entry.filename
-            if stat.S_ISDIR(entry.st_mode):
-                files.extend(collect_files(remote_path, local_path))
-                continue
-            files.append((remote_path, local_path, int(getattr(entry, "st_size", 0))))
-        return files
-
-    transfer_plan = collect_files(remote_dir, local_dir)
-    total_files = len(transfer_plan)
-    total_bytes = sum(size for _remote_path, _local_path, size in transfer_plan)
-    transferred_bytes = 0
-    progress = _ProgressBar(total=total_bytes, desc="[OBGPU load] Sync from Sol", unit="B", unit_scale=True)
-
-    if total_files:
-        _progress_write(
-            f"[OBGPU load] Syncing {total_files} files from Sol ({_format_bytes(total_bytes)})...",
-        )
-
-    for index, (remote_path, local_path, file_size) in enumerate(transfer_plan, start=1):
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        _progress_write(
-            f"[OBGPU load] Syncing {index}/{total_files}: {local_path.name} ({_format_bytes(file_size)})",
-        )
-        base_bytes = transferred_bytes
-
-        def callback(current_file_bytes: int, _current_file_total: int) -> None:
-            overall_bytes = base_bytes + current_file_bytes
-            progress.update_to(overall_bytes)
-
-        _replace_file_via_temp_copy(
-            lambda temp_path: sftp.get(remote_path, str(temp_path), callback=callback),
-            local_path,
-        )
-        transferred_bytes += file_size
-        progress.update_to(transferred_bytes)
-
-    if total_files:
-        _progress_write(
-            f"[OBGPU load] Sync complete {_render_progress_bar(total_bytes, total_bytes)} "
-            f"{_format_bytes(total_bytes)} / {_format_bytes(total_bytes)}",
-        )
-    progress.close()
+    hooks = _NeuroinfraSFTPSyncHooks(
+        progress_factory=lambda total: _ProgressBar(total=total, desc="[OBGPU load] Sync from Sol", unit="B", unit_scale=True),
+        progress_write=_progress_write,
+        format_bytes=_format_bytes,
+        render_progress_bar=_render_progress_bar,
+        replace_file_via_temp_copy=_replace_file_via_temp_copy,
+    )
+    _neuroinfra_sftp_copy_tree(sftp, remote_dir, local_dir, hooks=hooks)
 
 
 def _sftp_copy_files(sftp: Any, remote_dir: str, local_dir: Path, file_names: list[str] | tuple[str, ...]) -> None:
     """Copy a selected set of remote files through SFTP with progress output."""
-    local_dir.mkdir(parents=True, exist_ok=True)
-    transfer_plan: list[tuple[str, Path, int]] = []
-    for name in file_names:
-        remote_path = f"{remote_dir.rstrip('/')}/{name}"
-        local_path = local_dir / name
-        try:
-            entry = sftp.stat(remote_path)
-        except Exception:
-            continue
-        if stat.S_ISDIR(entry.st_mode):
-            continue
-        transfer_plan.append((remote_path, local_path, int(getattr(entry, "st_size", 0))))
-
-    total_files = len(transfer_plan)
-    total_bytes = sum(size for _remote_path, _local_path, size in transfer_plan)
-    transferred_bytes = 0
-    progress = _ProgressBar(total=total_bytes, desc="[OBGPU load] Sync from Sol", unit="B", unit_scale=True)
-
-    if total_files:
-        _progress_write(
-            f"[OBGPU load] Syncing {total_files} selected files from Sol ({_format_bytes(total_bytes)})...",
-        )
-
-    for index, (remote_path, local_path, file_size) in enumerate(transfer_plan, start=1):
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        _progress_write(
-            f"[OBGPU load] Syncing {index}/{total_files}: {local_path.name} ({_format_bytes(file_size)})",
-        )
-        base_bytes = transferred_bytes
-
-        def callback(current_file_bytes: int, _current_file_total: int) -> None:
-            overall_bytes = base_bytes + current_file_bytes
-            progress.update_to(overall_bytes)
-
-        _replace_file_via_temp_copy(
-            lambda temp_path: sftp.get(remote_path, str(temp_path), callback=callback),
-            local_path,
-        )
-        transferred_bytes += file_size
-        progress.update_to(transferred_bytes)
-
-    if total_files:
-        _progress_write(
-            f"[OBGPU load] Sync complete {_render_progress_bar(total_bytes, total_bytes)} "
-            f"{_format_bytes(total_bytes)} / {_format_bytes(total_bytes)}",
-        )
-    progress.close()
+    hooks = _NeuroinfraSFTPSyncHooks(
+        progress_factory=lambda total: _ProgressBar(total=total, desc="[OBGPU load] Sync from Sol", unit="B", unit_scale=True),
+        progress_write=_progress_write,
+        format_bytes=_format_bytes,
+        render_progress_bar=_render_progress_bar,
+        replace_file_via_temp_copy=_replace_file_via_temp_copy,
+    )
+    _neuroinfra_sftp_copy_files(sftp, remote_dir, local_dir, file_names, hooks=hooks)
 
 
 def _run_ssh_shell(

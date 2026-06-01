@@ -99,6 +99,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/remote/command_launch.py",
             "neuroinfra/remote/helper_bundle.py",
             "neuroinfra/remote/notebook_runtime.py",
+            "neuroinfra/remote/sftp_sync.py",
             "tools/remote/slurm_common.py",
             "tools/remote/submit_sol_run.py",
             "tools/remote/submit_slurm_allocation.py",
@@ -119,8 +120,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=2,
-        current_status="config_local_and_session_seams_standardized",
-        recommended_action="The remote config-normalization, helper-bundle packaging, notebook runtime/session policy, and local command-building seams are now standardized under neuroinfra; next extract shared launcher logic without breaking the live remote entrypoints.",
+        current_status="config_session_and_sync_seams_standardized",
+        recommended_action="The remote config-normalization, helper-bundle packaging, notebook runtime/session policy, SFTP sync loops, and local command-building seams are now standardized under neuroinfra; next extract shared launcher logic without breaking the live remote entrypoints.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",

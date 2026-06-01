@@ -150,6 +150,8 @@ Current progress:
 - the notebook-shared remote runtime keys, Paramiko prompt-cache handling,
   and fail-closed reconnect policy that sit underneath the live notebook SSH
   path now live under `neuroinfra.remote.notebook_runtime`
+- the SFTP transfer planning and copy loops that power selected-file and full
+  result syncs now live under `neuroinfra.remote.sftp_sync`
 - the helper-bundle manifest/signature protocol that packages remote scripts
   for upload is now standardized under `neuroinfra.remote.helper_bundle`
 - the local command builders that launch uploaded or inline helper scripts are
