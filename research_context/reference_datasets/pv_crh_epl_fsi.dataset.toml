@@ -1,0 +1,1145 @@
+dataset_id = "pv_crh_epl_fsi"
+dataset_name = "PV/CRH-overlap EPL fast-spiking interneuron"
+source_data_subdir = "epl_fsi"
+
+[outputs]
+ephys = "PV_CRH_EPL_FSI_ephys.csv"
+fi_curve = "PV_CRH_EPL_FSI_fI_curve.csv"
+protocols = "PV_CRH_EPL_FSI_protocols.csv"
+identity = "PV_CRH_EPL_FSI_identity.csv"
+notes = "validation_notes.csv"
+manual = "needs_manual_extraction.csv"
+readme = "PV_CRH_EPL_FSI_extraction_README.md"
+
+[readme]
+title = "PV/CRH-overlap EPL fast-spiking interneuron reference-data extraction"
+summary = "This directory contains a protocol-aware reference-data set for a PV/CRH-overlap, axonless, external-plexiform-layer fast-spiking interneuron target."
+source_summary = [
+  "Burton, Malyshko & Urban 2024 contributes the primary fast-spiking-interneuron intrinsic, firing-rate-current, and morphology sources through S8, S15, and S16 supporting files.",
+  "Huang et al. 2013 contributes CRH/PV-overlap identity constraints, axonless morphology constraints, spontaneous firing summary, and maximum current-evoked firing summary.",
+  "Kato et al. 2013 contributes PV+ external-plexiform-layer interneuron identity constraints and summary intrinsic electrophysiology.",
+  "Liu et al. 2019 remains identity/network-only here unless explicit intrinsic or current-rate numeric data are added."
+]
+suitable_now = [
+  "Burton 2024 S15-derived intrinsic-property rows",
+  "Burton 2024 S8-derived example-cell current-rate rows",
+  "Burton 2024 S16-derived morphology rows",
+  "Huang 2013 spontaneous-firing and maximum current-evoked firing summary rows",
+  "Kato 2013 intrinsic-property summary rows",
+  "Protocol metadata and protocol caveat notes"
+]
+caveats = [
+  "Burton 2024 S8 rows are tagged sample_scope = example_cell; they are not population-average firing-rate curves.",
+  "Burton 2014 MC/TC and Burton/Malyshko/Urban 2024 EPL-FSI firing-rate validation remain protocol-non-equivalent. N_FI_PROTOCOL_DIFFERENCE must remain visible in combined outputs.",
+  "The pipeline does not perform built-in figure digitization. Figure-only gaps stay in needs_manual_extraction.csv."
+]
+
+[[sources]]
+source_id = "burton2024_article_pdf"
+source = "Burton, Malyshko & Urban (2024)"
+label = "Burton 2024 article PDF"
+filename = "burton_malyshko_urban_2024_article.pdf"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660&type=printable"
+downloadable = true
+required = true
+expected_extension = ".pdf"
+
+[[sources]]
+source_id = "burton2024_s1_table"
+source = "Burton, Malyshko & Urban (2024)"
+label = "Burton 2024 S1 Table"
+filename = "burton_malyshko_urban_2024_S1_Table_intrinsic_properties.docx"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660.s015&type=supplementary"
+downloadable = true
+required = true
+expected_extension = ".docx"
+
+[[sources]]
+source_id = "burton2024_s2_table"
+source = "Burton, Malyshko & Urban (2024)"
+label = "Burton 2024 S2 Table"
+filename = "burton_malyshko_urban_2024_S2_Table_morphology.docx"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660.s016&type=supplementary"
+downloadable = true
+required = true
+expected_extension = ".docx"
+
+[[sources]]
+source_id = "burton2024_s8_data"
+source = "Burton, Malyshko & Urban (2024)"
+label = "Burton 2024 S8 Data"
+filename = "burton_malyshko_urban_2024_S8_Data_fI_examples.xls"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660.s025&type=supplementary"
+downloadable = true
+required = true
+expected_extension = ".xls"
+
+[[sources]]
+source_id = "burton2024_s15_data"
+source = "Burton, Malyshko & Urban (2024)"
+label = "Burton 2024 S15 Data"
+filename = "burton_malyshko_urban_2024_S15_Data_intrinsic_properties.xls"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660.s032&type=supplementary"
+downloadable = true
+required = true
+expected_extension = ".xls"
+
+[[sources]]
+source_id = "burton2024_s16_data"
+source = "Burton, Malyshko & Urban (2024)"
+label = "Burton 2024 S16 Data"
+filename = "burton_malyshko_urban_2024_S16_Data_morphology.xls"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660.s033&type=supplementary"
+downloadable = true
+required = true
+expected_extension = ".xls"
+
+[[sources]]
+source_id = "huang2013_article_pdf"
+source = "Huang et al. (2013)"
+label = "Huang 2013 article PDF"
+filename = "Huang EPLI.pdf"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+downloadable = false
+required = false
+expected_extension = ".pdf"
+
+[[sources]]
+source_id = "kato2013_article_pdf"
+source = "Kato et al. (2013)"
+label = "Kato 2013 article PDF"
+filename = "kato2013 EPLI.pdf"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+downloadable = false
+required = false
+expected_extension = ".pdf"
+
+[[sources]]
+source_id = "liu2019_article_pdf"
+source = "Liu et al. (2019)"
+label = "Liu 2019 article PDF"
+filename = "liu_et_al_2019_article.pdf"
+source_url = "https://www.nature.com/articles/s41467-019-11354-y.pdf"
+downloadable = false
+required = false
+expected_extension = ".pdf"
+
+[[static_protocol_rows]]
+protocol_id = "BU2014_MC_TC_2s_0_300pA_50pA"
+source = "Burton & Urban (2014)"
+cell_type = "MC;TC"
+marker_profile = "principal_cell"
+stimulus_type = "somatic depolarizing current step"
+step_duration_ms = 2000.0
+current_start_pA = 0.0
+current_stop_pA = 300.0
+current_step_pA = 50.0
+current_values_pA = "0;50;100;150;200;250;300"
+rate_definition = "Legacy MC/TC summary metrics derived from a two-second firing-rate-versus-current protocol."
+spike_detection_rule = "Not explicitly preserved in the legacy CSVs; see Burton & Urban 2014 methods."
+baseline_or_holding_vm_mV = -58.0
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "MC_TC_fI"
+notes = "Legacy mitral-cell / tufted-cell protocol retained so downstream renderers can detect non-equivalence to EPL-FSI protocols."
+
+[[static_protocol_rows]]
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+source = "Burton, Malyshko & Urban (2024)"
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+stimulus_type = "somatic depolarizing current step"
+step_duration_ms = 500.0
+current_start_pA = 50.0
+current_stop_pA = 600.0
+current_step_pA = 50.0
+current_values_pA = "50;100;150;200;250;300;350;400;450;500;550;600"
+rate_definition = "Median inverse interspike interval evoked by each step current."
+spike_detection_rule = "Voltage derivative threshold of 15 mV/ms."
+baseline_or_holding_vm_mV = "held at resting membrane potential (0 pA holding current)"
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "EPL_FSI_fI"
+notes = "Actual current-rate points are extracted from Burton 2024 S8 Data example fast-spiking-interneuron sheets. This remains a different protocol family from the legacy Burton and Urban 2014 mitral-cell / tufted-cell protocol."
+
+[[static_protocol_rows]]
+protocol_id = "HUANG2013_CRH_EPL_current_injection"
+source = "Huang et al. (2013)"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+stimulus_type = "somatic current injection"
+current_values_pA = ""
+rate_definition = "Maximum current-evoked firing rate only; full current-rate series not recoverable from local PDF text."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "EPL_identity_control"
+notes = "Use only as a tagged CRH+ current-clamp summary unless manually curated current-rate points are added with provenance."
+
+[[static_protocol_rows]]
+protocol_id = "KATO2013_PV_EPL_current_clamp"
+source = "Kato et al. (2013)"
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+stimulus_type = "somatic current clamp"
+current_step_pA = 100.0
+current_values_pA = ""
+rate_definition = "High-frequency spike summary only; no extracted current-rate point table."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "PV_EPL_identity_control"
+notes = "The local PDF text confirms 100 pA current-step increments but does not expose a recoverable current-rate point table."
+
+[[static_note_rows]]
+note_id = "N_FI_PROTOCOL_DIFFERENCE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "protocol"
+target = "BU2014_MC_TC_2s_0_300pA_50pA;BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+message = "MC/TC and EPL-FSI f-I validation targets use different current-injection protocols. Burton & Urban 2014 MC/TC values use 2 s depolarizing steps from 0 to 300 pA in 50 pA increments. Burton, Malyshko & Urban 2024 EPL-FSI values use 500 ms depolarizing steps from 50 to 600 pA in 50 pA increments, with firing rate computed from median inverse ISI. Compare model outputs only against rows with matching protocol_id unless an explicit normalization/reanalysis step is implemented."
+display_order = 10
+source = "Burton & Urban (2014); Burton, Malyshko & Urban (2024)"
+source_location = "Protocol metadata rows"
+
+[[static_note_rows]]
+note_id = "N_BMU2024_EXAMPLE_CELL_SCOPE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "source"
+target = "Burton, Malyshko & Urban (2024)"
+message = "Burton, Malyshko & Urban 2024 S8 current-rate rows are example-cell traces rather than population-level averages. Use them as tagged validation targets with sample_scope = example_cell."
+display_order = 20
+source = "Burton, Malyshko & Urban (2024)"
+source_location = "S8 Data example FSI sheets"
+
+[[static_note_rows]]
+note_id = "N_MARKER_PROFILE_SEPARATION"
+severity = "warning"
+scope = "identity_validation"
+target_type = "source"
+target = "PV+ EPL-IN;CRH+ EPL-IN;EPL-FSI"
+message = "PV+, CRH+, and PV/CRH-overlap-adjacent EPL interneuron rows are intentionally kept separate by marker_profile and protocol_id. Do not pool them unless the source explicitly identifies the same population under a compatible protocol."
+display_order = 40
+source = "Huang et al. (2013); Kato et al. (2013); Burton, Malyshko & Urban (2024)"
+source_location = "Cross-source integration rule for this extraction pipeline"
+
+[[conditional_note_rows]]
+condition = "missing_source"
+source_id = "burton2024_s8_data"
+note_id = "N_BMU2024_SUPPLEMENT_MISSING"
+severity = "warning"
+scope = "extraction"
+target_type = "source"
+target = "Burton, Malyshko & Urban (2024)"
+message = "One or more Burton, Malyshko & Urban 2024 supporting files could not be acquired automatically. The extractor fell back to partial outputs and tracked the remaining gaps in needs_manual_extraction.csv."
+display_order = 30
+source = "Burton, Malyshko & Urban (2024)"
+source_location = "Remote acquisition step for required supporting files"
+
+[[conditional_note_rows]]
+condition = "output_empty"
+output = "fi_curve"
+note_id = "N_EPL_FI_POINTS_UNAVAILABLE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "source"
+target = "PV_CRH_EPL_FSI_fI_curve.csv"
+message = "No validated EPL fast-spiking interneuron current-rate point set was extracted. The f-I curve CSV remains empty until S8 Data is available or a manually curated table is committed."
+display_order = 35
+source = "Burton, Malyshko & Urban (2024)"
+source_location = "S8 Data extraction status"
+
+[[static_manual_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+figure_or_table = "Figure 4A-D"
+target_metric = "CRH+ EPL-IN resistance, capacitance, resting membrane potential, and action-potential threshold numeric values"
+reason = "The local PDF text states directionality but does not expose the bar values numerically."
+suggested_action = "Create or locate a manually curated source table before adding these rows to PV_CRH_EPL_FSI_ephys.csv."
+
+[[static_manual_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+figure_or_table = "Figure 4F"
+target_metric = "CRH+ EPL-IN current-rate points"
+reason = "The local PDF text exposes only the maximum current-evoked firing rate, not the full current-rate series or exact step protocol values."
+suggested_action = "Create a manually curated current-rate table with provenance before populating PV_CRH_EPL_FSI_fI_curve.csv."
+
+[[static_manual_rows]]
+source = "Kato et al. (2013)"
+source_file = "kato2013 EPLI.pdf"
+figure_or_table = "Figure 1D"
+target_metric = "PV+ EPL-IN current-rate points and exact current range"
+reason = "The local PDF text exposes 100 pA step increments and a high-frequency spike summary but not a recoverable current-rate point table."
+suggested_action = "Create a manually curated source table before treating Kato 2013 as an f-I point-set reference."
+
+[[static_manual_rows]]
+source = "Liu et al. (2019)"
+source_file = "liu_et_al_2019_article.pdf"
+figure_or_table = "all"
+target_metric = "EPL interneuron identity/network constraints from Liu et al. 2019"
+reason = "Liu 2019 remains an identity/network-only source here unless explicit intrinsic or current-rate numeric data are extracted."
+suggested_action = "Add local Liu 2019 source tables only if they contain relevant identity or intrinsic metrics."
+
+[[conditional_manual_rows]]
+condition = "missing_source"
+source_id = "burton2024_s15_data"
+source = "Burton, Malyshko & Urban (2024)"
+source_file = "burton_malyshko_urban_2024_S15_Data_intrinsic_properties.xls"
+figure_or_table = "S15 Data / S1 Table"
+target_metric = "FSI intrinsic biophysical property summary table"
+reason = "Required Burton 2024 S15 Data workbook is not available after the acquisition step."
+suggested_action = "Retry source download, then regenerate PV_CRH_EPL_FSI_ephys.csv from S15 Data."
+
+[[conditional_manual_rows]]
+condition = "missing_source"
+source_id = "burton2024_s8_data"
+source = "Burton, Malyshko & Urban (2024)"
+source_file = "burton_malyshko_urban_2024_S8_Data_fI_examples.xls"
+figure_or_table = "S8 Data / S2 Fig"
+target_metric = "EPL-FSI firing-rate-current points and firing-irregularity-current points"
+reason = "Required Burton 2024 S8 Data workbook is not available after the acquisition step."
+suggested_action = "Retry source download or add a manually curated source table before populating PV_CRH_EPL_FSI_fI_curve.csv."
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "resting potential (mV)"
+property_name = "Membrane Resting Voltage"
+reported_definition = "resting potential"
+unit = "mV"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "input resistance (MΩ)"
+property_name = "Input Resistance"
+reported_definition = "input resistance"
+unit = "MOhm"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "membrane time constant (ms)"
+property_name = "Membrane Time Constant"
+reported_definition = "membrane time constant"
+unit = "ms"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "membrane capacitance (pF)"
+property_name = "Capacitance"
+reported_definition = "membrane capacitance"
+unit = "pF"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "spontaneous firing rate (Hz)"
+property_name = "Spontaneous Firing Rate"
+reported_definition = "spontaneous firing rate"
+unit = "Hz"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "spike amp. (mV)"
+property_name = "AP Amplitude"
+reported_definition = "spike amplitude"
+unit = "mV"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "spike width (ms)"
+property_name = "AP Half-Width"
+reported_definition = "spike width"
+unit = "ms"
+data_kind = "intrinsic_property"
+notes = "The source spreadsheet reports spike width in milliseconds; this row preserves that definition directly."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "spike threshold (mV)"
+property_name = "AP Threshold"
+reported_definition = "spike threshold"
+unit = "mV"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "afterhyperpolarization amp. (mV)"
+property_name = "AHP Amplitude"
+reported_definition = "afterhyperpolarization amplitude"
+unit = "mV"
+data_kind = "intrinsic_property"
+notes = "Computed directly from FSI rows in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "afterhyperpolarization 50% decay (ms)"
+property_name = "AHP Duration"
+reported_definition = "afterhyperpolarization 50 percent decay"
+unit = "ms"
+data_kind = "intrinsic_property"
+notes = "This is the afterhyperpolarization fifty-percent decay time reported in S15 Data."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "rheobase (pA)"
+property_name = "Rheobase Current"
+reported_definition = "rheobase"
+unit = "pA"
+data_kind = "fI_summary_metric"
+notes = "Computed directly from FSI rows in S15 Data under the Burton, Malyshko & Urban 2024 EPL-FSI current-clamp protocol. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+include_in_fi_validation = true
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "max. gain (Hz/pA)"
+property_name = "FI Curve Slope"
+reported_definition = "maximum gain"
+unit = "Hz/nA"
+transform_scale = 1000.0
+data_kind = "fI_summary_metric"
+notes = "The source defines this as maximum gain in hertz per picoampere. It is converted here to hertz per nanoampere by multiplying by one thousand. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+include_in_fi_validation = true
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "max. instantaneous rate (Hz)"
+property_name = "Max FI Rate"
+reported_definition = "maximum instantaneous rate"
+unit = "Hz"
+data_kind = "fI_summary_metric"
+notes = "The source defines this as maximum instantaneous rate rather than a full current-rate point set. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+include_in_fi_validation = true
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "max. interspike interval (ISI) C.V."
+property_name = "ISI Coefficient of Variation"
+reported_definition = "maximum interspike interval coefficient of variation"
+unit = ""
+data_kind = "fI_summary_metric"
+notes = "The source defines this as the maximum interspike-interval coefficient of variation across the protocol, not as a baseline irregularity measure. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+include_in_fi_validation = true
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[summary_rules]]
+output = "ephys"
+source_id = "burton2024_s15_data"
+sheet_name = "S1 Table"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "relative adaptation (ISIfirst/ISIlast; %)"
+property_name = "Spiking Rate Accommodation"
+reported_definition = "relative adaptation (ISI first / ISI last; percent)"
+unit = "%"
+data_kind = "fI_summary_metric"
+notes = "The source defines this row as relative adaptation using first-interval over last-interval ratio in percent. The companion absolute-adaptation column remains available in the raw S15 workbook but is not emitted as a separate canonical row here. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+include_in_fi_validation = true
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[summary_rules]]
+output = "identity"
+source_id = "burton2024_s16_data"
+sheet_name = "somatodendritic morphology"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "soma max. diameter (μm)"
+property_name = "Soma Diameter"
+unit = "um"
+identity_kind = "morphology_constraint"
+data_kind = "morphology_constraint"
+notes = "Computed directly from FSI rows in S16 Data somatodendritic morphology sheet."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "identity"
+source_id = "burton2024_s16_data"
+sheet_name = "somatodendritic morphology"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "# primary dendritic branches"
+property_name = "Primary Process Count"
+unit = "count"
+identity_kind = "morphology_constraint"
+data_kind = "morphology_constraint"
+notes = "Computed directly from FSI rows in S16 Data somatodendritic morphology sheet."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "identity"
+source_id = "burton2024_s16_data"
+sheet_name = "somatodendritic morphology"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "total dendritic length (mm)"
+property_name = "Total Dendritic Length"
+unit = "mm"
+identity_kind = "morphology_constraint"
+data_kind = "morphology_constraint"
+notes = "Computed directly from FSI rows in S16 Data somatodendritic morphology sheet."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[summary_rules]]
+output = "identity"
+source_id = "burton2024_s16_data"
+sheet_name = "relative EPL depth"
+row_filter_column = "EPL-IN type"
+row_filter_equals = "FSI"
+column = "relative EPL depth (0=MCL, 1=GL) [sorted by type and depth]"
+property_name = "Relative EPL Depth"
+unit = "normalized depth"
+identity_kind = "morphology_constraint"
+data_kind = "morphology_constraint"
+notes = "Computed directly from FSI rows in S16 Data relative EPL depth sheet."
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+
+[[point_rules]]
+source_id = "burton2024_s8_data"
+sheet_name = "Panels D,E"
+current_column = "current (pA)"
+value_column = "firing rate (Hz)"
+current_min_pA = 50.0
+current_max_pA = 600.0
+cell_type = "EPL-FSI"
+cell_id = "BMU2024_FSI_example_Fig1B"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+source_location = "S8 Data, sheet 'Panels D,E' (example fast-spiking interneuron corresponding to S2 Fig D,E / Fig 1B)"
+rate_definition = "Median inverse interspike interval."
+step_duration_ms = 500.0
+current_start_pA = 50.0
+current_stop_pA = 600.0
+current_step_pA = 50.0
+baseline_or_holding_vm_mV = "held at resting membrane potential (0 pA holding current)"
+sample_scope = "example_cell"
+extraction_method = "source_spreadsheet"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE", "N_BMU2024_EXAMPLE_CELL_SCOPE"]
+notes = "Actual current-rate point from Burton 2024 S8 Data. This row is from an example fast-spiking interneuron, not a population average. The companion CV(ISI) column remains in the source workbook and is not emitted here."
+
+[[point_rules]]
+source_id = "burton2024_s8_data"
+sheet_name = "Panels I,J"
+current_column = "current (pA)"
+value_column = "firing rate (Hz)"
+current_min_pA = 50.0
+current_max_pA = 600.0
+cell_type = "EPL-FSI"
+cell_id = "BMU2024_FSI_example_Fig1C"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+protocol_id = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
+source_location = "S8 Data, sheet 'Panels I,J' (example fast-spiking interneuron corresponding to S2 Fig I,J / Fig 1C)"
+rate_definition = "Median inverse interspike interval."
+step_duration_ms = 500.0
+current_start_pA = 50.0
+current_stop_pA = 600.0
+current_step_pA = 50.0
+baseline_or_holding_vm_mV = "held at resting membrane potential (0 pA holding current)"
+sample_scope = "example_cell"
+extraction_method = "source_spreadsheet"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE", "N_BMU2024_EXAMPLE_CELL_SCOPE"]
+notes = "Actual current-rate point from Burton 2024 S8 Data. This row is from an example fast-spiking interneuron, not a population average. The companion CV(ISI) column remains in the source workbook and is not emitted here."
+
+[[static_ephys_rows]]
+property_name = "Spontaneous Firing Rate"
+source = "Huang et al. (2013)"
+notes = "CRH+ external-plexiform-layer interneurons; baseline firing rate reported directly in text near Figure 4E."
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+mean = 0.20
+sd = 0.3367491648096547
+sem = 0.09
+n = 14
+stat_type = "sd_from_sem"
+unit = "Hz"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 4E; Results text describing baseline firing rates"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+data_kind = "intrinsic_property"
+extraction_method = "pdf_text"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+reported_value_raw = "0.20 +/- 0.09 Hz (n = 14, reported as mean +/- SEM)"
+
+[[static_ephys_rows]]
+property_name = "Max FI Rate"
+source = "Huang et al. (2013)"
+notes = "Maximum current-evoked firing rate only. The local PDF text does not expose the full current-step series, so this row is not used as a protocol-equivalent f-I target."
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+protocol_id = "HUANG2013_CRH_EPL_current_injection"
+mean = 77.20
+sd = 19.418778539278973
+sem = 6.14
+n = 10
+stat_type = "sd_from_sem"
+unit = "Hz"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 4F; Results text describing current-evoked firing"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+data_kind = "fI_summary_metric"
+extraction_method = "pdf_text"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+reported_value_raw = "77.20 +/- 6.14 Hz (n = 10, reported as mean +/- SEM)"
+
+[[static_ephys_rows]]
+property_name = "Input Resistance"
+source = "Kato et al. (2013)"
+notes = "PV+ external-plexiform-layer interneurons; electrophysiology summary from text near Figure 1D."
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+mean = 90.5
+sd = 29.633764571073754
+sem = 5.6
+n = 28
+stat_type = "sd_from_sem"
+unit = "MOhm"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Results text describing electrophysiological properties near Figure 1D"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+data_kind = "intrinsic_property"
+extraction_method = "pdf_text"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+reported_value_raw = "90.5 +/- 5.6 MOhm (n = 28, reported as mean +/- SEM)"
+
+[[static_ephys_rows]]
+property_name = "Membrane Time Constant"
+source = "Kato et al. (2013)"
+notes = "PV+ external-plexiform-layer interneurons; electrophysiology summary from text near Figure 1D."
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+mean = 5.9
+sd = 2.1166010488516727
+sem = 0.4
+n = 28
+stat_type = "sd_from_sem"
+unit = "ms"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Results text describing electrophysiological properties near Figure 1D"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+data_kind = "intrinsic_property"
+extraction_method = "pdf_text"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+reported_value_raw = "5.9 +/- 0.4 ms (n = 28, reported as mean +/- SEM)"
+
+[[static_ephys_rows]]
+property_name = "AP Half-Width"
+source = "Kato et al. (2013)"
+notes = "Converted from the paper's microsecond-scale half-width summary to milliseconds. The local pdftotext stream drops the micro sign, so reported_value_raw preserves the intended source unit."
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+mean = 0.53
+sd = 0.1428460712979354
+sem = 0.027
+n = 28
+stat_type = "sd_from_sem"
+unit = "ms"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Figure 1D; Results text describing fast action potentials"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+data_kind = "intrinsic_property"
+extraction_method = "pdf_text"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+reported_value_raw = "530 +/- 27 μs (n = 28, reported as mean +/- SEM)"
+
+[[static_ephys_rows]]
+property_name = "Max FI Rate"
+source = "Kato et al. (2013)"
+notes = "Peak high-frequency spiking summary only. The local PDF exposes the 100 pA step increment but not a recoverable current-rate point table, so this row remains outside exact f-I validation."
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+protocol_id = "KATO2013_PV_EPL_current_clamp"
+mean = 171.0
+sd = 44.8998886412873
+sem = 12.0
+n = 14
+stat_type = "sd_from_sem"
+unit = "Hz"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Figure 1D; Results text describing high-frequency spikes"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+data_kind = "fI_summary_metric"
+extraction_method = "pdf_text"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+reported_value_raw = "171 +/- 12 Hz (n = 14, reported as mean +/- SEM)"
+
+[[static_identity_rows]]
+source = "Burton, Malyshko & Urban (2024)"
+source_file = "burton_malyshko_urban_2024_article.pdf"
+source_location = "Results text describing FSI neurochemical profile and lack of visible axons"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660&type=printable"
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+identity_kind = "marker_overlap"
+property_name = "PV Positive Fraction"
+mean = 100.0
+stat_type = "qualitative"
+unit = "%"
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "medium"
+notes = "All fast-spiking interneurons were reported as PV-positive."
+reported_value_raw = "100% of FSIs expressed PV"
+
+[[static_identity_rows]]
+source = "Burton, Malyshko & Urban (2024)"
+source_file = "burton_malyshko_urban_2024_article.pdf"
+source_location = "Results text describing FSI neurochemical profile"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660&type=printable"
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+identity_kind = "marker_overlap"
+property_name = "TH Overlap Fraction"
+mean = 0.0
+stat_type = "qualitative"
+unit = "%"
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "medium"
+notes = "Neither fast-spiking nor regular-spiking interneurons expressed tyrosine hydroxylase."
+reported_value_raw = "Neither FSIs nor RSIs expressed TH"
+
+[[static_identity_rows]]
+source = "Burton, Malyshko & Urban (2024)"
+source_file = "burton_malyshko_urban_2024_article.pdf"
+source_location = "Results text describing weak VIP expression in a subset of FSIs"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660&type=printable"
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+identity_kind = "marker_overlap"
+property_name = "VIP Positive Fraction"
+mean = 27.0
+stat_type = "qualitative"
+unit = "%"
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "medium"
+notes = "Weak vasoactive-intestinal-peptide expression was reported in a minority of fast-spiking interneurons."
+reported_value_raw = "27% of FSIs expressed weak VIP"
+
+[[static_identity_rows]]
+source = "Burton, Malyshko & Urban (2024)"
+source_file = "burton_malyshko_urban_2024_article.pdf"
+source_location = "Results text describing FSI morphology"
+source_url = "https://journals.plos.org/plosbiology/article/file?id=10.1371/journal.pbio.3002660&type=printable"
+cell_type = "EPL-FSI"
+marker_profile = "PV+; CRH_not_assayed_or_not_reported"
+identity_kind = "morphology_constraint"
+property_name = "Axonless Morphology"
+stat_type = "qualitative"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "The paper states that fast-spiking interneurons did not extend visible axons."
+reported_value_raw = "Neither FSIs nor RSIs extended visible axons"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 2J; CRH-Cre overlap analysis in the EPL"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "population_fraction"
+property_name = "CRH Positive Fraction Within Calretinin EPL Interneurons"
+mean = 25.69
+sd = 2.268016460608818
+sem = 1.31
+stat_type = "sd_from_sem"
+unit = "%"
+n = 3
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Fraction of calretinin-positive external-plexiform-layer interneurons labeled by CRH-Cre."
+reported_value_raw = "25.69 +/- 1.31% (N = 3, reported as mean +/- SEM)"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 2J; calretinin-positive EPL fraction text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "population_fraction"
+property_name = "Calretinin Positive Fraction Within EPL Cells"
+mean = 68.75
+sd = 4.676537184650238
+sem = 2.70
+stat_type = "sd_from_sem"
+unit = "%"
+n = 3
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Calretinin-positive interneurons as a fraction of all external-plexiform-layer cells."
+reported_value_raw = "68.75 +/- 2.70% (N = 3, reported as mean +/- SEM)"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 2J; marker overlap text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "marker_overlap"
+property_name = "PV Overlap Fraction"
+mean = 81.5
+sd = 5.196152422706632
+sem = 3.0
+stat_type = "sd_from_sem"
+unit = "%"
+n = 3
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Parvalbumin overlap within the CRH-positive external-plexiform-layer interneuron population."
+reported_value_raw = "81.5 +/- 3% (N = 3, reported as mean +/- SEM)"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 2J; marker overlap text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "marker_overlap"
+property_name = "SST Overlap Fraction"
+mean = 24.8
+sd = 1.3856406460551018
+sem = 0.8
+stat_type = "sd_from_sem"
+unit = "%"
+n = 3
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Somatostatin overlap within the CRH-positive external-plexiform-layer interneuron population."
+reported_value_raw = "24.8 +/- 0.8% (N = 3, reported as mean +/- SEM)"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 2J; marker overlap text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "marker_overlap"
+property_name = "TH Overlap Fraction"
+mean = 0.0
+stat_type = "qualitative"
+unit = "%"
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "medium"
+notes = "The source states that tyrosine-hydroxylase labeling did not overlap with CRH-positive external-plexiform-layer interneurons."
+reported_value_raw = "TH did not overlap with CRH+ EPL interneurons"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 2I / Figure 2J; NeuN labeling text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "marker_overlap"
+property_name = "NeuN Low Or Sparse Fraction"
+mean = 44.2
+sd = 2.9444863728670914
+sem = 1.7
+stat_type = "sd_from_sem"
+unit = "%"
+n = 3
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Low or sparse NeuN labeling fraction for CRH-positive external-plexiform-layer interneurons."
+reported_value_raw = "44.2 +/- 1.7% (N = 3, reported as mean +/- SEM)"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 3 morphology text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "morphology_constraint"
+property_name = "Primary Process Count"
+mean = 3.5
+sem = 0.4
+stat_type = "mean_sem"
+unit = "count"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Reported directly in the figure text, but the local PDF text snippet does not expose the sample count needed to convert SEM to SD."
+reported_value_raw = "3.5 +/- 0.4 primary processes"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 3 morphology text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "morphology_constraint"
+property_name = "Soma Diameter"
+mean = 9.6
+sem = 0.7
+stat_type = "mean_sem"
+unit = "um"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Reported directly in the figure text, but the local PDF text snippet does not expose the sample count needed to convert SEM to SD."
+reported_value_raw = "9.6 +/- 0.7 um"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 3 morphology text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "morphology_constraint"
+property_name = "Planar Span"
+mean = 71.0
+sem = 4.5
+stat_type = "mean_sem"
+unit = "um"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "Neurites were reported to span up to 71 +/- 4.5 um from the soma."
+reported_value_raw = "71 +/- 4.5 um"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 3 morphology text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "morphology_constraint"
+property_name = "Branching Zone Maximum"
+mean = 30.0
+stat_type = "qualitative"
+unit = "um"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "medium"
+notes = "Highest branching was reported within 30 um of the soma rather than as a mean +/- spread statistic."
+reported_value_raw = "highest branching occurred within 30 um from the cell body"
+
+[[static_identity_rows]]
+source = "Huang et al. (2013)"
+source_file = "Huang EPLI.pdf"
+source_location = "Figure 3 axon-initial-segment text"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf"
+cell_type = "CRH+ EPL-IN"
+marker_profile = "CRH+; PV_overlap_population"
+identity_kind = "morphology_constraint"
+property_name = "Axonless Morphology"
+stat_type = "qualitative"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "The source reports no obvious axon initial segment or beta-IV-spectrin-defined axon."
+reported_value_raw = "CRH+ EPL interneurons were axonless"
+
+[[static_identity_rows]]
+source = "Kato et al. (2013)"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Results text describing PV-cell laminar distribution"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+identity_kind = "population_fraction"
+property_name = "PV Cell Fraction In EPL"
+mean = 91.4
+stat_type = "qualitative"
+unit = "%"
+n = 1883
+data_kind = "marker_overlap"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "The numerator and denominator are preserved in the raw value text; the mouse count remains in the notes."
+reported_value_raw = "91.4% (1722/1883 cells, n = 5 mice)"
+
+[[static_identity_rows]]
+source = "Kato et al. (2013)"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Figure 1C; anatomical reconstruction text"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+identity_kind = "morphology_constraint"
+property_name = "Axonless Morphology"
+stat_type = "qualitative"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "All anatomically reconstructed PV cells were reported to lack an obvious axon."
+reported_value_raw = "All reconstructed PV cells lacked an obvious axon"
+
+[[static_identity_rows]]
+source = "Kato et al. (2013)"
+source_file = "kato2013 EPLI.pdf"
+source_location = "Figure 1C; anatomical reconstruction text"
+source_url = "https://komiyamalab.biosci.ucsd.edu/wp-content/uploads/2021/05/2013-1-s2.0-S0896627313007952-main.pdf"
+cell_type = "PV+ EPL-IN"
+marker_profile = "PV+; CRH_unknown"
+identity_kind = "morphology_constraint"
+property_name = "Multipolar Dendrites In EPL"
+stat_type = "qualitative"
+data_kind = "morphology_constraint"
+extraction_method = "pdf_text"
+include_in_validation = true
+confidence = "high"
+notes = "The reconstructed PV cells had multipolar dendrites localized within the external plexiform layer."
+reported_value_raw = "PV cells had multipolar dendrites localized within the EPL"

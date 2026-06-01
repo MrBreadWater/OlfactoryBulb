@@ -1,18 +1,19 @@
-"""Manifest-backed source acquisition for EPL fast-spiking interneuron reference data."""
+"""Generic source acquisition for declarative reference-data datasets."""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 import requests
 
-from .reference_data import REFERENCE_DATA_DIR, SOURCE_MANIFEST_FILENAME
+from .reference_dataset_config import (
+    DEFAULT_REFERENCE_DATASET_ID,
+    dataset_source_data_dir,
+    dataset_sources,
+    load_dataset_config,
+)
 
-
-SOURCE_DATA_DIR = REFERENCE_DATA_DIR / "source_data" / "epl_fsi"
-SOURCE_MANIFEST_PATH = REFERENCE_DATA_DIR / SOURCE_MANIFEST_FILENAME
 
 BURTON2024_ARTICLE_PDF_SOURCE_ID = "burton2024_article_pdf"
 BURTON2024_S1_TABLE_SOURCE_ID = "burton2024_s1_table"
@@ -31,48 +32,85 @@ REQUIRED_BURTON2024_SOURCE_IDS = (
 )
 
 
-def load_source_manifest(path: Path | None = None) -> dict[str, Any]:
-    manifest_path = path or SOURCE_MANIFEST_PATH
-    return json.loads(manifest_path.read_text())
+def _resolved_config(
+    *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
+    return dict(config) if config is not None else load_dataset_config(dataset_id=dataset_id, path=config_path)
 
 
-def manifest_sources(path: Path | None = None) -> list[dict[str, Any]]:
-    manifest = load_source_manifest(path)
-    sources = manifest.get("sources")
-    if not isinstance(sources, list):
-        raise ValueError(f"Invalid source manifest at {path or SOURCE_MANIFEST_PATH}: missing 'sources' list")
-    return [dict(source) for source in sources]
+def manifest_sources(
+    *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
+) -> list[dict[str, Any]]:
+    return dataset_sources(_resolved_config(config=config, dataset_id=dataset_id, config_path=config_path))
 
 
-def source_entries_by_id(path: Path | None = None) -> dict[str, dict[str, Any]]:
-    return {str(entry["source_id"]): entry for entry in manifest_sources(path)}
+def source_entries_by_id(
+    *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
+) -> dict[str, dict[str, Any]]:
+    return {
+        str(entry["source_id"]): entry
+        for entry in manifest_sources(config=config, dataset_id=dataset_id, config_path=config_path)
+    }
 
 
-def source_entry(source_id: str, path: Path | None = None) -> dict[str, Any]:
+def source_entry(
+    source_id: str,
+    *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
+) -> dict[str, Any]:
     try:
-        return source_entries_by_id(path)[source_id]
+        return source_entries_by_id(config=config, dataset_id=dataset_id, config_path=config_path)[source_id]
     except KeyError as exc:
-        raise KeyError(f"Unknown EPL-FSI source id: {source_id}") from exc
+        raise KeyError(f"Unknown reference-data source id: {source_id}") from exc
 
 
-def stable_source_url(source_id: str, path: Path | None = None) -> str:
-    return str(source_entry(source_id, path).get("source_url", ""))
+def stable_source_url(
+    source_id: str,
+    *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
+) -> str:
+    return str(
+        source_entry(source_id, config=config, dataset_id=dataset_id, config_path=config_path).get("source_url", "")
+    )
 
 
-def local_source_path(source_id: str, path: Path | None = None) -> Path:
-    entry = source_entry(source_id, path)
-    return SOURCE_DATA_DIR / str(entry["filename"])
+def local_source_path(
+    source_id: str,
+    *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
+) -> Path:
+    resolved = _resolved_config(config=config, dataset_id=dataset_id, config_path=config_path)
+    entry = source_entry(source_id, config=resolved)
+    return dataset_source_data_dir(resolved) / str(entry["filename"])
 
 
 def downloadable_entries(
     *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
     include_optional: bool = False,
     source_ids: list[str] | tuple[str, ...] | None = None,
-    path: Path | None = None,
 ) -> list[dict[str, Any]]:
+    resolved = _resolved_config(config=config, dataset_id=dataset_id, config_path=config_path)
     requested_ids = set(source_ids or [])
     entries: list[dict[str, Any]] = []
-    for entry in manifest_sources(path):
+    for entry in manifest_sources(config=resolved):
         if not bool(entry.get("downloadable", True)):
             continue
         if requested_ids and str(entry["source_id"]) not in requested_ids:
@@ -86,11 +124,16 @@ def downloadable_entries(
 def download_source_entry(
     entry: dict[str, Any],
     *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
     force: bool = False,
     timeout_s: float = 120.0,
 ) -> Path:
-    SOURCE_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    destination = SOURCE_DATA_DIR / str(entry["filename"])
+    resolved = _resolved_config(config=config, dataset_id=dataset_id, config_path=config_path)
+    source_dir = dataset_source_data_dir(resolved)
+    source_dir.mkdir(parents=True, exist_ok=True)
+    destination = source_dir / str(entry["filename"])
     if destination.exists() and destination.stat().st_size > 0 and not force:
         return destination
 
@@ -109,13 +152,13 @@ def download_source_entry(
         response.close()
 
     if not tmp_path.exists() or tmp_path.stat().st_size == 0:
-        raise RuntimeError(f"Downloaded EPL-FSI source is empty: {entry['source_id']}")
+        raise RuntimeError(f"Downloaded reference-data source is empty: {entry['source_id']}")
 
     expected_extension = str(entry.get("expected_extension", "") or "").strip().lower()
     if expected_extension and destination.suffix.lower() != expected_extension:
         tmp_path.unlink(missing_ok=True)
         raise RuntimeError(
-            f"Downloaded EPL-FSI source extension mismatch for {entry['source_id']}: "
+            f"Downloaded reference-data source extension mismatch for {entry['source_id']}: "
             f"expected {expected_extension}, destination is {destination.suffix.lower()}"
         )
 
@@ -125,20 +168,28 @@ def download_source_entry(
 
 def ensure_reference_sources(
     *,
+    config: dict[str, Any] | None = None,
+    dataset_id: str | None = None,
+    config_path: Path | None = None,
     include_optional: bool = False,
     source_ids: list[str] | tuple[str, ...] | None = None,
     force: bool = False,
     strict: bool = True,
     timeout_s: float = 120.0,
 ) -> tuple[dict[str, Path], dict[str, str]]:
+    resolved = _resolved_config(config=config, dataset_id=dataset_id, config_path=config_path)
     paths: dict[str, Path] = {}
     errors: dict[str, str] = {}
-    for entry in downloadable_entries(include_optional=include_optional, source_ids=source_ids):
+    for entry in downloadable_entries(config=resolved, include_optional=include_optional, source_ids=source_ids):
         source_id = str(entry["source_id"])
         try:
-            paths[source_id] = download_source_entry(entry, force=force, timeout_s=timeout_s)
+            paths[source_id] = download_source_entry(entry, config=resolved, force=force, timeout_s=timeout_s)
         except Exception as exc:
             errors[source_id] = str(exc)
             if strict:
                 raise
     return paths, errors
+
+
+def default_dataset_id() -> str:
+    return DEFAULT_REFERENCE_DATASET_ID

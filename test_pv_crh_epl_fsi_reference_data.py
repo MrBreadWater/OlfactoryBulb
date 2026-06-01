@@ -217,6 +217,8 @@ rendered_report = format_report(
 assert "Notes / protocol caveats" in rendered_report
 assert "MC/TC and EPL-FSI f-I validation targets use different current-injection protocols." in rendered_report
 
-assert "current-rate points" in paths["readme"].read_text()
+readme_text = paths["readme"].read_text()
+assert "current-rate" in readme_text
+assert "fi_curve" in readme_text
 
 print("pv_crh_epl_fsi_reference_data: OK")

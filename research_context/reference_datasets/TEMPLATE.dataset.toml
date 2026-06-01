@@ -1,0 +1,233 @@
+# Required dataset identity
+dataset_id = "example_dataset"
+dataset_name = "Example reference dataset"
+source_data_subdir = "example_dataset"
+
+[outputs]
+ephys = "EXAMPLE_ephys.csv"
+fi_curve = "EXAMPLE_fI_curve.csv"
+protocols = "EXAMPLE_protocols.csv"
+identity = "EXAMPLE_identity.csv"
+notes = "validation_notes.csv"
+manual = "needs_manual_extraction.csv"
+readme = "EXAMPLE_extraction_README.md"
+
+[readme]
+title = "Example reference-data extraction"
+summary = "One-line summary of what this dataset represents."
+source_summary = [
+  "Primary paper or supplement that contributes machine-readable data.",
+]
+suitable_now = [
+  "List what can already be used for validation.",
+]
+caveats = [
+  "List the unavoidable caveats that downstream validation must display.",
+]
+
+# Required: declare every source that the dataset may reference.
+[[sources]]
+source_id = "example_primary_table"
+source = "Example et al. (2026)"
+label = "Example 2026 supplementary table"
+filename = "example_2026_primary_table.csv"
+source_url = "https://example.org/example_2026_primary_table.csv"
+downloadable = true
+required = true
+expected_extension = ".csv"
+
+# Optional downloadable source.
+# [[sources]]
+# source_id = "example_optional_pdf"
+# source = "Example et al. (2026)"
+# label = "Example 2026 article PDF"
+# filename = "example_2026_article.pdf"
+# source_url = "https://example.org/example_2026_article.pdf"
+# downloadable = true
+# required = false
+# expected_extension = ".pdf"
+
+# Optional local-only source that should not be auto-downloaded.
+# [[sources]]
+# source_id = "example_local_pdf"
+# source = "Example et al. (2026)"
+# label = "Local paper PDF"
+# filename = "Example Local Paper.pdf"
+# source_url = "https://example.org/local-paper.pdf"
+# downloadable = false
+# required = false
+# expected_extension = ".pdf"
+
+# Required protocol metadata rows.
+[[static_protocol_rows]]
+protocol_id = "EXAMPLE_PROTOCOL_ID"
+source = "Example et al. (2026)"
+cell_type = "Example Cell"
+marker_profile = "Example Marker"
+stimulus_type = "somatic depolarizing current step"
+step_duration_ms = 1000.0
+current_start_pA = 0.0
+current_stop_pA = 400.0
+current_step_pA = 50.0
+current_values_pA = "0;50;100;150;200;250;300;350;400"
+rate_definition = "Mean firing rate over the full current step."
+spike_detection_rule = "Describe the spike-detection rule if known."
+baseline_or_holding_vm_mV = -65.0
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "example_fI"
+notes = "Describe how this protocol should be interpreted downstream."
+
+# Required note rows if protocol caveats must survive into validation output.
+[[static_note_rows]]
+note_id = "N_EXAMPLE_PROTOCOL_CAVEAT"
+severity = "warning"
+scope = "fI_validation"
+target_type = "protocol"
+target = "EXAMPLE_PROTOCOL_ID"
+message = "Describe the protocol caveat here."
+display_order = 10
+source = "Example et al. (2026)"
+source_location = "Protocol metadata rows"
+
+# Optional static ephys rows for values reported directly in text or a figure legend.
+# [[static_ephys_rows]]
+# property_name = "Membrane Resting Voltage"
+# source = "Example et al. (2026)"
+# notes = "Explain where this value came from."
+# cell_type = "Example Cell"
+# marker_profile = "Example Marker"
+# mean = -65.2
+# sd = 4.1
+# sem = 1.0
+# n = 16
+# stat_type = "mean_sd"
+# unit = "mV"
+# source_file = "Example Local Paper.pdf"
+# source_location = "Results text near Figure 2B"
+# source_url = "https://example.org/local-paper.pdf"
+# data_kind = "intrinsic_property"
+# extraction_method = "pdf_text"
+# include_in_validation = true
+# include_in_fi_validation = false
+# confidence = "medium"
+# reported_value_raw = "-65.2 +/- 4.1 mV (n = 16)"
+
+# Optional static identity rows.
+# [[static_identity_rows]]
+# source = "Example et al. (2026)"
+# source_file = "Example Local Paper.pdf"
+# source_location = "Figure 1A"
+# source_url = "https://example.org/local-paper.pdf"
+# cell_type = "Example Cell"
+# marker_profile = "Example Marker"
+# identity_kind = "marker_overlap"
+# property_name = "Marker Overlap Fraction"
+# mean = 81.5
+# sd = 5.2
+# sem = 3.0
+# stat_type = "sd_from_sem"
+# unit = "%"
+# n = 3
+# data_kind = "marker_overlap"
+# extraction_method = "pdf_text"
+# include_in_validation = true
+# confidence = "high"
+# notes = "Explain what the overlap represents."
+# reported_value_raw = "81.5 +/- 3% (N = 3)"
+
+# Required summary-rule example for machine-readable tables.
+[[summary_rules]]
+output = "ephys"
+source_id = "example_primary_table"
+sheet_name = "Sheet1"
+row_filter_column = "cell_type"
+row_filter_equals = "Example Cell"
+column = "rest_mV"
+property_name = "Membrane Resting Voltage"
+reported_definition = "resting potential"
+unit = "mV"
+data_kind = "intrinsic_property"
+notes = "Computed directly from example rows in the source table."
+cell_type = "Example Cell"
+marker_profile = "Example Marker"
+
+# Optional summary rule with a unit conversion.
+# [[summary_rules]]
+# output = "ephys"
+# source_id = "example_primary_table"
+# sheet_name = "Sheet1"
+# row_filter_column = "cell_type"
+# row_filter_equals = "Example Cell"
+# column = "gain_Hz_per_pA"
+# property_name = "FI Curve Slope"
+# reported_definition = "maximum gain"
+# unit = "Hz/nA"
+# transform_scale = 1000.0
+# data_kind = "fI_summary_metric"
+# notes = "Converted from hertz per picoampere to hertz per nanoampere."
+# cell_type = "Example Cell"
+# marker_profile = "Example Marker"
+# protocol_id = "EXAMPLE_PROTOCOL_ID"
+# include_in_fi_validation = true
+# note_ids = ["N_EXAMPLE_PROTOCOL_CAVEAT"]
+
+# Optional point-rule example for current-rate point tables.
+# [[point_rules]]
+# source_id = "example_primary_table"
+# sheet_name = "Figure3_points"
+# current_column = "current_pA"
+# value_column = "firing_rate_Hz"
+# current_min_pA = 0.0
+# current_max_pA = 400.0
+# cell_type = "Example Cell"
+# cell_id = "ExampleCell01"
+# marker_profile = "Example Marker"
+# protocol_id = "EXAMPLE_PROTOCOL_ID"
+# source_location = "Supplementary table Figure3_points"
+# rate_definition = "Mean firing rate over the full current step."
+# step_duration_ms = 1000.0
+# current_start_pA = 0.0
+# current_stop_pA = 400.0
+# current_step_pA = 50.0
+# baseline_or_holding_vm_mV = -65.0
+# sample_scope = "population_mean"
+# extraction_method = "source_spreadsheet"
+# include_in_validation = true
+# confidence = "high"
+# note_ids = ["N_EXAMPLE_PROTOCOL_CAVEAT"]
+# notes = "Machine-readable current-rate point set."
+
+# Optional conditional note if a required source download fails.
+# [[conditional_note_rows]]
+# condition = "missing_source"
+# source_id = "example_primary_table"
+# note_id = "N_EXAMPLE_SOURCE_MISSING"
+# severity = "warning"
+# scope = "extraction"
+# target_type = "source"
+# target = "Example et al. (2026)"
+# message = "Primary source file is missing after download."
+# display_order = 20
+# source = "Example et al. (2026)"
+# source_location = "Remote acquisition step"
+
+# Optional conditional manual-extraction row if a required source is missing.
+# [[conditional_manual_rows]]
+# condition = "missing_source"
+# source_id = "example_primary_table"
+# source = "Example et al. (2026)"
+# source_file = "example_2026_primary_table.csv"
+# figure_or_table = "Supplementary Table 1"
+# target_metric = "Intrinsic-property table"
+# reason = "Primary table missing after download."
+# suggested_action = "Re-run the downloader or add the local source file manually."
+
+# Optional static manual-extraction row for figure-only or prose-only data.
+# [[static_manual_rows]]
+# source = "Example et al. (2026)"
+# source_file = "Example Local Paper.pdf"
+# figure_or_table = "Figure 4A"
+# target_metric = "Current-rate points"
+# reason = "Only a plotted curve is available; no machine-readable table exists."
+# suggested_action = "Create a manually curated CSV with provenance and then ingest it as a normal source."
