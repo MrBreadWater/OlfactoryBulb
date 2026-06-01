@@ -70,6 +70,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Result artifact and output-path helpers",
         target_module="neuroinfra.artifacts",
         source_paths=(
+            "neuroinfra/artifacts/output_paths.py",
+            "neuroinfra/artifacts/result_artifacts.py",
             "olfactorybulb/result_artifacts.py",
             "olfactorybulb/output_paths.py",
         ),
@@ -85,8 +87,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="high",
         proposed_phase=1,
-        current_status="candidate",
-        recommended_action="Lift into a generic artifact package with neutral naming adapters retained in this repo.",
+        current_status="internal_shim_extracted",
+        recommended_action="The first internal extraction has been done behind compatibility shims; next remove remaining OBGPU-specific naming and add more consumer tests.",
     ),
     ExtractionCandidate(
         key="remote_slurm_execution",

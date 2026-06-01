@@ -15,6 +15,11 @@ The first implemented artifact is the component inventory:
 
 - `neuroinfra.inventory`
 
+The first live internal extraction is now also present:
+
+- `neuroinfra.artifacts.output_paths`
+- `neuroinfra.artifacts.result_artifacts`
+
 It captures:
 
 - candidate reusable subsystems
@@ -45,8 +50,11 @@ python -m neuroinfra --json
 The expected first-wave extractions are:
 
 1. audit core / CLI / registry
-2. result artifact and output-path helpers
-3. shared Slurm helper layer
+2. shared Slurm helper layer
+
+The result-artifact and output-path helpers have already been mirrored into
+`neuroinfra.artifacts` and left behind compatibility wrappers under
+`olfactorybulb.*`.
 
 The main file blocking deeper extraction is still:
 
