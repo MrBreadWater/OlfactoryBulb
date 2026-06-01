@@ -789,6 +789,7 @@ with tempfile.TemporaryDirectory() as tmp:
     helper_sources = hlp._remote_helper_sources()
     assert helper_sources["slurm_common.py"] == hlp.REPO_ROOT / "tools" / "remote" / "slurm_common.py"
     assert helper_sources["neuroinfra/remote_script_common.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_common.py"
+    assert helper_sources["neuroinfra/remote_script_submit.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_submit.py"
     assert helper_sources["neuroinfra/remote_script_polling.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_polling.py"
     assert helper_sources["neuroinfra/remote_script_allocations.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_allocations.py"
     helper_manifest = helper_bundle_manifest(
@@ -811,8 +812,10 @@ with tempfile.TemporaryDirectory() as tmp:
     print("Remote helper cache command shrink: OK")
 
     submit_sol_run_source = Path(submit_sol_run.__file__).read_text()
-    assert '--nodes=1 --ntasks="$step_ntasks"' in submit_sol_run_source
-    assert "--step-ntasks" in submit_sol_run_source
+    remote_submit_source = (hlp.REPO_ROOT / "neuroinfra" / "remote_script_submit.py").read_text()
+    assert "remote_script_submit" in submit_sol_run_source
+    assert '--nodes=1 --ntasks="$step_ntasks"' in remote_submit_source
+    assert "--step-ntasks" in remote_submit_source
     print("Reusable allocation wrapper step launch: OK")
 
     allocation_cfg = build_run_config(

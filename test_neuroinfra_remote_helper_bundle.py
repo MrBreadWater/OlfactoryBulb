@@ -55,6 +55,7 @@ def main() -> None:
     )
     assert helper_sources["slurm_common.py"] == hlp.REPO_ROOT / "tools" / "remote" / "slurm_common.py"
     assert helper_sources["neuroinfra/remote_script_common.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_common.py"
+    assert helper_sources["neuroinfra/remote_script_submit.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_submit.py"
     assert helper_sources["neuroinfra/remote_script_polling.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_polling.py"
     assert helper_sources["neuroinfra/remote_script_allocations.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_allocations.py"
     assert sorted(helper_sources.keys()) == helper_manifest["files"]

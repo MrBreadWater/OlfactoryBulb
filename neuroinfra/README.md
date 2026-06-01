@@ -31,6 +31,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.slurm_launch`
 - `neuroinfra.remote.slurm_state`
 - `neuroinfra.remote_script_common`
+- `neuroinfra.remote_script_submit`
 - `neuroinfra.remote_script_polling`
 - `neuroinfra.remote_script_allocations`
 - `neuroinfra.remote_script_sweeps`
@@ -118,6 +119,10 @@ The remote-safe common helpers shared by uploaded Slurm wrapper scripts now
 live under `neuroinfra.remote_script_common`, while `tools/remote/slurm_common.py`
 remains as a compatibility bootstrap so the live entrypoints keep working from
 both repo and helper-cache execution roots.
+
+The remote-safe single-run submit helpers now live under
+`neuroinfra.remote_script_submit`, while `tools/remote/submit_sol_run.py`
+remains as a compatibility bootstrap/CLI wrapper around that module.
 
 The remote-safe polling helpers shared by uploaded Slurm wrapper scripts now
 live under `neuroinfra.remote_script_polling`, while `tools/remote/poll_sol_run.py`

@@ -168,6 +168,9 @@ Current progress:
 - the remote-safe common helpers shared by uploaded Slurm wrapper scripts now
   live under `neuroinfra.remote_script_common`, while
   `tools/remote/slurm_common.py` remains as a compatibility bootstrap
+- the remote-safe single-run submit helpers now live under
+  `neuroinfra.remote_script_submit`, while
+  `tools/remote/submit_sol_run.py` remains as a compatibility bootstrap/CLI wrapper
 - the remote-safe polling helpers shared by uploaded Slurm wrapper scripts now
   live under `neuroinfra.remote_script_polling`, while
   `tools/remote/poll_sol_run.py` remains as a compatibility bootstrap/CLI wrapper
