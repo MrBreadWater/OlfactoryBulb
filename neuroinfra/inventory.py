@@ -106,6 +106,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/remote_script_common.py",
             "neuroinfra/remote_script_polling.py",
             "neuroinfra/remote_script_allocations.py",
+            "neuroinfra/remote_script_sweeps.py",
             "neuroinfra/remote/git_sync.py",
             "neuroinfra/remote/helper_cache.py",
             "neuroinfra/remote/allocation_cache.py",
@@ -129,8 +130,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=2,
-        current_status="config_sync_launch_state_script_common_polling_allocations_git_helper_cache_and_allocation_seams_standardized",
-        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook runtime/session policy, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote polling/status helpers, remote allocation lifecycle helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract more of the shared remote entrypoint logic from tools/remote without breaking the live wrappers.",
+        current_status="config_sync_launch_state_script_common_polling_allocations_sweeps_git_helper_cache_and_allocation_seams_standardized",
+        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook runtime/session policy, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract more of the shared remote entrypoint logic from tools/remote without breaking the live wrappers.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",

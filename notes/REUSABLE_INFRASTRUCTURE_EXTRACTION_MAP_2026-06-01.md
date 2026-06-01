@@ -175,6 +175,9 @@ Current progress:
   scripts now live under `neuroinfra.remote_script_allocations`, while
   `tools/remote/submit_slurm_allocation.py` and
   `tools/remote/cleanup_stale_allocations.py` remain as compatibility wrappers
+- the remote-safe sweep runner helpers now live under
+  `neuroinfra.remote_script_sweeps`, while
+  `tools/remote/remote_sweep_driver.py` remains as a compatibility wrapper
 - the local Git publication/base-resolution helpers that support notebook-
   driven remote syncs now live under `neuroinfra.remote.git_sync`
 - the helper-cache runtime key, cache directory layout, manifest probe logic,

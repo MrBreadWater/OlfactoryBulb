@@ -33,6 +33,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote_script_common`
 - `neuroinfra.remote_script_polling`
 - `neuroinfra.remote_script_allocations`
+- `neuroinfra.remote_script_sweeps`
 - `neuroinfra.remote.git_sync`
 - `neuroinfra.remote.helper_cache`
 - `neuroinfra.remote.allocation_cache`
@@ -127,6 +128,11 @@ scripts now live under `neuroinfra.remote_script_allocations`, while
 `tools/remote/submit_slurm_allocation.py` and
 `tools/remote/cleanup_stale_allocations.py` remain as compatibility
 bootstrap/CLI wrappers.
+
+The remote-safe sweep runner helpers now live under
+`neuroinfra.remote_script_sweeps`, while
+`tools/remote/remote_sweep_driver.py` remains as a compatibility bootstrap
+wrapper around that module.
 
 The local Git publication/base-resolution helpers that support notebook-driven
 remote syncs now also live under `neuroinfra.remote.git_sync`, while the live
