@@ -21,13 +21,9 @@ import math
 import os
 import re
 import shutil
-import signal
-import socket
-import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -51,6 +47,19 @@ from neuroinfra.dashboard.packets import (
     cleanup_packet_dirs as _cleanup_packet_dirs,
     discover_packets as _discover_packets,
     read_json_dict as _read_json,
+)
+from neuroinfra.dashboard.runtime import (
+    RuntimeProcessInfo,
+    matching_pids as _matching_pids,
+    pid_is_alive as _pid_is_alive,
+    port_in_use as _port_in_use,
+    process_matches_command as _process_matches_command,
+    read_runtime_process_info as _read_runtime_process_info,
+    runtime_dir as _runtime_dir,
+    runtime_process_paths as _runtime_process_paths,
+    spawn_detached_process as _spawn_detached_process,
+    terminate_process as _terminate_process,
+    write_json_atomic as _write_json_atomic,
 )
 from generate_hfo_candidate_packet import VISUAL_STYLE_VERSION
 from regenerate_hfo_packet_psd import PSD_PACKET_RENDER_VERSION
@@ -76,16 +85,6 @@ RUNTIME_SUBDIR = ".runtime"
 EXPORT_LOCK_NAME = "export.lock"
 _PACKET_GENERATION_JOBS: dict[tuple[str, str], threading.Thread] = {}
 _PACKET_GENERATION_JOBS_LOCK = threading.Lock()
-
-@dataclass(frozen=True)
-class RuntimeProcessInfo:
-    kind: str
-    pid: int
-    pid_path: Path
-    stdout_path: Path
-    stderr_path: Path
-    meta: dict[str, Any]
-
 
 def _safe_float(value: Any) -> float | None:
     try:
@@ -115,13 +114,6 @@ def _esc(value: Any) -> str:
 def _relpath(path: Path, *, from_dir: Path) -> str:
     return os.path.relpath(path.resolve(), from_dir.resolve()).replace(os.sep, "/")
 
-def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-    os.replace(tmp, path)
-
-
 def _wait_with_stop(delay_s: float, stop_event: threading.Event | None) -> None:
     if stop_event is None:
         time.sleep(max(float(delay_s), 0.0))
@@ -129,169 +121,8 @@ def _wait_with_stop(delay_s: float, stop_event: threading.Event | None) -> None:
     stop_event.wait(timeout=max(float(delay_s), 0.0))
 
 
-def _runtime_dir(output_path: Path) -> Path:
-    return output_path / RUNTIME_SUBDIR
-
-
 def _export_lock_path(output_path: Path) -> Path:
     return _runtime_dir(output_path) / EXPORT_LOCK_NAME
-
-
-def _runtime_process_paths(output_path: Path, kind: str) -> dict[str, Path]:
-    runtime_dir = _runtime_dir(output_path)
-    return {
-        "runtime_dir": runtime_dir,
-        "pid": runtime_dir / f"{kind}.pid.json",
-        "stdout": runtime_dir / f"{kind}.stdout.log",
-        "stderr": runtime_dir / f"{kind}.stderr.log",
-    }
-
-
-def _pid_is_alive(pid: int) -> bool:
-    if pid <= 0:
-        return False
-    try:
-        os.kill(int(pid), 0)
-    except OSError:
-        return False
-    return True
-
-
-def _process_cmdline(pid: int) -> str:
-    try:
-        raw = Path(f"/proc/{int(pid)}/cmdline").read_bytes()
-    except OSError:
-        return ""
-    return raw.replace(b"\x00", b" ").decode("utf-8", errors="ignore").strip()
-
-
-def _process_cmdargs(pid: int) -> list[str]:
-    try:
-        raw = Path(f"/proc/{int(pid)}/cmdline").read_bytes()
-    except OSError:
-        return []
-    return [arg for arg in raw.decode("utf-8", errors="ignore").split("\x00") if arg]
-
-
-def _process_matches_tokens(pid: int, expected_tokens: list[str]) -> bool:
-    cmdline = _process_cmdline(pid)
-    if not cmdline:
-        return False
-    return all(token in cmdline for token in expected_tokens)
-
-
-def _process_matches_command(pid: int, expected_command: list[str]) -> bool:
-    actual = _process_cmdargs(pid)
-    if not actual:
-        return False
-    return actual == [str(arg) for arg in expected_command]
-
-
-def _matching_pids(expected_tokens: list[str]) -> list[int]:
-    matches: list[int] = []
-    for proc_dir in Path("/proc").iterdir():
-        if not proc_dir.name.isdigit():
-            continue
-        pid = int(proc_dir.name)
-        if _process_matches_tokens(pid, expected_tokens):
-            matches.append(pid)
-    return sorted(set(matches))
-
-
-def _read_runtime_process_info(output_path: Path, kind: str) -> RuntimeProcessInfo | None:
-    paths = _runtime_process_paths(output_path, kind)
-    payload = _read_json(paths["pid"])
-    pid = int(payload.get("pid") or 0)
-    if pid <= 0:
-        return None
-    return RuntimeProcessInfo(
-        kind=kind,
-        pid=pid,
-        pid_path=paths["pid"],
-        stdout_path=paths["stdout"],
-        stderr_path=paths["stderr"],
-        meta=payload,
-    )
-
-
-def _terminate_process(pid: int, *, grace_s: float = 5.0) -> None:
-    if pid <= 0 or not _pid_is_alive(pid):
-        return
-    try:
-        pgid = os.getpgid(int(pid))
-    except OSError:
-        pgid = None
-    try:
-        if pgid is not None and pgid > 0:
-            os.killpg(pgid, signal.SIGTERM)
-        else:
-            os.kill(pid, signal.SIGTERM)
-    except OSError:
-        return
-    deadline = time.time() + max(float(grace_s), 0.0)
-    while time.time() < deadline:
-        if not _pid_is_alive(pid):
-            return
-        time.sleep(0.1)
-    try:
-        if pgid is not None and pgid > 0:
-            os.killpg(pgid, signal.SIGKILL)
-        else:
-            os.kill(pid, signal.SIGKILL)
-    except OSError:
-        return
-
-
-def _spawn_detached_process(
-    command: list[str],
-    *,
-    cwd: Path,
-    stdout_path: Path,
-    stderr_path: Path,
-    meta_path: Path,
-    meta: dict[str, Any],
-) -> RuntimeProcessInfo:
-    stdout_path.parent.mkdir(parents=True, exist_ok=True)
-    with stdout_path.open("ab") as stdout_handle, stderr_path.open("ab") as stderr_handle:
-        proc = subprocess.Popen(
-            command,
-            cwd=str(cwd),
-            stdin=subprocess.DEVNULL,
-            stdout=stdout_handle,
-            stderr=stderr_handle,
-            start_new_session=True,
-        )
-    payload = dict(meta)
-    payload.update(
-        {
-            "pid": int(proc.pid),
-            "command": list(command),
-            "cwd": str(cwd),
-            "started_at": datetime.now().isoformat(timespec="seconds"),
-        }
-    )
-    _write_json_atomic(meta_path, payload)
-    return RuntimeProcessInfo(
-        kind=str(meta.get("kind") or ""),
-        pid=int(proc.pid),
-        pid_path=meta_path,
-        stdout_path=stdout_path,
-        stderr_path=stderr_path,
-        meta=payload,
-    )
-
-
-def _port_in_use(host: str, port: int) -> bool:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            try:
-                sock.bind((host, int(port)))
-            except OSError:
-                return True
-    except PermissionError:
-        return False
-    return False
 
 
 def _watch_sources_mtime(campaign_path: Path, status_path: Path) -> float:

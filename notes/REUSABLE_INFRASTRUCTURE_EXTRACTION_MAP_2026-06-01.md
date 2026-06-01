@@ -247,6 +247,7 @@ This is one of the most valuable general patterns in the repo.
 Current files:
 
 - `neuroinfra/dashboard/packets.py`
+- `neuroinfra/dashboard/runtime.py`
 - `tools/analysis/hfo_visual_dashboard.py`
 - `tools/analysis/generate_hfo_candidate_packet.py`
 - `tools/analysis/regenerate_hfo_packet_psd.py`
@@ -257,6 +258,10 @@ What is already generic:
 - packet manifest directory scanning
 - latest-packet selection per candidate
 - stale packet cleanup
+- detached sidecar process spawning
+- pid metadata/status file management
+- process liveness and command matching
+- sidecar termination helpers
 - packet manifest pattern
 - background packet generation
 - runtime supervision
@@ -284,8 +289,10 @@ Current progress:
 
 - the generic packet manifest discovery and stale-packet cleanup helpers now
   live under `neuroinfra.dashboard.packets`
+- the generic sidecar/runtime process primitives now live under
+  `neuroinfra.dashboard.runtime`
 - the HFO dashboard still owns the HFO-specific packet freshness rules,
-  packet-generation queueing, and HTML/runtime behavior
+  packet-generation queueing, command assembly, and HTML/server behavior
 
 ### 7. Cell-model registry
 

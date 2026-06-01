@@ -29,6 +29,7 @@ The next standardized seam is also in place:
 - `neuroinfra.contracts.parameters`
 - `neuroinfra.contracts.visuals`
 - `neuroinfra.dashboard.packets`
+- `neuroinfra.dashboard.runtime`
 
 It captures:
 
@@ -83,6 +84,11 @@ render helpers remain in `olfactorybulb.hfo_visuals`.
 The generic manifest-backed packet discovery and stale-packet cleanup helpers
 that the HFO dashboard uses now live under `neuroinfra.dashboard.packets`,
 while the HFO-specific packet freshness rules and HTML rendering remain in
+`tools.analysis.hfo_visual_dashboard`.
+
+The generic sidecar/runtime process primitives that the HFO dashboard uses now
+live under `neuroinfra.dashboard.runtime`, while the HFO-specific command
+assembly and freshness policy still remain in
 `tools.analysis.hfo_visual_dashboard`.
 
 The main file blocking deeper extraction is still:

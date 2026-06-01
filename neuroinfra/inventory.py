@@ -179,6 +179,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.dashboard",
         source_paths=(
             "neuroinfra/dashboard/packets.py",
+            "neuroinfra/dashboard/runtime.py",
             "tools/analysis/hfo_visual_dashboard.py",
             "tools/analysis/generate_hfo_candidate_packet.py",
             "tools/analysis/regenerate_hfo_packet_psd.py",
@@ -198,8 +199,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium",
         proposed_phase=5,
-        current_status="packet_protocol_extracted",
-        recommended_action="The generic packet manifest discovery and stale-packet cleanup helpers now live under neuroinfra.dashboard; next extract the sidecar/runtime supervision pieces without carrying over HFO-specific command conventions.",
+        current_status="packet_and_runtime_protocol_extracted",
+        recommended_action="The generic packet manifest and sidecar/runtime process helpers now live under neuroinfra.dashboard; next separate the remaining HFO-specific command assembly and HTML/server policy from the shared supervision shell.",
     ),
     ExtractionCandidate(
         key="cell_model_registry",
