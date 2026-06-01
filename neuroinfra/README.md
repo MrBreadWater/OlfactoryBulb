@@ -29,6 +29,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.sftp_sync`
 - `neuroinfra.remote.archive_stream`
 - `neuroinfra.remote.slurm_launch`
+- `neuroinfra.remote.slurm_state`
 - `neuroinfra.remote.git_sync`
 - `neuroinfra.remote.helper_cache`
 - `neuroinfra.remote.allocation_cache`
@@ -103,6 +104,11 @@ The higher-level argv and helper-launch assembly for allocation submit, run
 submit, stale-allocation cleanup, and polling now also live under
 `neuroinfra.remote.slurm_launch`, while the repo-specific config mapping and
 live orchestration still remain in `obgpu_experiment_helpers.py`.
+
+The remote preflight command builder, one-session preflight cache policy,
+remote result-directory listing command, cancel command builder, and Slurm
+state-query normalization that sit underneath the live notebook run path now
+also live under `neuroinfra.remote.slurm_state`.
 
 The local Git publication/base-resolution helpers that support notebook-driven
 remote syncs now also live under `neuroinfra.remote.git_sync`, while the live

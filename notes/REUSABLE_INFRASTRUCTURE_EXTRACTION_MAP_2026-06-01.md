@@ -162,6 +162,9 @@ Current progress:
 - the higher-level argv and helper-launch assembly for allocation submit, run
   submit, stale-allocation cleanup, and polling now live under
   `neuroinfra.remote.slurm_launch`
+- the remote preflight command builder, one-session preflight cache policy,
+  result-directory listing command, cancel command builder, and Slurm state
+  query normalization now live under `neuroinfra.remote.slurm_state`
 - the local Git publication/base-resolution helpers that support notebook-
   driven remote syncs now live under `neuroinfra.remote.git_sync`
 - the helper-cache runtime key, cache directory layout, manifest probe logic,

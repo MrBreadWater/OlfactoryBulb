@@ -124,6 +124,18 @@ from neuroinfra.remote.allocation_cache import (
     disabled_allocation_record as _neuroinfra_disabled_allocation_record,
     manual_allocation_record as _neuroinfra_manual_allocation_record,
 )
+from neuroinfra.remote.slurm_state import (
+    REMOTE_SLURM_TERMINAL_FAIL as _NEUROINFRA_REMOTE_SLURM_TERMINAL_FAIL,
+    REMOTE_SLURM_TERMINAL_OK as _NEUROINFRA_REMOTE_SLURM_TERMINAL_OK,
+    build_remote_cancel_command as _neuroinfra_build_remote_cancel_command,
+    build_remote_preflight_command as _neuroinfra_build_remote_preflight_command,
+    build_remote_result_listing_command as _neuroinfra_build_remote_result_listing_command,
+    normalize_slurm_state as _neuroinfra_normalize_slurm_state,
+    query_remote_slurm_job_state as _neuroinfra_query_remote_slurm_job_state,
+    remote_preflight_cache_key as _neuroinfra_remote_preflight_cache_key,
+    remote_status_has_artifacts as _neuroinfra_remote_status_has_artifacts,
+    run_remote_preflight_cached as _neuroinfra_run_remote_preflight_cached,
+)
 from neuroinfra.remote.command_launch import (
     build_remote_python_file_command as _neuroinfra_build_remote_python_file_command,
     build_remote_python_inline_command as _neuroinfra_build_remote_python_inline_command,
@@ -1905,19 +1917,8 @@ def _remote_helper_cache_dir(config: dict[str, Any]) -> PurePosixPath:
     )
 
 
-_REMOTE_SLURM_TERMINAL_OK = {"COMPLETED"}
-_REMOTE_SLURM_TERMINAL_FAIL = {
-    "BOOT_FAIL",
-    "CANCELLED",
-    "COMPLETED_WITH_ERRORS",
-    "DEADLINE",
-    "FAILED",
-    "NODE_FAIL",
-    "OUT_OF_MEMORY",
-    "PREEMPTED",
-    "REVOKED",
-    "TIMEOUT",
-}
+_REMOTE_SLURM_TERMINAL_OK = _NEUROINFRA_REMOTE_SLURM_TERMINAL_OK
+_REMOTE_SLURM_TERMINAL_FAIL = _NEUROINFRA_REMOTE_SLURM_TERMINAL_FAIL
 
 
 def _resolve_local_git_head() -> str | None:
@@ -2099,7 +2100,7 @@ def _build_remote_git_repo_probe_command(remote_repo_root: PurePosixPath) -> str
 
 def _normalize_slurm_state(raw_state: str) -> str:
     """Normalize Slurm state tokens by removing suffixes such as '+'."""
-    return raw_state.split()[0].split("+", 1)[0].strip().upper()
+    return _neuroinfra_normalize_slurm_state(raw_state)
 
 
 def _remote_heartbeat_timeout_s(config: dict[str, Any]) -> int:
@@ -4017,34 +4018,17 @@ def _build_remote_preflight_command(
     remote_repo_root: PurePosixPath,
 ) -> str:
     """Build one remote shell command that validates Sol-side prerequisites."""
-    checks = [
-        f'test -d {shlex.quote(remote_repo_root.as_posix())}',
-        'REMOTE_PYTHON="$(command -v python3 || command -v python || true)"',
-        'test -n "$REMOTE_PYTHON"',
-        'command -v bash >/dev/null',
-        'command -v git >/dev/null',
-        'command -v sbatch >/dev/null',
-        'command -v sacct >/dev/null',
-        'command -v scancel >/dev/null',
-        'command -v squeue >/dev/null',
-        'command -v srun >/dev/null',
-    ]
-    return " && ".join(checks)
+    return _neuroinfra_build_remote_preflight_command(remote_repo_root=remote_repo_root)
 
 
 def _remote_preflight_cache_key(config: dict[str, Any], remote_repo_root: PurePosixPath) -> str:
     """Return the runtime cache key for one successful remote preflight."""
-    payload = json.dumps(
-        {
-            "endpoint": _paramiko_connection_key(config),
-            "remote_repo_root": remote_repo_root.as_posix(),
-            "remote_conda_activate_cmd": str(config.get("remote_conda_activate_cmd") or ""),
-            "helper_signature": _remote_helper_signature(),
-        },
-        sort_keys=True,
-        separators=(",", ":"),
+    return _neuroinfra_remote_preflight_cache_key(
+        connection_key=_paramiko_connection_key(config),
+        remote_repo_root=remote_repo_root,
+        remote_conda_activate_cmd=str(config.get("remote_conda_activate_cmd") or ""),
+        helper_signature=_remote_helper_signature(),
     )
-    return sha1(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _run_remote_preflight_cached(
@@ -4054,28 +4038,16 @@ def _run_remote_preflight_cached(
 ) -> tuple[subprocess.CompletedProcess[str], bool]:
     """Run one remote preflight only once per notebook session."""
     cache_key = _remote_preflight_cache_key(config, remote_repo_root)
-    cached = _LIVE_REMOTE_PREFLIGHTS.get(cache_key)
-    if cached is not None:
-        return (
-            subprocess.CompletedProcess(
-                args=["remote-preflight-cache", remote_repo_root.as_posix()],
-                returncode=0,
-                stdout=str(cached.get("stdout") or ""),
-                stderr="",
-            ),
-            True,
-        )
-
-    completed = _run_ssh_shell(
-        config,
-        _build_remote_preflight_command(remote_repo_root=remote_repo_root),
+    return _neuroinfra_run_remote_preflight_cached(
+        cache=_LIVE_REMOTE_PREFLIGHTS,
+        cache_key=cache_key,
+        remote_repo_root=remote_repo_root,
+        command=_build_remote_preflight_command(remote_repo_root=remote_repo_root),
+        run_command=lambda command: _run_ssh_shell(
+            config,
+            command,
+        ),
     )
-    if completed.returncode == 0:
-        _LIVE_REMOTE_PREFLIGHTS[cache_key] = {
-            "timestamp": time.time(),
-            "stdout": completed.stdout or "",
-        }
-    return completed, False
 
 
 def _build_remote_result_listing_command(
@@ -4083,80 +4055,20 @@ def _build_remote_result_listing_command(
     remote_result_dir: PurePosixPath,
 ) -> str:
     """Build one remote shell command that lists the synced result directory contents."""
-    quoted_dir = shlex.quote(remote_result_dir.as_posix())
-    return (
-        f"if test -d {quoted_dir}; then "
-        f"find {quoted_dir} -maxdepth 1 -type f -printf '%f\\t%s\\n' | sort; "
-        "fi"
-    )
+    return _neuroinfra_build_remote_result_listing_command(remote_result_dir=remote_result_dir)
 
 
 def _build_remote_cancel_command(*, job_id: str) -> str:
     """Build one remote shell command that cancels a submitted Slurm job."""
-    return f"scancel {shlex.quote(str(job_id))}"
+    return _neuroinfra_build_remote_cancel_command(job_id=job_id)
 
 
 def _query_remote_slurm_job_state(config: dict[str, Any], job_id: str) -> dict[str, str]:
     """Query one remote Slurm job state without requiring a result directory."""
-    query_command = (
-        f"squeue -j {shlex.quote(str(job_id))} -h -o '%T|%R' || true; "
-        "printf '%s\\n' '__SACCT__'; "
-        f"sacct -j {shlex.quote(str(job_id))} --format=JobIDRaw,State --parsable2 --noheader || true"
+    return _neuroinfra_query_remote_slurm_job_state(
+        job_id=str(job_id),
+        run_command=lambda command: _run_ssh_shell(config, command),
     )
-    completed = _run_ssh_shell(config, query_command)
-    if completed.returncode != 0:
-        raise RuntimeError(
-            "Remote Slurm job-state query failed.\n"
-            f"Job id: {job_id}\n"
-            f"Stdout:\n{completed.stdout}\n\nStderr:\n{completed.stderr}"
-        )
-
-    squeue_text, _marker, sacct_text = (completed.stdout or "").partition("__SACCT__\n")
-    squeue_output = squeue_text.strip()
-    sacct_output = sacct_text.strip()
-    squeue_reason = ""
-    squeue_location = ""
-
-    if squeue_output:
-        first_line = squeue_output.splitlines()[0]
-        parts = first_line.split("|", 1)
-        if len(parts) == 2:
-            squeue_state = _normalize_slurm_state(parts[0])
-            squeue_detail = parts[1].strip()
-            if squeue_state == "PENDING":
-                squeue_reason = squeue_detail
-            else:
-                squeue_location = squeue_detail
-        else:
-            squeue_state = _normalize_slurm_state(first_line)
-        if squeue_state == "PENDING":
-            return {"state": squeue_state, "reason": squeue_reason, "location": squeue_location}
-
-    if sacct_output:
-        for line in sacct_output.splitlines():
-            parts = line.split("|", 1)
-            if len(parts) != 2:
-                continue
-            raw_job_id, raw_state = parts
-            if raw_job_id.strip() == str(job_id):
-                state = _normalize_slurm_state(raw_state)
-                if state:
-                    return {"state": state, "reason": squeue_reason, "location": squeue_location}
-        for line in sacct_output.splitlines():
-            parts = line.split("|", 1)
-            if len(parts) != 2:
-                continue
-            state = _normalize_slurm_state(parts[1])
-            if state:
-                return {"state": state, "reason": squeue_reason, "location": squeue_location}
-
-    if squeue_output:
-        return {
-            "state": _normalize_slurm_state(squeue_output.split("|", 1)[0]),
-            "reason": squeue_reason,
-            "location": squeue_location,
-        }
-    return {"state": "UNKNOWN", "reason": "", "location": ""}
 
 
 def _ensure_cached_remote_slurm_allocation(
@@ -4435,19 +4347,7 @@ def _remote_submission_payload(
 
 def _remote_status_has_artifacts(status: dict[str, Any] | None) -> bool:
     """Return whether the remote poll status saw any useful output artifacts."""
-    if not status:
-        return False
-    return any(
-        bool(status.get(key))
-        for key in (
-            "summary_exists",
-            "stdout_exists",
-            "stderr_exists",
-            "bootstrap_exists",
-            "command_exists",
-            "slurm_log_exists",
-        )
-    )
+    return _neuroinfra_remote_status_has_artifacts(status)
 
 
 def _create_git_bundle_for_commit(commit_sha: str, *, exclude_ref: str | None = None) -> tuple[Path, str]:
