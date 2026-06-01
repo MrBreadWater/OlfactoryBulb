@@ -22,6 +22,7 @@ The first live internal extraction is now also present:
 
 The next standardized seam is also in place:
 
+- `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
 - `neuroinfra.models.registry`
@@ -71,6 +72,11 @@ The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus
 the local command builders that launch uploaded or inline helpers, now have a
 standardized home under `neuroinfra.remote`.
+
+The remote endpoint parsing, timeout normalization, retry policy, and generic
+Paramiko-backed Slurm config builder that the notebook layer uses now also live
+under `neuroinfra.remote.config`, while the notebook-facing wrappers remain in
+`obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
