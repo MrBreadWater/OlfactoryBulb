@@ -1891,6 +1891,7 @@ def _remote_helper_bundle_entries() -> tuple[HelperBundleEntry, ...]:
         HelperBundleEntry("neuroinfra/__init__.py", neuroinfra_dir / "__init__.py"),
         HelperBundleEntry("neuroinfra/inventory.py", neuroinfra_dir / "inventory.py"),
         HelperBundleEntry("neuroinfra/remote_script_common.py", neuroinfra_dir / "remote_script_common.py"),
+        HelperBundleEntry("neuroinfra/remote_script_polling.py", neuroinfra_dir / "remote_script_polling.py"),
     )
 
 

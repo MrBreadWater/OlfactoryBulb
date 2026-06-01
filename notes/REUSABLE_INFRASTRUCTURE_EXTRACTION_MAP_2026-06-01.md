@@ -168,6 +168,9 @@ Current progress:
 - the remote-safe common helpers shared by uploaded Slurm wrapper scripts now
   live under `neuroinfra.remote_script_common`, while
   `tools/remote/slurm_common.py` remains as a compatibility bootstrap
+- the remote-safe polling helpers shared by uploaded Slurm wrapper scripts now
+  live under `neuroinfra.remote_script_polling`, while
+  `tools/remote/poll_sol_run.py` remains as a compatibility bootstrap/CLI wrapper
 - the local Git publication/base-resolution helpers that support notebook-
   driven remote syncs now live under `neuroinfra.remote.git_sync`
 - the helper-cache runtime key, cache directory layout, manifest probe logic,

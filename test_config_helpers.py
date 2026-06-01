@@ -789,6 +789,7 @@ with tempfile.TemporaryDirectory() as tmp:
     helper_sources = hlp._remote_helper_sources()
     assert helper_sources["slurm_common.py"] == hlp.REPO_ROOT / "tools" / "remote" / "slurm_common.py"
     assert helper_sources["neuroinfra/remote_script_common.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_common.py"
+    assert helper_sources["neuroinfra/remote_script_polling.py"] == hlp.REPO_ROOT / "neuroinfra" / "remote_script_polling.py"
     helper_manifest = helper_bundle_manifest(
         hlp._remote_helper_bundle_entries(),
         signature=hlp._remote_helper_signature(),
