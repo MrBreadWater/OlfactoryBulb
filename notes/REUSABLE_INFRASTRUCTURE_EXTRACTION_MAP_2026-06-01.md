@@ -267,11 +267,52 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates nested path mutation and sweep
   plan expansion there while still owning concrete execution and persistence
 
+### 2e.5 Notebook entrypoint dispatch
+
+Current files:
+
+- `neuroinfra/notebooks/dispatch.py`
+- `olfactorybulb/notebook_dispatch.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- local versus remote single-run dispatch
+- parameter sweep dispatch
+- grid sweep dispatch
+- standard timestamp, label, and local result-dir resolution for notebook
+  entrypoints
+
+What is domain-specific:
+
+- run-config normalization and label policy
+- concrete local payload and hook assembly
+- concrete remote run and remote sweep executors
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic notebook entrypoint dispatch layer now lives under
+  `neuroinfra.notebooks.dispatch`
+- the concrete olfactory-bulb entrypoint adapters now live under
+  `olfactorybulb/notebook_dispatch.py`
+- `obgpu_experiment_helpers.py` now delegates `run_simulation`,
+  `run_parameter_sweep`, and `run_grid_sweep` through that explicit adapter
+  layer instead of open-coding the local/remote branch selection inline
+
 ### 2f. Notebook local subprocess execution
 
 Current files:
 
 - `neuroinfra/notebooks/local_runs.py`
+- `olfactorybulb/notebook_local_runs.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
@@ -353,10 +394,13 @@ Current progress:
 
 Current files:
 
+- `neuroinfra/notebooks/dispatch.py`
 - `neuroinfra/notebooks/remote_jobs.py`
 - `neuroinfra/notebooks/remote_runs.py`
 - `neuroinfra/notebooks/remote_sweeps.py`
 - `neuroinfra/notebooks/workflows.py`
+- `olfactorybulb/notebook_dispatch.py`
+- `olfactorybulb/notebook_workflows.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
@@ -416,10 +460,14 @@ Current progress:
   `neuroinfra.notebooks.workflows`
 - the concrete olfactory-bulb workflow hook assembly now lives under
   `olfactorybulb/notebook_workflows.py`
+- the generic notebook dispatch layer now also lives under
+  `neuroinfra.notebooks.dispatch`
+- the concrete olfactory-bulb entrypoint adapters now also live under
+  `olfactorybulb/notebook_dispatch.py`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
-  and the local branches of parameter/grid sweeps through that domain adapter
-  while still owning notebook-facing progress messages and the higher-level
-  local/remote branch selection
+  `run_simulation`, and the parameter/grid sweep entrypoints through those
+  domain adapters while still owning notebook-facing progress messages and a
+  narrower layer of presentation-oriented glue
 
 ### 2i. Result analysis and signal registry
 

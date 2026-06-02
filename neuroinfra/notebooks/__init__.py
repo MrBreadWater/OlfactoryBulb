@@ -14,6 +14,13 @@ from .config_store import (
     load_json_config,
     save_json_config,
 )
+from .dispatch import (
+    NotebookRunDispatchHooks,
+    NotebookSweepDispatchHooks,
+    dispatch_grid_sweep,
+    dispatch_parameter_sweep,
+    dispatch_run,
+)
 from .local_runs import (
     DEFAULT_COMMAND_FILENAME,
     LocalRunHooks,
@@ -67,6 +74,9 @@ from .workflows import (
 
 __all__ = [
     "diff_values",
+    "dispatch_grid_sweep",
+    "dispatch_parameter_sweep",
+    "dispatch_run",
     "flatten_for_diff",
     "format_diff_value",
     "RunRecord",
@@ -89,6 +99,8 @@ __all__ = [
     "DEFAULT_COMMAND_FILENAME",
     "env_subset",
     "execute_local_run",
+    "NotebookRunDispatchHooks",
+    "NotebookSweepDispatchHooks",
     "load_run_pair",
     "load_run_info_payload",
     "merge_run_info_payload",

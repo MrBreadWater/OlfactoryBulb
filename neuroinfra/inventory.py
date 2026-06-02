@@ -197,6 +197,31 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic sweep-planning layer now lives under neuroinfra.notebooks.sweeps, while the notebook helper still owns concrete run-config normalization, sweep execution, and persistence; next separate the remaining local/remote sweep runner orchestration from planning.",
     ),
     ExtractionCandidate(
+        key="notebook_dispatch",
+        title="Notebook entrypoint dispatch",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/dispatch.py",
+            "olfactorybulb/notebook_dispatch.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "local versus remote single-run dispatch",
+            "parameter sweep dispatch",
+            "grid sweep dispatch",
+            "standard timestamp, label, and local result-dir resolution for notebook entrypoints",
+        ),
+        repo_specific_couplings=(
+            "run-config normalization and label policy still remain domain-specific",
+            "local payload and hook assembly still come from the olfactory-bulb notebook layer",
+            "remote run and remote sweep executors still depend on the repo's concrete remote adapters",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic notebook dispatch layer now lives under neuroinfra.notebooks.dispatch, while the concrete olfactory-bulb entrypoint adapters now live in olfactorybulb.notebook_dispatch; next keep shrinking obgpu_experiment_helpers.py toward thin notebook entrypoints and move the last presentation-oriented glue into explicit domain modules.",
+    ),
+    ExtractionCandidate(
         key="notebook_local_run_execution",
         title="Notebook local subprocess execution",
         target_module="neuroinfra.notebooks",

@@ -36,6 +36,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.sweeps`
 - `neuroinfra.analysis.signals`
 - `neuroinfra.notebooks.config_store`
+- `neuroinfra.notebooks.dispatch`
 - `neuroinfra.notebooks.local_runs`
 - `neuroinfra.notebooks.remote_jobs`
 - `neuroinfra.notebooks.remote_runs`
@@ -182,6 +183,14 @@ planning helpers now also live under `neuroinfra.notebooks.sweeps`, while the
 concrete run-config normalization, label policy, and local/remote sweep
 execution still remain in `obgpu_experiment_helpers.py`.
 
+The generic notebook entrypoint dispatch layer that chooses local vs remote
+single-run execution plus local vs remote parameter/grid sweep execution now
+also lives under `neuroinfra.notebooks.dispatch`, while the concrete
+olfactory-bulb dispatch adapters that wire local payload builders and remote
+workflow entrypoints now live in `olfactorybulb.notebook_dispatch`. The
+notebook helper now delegates `run_simulation`, `run_parameter_sweep`, and
+`run_grid_sweep` through that explicit adapter layer.
+
 The generic local notebook subprocess runner that executes one command,
 captures stdout/stderr, persists command/capture artifacts, enforces summary
 file presence, and delegates run-info persistence now also lives under
@@ -199,8 +208,8 @@ The generic notebook workflow layer that composes `run_and_load`,
 `load_run_pair`, and local sweep execution loops now also lives under
 `neuroinfra.notebooks.workflows`, while the concrete olfactory-bulb workflow
 hook assembly now lives under `olfactorybulb.notebook_workflows`. The notebook
-helper still owns notebook-facing progress messages and higher-level
-local/remote runner selection.
+helper still owns notebook-facing progress messages and a narrower layer of
+presentation-oriented entrypoint glue.
 
 The generic notebook remote session lifecycle that publishes one git ref, runs
 preflight, warms helper cache state, prepares reusable allocations, and

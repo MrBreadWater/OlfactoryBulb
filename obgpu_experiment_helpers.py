@@ -128,6 +128,13 @@ from olfactorybulb.notebook_local_runs import (
     build_local_run_hooks as _ob_build_local_run_hooks,
     build_local_run_payload as _ob_build_local_run_payload,
 )
+from olfactorybulb.notebook_dispatch import (
+    NotebookRunDispatchAdapterHooks as _OlfactoryBulbNotebookRunDispatchAdapterHooks,
+    NotebookSweepDispatchAdapterHooks as _OlfactoryBulbNotebookSweepDispatchAdapterHooks,
+    run_notebook_grid_sweep as _ob_run_notebook_grid_sweep,
+    run_notebook_parameter_sweep as _ob_run_notebook_parameter_sweep,
+    run_notebook_simulation as _ob_run_notebook_simulation,
+)
 from olfactorybulb.notebook_run_info import (
     NotebookRunInfoHooks as _OlfactoryBulbNotebookRunInfoHooks,
     merge_extra_run_info as _ob_merge_extra_run_info,
@@ -2677,6 +2684,34 @@ def _ob_notebook_workflow_adapter_hooks() -> _OlfactoryBulbNotebookWorkflowAdapt
     )
 
 
+def _ob_notebook_run_dispatch_hooks() -> _OlfactoryBulbNotebookRunDispatchAdapterHooks:
+    """Build the concrete olfactory-bulb hooks for notebook run entrypoint dispatch."""
+    return _OlfactoryBulbNotebookRunDispatchAdapterHooks(
+        normalize_config_fn=lambda config: build_run_config(**(config or {})),
+        make_timestamp_fn=make_timestamp,
+        make_label_fn=lambda config, timestamp: make_label(config, timestamp=timestamp),
+        build_local_run_payload_fn=_ob_build_local_run_payload,
+        local_run_payload_hooks_fn=_ob_local_run_payload_hooks,
+        build_local_run_hooks_fn=_ob_build_local_run_hooks,
+        local_run_hook_builder_hooks_fn=_ob_local_run_hook_builder_hooks,
+        execute_local_run_fn=_neuroinfra_execute_local_run,
+        execute_remote_run_fn=_run_remote_simulation,
+        default_results_base=DEFAULT_RESULTS_BASE,
+    )
+
+
+def _ob_notebook_sweep_dispatch_hooks() -> _OlfactoryBulbNotebookSweepDispatchAdapterHooks:
+    """Build the concrete olfactory-bulb hooks for notebook sweep entrypoint dispatch."""
+    return _OlfactoryBulbNotebookSweepDispatchAdapterHooks(
+        prepare_sweep_plan_fn=_prepare_sweep_plan,
+        uses_remote_batch_engine_fn=_sweep_uses_remote_batch_engine,
+        build_local_sweep_hooks_fn=_ob_build_local_sweep_hooks,
+        notebook_workflow_adapter_hooks_fn=_ob_notebook_workflow_adapter_hooks,
+        execute_local_sweep_plan_fn=_neuroinfra_run_local_sweep_plan,
+        execute_remote_sweep_fn=_run_remote_sweep,
+    )
+
+
 def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
@@ -4321,41 +4356,10 @@ def run_simulation(
     label: str | None = None,
 ) -> RunRecord:
     """Run one timestamped notebook simulation and return its recorded metadata."""
-    config = build_run_config(**(config or {}))
-    timestamp = make_timestamp()
-    label = str(label or make_label(config, timestamp=timestamp))
-    result_dir = Path(config.get("results_base", DEFAULT_RESULTS_BASE)) / label
-    runner_backend = str(config.get("runner_backend", "local"))
-
-    if runner_backend in {"sol_slurm", "slurm_remote"}:
-        return _run_remote_simulation(
-            config,
-            label=label,
-            timestamp=timestamp,
-            local_result_dir=result_dir,
-        )
-
-    if runner_backend != "local":
-        raise ValueError(f"Unsupported runner_backend={runner_backend!r}")
-
-    local_payload = _ob_build_local_run_payload(
-        _ob_local_run_payload_hooks(),
+    return _ob_run_notebook_simulation(
+        _ob_notebook_run_dispatch_hooks(),
         config,
         label=label,
-        timestamp=timestamp,
-        repo_root=REPO_ROOT,
-        default_results_base=DEFAULT_RESULTS_BASE,
-    )
-    return _neuroinfra_execute_local_run(
-        config=config,
-        label=label,
-        timestamp=timestamp,
-        result_dir=local_payload.result_dir,
-        env=local_payload.env,
-        command=local_payload.command,
-        runner_name="obgpu_experiment_helpers.run_simulation",
-        hooks=_ob_build_local_run_hooks(_ob_local_run_hook_builder_hooks()),
-        success_extra_payload={"remote": None},
     )
 
 
@@ -4551,12 +4555,11 @@ def run_parameter_sweep(
     sub-dict of ``{path: value}`` pairs. Remote Slurm backends default to a
     single submitted sweep job unless ``sweep_engine='legacy'`` is requested.
     """
-    sweep_plan = _prepare_sweep_plan(base_config, sweep_path, values, grid=False)
-    if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
-        return _run_remote_sweep(sweep_plan)
-    return _neuroinfra_run_local_sweep_plan(
-        _ob_build_local_sweep_hooks(_ob_notebook_workflow_adapter_hooks()),
-        sweep_plan,
+    return _ob_run_notebook_parameter_sweep(
+        _ob_notebook_sweep_dispatch_hooks(),
+        base_config,
+        sweep_path,
+        values,
     )
 
 
@@ -4574,12 +4577,10 @@ def run_grid_sweep(
     Items are ordered row-major (first parameter varies slowest). Each item's
     ``value`` is a ``{path: value}`` dict, matching the joint-sweep convention.
     """
-    sweep_plan = _prepare_sweep_plan(base_config, param_grid, grid=True)
-    if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
-        return _run_remote_sweep(sweep_plan)
-    return _neuroinfra_run_local_sweep_plan(
-        _ob_build_local_sweep_hooks(_ob_notebook_workflow_adapter_hooks()),
-        sweep_plan,
+    return _ob_run_notebook_grid_sweep(
+        _ob_notebook_sweep_dispatch_hooks(),
+        base_config,
+        param_grid,
     )
 
 

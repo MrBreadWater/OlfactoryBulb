@@ -148,15 +148,15 @@ with tempfile.TemporaryDirectory() as tmp:
     assert grid_plan["items"][2]["value"] == {"gaba_tau2_ms": 50.0, "gap_mc": 16.0}
     print("sweep planning wrappers: OK")
 
-    # --- local run wrapper delegates through neuroinfra local runner ---
-    original_local_run = hlp._neuroinfra_execute_local_run
+    # --- local run wrapper delegates through notebook dispatch layer ---
+    original_run_dispatch = hlp._ob_run_notebook_simulation
     local_run_calls = []
     try:
-        def _fake_local_run(**kwargs):
-            local_run_calls.append(kwargs)
+        def _fake_run_dispatch(hooks, config=None, *, label=None):
+            local_run_calls.append((hooks, dict(config or {}), label))
             return "LOCAL-RUN-SENTINEL"
 
-        hlp._neuroinfra_execute_local_run = _fake_local_run
+        hlp._ob_run_notebook_simulation = _fake_run_dispatch
         delegated = hlp.run_simulation(
             build_run_config(
                 paramset="GammaSignature",
@@ -165,11 +165,10 @@ with tempfile.TemporaryDirectory() as tmp:
             label="local_runner_delegate",
         )
         assert delegated == "LOCAL-RUN-SENTINEL"
-        assert local_run_calls and local_run_calls[0]["runner_name"] == "obgpu_experiment_helpers.run_simulation"
-        assert local_run_calls[0]["command"]
-        assert Path(local_run_calls[0]["result_dir"]).name == "local_runner_delegate"
+        assert local_run_calls and local_run_calls[0][2] == "local_runner_delegate"
+        assert local_run_calls[0][1]["results_base"] == str(tmp / "local_runs")
     finally:
-        hlp._neuroinfra_execute_local_run = original_local_run
+        hlp._ob_run_notebook_simulation = original_run_dispatch
     print("local run wrapper delegation: OK")
 
     # --- remote run wrapper delegates through notebook remote session layer ---
@@ -369,20 +368,21 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._neuroinfra_run_and_load_workflow = original_run_and_load_workflow
     print("run_and_load wrapper delegation: OK")
 
-    # --- local sweep wrapper delegates through neuroinfra workflow ---
-    original_local_sweep_workflow = hlp._neuroinfra_run_local_sweep_plan
+    # --- local sweep wrapper delegates through notebook dispatch layer ---
+    original_local_sweep_dispatch = hlp._ob_run_notebook_parameter_sweep
     local_sweep_calls = []
     try:
-        def _fake_local_sweep_workflow(hooks, sweep_plan):
-            local_sweep_calls.append((hooks, sweep_plan))
-            return {"items": [], "path": sweep_plan["path"], "values": sweep_plan["values"], "paramset": sweep_plan["paramset"]}
+        def _fake_local_sweep_dispatch(hooks, base_config, sweep_path, values=None):
+            local_sweep_calls.append((hooks, dict(base_config), sweep_path, list(values or [])))
+            return {"items": [], "path": sweep_path, "values": list(values or []), "paramset": base_config["paramset"]}
 
-        hlp._neuroinfra_run_local_sweep_plan = _fake_local_sweep_workflow
+        hlp._ob_run_notebook_parameter_sweep = _fake_local_sweep_dispatch
         sweep_result = hlp.run_parameter_sweep(cfg, "gaba_tau2_ms", [36.0, 50.0])
         assert sweep_result["paramset"] == "GammaSignature"
-        assert local_sweep_calls and local_sweep_calls[0][1]["path"] == "gaba_tau2_ms"
+        assert local_sweep_calls and local_sweep_calls[0][2] == "gaba_tau2_ms"
+        assert local_sweep_calls[0][3] == [36.0, 50.0]
     finally:
-        hlp._neuroinfra_run_local_sweep_plan = original_local_sweep_workflow
+        hlp._ob_run_notebook_parameter_sweep = original_local_sweep_dispatch
     print("local sweep workflow delegation: OK")
 
     # --- save_figure wrapper ---
