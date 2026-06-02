@@ -118,10 +118,11 @@ presentation policy still remain in `obgpu_experiment_helpers.py`.
 The generic result-catalog helpers, result-overview builders, shared plotting
 primitives, named-signal trace, band-pass, PSD overview, time-frequency view
 helpers, resolved-signal phase-locking summaries, frequency KDE and
-time-binned sample renderers, spectral-analysis core, sweep plot protocol,
-sweep persistence and reload helpers, streamed GIF rendering pipeline,
-event-rate/raster analysis helpers, shared event-rate plotting, raster-plus-
-rate overview layout, and named-signal provider registry that list,
+time-binned sample renderers, labeled-row instantaneous-frequency sample
+collectors, spectral-analysis core, sweep plot protocol, sweep persistence and
+reload helpers, streamed GIF rendering pipeline, event-rate/raster analysis
+helpers, shared event-rate plotting, raster-plus-rate overview layout, and
+named-signal provider registry that list,
 summarize, transform, plot, animate, persist, reload, and resolve analysis
 signals in a stable ordered way now also live under `neuroinfra.analysis`,
 while the concrete OBGPU signal families and notebook-specific presentation

@@ -35,6 +35,16 @@ class EventOverviewLayout:
     left_margin: float
 
 
+@dataclass(frozen=True)
+class FrequencySampleCollection:
+    """Instantaneous frequency samples collected from labeled event rows."""
+
+    times_ms: np.ndarray
+    freqs_hz: np.ndarray
+    labels: tuple[str, ...]
+    rows: tuple[Any, ...]
+
+
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
     """Convert event times into midpoint/frequency samples."""
     times = np.asarray(times, dtype=float)
@@ -43,6 +53,63 @@ def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarr
     t_freq = (times[:-1] + times[1:]) / 2.0
     event_hz = 1000.0 / np.diff(times)
     return t_freq, event_hz
+
+
+def collect_frequency_samples_from_rows(
+    rows: Sequence[Any],
+    *,
+    label_fn: Callable[[Any], str],
+    times_fn: Callable[[Any], np.ndarray | list[float]],
+    indices: Sequence[int] | range | None = None,
+    include_prefixes: Sequence[str] | None = None,
+    modulus: float | int | None = None,
+) -> FrequencySampleCollection:
+    """Collect instantaneous frequency samples from labeled event-time rows."""
+    row_sequence = list(rows)
+    prefixes = tuple(str(name) for name in include_prefixes) if include_prefixes else None
+    selected_indices: Sequence[int] | range
+    if indices is None:
+        selected_indices = range(len(row_sequence))
+    else:
+        selected_indices = indices
+
+    modulus_value = normalize_time_modulus(modulus)
+    all_freq_t: list[np.ndarray] = []
+    all_freq: list[np.ndarray] = []
+    labels: list[str] = []
+    selected_rows: list[Any] = []
+
+    for index in selected_indices:
+        if int(index) >= len(row_sequence):
+            break
+        row = row_sequence[int(index)]
+        label = str(label_fn(row))
+        if prefixes is not None and not any(label.startswith(prefix) for prefix in prefixes):
+            continue
+        t_freq, event_hz = calculate_event_frequency(times_fn(row))
+        if len(t_freq) == 0:
+            continue
+        t_freq = np.asarray(t_freq, dtype=float)
+        if modulus_value is not None:
+            t_freq = np.mod(t_freq, modulus_value)
+        all_freq_t.append(t_freq)
+        all_freq.append(np.asarray(event_hz, dtype=float))
+        labels.append(label)
+        selected_rows.append(row)
+
+    if all_freq_t:
+        times = np.concatenate(all_freq_t)
+        freqs = np.concatenate(all_freq)
+    else:
+        times = np.array([], dtype=float)
+        freqs = np.array([], dtype=float)
+
+    return FrequencySampleCollection(
+        times_ms=times,
+        freqs_hz=freqs,
+        labels=tuple(labels),
+        rows=tuple(selected_rows),
+    )
 
 
 def smooth_rate_series(

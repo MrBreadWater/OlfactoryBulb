@@ -259,6 +259,7 @@ from neuroinfra.analysis.events import (
     binned_event_rate as _neuroinfra_binned_event_rate,
     build_event_overview_layout as _neuroinfra_build_event_overview_layout,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
+    collect_frequency_samples_from_rows as _neuroinfra_collect_frequency_samples_from_rows,
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
     plot_event_overview as _neuroinfra_plot_event_overview,
@@ -6392,9 +6393,6 @@ def collect_spike_frequency_samples(
 ) -> dict[str, Any]:
     """Collect midpoint/frequency samples from detected soma spikes."""
     prefixes = tuple(str(name) for name in cell_types) if cell_types else None
-    all_freq_t = []
-    all_freq = []
-    labels = []
 
     saved_rows = _saved_soma_spike_rows(
         result,
@@ -6417,29 +6415,18 @@ def collect_spike_frequency_samples(
                 continue
             trace_rows.append((str(label), detect_spikes(t, mp, threshold=threshold)))
 
-    for label, spike_times in trace_rows:
-        t_freq, spiking_hz = calculate_event_frequency(spike_times)
-        if len(t_freq) == 0:
-            continue
-        t_freq = np.asarray(t_freq, dtype=float)
-        if modulus is not None:
-            t_freq = np.mod(t_freq, float(modulus))
-        all_freq_t.append(t_freq)
-        all_freq.append(np.asarray(spiking_hz, dtype=float))
-        labels.append(str(label))
-
-    if all_freq_t:
-        times = np.concatenate(all_freq_t)
-        freqs = np.concatenate(all_freq)
-    else:
-        times = np.array([], dtype=float)
-        freqs = np.array([], dtype=float)
+    sample_collection = _neuroinfra_collect_frequency_samples_from_rows(
+        trace_rows,
+        label_fn=lambda row: row[0],
+        times_fn=lambda row: row[1],
+        modulus=modulus,
+    )
 
     return {
-        "times": times,
-        "freqs": freqs,
-        "labels": labels,
-        "n_traces": len(labels),
+        "times": sample_collection.times_ms,
+        "freqs": sample_collection.freqs_hz,
+        "labels": list(sample_collection.labels),
+        "n_traces": len(sample_collection.labels),
         "cell_types": list(prefixes) if prefixes is not None else None,
     }
 
@@ -6682,38 +6669,22 @@ def collect_gc_output_frequency_samples(
 ) -> dict[str, Any]:
     """Collect instantaneous GC inhibitory-output frequency samples for KDE plots."""
     events = filter_gc_output_events(result, target_types=target_types)
-    if indices is None:
-        indices = range(len(events))
-
-    selected_events = []
-    all_freq_t = []
-    all_freq = []
-
-    for i in indices:
-        if i >= len(events):
-            break
-        entry = events[i]
-        t_freq, event_hz = calculate_event_frequency(entry.get("times", []))
-        if len(t_freq) == 0:
-            continue
-        if modulus is not None:
-            t_freq = np.mod(t_freq, float(modulus))
-        all_freq_t.append(np.asarray(t_freq, dtype=float))
-        all_freq.append(np.asarray(event_hz, dtype=float))
-        selected_events.append(entry)
-
-    if all_freq_t:
-        times = np.concatenate(all_freq_t)
-        freqs = np.concatenate(all_freq)
-    else:
-        times = np.array([], dtype=float)
-        freqs = np.array([], dtype=float)
+    sample_collection = _neuroinfra_collect_frequency_samples_from_rows(
+        events,
+        label_fn=lambda entry: (
+            f"{normalize_cell_name(entry.get('source_section', 'GC'))}->"
+            f"{normalize_cell_name(entry.get('dest_section', 'cell'))}"
+        ),
+        times_fn=lambda entry: entry.get("times", []),
+        indices=indices,
+        modulus=modulus,
+    )
 
     return {
-        "times": times,
-        "freqs": freqs,
-        "events": selected_events,
-        "n_events": len(selected_events),
+        "times": sample_collection.times_ms,
+        "freqs": sample_collection.freqs_hz,
+        "events": list(sample_collection.rows),
+        "n_events": len(sample_collection.rows),
     }
 
 

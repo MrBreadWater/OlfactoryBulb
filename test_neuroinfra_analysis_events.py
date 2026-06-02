@@ -11,9 +11,11 @@ import numpy as np
 
 from neuroinfra.analysis.events import (
     EventRateTrace,
+    FrequencySampleCollection,
     binned_event_rate,
     build_event_overview_layout,
     calculate_event_frequency,
+    collect_frequency_samples_from_rows,
     ensure_raster_axis,
     fit_raster_labels,
     overview_left_margin,
@@ -33,6 +35,23 @@ def main() -> None:
     t_freq, event_hz = calculate_event_frequency([0.0, 50.0, 100.0])
     assert np.allclose(t_freq, [25.0, 75.0])
     assert np.allclose(event_hz, [20.0, 20.0])
+
+    freq_samples = collect_frequency_samples_from_rows(
+        [
+            ("MC0", np.array([0.0, 50.0, 100.0])),
+            ("TC0", np.array([20.0])),
+            ("MC1", np.array([10.0, 40.0, 70.0])),
+        ],
+        label_fn=lambda row: row[0],
+        times_fn=lambda row: row[1],
+        include_prefixes=("MC",),
+        modulus=60.0,
+    )
+    assert isinstance(freq_samples, FrequencySampleCollection)
+    assert freq_samples.labels == ("MC0", "MC1")
+    assert len(freq_samples.rows) == 2
+    assert np.allclose(freq_samples.times_ms, [25.0, 15.0, 25.0, 55.0])
+    assert np.allclose(freq_samples.freqs_hz, [20.0, 20.0, 33.3333333333, 33.3333333333])
 
     raw_rate = np.array([0.0, 0.0, 10.0, 0.0, 0.0], dtype=float)
     smoothed = smooth_rate_series(raw_rate, bin_ms=5.0, smooth_sigma_ms=10.0)

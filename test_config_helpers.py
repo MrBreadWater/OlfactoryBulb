@@ -427,6 +427,31 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp.plt.close(freq_ax.figure)
     print("Frequency KDE wrapper: OK")
 
+    gc_freq_result = {
+        "gc_output_events": [
+            {
+                "source_section": "GC0[0].soma",
+                "dest_section": "MC0[0].soma",
+                "times": np.array([0.0, 20.0, 50.0], dtype=float),
+            },
+            {
+                "source_section": "GC1[0].soma",
+                "dest_section": "TC0[0].soma",
+                "times": np.array([10.0], dtype=float),
+            },
+        ]
+    }
+    gc_freq_samples = hlp.collect_gc_output_frequency_samples(
+        gc_freq_result,
+        target_types=("MC",),
+        modulus=40.0,
+    )
+    assert gc_freq_samples["n_events"] == 1
+    assert len(gc_freq_samples["events"]) == 1
+    np.testing.assert_allclose(gc_freq_samples["times"], [10.0, 35.0])
+    np.testing.assert_allclose(gc_freq_samples["freqs"], [50.0, 33.3333333333])
+    print("GC output frequency wrapper: OK")
+
     # --- Optional int16 soma traces should round-trip with bounded quantization error ---
     quantized_dir = tmp / "quantized_soma"
     quantized_dir.mkdir()

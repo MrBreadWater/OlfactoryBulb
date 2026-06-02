@@ -121,6 +121,7 @@ Current progress:
 
 Current files:
 
+- `neuroinfra/analysis/events.py`
 - `neuroinfra/analysis/catalog.py`
 - `neuroinfra/analysis/frequency_plots.py`
 - `neuroinfra/analysis/overview.py`
@@ -142,6 +143,7 @@ What is already generic:
 - named-signal trace, band-pass, PSD overview, spectrogram, wavelet, and band-power view helpers built on provider-style resolvers
 - phase-locking summaries from resolved signals and labeled spike-time rows
 - frequency KDE and time-binned plotting from precomputed sample arrays
+- instantaneous frequency sample collection from labeled event rows
 - event-frequency conversion, event-rate binning, shared rate-plot helpers, and reusable raster-plot primitives
 - shared raster-plus-rate overview layout for notebook summaries
 - sweep plot specification, placeholder rendering, per-frame rendering, and GIF assembly
