@@ -192,6 +192,10 @@ from neuroinfra.remote.status_poll import (
     RemoteJSONPollHooks as _NeuroinfraRemoteJSONPollHooks,
     poll_remote_json_status as _neuroinfra_poll_remote_json_status,
 )
+from neuroinfra.remote.run_artifacts import (
+    RemoteRunArtifactHooks as _NeuroinfraRemoteRunArtifactHooks,
+    finalize_remote_run_artifacts as _neuroinfra_finalize_remote_run_artifacts,
+)
 from neuroinfra.remote.deferred_artifacts import (
     DeferredArtifactSyncHooks as _NeuroinfraDeferredArtifactSyncHooks,
     sync_deferred_remote_artifact as _neuroinfra_sync_deferred_remote_artifact,
@@ -2368,6 +2372,28 @@ def _remote_json_poll_hooks(
     )
 
 
+def _remote_run_artifact_hooks(
+    notebook_timings: dict[str, float],
+) -> _NeuroinfraRemoteRunArtifactHooks:
+    """Build reusable hooks for remote single-run final sync and artifact collection."""
+    return _NeuroinfraRemoteRunArtifactHooks(
+        sync_remote_result_dir_resilient_fn=_sync_remote_result_dir_resilient,
+        sync_remote_result_dir_fn=_sync_remote_result_dir,
+        run_paramiko_shell_fn=_run_ssh_shell,
+        build_remote_result_listing_command_fn=_build_remote_result_listing_command,
+        local_result_dir_has_loadable_payload_fn=_local_result_dir_has_loadable_payload,
+        local_result_dir_has_diagnostics_fn=_local_result_dir_has_diagnostics,
+        standard_result_artifact_sizes_fn=_standard_result_artifact_sizes,
+        synthesize_partial_sync_summary_fn=_synthesize_partial_sync_summary,
+        compact_remote_poll_events_fn=_compact_remote_poll_events,
+        read_json_if_present_fn=_read_json_if_present,
+        progress_write=_progress_write,
+        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        sleep_fn=time.sleep,
+        perf_counter_fn=time.perf_counter,
+    )
+
+
 def _apply_loaded_result_artifact(result: MutableMapping[str, Any], key: str, loaded: Any) -> None:
     """Apply one loaded artifact payload to the standard notebook result dict."""
     if key == "lfp":
@@ -4312,119 +4338,36 @@ def _run_remote_simulation(
     if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", False)):
         final_sync_include_files = _remote_fast_sync_files(effective_config)
         deferred_remote_artifacts.append(preferred_soma_trace_artifact_name())
-
-    sync_started = time.perf_counter()
-    sync_completed = _sync_remote_result_dir_resilient(
+    artifact_result = _neuroinfra_finalize_remote_run_artifacts(
         effective_config,
-        remote_result_dir=remote_result_dir,
+        final_status=final_status,
         local_result_dir=local_result_dir,
-        expected_files=("summary.json",),
-        include_files=final_sync_include_files,
+        remote_result_dir=remote_result_dir,
         wrapper_dir=submission.get("wrapper_dir"),
+        label=label,
+        timestamp=timestamp,
+        notebook_timings=notebook_timings,
+        poll_transcript=poll_transcript,
+        include_files=final_sync_include_files,
+        deferred_remote_artifacts=deferred_remote_artifacts,
+        hooks=_remote_run_artifact_hooks(notebook_timings),
     )
-    _record_timing(notebook_timings, "sync_s", sync_started)
-    (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
-    (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
-    sync_warning = None
-    if sync_completed.returncode != 0:
-        if _local_result_dir_has_loadable_payload(local_result_dir):
-            sync_warning = (
-                "Remote Sol result sync reported an error, but standard payload files were already present locally. "
-                "Proceeding with the partial local copy.\n"
-                f"{sync_completed.stderr}"
-            )
-            _progress_write(f"[OBGPU load] {sync_warning}")
-        elif _local_result_dir_has_diagnostics(local_result_dir):
-            sync_warning = (
-                "Remote Sol result payload sync failed, but diagnostic logs were synced. "
-                "Proceeding to build a failure report instead of aborting at sync.\n"
-                f"{sync_completed.stderr}"
-            )
-            _progress_write(f"[OBGPU load] {sync_warning}")
-            if final_status is not None:
-                final_status = dict(final_status)
-                final_status["ok"] = False
-                final_status["sync_failed"] = True
-                final_status["sync_stderr"] = sync_completed.stderr or ""
-        else:
-            raise RuntimeError(
-                "Remote Sol result sync failed.\n"
-                f"Result dir: {local_result_dir}\n"
-                f"sync stderr:\n{sync_completed.stderr}"
-            )
-    _progress_write(f"[OBGPU load] Remote sync finished: {local_result_dir}")
-
-    stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
-    stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
-    bootstrap_text = (
-        (local_result_dir / "bootstrap.log").read_text()
-        if (local_result_dir / "bootstrap.log").exists()
-        else ""
-    )
-    slurm_logs = sorted(local_result_dir.glob("slurm-*.out"))
-    slurm_text = slurm_logs[-1].read_text() if slurm_logs else ""
-    if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
-        time.sleep(3.0)
-        retry_sync_started = time.perf_counter()
-        sync_completed = _sync_remote_result_dir(
-            effective_config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=local_result_dir,
-        )
-        _record_timing(notebook_timings, "retry_sync_s", retry_sync_started)
-        (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
-        (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
-        if sync_completed.returncode == 0:
-            stdout_text = (local_result_dir / "stdout.txt").read_text() if (local_result_dir / "stdout.txt").exists() else ""
-            stderr_text = (local_result_dir / "stderr.txt").read_text() if (local_result_dir / "stderr.txt").exists() else ""
-            bootstrap_text = (
-                (local_result_dir / "bootstrap.log").read_text()
-                if (local_result_dir / "bootstrap.log").exists()
-                else ""
-            )
-            slurm_logs = sorted(local_result_dir.glob("slurm-*.out"))
-            slurm_text = slurm_logs[-1].read_text() if slurm_logs else ""
-    remote_listing_text = ""
-    if final_status and not final_status.get("ok") and not any((stdout_text, stderr_text, bootstrap_text, slurm_text)):
-        listing_completed = _run_ssh_shell(
-            effective_config,
-            _build_remote_result_listing_command(remote_result_dir=remote_result_dir),
-        )
-        remote_listing_text = (listing_completed.stdout or "").strip()
-    remote_git_commit = (
-        (local_result_dir / "git_commit.txt").read_text().strip()
-        if (local_result_dir / "git_commit.txt").exists()
-        else None
-    )
-    remote_git_ref = (
-        (local_result_dir / "git_ref.txt").read_text().strip()
-        if (local_result_dir / "git_ref.txt").exists()
-        else remote_metadata.get("remote_git_ref")
-    )
-    returncode = 0 if final_status and final_status.get("ok") else 1
+    final_status = artifact_result.final_status
+    sync_warning = artifact_result.sync_warning
+    stdout_text = artifact_result.stdout_text
+    stderr_text = artifact_result.stderr_text
+    bootstrap_text = artifact_result.bootstrap_text
+    slurm_text = artifact_result.slurm_text
+    remote_listing_text = artifact_result.remote_listing_text
+    remote_git_commit = artifact_result.remote_git_commit
+    remote_git_ref = artifact_result.remote_git_ref or remote_metadata.get("remote_git_ref")
+    returncode = artifact_result.returncode
     completed = SimpleNamespace(returncode=returncode, stdout=stdout_text, stderr=stderr_text)
-
-    summary_path = local_result_dir / "summary.json"
-    summary = None
-    if summary_path.exists():
-        with open(summary_path) as f:
-            summary = json.load(f)
-    elif sync_warning is not None and _local_result_dir_has_loadable_payload(local_result_dir):
-        summary = _synthesize_partial_sync_summary(
-            local_result_dir,
-            label=label,
-            timestamp=timestamp,
-            config=effective_config,
-        )
-        summary_path.write_text(json.dumps(summary, indent=2, sort_keys=True))
-
-    compact_poll_events = _compact_remote_poll_events(poll_transcript)
-    poll_events_path = None
-    if compact_poll_events:
-        poll_events_path = local_result_dir / "remote_poll_events.json"
-        poll_events_path.write_text(json.dumps(_json_ready(compact_poll_events), indent=2, sort_keys=True))
-    artifact_sizes = _standard_result_artifact_sizes(local_result_dir)
-    remote_metadata["deferred_remote_artifacts"] = list(deferred_remote_artifacts)
+    summary = artifact_result.summary
+    compact_poll_events = artifact_result.compact_poll_events
+    poll_events_path = artifact_result.poll_events_path
+    artifact_sizes = artifact_result.artifact_sizes
+    remote_metadata["deferred_remote_artifacts"] = list(artifact_result.deferred_remote_artifacts)
     remote_metadata["artifact_sizes"] = artifact_sizes
     remote_metadata["notebook_timing_seconds"] = notebook_timings
 

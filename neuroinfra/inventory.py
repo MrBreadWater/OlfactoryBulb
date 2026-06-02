@@ -110,6 +110,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/remote/result_sync.py",
             "neuroinfra/remote/deferred_artifacts.py",
             "neuroinfra/remote/status_poll.py",
+            "neuroinfra/remote/run_artifacts.py",
             "neuroinfra/remote/slurm_launch.py",
             "neuroinfra/remote/slurm_state.py",
             "neuroinfra/remote_script_common.py",
@@ -140,8 +141,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=2,
-        current_status="config_sync_launch_state_transport_allocation_runtime_sftp_stream_result_sync_deferred_artifact_status_poll_script_common_submit_polling_allocations_sweeps_git_helper_cache_and_allocation_seams_standardized",
-        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook-managed reusable-allocation orchestration, low-level Paramiko archive/direct stream helpers, higher-level result-sync retry/fallback policy, deferred remote-artifact sync policy, shared JSON status-poll retry/parsing, notebook runtime/session policy, Paramiko transport/session logic, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote single-run submit helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract more of the remote run/sweep orchestration and result-loading policy from obgpu_experiment_helpers.py without breaking the live wrappers.",
+        current_status="config_sync_launch_state_transport_allocation_runtime_sftp_stream_result_sync_deferred_artifact_status_poll_run_artifacts_script_common_submit_polling_allocations_sweeps_git_helper_cache_and_allocation_seams_standardized",
+        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook-managed reusable-allocation orchestration, low-level Paramiko archive/direct stream helpers, higher-level result-sync retry/fallback policy, deferred remote-artifact sync policy, shared JSON status-poll retry/parsing, remote single-run final sync and artifact-collection policy, notebook runtime/session policy, Paramiko transport/session logic, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote single-run submit helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract more of the live remote run/sweep monitoring loops and the OBGPU-specific result-loading policy from obgpu_experiment_helpers.py without breaking the live wrappers.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",

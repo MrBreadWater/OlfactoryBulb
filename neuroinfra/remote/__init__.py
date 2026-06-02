@@ -77,6 +77,11 @@ from .status_poll import (
     RemoteJSONPollHooks,
     poll_remote_json_status,
 )
+from .run_artifacts import (
+    RemoteRunArtifactHooks,
+    RemoteRunArtifactResult,
+    finalize_remote_run_artifacts,
+)
 from .deferred_artifacts import (
     DeferredArtifactSyncHooks,
     sync_deferred_remote_artifact,
@@ -245,6 +250,9 @@ __all__ = [
     "sync_remote_result_dir_resilient",
     "RemoteJSONPollHooks",
     "poll_remote_json_status",
+    "RemoteRunArtifactHooks",
+    "RemoteRunArtifactResult",
+    "finalize_remote_run_artifacts",
     "DeferredArtifactSyncHooks",
     "sync_deferred_remote_artifact",
     "sync_deferred_remote_artifact_direct",

@@ -45,6 +45,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.result_sync`
 - `neuroinfra.remote.deferred_artifacts`
 - `neuroinfra.remote.status_poll`
+- `neuroinfra.remote.run_artifacts`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -196,6 +197,13 @@ The shared JSON status-poll retry/parsing helper that both the single-run and
 remote-sweep notebook paths use now also lives under
 `neuroinfra.remote.status_poll`, while the higher-level run/sweep monitoring
 loops still remain in `obgpu_experiment_helpers.py`.
+
+The remote single-run final sync, retry-on-empty-diagnostics, partial-payload
+warning handling, failure listing fallback, and local artifact-collection
+policy that sit between status monitoring and `run_info` persistence now also
+live under `neuroinfra.remote.run_artifacts`, while the surrounding live
+monitoring loop and notebook-specific metadata writing still remain in
+`obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while

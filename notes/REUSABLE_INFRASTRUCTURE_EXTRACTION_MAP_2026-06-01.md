@@ -222,6 +222,11 @@ Current progress:
   and remote-sweep notebook paths use now lives under
   `neuroinfra.remote.status_poll`, while the higher-level monitoring loops
   still remain in `obgpu_experiment_helpers.py`
+- the remote single-run final sync, retry-on-empty-diagnostics, partial-payload
+  warning handling, failure listing fallback, and local artifact-collection
+  policy now live under `neuroinfra.remote.run_artifacts`, while the live
+  monitoring loop and notebook-specific `run_info` persistence still remain in
+  `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework
