@@ -106,11 +106,21 @@ from olfactorybulb.analysis_presentations import (
     animate_wavelet_sweep as _ob_animate_wavelet_sweep,
     show_all_outputs as _ob_show_all_outputs,
 )
+from olfactorybulb.notebook_configs import (
+    DEFAULT_CONFIGS_DIR as _OLFACTORY_BULB_DEFAULT_CONFIGS_DIR,
+    NotebookConfigHooks as _OlfactoryBulbNotebookConfigHooks,
+    config_diff as _ob_config_diff,
+    list_paramsets as _ob_list_paramsets,
+    list_saved_configs as _ob_list_saved_configs,
+    load_config as _ob_load_config,
+    save_config as _ob_save_config,
+)
 from olfactorybulb.hfo_features import (
     apply_hfo_runtime_overrides,
     hfo_control_help,
     hfo_run_config_defaults,
 )
+from neuroinfra.notebooks.config_store import json_ready as _neuroinfra_json_ready
 from neuroinfra.remote.helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -4357,17 +4367,7 @@ def _run_remote_simulation(
 
 def _json_ready(value: Any) -> Any:
     """Convert arrays, scalars, and paths into JSON-serializable equivalents."""
-    if isinstance(value, Path):
-        return str(value)
-    if isinstance(value, np.ndarray):
-        return value.tolist()
-    if isinstance(value, np.generic):
-        return value.item()
-    if isinstance(value, dict):
-        return {str(key): _json_ready(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_json_ready(item) for item in value]
-    return value
+    return _neuroinfra_json_ready(value)
 
 
 def _write_notebook_run_info(
@@ -7685,7 +7685,7 @@ def print_run_summary(
 # Config persistence helpers
 # ---------------------------------------------------------------------------
 
-DEFAULT_CONFIGS_DIR = REPO_ROOT / "configs"
+DEFAULT_CONFIGS_DIR = _OLFACTORY_BULB_DEFAULT_CONFIGS_DIR
 
 
 def save_config(config: dict[str, Any], path: str | Path) -> Path:
@@ -7706,10 +7706,7 @@ def save_config(config: dict[str, Any], path: str | Path) -> Path:
     Path
         The resolved path that was written.
     """
-    path = Path(path).expanduser().resolve()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(_json_ready(dict(config)), indent=2, sort_keys=True))
-    return path
+    return _ob_save_config(config, path)
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
@@ -7724,12 +7721,14 @@ def load_config(path: str | Path) -> dict[str, Any]:
     path:
         Path to a JSON config file previously written by :func:`save_config`.
     """
-    path = Path(path).expanduser().resolve()
-    with open(path) as f:
-        data = json.load(f)
-    if data.get("input_odors") is not None:
-        data["input_odors"] = normalize_input_odors(data["input_odors"])
-    return data
+    return _ob_load_config(
+        _OlfactoryBulbNotebookConfigHooks(
+            normalize_input_odors_fn=normalize_input_odors,
+            resolve_effective_params_fn=resolve_effective_params,
+            diff_values_fn=diff_values,
+        ),
+        path,
+    )
 
 
 def config_from_run(
@@ -7785,10 +7784,7 @@ def list_saved_configs(directory: str | Path | None = None) -> list[Path]:
     directory:
         Directory to search.  Defaults to ``<repo_root>/configs``.
     """
-    directory = Path(directory).expanduser().resolve() if directory else DEFAULT_CONFIGS_DIR
-    if not directory.is_dir():
-        return []
-    return sorted(directory.glob("*.json"))
+    return _ob_list_saved_configs(directory)
 
 
 def list_paramsets(
@@ -7833,24 +7829,7 @@ def list_paramsets(
         # }
         cfg = load_config(sources['saved'][0])
     """
-    import olfactorybulb.model as obmodel
-    from olfactorybulb.paramsets.base import SilentNetwork
-
-    names = sorted(
-        name
-        for name, obj in vars(obmodel).items()
-        if isinstance(obj, type)
-        and issubclass(obj, SilentNetwork)
-        and obj is not SilentNetwork
-    )
-
-    if not include_saved:
-        return names
-
-    return {
-        "builtin": names,
-        "saved": list_saved_configs(configs_dir),
-    }
+    return _ob_list_paramsets(include_saved=include_saved, configs_dir=configs_dir)
 
 
 def config_diff(
@@ -7880,9 +7859,15 @@ def config_diff(
         changes = config_diff(base, tweaked)
         print_diff_section("Changes", changes)
     """
-    snap1 = resolve_effective_params(config1)["full_param_snapshot"]
-    snap2 = resolve_effective_params(config2)["full_param_snapshot"]
-    return diff_values(snap1, snap2)
+    return _ob_config_diff(
+        _OlfactoryBulbNotebookConfigHooks(
+            normalize_input_odors_fn=normalize_input_odors,
+            resolve_effective_params_fn=resolve_effective_params,
+            diff_values_fn=diff_values,
+        ),
+        config1,
+        config2,
+    )
 
 
 if __name__ == "__main__":

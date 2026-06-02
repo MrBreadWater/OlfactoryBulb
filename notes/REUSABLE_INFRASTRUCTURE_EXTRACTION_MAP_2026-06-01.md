@@ -154,7 +154,44 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates the generic saved-run listing,
   resolution, metadata loading, and config snapshot reload paths there
 
-### 2c. Result analysis and signal registry
+### 2c. Notebook config persistence and catalog
+
+Current files:
+
+- `neuroinfra/notebooks/config_store.py`
+- `olfactorybulb/notebook_configs.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- JSON-ready conversion for notebook config payloads
+- config save and reload helpers
+- saved config file discovery
+
+What is domain-specific:
+
+- odor-schedule normalization after reload
+- the built-in paramset catalog
+- effective-param diffing against paramset defaults
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic notebook config save/load/list helpers now live under
+  `neuroinfra.notebooks.config_store`
+- the olfactory-bulb-specific normalization, built-in paramset catalog, and
+  config diff logic now live in `olfactorybulb/notebook_configs.py`
+- `obgpu_experiment_helpers.py` now delegates that config layer instead of
+  owning it inline
+
+### 2d. Result analysis and signal registry
 
 Current files:
 

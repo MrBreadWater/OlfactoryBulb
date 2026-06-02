@@ -122,6 +122,30 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic run-directory catalog and metadata loader now live under neuroinfra.notebooks.runs; next separate the remaining config normalization, run summary presentation, and simulation/result wiring from the notebook helper.",
     ),
     ExtractionCandidate(
+        key="notebook_config_store",
+        title="Notebook config persistence and catalog",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/config_store.py",
+            "olfactorybulb/notebook_configs.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "JSON-ready conversion for notebook config payloads",
+            "config save and reload helpers",
+            "saved config file discovery",
+        ),
+        repo_specific_couplings=(
+            "odor-schedule normalization after reload remains olfactory-bulb-specific",
+            "the built-in paramset catalog is domain-specific",
+            "effective-param diffing still depends on the repo's paramset semantics",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic config persistence helpers now live under neuroinfra.notebooks.config_store, while the olfactory-bulb-specific normalization and paramset catalog live in olfactorybulb.notebook_configs; next separate the remaining run-summary presentation and simulation wiring from the notebook helper.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",
