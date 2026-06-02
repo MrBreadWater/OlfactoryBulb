@@ -62,6 +62,16 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
             ),
         ),
         (
+            "test_suite_status",
+            AuditSpec(
+                audit_id="test_suite_status",
+                title="Structured test-suite audit",
+                description="Run grouped Python test suites through the maintained audit surface instead of exposing every low-level test as its own audit.",
+                module_path="olfactorybulb.audit.test_suite_status",
+                include_in_new_sweep=False,
+            ),
+        ),
+        (
             "maintained_docs_integrity",
             AuditSpec(
                 audit_id="maintained_docs_integrity",

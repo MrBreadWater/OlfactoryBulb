@@ -25,6 +25,7 @@ SCRATCH_TRACKED_GLOBS = (
     "notebooks/*-Copy*.ipynb",
     "notebooks/*Copy*.ipynb",
 )
+ROOT_TEST_GLOB = "test_*.py"
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
@@ -77,6 +78,7 @@ def run(args: argparse.Namespace) -> AuditReport:
             tracked_scratch[pathspec] = matches
 
     research_readme = RESEARCH_README_PATH.read_text()
+    root_test_files = sorted(path.name for path in REPO_ROOT.glob(ROOT_TEST_GLOB) if path.is_file())
 
     items = [
         _item(
@@ -114,6 +116,16 @@ def run(args: argparse.Namespace) -> AuditReport:
                 "mentions_generated_outputs": "generated canonical outputs" in research_readme,
                 "mentions_no_hand_edits": "Do not hand-edit generated canonical outputs" in research_readme,
             },
+        ),
+        _item(
+            check_id="root_test_files_moved_under_tests_package",
+            status="PASS" if not root_test_files else "FAIL",
+            title="Developer test files live under the structured tests package instead of repo root",
+            criterion="Low-level Python test modules should live under tests/ so the repo root stays focused on maintained runtime and configuration surfaces.",
+            description="This protects the maintained tree from drifting back to a flat test-file namespace where audit surfaces, runtime entrypoints, and one-off regressions are mixed together.",
+            acceptable="No root-level files matching test_*.py exist in the repository root.",
+            acceptable_basis="The structured tests/ tree is now the maintained home for developer-facing tests, while grouped suite audits present selected families through the user-facing audit surface.",
+            evidence={"root_test_files": root_test_files},
         ),
     ]
 

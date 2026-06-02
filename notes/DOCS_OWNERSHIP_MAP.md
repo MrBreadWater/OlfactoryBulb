@@ -152,6 +152,17 @@ multiple places and to decide where a doc change should land first.
     - raw human-curated intake expectations
     - row-shape and provenance expectations for manual capture
 
+### Tests and grouped developer verification
+
+- `tests/README.md`
+  - Purpose: maintained test-tree ownership and execution rules.
+  - Owns:
+    - `tests/` layout expectations
+    - canonical direct test execution style
+    - the boundary between low-level tests and grouped suite audits
+  - Should not own:
+    - full audit-framework procedure already covered by audit docs
+
 ## Common cleanup targets
 
 - If `readme.md`, `INSTALL.md`, and `tools/README.md` all say the same thing,

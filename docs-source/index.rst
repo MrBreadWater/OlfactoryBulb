@@ -14,6 +14,7 @@ Maintained workflow docs
 - `Repository README <../readme.md>`_
 - `Install and bootstrap guide <../INSTALL.md>`_
 - `Tooling map <../tools/README.md>`_
+- `Tests and suite-audit guide <../tests/README.md>`_
 - `Documentation ownership map <../notes/DOCS_OWNERSHIP_MAP.md>`_
 - `Reference dataset HOWTO <../notes/REFERENCE_DATASET_HOWTO.md>`_
 - `Reference validation HOWTO <../notes/REFERENCE_VALIDATION_HOWTO.md>`_

@@ -37,6 +37,12 @@ system, use:
 
 - `python tools/run_audit.py repo_health --profile maintained`
 
+For grouped developer-facing Python tests presented through the same audit
+surface, use:
+
+- `python tools/run_audit.py test_suite_status --list-suites`
+- `python tools/run_audit.py test_suite_status --suite maintained_core`
+
 For a local docs portal that points at the maintained markdown docs first and
 historical generated pages second, open:
 

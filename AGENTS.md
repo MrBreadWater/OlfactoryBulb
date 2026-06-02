@@ -331,8 +331,11 @@ contract for future sessions.
     audits.
   - `tools/run_reference_validation.py` is the generic declarative
     literature-validation runner.
-  - `test_*reference_data.py` and
-    `python tools/run_audit.py reference_dataset_status --dataset-id <id>` /
+  - Low-level developer tests live under `tests/` and should usually be run as
+    modules, for example `python -m tests.reference.test_reference_data_sanity`.
+  - `python tools/run_audit.py test_suite_status --suite <suite_id>` is the
+    maintained grouped presentation layer for those low-level tests.
+  - `python tools/run_audit.py reference_dataset_status --dataset-id <id>` /
     `python tools/run_audit.py reference_dataset_contracts --dataset-id <id>`
     validate extracted literature bundles and provenance; they are not, by
     themselves, simulation-backed model-vs-literature audits.
@@ -342,6 +345,7 @@ contract for future sessions.
 - Human-facing audit CLI:
   - `python tools/run_audit.py --list`
   - `python tools/run_audit.py <audit_id>`
+  - `python tools/run_audit.py test_suite_status --list-suites`
 
 - Generic literature-validation CLI:
   - `python tools/run_reference_validation.py --list-validations`
@@ -352,6 +356,13 @@ contract for future sessions.
   - Audit IDs change over time.
   - The live source of truth is `python tools/run_audit.py --list` plus the
     audit registry in code.
+
+- Do not add new root-level `test_*.py` files.
+  - Low-level tests belong under `tests/`.
+  - If a new check needs a user-facing maintained surface, prefer:
+    - grouped suite audit for a family of tests
+    - or a real operational audit if it is not fundamentally a developer test
+  - Do not create one first-class audit per tiny helper regression.
 
 - Keep the CLI output standards intact:
   - explicit `Description`
@@ -629,7 +640,7 @@ contract for future sessions.
 ## 12. Sanity tests for extracted bundles
 
 - Run the reference-data sanity test when changing extraction logic:
-  - `python test_reference_data_sanity.py`
+  - `python -m tests.reference.test_reference_data_sanity`
 
 - Also rerun the relevant dataset extractor and verifier, not just unit tests.
   - Generic rebuild:
@@ -637,6 +648,7 @@ contract for future sessions.
   - Generic/source checks:
     - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
   - Human-readable verification:
+    - `python tools/run_audit.py test_suite_status --suite reference_bundles`
     - `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
     - `python tools/run_audit.py reference_dataset_contracts --dataset-id <id>`
 
@@ -672,6 +684,9 @@ contract for future sessions.
 
 - Run maintained repo-health checks:
   - `python tools/run_audit.py repo_health --profile maintained`
+
+- List grouped test suites:
+  - `python tools/run_audit.py test_suite_status --list-suites`
 
 - Open the maintained local docs portal:
   - `docs/index.html`

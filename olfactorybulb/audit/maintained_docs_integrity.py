@@ -14,6 +14,7 @@ MAINTAINED_DOCS = (
     REPO_ROOT / "INSTALL.md",
     REPO_ROOT / "tools/README.md",
     REPO_ROOT / "AGENTS.md",
+    REPO_ROOT / "tests/README.md",
     REPO_ROOT / "notes/DOCS_OWNERSHIP_MAP.md",
     REPO_ROOT / "notes/REFERENCE_DATASET_HOWTO.md",
     REPO_ROOT / "notes/REFERENCE_VALIDATION_HOWTO.md",
@@ -42,6 +43,7 @@ REQUIRED_PORTAL_LINKS = (
     "../readme.md",
     "../INSTALL.md",
     "../tools/README.md",
+    "../tests/README.md",
     "../notes/REFERENCE_DATASET_HOWTO.md",
     "../notes/REFERENCE_VALIDATION_HOWTO.md",
     "../research_context/README.md",
@@ -161,6 +163,16 @@ def run(args: argparse.Namespace) -> AuditReport:
                 "ownership_map_mentions_docs_source": "docs-source/" in ownership_map_text,
                 "ownership_map_mentions_tracked_docs": "tracked generated `docs/`" in ownership_map_text,
             },
+        ),
+        _item(
+            check_id="docs_ownership_map_covers_tests_readme",
+            status="PASS" if "tests/README.md" in ownership_map_text else "FAIL",
+            title="Docs ownership map covers the structured test tree guide",
+            criterion="The docs ownership map should explain where the maintained tests layout and execution rules live.",
+            description="Once the root test-file sprawl is replaced with a structured tests package, the ownership map should tell future agents where that policy is documented.",
+            acceptable="The ownership map explicitly names tests/README.md.",
+            acceptable_basis="The structured tests tree is now a maintained repo contract and should not rely on tribal knowledge.",
+            evidence={"ownership_map_mentions_tests_readme": "tests/README.md" in ownership_map_text},
         ),
     ]
 

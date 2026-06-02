@@ -91,7 +91,8 @@ Verify generated outputs:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
-python test_reference_data_sanity.py
+python -m tests.reference.test_reference_data_sanity
+python tools/run_audit.py test_suite_status --suite reference_bundles
 python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi

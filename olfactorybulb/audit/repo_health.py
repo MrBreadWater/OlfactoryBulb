@@ -51,19 +51,9 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
             command=_py("tools/run_audit.py", "hfo_feature_contracts"),
         ),
         RepoHealthCheck(
-            check_id="config_helpers",
-            title="Notebook facade and delegation smoke tests",
-            command=_py("test_config_helpers.py"),
-        ),
-        RepoHealthCheck(
-            check_id="reference_validation_engine",
-            title="Declarative validation engine smoke tests",
-            command=_py("test_reference_validation_engine.py"),
-        ),
-        RepoHealthCheck(
-            check_id="reference_data_sanity",
-            title="Reference-data sanity heuristics",
-            command=_py("test_reference_data_sanity.py"),
+            check_id="maintained_test_suite",
+            title="Maintained structured Python smoke-test suite",
+            command=_py("tools/run_audit.py", "test_suite_status", "--suite", "maintained_core"),
         ),
         RepoHealthCheck(
             check_id="maintained_docs_integrity",
@@ -78,9 +68,9 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
     ),
     "reference": (
         RepoHealthCheck(
-            check_id="reference_dataset_engine",
-            title="Declarative reference-dataset engine smoke tests",
-            command=_py("test_reference_dataset_engine.py"),
+            check_id="reference_test_suite",
+            title="Reference structured Python smoke-test suite",
+            command=_py("tools/run_audit.py", "test_suite_status", "--suite", "reference_bundles"),
         ),
         RepoHealthCheck(
             check_id="epl_fsi_reference_dataset_status",

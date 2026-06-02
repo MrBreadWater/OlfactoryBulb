@@ -699,9 +699,10 @@ python tools/download_reference_dataset_sources.py --dataset-id pv_crh_epl_fsi
 python tools/extract_reference_dataset.py --dataset-id pv_crh_epl_fsi
 python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi
 python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
-python test_reference_dataset_engine.py
-python test_download_epl_fsi_reference_sources.py
-python test_pv_crh_epl_fsi_reference_data.py
+python tools/run_audit.py test_suite_status --suite reference_bundles
+python -m tests.reference.test_reference_dataset_engine
+python -m tests.reference.test_download_epl_fsi_reference_sources
+python -m tests.reference.test_pv_crh_epl_fsi_reference_data
 ```
 
 Using the current GC dataset:
@@ -712,9 +713,10 @@ python tools/download_reference_dataset_sources.py --dataset-id granule_cells
 python tools/extract_reference_dataset.py --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
-python test_reference_dataset_engine.py
-python test_download_gc_reference_sources.py
-python test_gc_reference_data.py
+python tools/run_audit.py test_suite_status --suite reference_bundles
+python -m tests.reference.test_reference_dataset_engine
+python -m tests.reference.test_download_gc_reference_sources
+python -m tests.reference.test_gc_reference_data
 ```
 
 ## When to add code versus when to add config
