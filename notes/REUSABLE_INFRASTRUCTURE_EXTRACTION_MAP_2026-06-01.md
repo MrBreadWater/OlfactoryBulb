@@ -396,9 +396,11 @@ Current progress:
   parsing there
 - the generic notebook remote single-run workflow now also lives under
   `neuroinfra.notebooks.remote_runs`
+- the concrete olfactory-bulb run payload/workflow adapters now also live
+  under `olfactorybulb.notebook_remote_runs`
 - `obgpu_experiment_helpers.py` now delegates `_run_remote_simulation(...)`
-  there while still owning concrete remote payload construction, hook wiring,
-  and the OBGPU run-record shape
+  through that explicit domain module instead of owning concrete remote payload
+  construction, hook wiring, and the OBGPU run-record shape inline
 - the generic notebook remote sweep workflow now also lives under
   `neuroinfra.notebooks.remote_sweeps`
 - the concrete olfactory-bulb sweep payload/workflow adapters now also live

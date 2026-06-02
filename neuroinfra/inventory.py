@@ -299,6 +299,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.notebooks",
         source_paths=(
             "neuroinfra/notebooks/remote_runs.py",
+            "olfactorybulb/notebook_remote_runs.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -309,12 +310,12 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         repo_specific_couplings=(
             "remote payload construction still depends on the repo's benchmark command conventions",
             "monitor and artifact hook wiring still depends on the repo's remote helper set",
-            "returned run record shape still depends on the notebook helper's domain model",
+            "returned run record shape still depends on the repo's domain model",
         ),
         extraction_confidence="high",
         proposed_phase=2,
         current_status="internal_shim_extracted",
-        recommended_action="The generic notebook remote single-run workflow now lives under neuroinfra.notebooks.remote_runs, while the helper still owns concrete remote payload construction, monitor/artifact hook wiring, and domain return shaping; next separate the remaining remote sweep orchestration and shared domain adapters above this layer.",
+        recommended_action="The generic notebook remote single-run workflow now lives under neuroinfra.notebooks.remote_runs, and the concrete olfactory-bulb run payload/workflow adapters now live under olfactorybulb.notebook_remote_runs; next keep shrinking obgpu_experiment_helpers.py by moving the last notebook-entrypoint glue and shared domain adapters out of it.",
     ),
     ExtractionCandidate(
         key="notebook_remote_sweep_workflow",

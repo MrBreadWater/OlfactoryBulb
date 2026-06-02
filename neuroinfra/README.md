@@ -209,9 +209,9 @@ and result loading.
 The generic notebook remote single-run workflow that ties together preflight
 failure handling, runtime sidecar upload, JSON submission, live monitoring,
 final artifact collection, and run-info persistence now also lives under
-`neuroinfra.notebooks.remote_runs`, while the helper still owns concrete
-payload construction, monitor/artifact hook wiring, and the OBGPU run-record
-shape.
+`neuroinfra.notebooks.remote_runs`, and the concrete olfactory-bulb run
+payload/workflow adapters now live under `olfactorybulb.notebook_remote_runs`,
+instead of staying inline in the notebook helper.
 
 The generic notebook remote sweep workflow that ties together manifest upload,
 JSON submission, live sweep monitoring, compact final sync, partial-result

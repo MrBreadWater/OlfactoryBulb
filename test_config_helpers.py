@@ -23,6 +23,7 @@ import obgpu_experiment_helpers as hlp
 from neuroinfra.remote.deferred_artifacts import DeferredArtifactSyncHooks
 from neuroinfra.remote.helper_bundle import helper_bundle_manifest
 from neuroinfra.remote.result_sync import RemoteResultSyncHooks
+import olfactorybulb.notebook_remote_runs as ob_remote_runs
 from olfactorybulb.notebook_remote_sweeps import build_remote_sweep_payload
 
 REMOTE_TOOLS_DIR = Path(__file__).resolve().parent / "tools" / "remote"
@@ -168,8 +169,7 @@ with tempfile.TemporaryDirectory() as tmp:
     print("local run wrapper delegation: OK")
 
     # --- remote run wrapper delegates through notebook remote session layer ---
-    original_remote_session = hlp._neuroinfra_prepare_remote_job_session
-    original_remote_submission_payload = hlp._remote_submission_payload
+    original_remote_session = ob_remote_runs.prepare_remote_job_session
     original_write_run_info = hlp._write_notebook_run_info
     remote_session_calls = []
     remote_run_info_calls = []
@@ -208,14 +208,7 @@ with tempfile.TemporaryDirectory() as tmp:
                 allocation_heartbeat_path=None,
             )
 
-        hlp._neuroinfra_prepare_remote_job_session = _fake_prepare_remote_job_session
-        hlp._remote_submission_payload = lambda *args, **kwargs: (
-            PurePosixPath("/remote/OlfactoryBulb"),
-            PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
-            ["python3", "remote_driver.py"],
-            {"runner_backend": "slurm_remote"},
-            "submit-shell",
-        )
+        ob_remote_runs.prepare_remote_job_session = _fake_prepare_remote_job_session
         hlp._write_notebook_run_info = lambda *args, **kwargs: remote_run_info_calls.append((args, kwargs))
 
         remote_cfg = build_run_config(
@@ -236,8 +229,7 @@ with tempfile.TemporaryDirectory() as tmp:
         assert remote_run_info_calls
         assert remote_run_info_calls[0][1]["completed"].returncode == 2
     finally:
-        hlp._neuroinfra_prepare_remote_job_session = original_remote_session
-        hlp._remote_submission_payload = original_remote_submission_payload
+        ob_remote_runs.prepare_remote_job_session = original_remote_session
         hlp._write_notebook_run_info = original_write_run_info
     print("remote run workflow delegation: OK")
 
