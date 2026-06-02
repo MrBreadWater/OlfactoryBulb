@@ -8,6 +8,7 @@ from typing import Any, Callable, Iterable
 import math
 
 import numpy as np
+from scipy.stats import beta as beta_distribution
 
 from olfactorybulb.audit.core import AuditItem, rounded
 from olfactorybulb.audit.reference_data import (
@@ -55,6 +56,7 @@ class ReferenceAcceptanceBand:
     low: float
     high: float
     mode: str
+    standard_label: str
     raw_low: float
     raw_high: float
     lower_bound: float | None
@@ -198,6 +200,11 @@ def _sigma_phrase(sigma_multiplier: float) -> str:
     return f"{rounded(float(sigma_multiplier), 3)} standard deviations"
 
 
+def _central_mass_from_sigma(sigma_multiplier: float) -> float:
+    sigma = abs(float(sigma_multiplier))
+    return float(math.erf(sigma / math.sqrt(2.0)))
+
+
 def _optional_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
@@ -216,12 +223,17 @@ def compute_reference_acceptance_band(
     band_mode: str = "symmetric_sd",
     lower_bound: float | None = None,
     upper_bound: float | None = None,
+    quantile_low: float | None = None,
+    quantile_high: float | None = None,
+    quantile_low_label: str | None = None,
+    quantile_high_label: str | None = None,
 ) -> ReferenceAcceptanceBand:
     mode = str(band_mode or "symmetric_sd").strip()
     sigma_phrase = _sigma_phrase(sigma_multiplier)
     if mode == "symmetric_sd":
         raw_low = float(reference_mean - reference_sd * sigma_multiplier)
         raw_high = float(reference_mean + reference_sd * sigma_multiplier)
+        standard_label = "symmetric standard-deviation band"
         description = (
             f"the uploaded arithmetic mean plus or minus {sigma_phrase}"
         )
@@ -239,13 +251,67 @@ def compute_reference_acceptance_band(
         mu_log = math.log(float(reference_mean)) - 0.5 * sigma_log**2
         raw_low = float(math.exp(mu_log - float(sigma_multiplier) * sigma_log))
         raw_high = float(math.exp(mu_log + float(sigma_multiplier) * sigma_log))
+        standard_label = "lognormal-reconstructed dispersion band"
         description = (
             f"a log-space band reconstructed from the uploaded arithmetic mean and standard deviation "
             f"assuming a lognormal distribution, then exponentiated back to the original units over {sigma_phrase}"
         )
+    elif mode == "beta_sd":
+        if reference_mean < 0.0 or reference_mean > 1.0:
+            raise ValueError(
+                "beta_sd acceptance bands require a reference mean between 0 and 1"
+            )
+        if reference_sd < 0.0:
+            raise ValueError(
+                "beta_sd acceptance bands require a non-negative reference standard deviation"
+            )
+        variance = float(reference_sd) ** 2
+        if variance == 0.0:
+            raw_low = float(reference_mean)
+            raw_high = float(reference_mean)
+            coverage_fraction = _central_mass_from_sigma(sigma_multiplier)
+            standard_label = "beta-reconstructed bounded probability band"
+            description = (
+                f"an exact point interval at the uploaded mean because the reported standard deviation is zero; "
+                f"the nominal central-mass target implied by {sigma_phrase} would have been {rounded(coverage_fraction * 100.0)} percent"
+            )
+        else:
+            maximum_variance = float(reference_mean) * (1.0 - float(reference_mean))
+            if variance >= maximum_variance:
+                raise ValueError(
+                    "beta_sd acceptance bands require variance smaller than mean*(1-mean) "
+                    "to reconstruct valid beta-distribution parameters"
+                )
+            concentration = maximum_variance / variance - 1.0
+            alpha = float(reference_mean) * concentration
+            beta_param = (1.0 - float(reference_mean)) * concentration
+            coverage_fraction = _central_mass_from_sigma(sigma_multiplier)
+            tail_probability = (1.0 - coverage_fraction) / 2.0
+            raw_low = float(beta_distribution.ppf(tail_probability, alpha, beta_param))
+            raw_high = float(beta_distribution.ppf(1.0 - tail_probability, alpha, beta_param))
+            standard_label = "beta-reconstructed bounded probability band"
+            description = (
+                f"a beta-distribution central interval reconstructed from the uploaded arithmetic mean and standard deviation, "
+                f"with central mass matched to the normal-space coverage implied by {sigma_phrase} "
+                f"({rounded(coverage_fraction * 100.0)} percent)"
+            )
+    elif mode == "quantile_interval":
+        if quantile_low is None or quantile_high is None:
+            raise ValueError(
+                "quantile_interval acceptance bands require explicit quantile_low and quantile_high values"
+            )
+        low_label = str(quantile_low_label or "reported lower quantile").strip()
+        high_label = str(quantile_high_label or "reported upper quantile").strip()
+        raw_low = float(quantile_low)
+        raw_high = float(quantile_high)
+        standard_label = "reported quantile interval"
+        description = (
+            f"the explicitly reported quantile interval from {low_label} to {high_label}"
+        )
     else:
         raise ValueError(
-            f"Unknown reference-band mode {mode!r}. Supported modes: 'symmetric_sd', 'lognormal_sd'."
+            f"Unknown reference-band mode {mode!r}. Supported modes: "
+            "'symmetric_sd', 'lognormal_sd', 'beta_sd', 'quantile_interval'."
         )
 
     low = raw_low
@@ -269,6 +335,7 @@ def compute_reference_acceptance_band(
         low=float(low),
         high=float(high),
         mode=mode,
+        standard_label=standard_label,
         raw_low=float(raw_low),
         raw_high=float(raw_high),
         lower_bound=lower_bound,
@@ -374,6 +441,20 @@ def _property_override(
     if not isinstance(overrides, dict):
         return default
     return overrides.get(property_name, default)
+
+
+def _row_field_name(
+    rule: dict[str, Any],
+    property_name: str,
+    *,
+    field_override_key: str,
+    default_field_key: str,
+    default: str,
+) -> str:
+    override = _property_override(rule, field_override_key, property_name, None)
+    if override is not None:
+        return str(override).strip()
+    return str(rule.get(default_field_key, default) or default).strip()
 
 
 def _group_mean(summary: dict[str, dict[str, float]], group: str, metric_key: str) -> float:
@@ -655,6 +736,43 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
         upper_bound = _optional_float(
             _property_override(rule, "property_upper_bounds", property_name, default_upper_bound)
         )
+        quantile_low = None
+        quantile_high = None
+        quantile_low_label = None
+        quantile_high_label = None
+        if band_mode == "quantile_interval":
+            low_field = _row_field_name(
+                rule,
+                property_name,
+                field_override_key="property_quantile_low_fields",
+                default_field_key="default_quantile_low_field",
+                default="q_low",
+            )
+            high_field = _row_field_name(
+                rule,
+                property_name,
+                field_override_key="property_quantile_high_fields",
+                default_field_key="default_quantile_high_field",
+                default="q_high",
+            )
+            low_label_field = _row_field_name(
+                rule,
+                property_name,
+                field_override_key="property_quantile_low_label_fields",
+                default_field_key="default_quantile_low_label_field",
+                default="q_low_label",
+            )
+            high_label_field = _row_field_name(
+                rule,
+                property_name,
+                field_override_key="property_quantile_high_label_fields",
+                default_field_key="default_quantile_high_label_field",
+                default="q_high_label",
+            )
+            quantile_low = _optional_float(row.get(low_field))
+            quantile_high = _optional_float(row.get(high_field))
+            quantile_low_label = str(row.get(low_label_field, "")).strip() or low_field
+            quantile_high_label = str(row.get(high_label_field, "")).strip() or high_field
         band = compute_reference_acceptance_band(
             reference_mean=reference_mean,
             reference_sd=reference_sd,
@@ -662,6 +780,10 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
             band_mode=band_mode,
             lower_bound=lower_bound,
             upper_bound=upper_bound,
+            quantile_low=quantile_low,
+            quantile_high=quantile_high,
+            quantile_low_label=quantile_low_label,
+            quantile_high_label=quantile_high_label,
         )
         accepted_low = band.low
         accepted_high = band.high
@@ -674,6 +796,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
             "accepted_high": accepted_high,
             "accepted_sigma_multiplier": sigma_multiplier,
             "accepted_interval_mode": band.mode,
+            "accepted_interval_standard": band.standard_label,
             "__reference_annotations__": {evidence_key: _reference_annotation(row)},
         }
         if lower_bound is not None:
@@ -705,11 +828,12 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                 ),
                 acceptable=(
                     f"The observed {group} mean must lie {range_text}, using the configured "
-                    f"{band.mode.replace('_', ' ')} acceptance band."
+                    f"{band.standard_label}."
                 ),
                 acceptable_basis=(
                     f"The accepted interval is computed from the uploaded literature row for {property_name} as "
-                    f"{band.description}. The sigma multiplier comes from the configurable '{sigma_arg_name}' setting. "
+                    f"{band.description}. The acceptance standard used here is {band.standard_label}. "
+                    f"The sigma multiplier comes from the configurable '{sigma_arg_name}' setting when that standard needs one. "
                     f"This is a dispersion band, not a formal confidence interval."
                 ),
                 evidence=evidence,

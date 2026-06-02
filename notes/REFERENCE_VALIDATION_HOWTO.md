@@ -207,6 +207,8 @@ Use these config knobs deliberately:
   - built-ins:
     - `symmetric_sd`
     - `lognormal_sd`
+    - `beta_sd`
+    - `quantile_interval`
 - `property_lower_bounds`
   - clip naturally non-negative metrics at zero
 - `property_upper_bounds`
@@ -225,13 +227,22 @@ property_metric_map = {
   "Membrane Resting Voltage" = "resting_potential_mV",
   "ISI Coefficient of Variation" = "cv_isi",
   "Firing Probability" = "firing_probability",
+  "Skewed Latency" = "skewed_latency_ms",
 }
-property_band_modes = { "ISI Coefficient of Variation" = "lognormal_sd" }
+property_band_modes = {
+  "ISI Coefficient of Variation" = "lognormal_sd",
+  "Firing Probability" = "beta_sd",
+  "Skewed Latency" = "quantile_interval",
+}
 property_lower_bounds = {
   "ISI Coefficient of Variation" = 0.0,
   "Firing Probability" = 0.0,
 }
 property_upper_bounds = { "Firing Probability" = 1.0 }
+default_quantile_low_field = "q_low"
+default_quantile_high_field = "q_high"
+default_quantile_low_label_field = "q_low_label"
+default_quantile_high_label_field = "q_high_label"
 title = "Reference band placeholder"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
@@ -245,6 +256,29 @@ Use `lognormal_sd` when all of the following are true:
 - the literature value is better treated as right-skewed than symmetric, and
 - the source gives only arithmetic mean and standard deviation.
 
+Use `beta_sd` when all of the following are true:
+
+- the metric is a probability, fraction, or other quantity naturally bounded to
+  `[0, 1]`,
+- the source gives an arithmetic mean and standard deviation,
+- and you want a bounded interval that is more defensible than simply clipping a
+  symmetric Gaussian-style band.
+
+Use `quantile_interval` when the paper already reports an interval directly,
+such as:
+
+- 25th to 75th percentile,
+- 5th to 95th percentile,
+- lower to upper quartile,
+- any other explicit low/high quantile pair.
+
+In that case, add row fields such as:
+
+- `q_low`
+- `q_high`
+- `q_low_label`
+- `q_high_label`
+
 Use `property_lower_bounds` / `property_upper_bounds` when the metric has a
 hard physical or definitional bound even if you still want a symmetric band in
 the interior.
@@ -253,6 +287,14 @@ Do not describe these bands as formal confidence intervals unless the source
 actually reports a confidence interval and you model it that way. In this
 framework, the default `reference_sigma_multiplier` is a configurable
 **dispersion-band width**, not a statistical confidence level.
+
+Rendered reports now expose the assumption explicitly through:
+
+- `accepted_interval_mode`
+- `accepted_interval_standard`
+
+Do not hide those fields. If the standard is questionable for a given metric,
+change the config rather than quietly accepting the default.
 
 If the paper needs a genuinely different comparison rule, register a new rule
 kind in an extension module.

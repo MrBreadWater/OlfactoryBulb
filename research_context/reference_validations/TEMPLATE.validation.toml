@@ -178,9 +178,17 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # group_field = "cell_type"
 # sigma_arg_name = "reference_sigma_multiplier"
 # property_metric_map = { "Membrane Resting Voltage" = "resting_potential_mV", "Input Resistance" = "input_resistance_MOhm" }
-# property_band_modes = { "ISI Coefficient of Variation" = "lognormal_sd" }
+# property_band_modes = {
+#   "ISI Coefficient of Variation" = "lognormal_sd",
+#   "Firing Probability" = "beta_sd",
+#   "Skewed Latency" = "quantile_interval",
+# }
 # property_lower_bounds = { "Input Resistance" = 0.0, "ISI Coefficient of Variation" = 0.0 }
 # property_upper_bounds = { "Firing Probability" = 1.0 }
+# default_quantile_low_field = "q_low"
+# default_quantile_high_field = "q_high"
+# default_quantile_low_label_field = "q_low_label"
+# default_quantile_high_label_field = "q_high_label"
 # title = "Reference band placeholder"
 # criterion = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 # description = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
@@ -191,11 +199,20 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # - symmetric_sd: arithmetic mean +/- sigma * standard deviation
 # - lognormal_sd: reconstruct a positive-only band in log space from the
 #   uploaded arithmetic mean and standard deviation
+# - beta_sd: reconstruct a bounded probability/fraction interval on [0, 1]
+#   from the uploaded arithmetic mean and standard deviation
+# - quantile_interval: use explicitly reported row quantiles such as
+#   q_low/q_high instead of reconstructing a band from mean and standard deviation
 #
 # Use lower and upper bounds for naturally constrained metrics:
 # - non-negative metrics: lower bound 0.0
 # - probabilities / proportions: lower bound 0.0 and upper bound 1.0
 # This avoids impossible intervals such as negative ISI coefficients of variation.
+#
+# Every generated report will show both:
+# - accepted_interval_mode
+# - accepted_interval_standard
+# so the statistical assumption stays visible to the reader.
 
 # Optional direct curve-match check for extracted point sets.
 # [[checks]]

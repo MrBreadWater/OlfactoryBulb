@@ -23,6 +23,32 @@ log_band = compute_reference_acceptance_band(
 assert 0.0 < log_band.low < 0.2
 assert 1.0 < log_band.high < 1.3
 assert "lognormal distribution" in log_band.description
+assert log_band.standard_label == "lognormal-reconstructed dispersion band"
+
+beta_band = compute_reference_acceptance_band(
+    reference_mean=0.4,
+    reference_sd=0.15,
+    sigma_multiplier=2.0,
+    band_mode="beta_sd",
+)
+assert 0.0 < beta_band.low < beta_band.high < 1.0
+assert beta_band.standard_label == "beta-reconstructed bounded probability band"
+assert "beta-distribution central interval" in beta_band.description
+
+quantile_band = compute_reference_acceptance_band(
+    reference_mean=10.0,
+    reference_sd=3.0,
+    sigma_multiplier=2.0,
+    band_mode="quantile_interval",
+    quantile_low=7.0,
+    quantile_high=15.0,
+    quantile_low_label="25th percentile",
+    quantile_high_label="75th percentile",
+)
+assert quantile_band.low == 7.0
+assert quantile_band.high == 15.0
+assert quantile_band.standard_label == "reported quantile interval"
+assert "25th percentile" in quantile_band.description
 
 clipped_band = compute_reference_acceptance_band(
     reference_mean=0.4,
@@ -40,9 +66,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
     csv_path.write_text(
         "\n".join(
             [
-                "Property,Source,cell_type,mean,sd,unit",
+                "Property,Source,cell_type,mean,sd,unit,q_low,q_high,q_low_label,q_high_label",
                 "ISI Coefficient of Variation,Burton & Urban (2014),MC,0.45,0.29,",
-                "Firing Probability,Example et al. (2026),MC,0.40,0.50,",
+                "Firing Probability,Example et al. (2026),MC,0.40,0.15,",
+                "Skewed Latency,Example et al. (2026),MC,10.0,3.0,ms,7.0,15.0,25th percentile,75th percentile",
             ]
         )
     )
@@ -71,19 +98,19 @@ with tempfile.TemporaryDirectory() as tmpdir:
     }
     log_item = build_rule_items([log_rule], context)[0]
     assert log_item.evidence["accepted_interval_mode"] == "lognormal_sd"
+    assert log_item.evidence["accepted_interval_standard"] == "lognormal-reconstructed dispersion band"
     assert log_item.evidence["accepted_low"] > 0.0
     assert "lognormal distribution" in log_item.acceptable_basis
     assert "not a formal confidence interval" in log_item.acceptable_basis
 
-    clipped_rule = {
+    beta_rule = {
         "kind": "reference_band_rows",
         "loader": f"csv:{csv_path}",
         "reference_source": "Example et al. (2026)",
         "group_field": "cell_type",
         "sigma_arg_name": "reference_sigma_multiplier",
         "property_metric_map": {"Firing Probability": "firing_probability"},
-        "property_lower_bounds": {"Firing Probability": 0.0},
-        "property_upper_bounds": {"Firing Probability": 1.0},
+        "property_band_modes": {"Firing Probability": "beta_sd"},
         "check_id": "placeholder",
         "title": "placeholder",
         "criterion": "placeholder",
@@ -91,10 +118,39 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "acceptable": "placeholder",
         "acceptable_basis": "placeholder",
     }
-    clipped_item = build_rule_items([clipped_rule], context)[0]
-    assert clipped_item.evidence["accepted_low"] == 0.0
-    assert clipped_item.evidence["accepted_high"] == 1.0
-    assert clipped_item.evidence["unbounded_low"] < 0.0
-    assert clipped_item.evidence["unbounded_high"] > 1.0
+    beta_item = build_rule_items([beta_rule], context)[0]
+    assert beta_item.evidence["accepted_interval_mode"] == "beta_sd"
+    assert beta_item.evidence["accepted_interval_standard"] == "beta-reconstructed bounded probability band"
+    assert 0.0 < beta_item.evidence["accepted_low"] < beta_item.evidence["accepted_high"] < 1.0
+    assert "beta-distribution central interval" in beta_item.acceptable_basis
+
+    quantile_rule = {
+        "kind": "reference_band_rows",
+        "loader": f"csv:{csv_path}",
+        "reference_source": "Example et al. (2026)",
+        "group_field": "cell_type",
+        "sigma_arg_name": "reference_sigma_multiplier",
+        "property_metric_map": {"Skewed Latency": "skewed_latency_ms"},
+        "property_band_modes": {"Skewed Latency": "quantile_interval"},
+        "check_id": "placeholder",
+        "title": "placeholder",
+        "criterion": "placeholder",
+        "description": "placeholder",
+        "acceptable": "placeholder",
+        "acceptable_basis": "placeholder",
+    }
+    quantile_context = ValidationRuleContext(
+        metrics=[],
+        summary={"MC": {"skewed_latency_ms": 9.0}},
+        args=Namespace(reference_sigma_multiplier=2.0),
+        config={},
+        protocol_result=None,
+    )
+    quantile_item = build_rule_items([quantile_rule], quantile_context)[0]
+    assert quantile_item.evidence["accepted_interval_mode"] == "quantile_interval"
+    assert quantile_item.evidence["accepted_interval_standard"] == "reported quantile interval"
+    assert quantile_item.evidence["accepted_low"] == 7.0
+    assert quantile_item.evidence["accepted_high"] == 15.0
+    assert "25th percentile" in quantile_item.acceptable_basis
 
 print("reference_validation_band_rules: OK")

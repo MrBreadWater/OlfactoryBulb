@@ -830,6 +830,8 @@ def _single_cell_type_reference_evidence(
     accepted_low: float,
     accepted_high: float,
     reference_sigma_multiplier: float,
+    accepted_interval_mode: str,
+    accepted_interval_standard: str,
 ) -> dict[str, Any]:
     reference = _reference_for_metric(metric_key, cell_type)
     label_key = f"{cell_type}_mean"
@@ -839,6 +841,8 @@ def _single_cell_type_reference_evidence(
             "accepted_low": accepted_low,
             "accepted_high": accepted_high,
             "accepted_sigma_multiplier": reference_sigma_multiplier,
+            "accepted_interval_mode": accepted_interval_mode,
+            "accepted_interval_standard": accepted_interval_standard,
         }
     )
     if reference is not None:
@@ -896,12 +900,13 @@ def _build_burton_reference_fit_items(
                     ),
                     acceptable=(
                         f"The observed {_cell_label(cell_type)} mean must lie between {rounded(accepted_low)} and "
-                        f"{rounded(accepted_high)}{units_suffix}, using the configured {band.mode.replace('_', ' ')} acceptance band."
+                        f"{rounded(accepted_high)}{units_suffix}, using the configured {band.standard_label}."
                     ),
                     acceptable_basis=(
                         f"The accepted interval is computed from the uploaded Burton and Urban 2014 row for "
-                        f"{_cell_label(cell_type)} {metric_label} as {band.description}. The sigma multiplier is "
-                        f"configurable, and the default is 2.0. This is a dispersion band, not a formal confidence interval."
+                        f"{_cell_label(cell_type)} {metric_label} as {band.description}. The acceptance standard used "
+                        f"here is {band.standard_label}. The sigma multiplier is configurable, and the default is 2.0 "
+                        f"when that standard needs one. This is a dispersion band, not a formal confidence interval."
                     ),
                     evidence=_single_cell_type_reference_evidence(
                         observed_value=observed_value,
@@ -910,6 +915,8 @@ def _build_burton_reference_fit_items(
                         accepted_low=accepted_low,
                         accepted_high=accepted_high,
                         reference_sigma_multiplier=reference_sigma_multiplier,
+                        accepted_interval_mode=band.mode,
+                        accepted_interval_standard=band.standard_label,
                     ),
                 )
             )
