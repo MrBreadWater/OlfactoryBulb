@@ -157,7 +157,7 @@ What is already generic:
 - prepared labeled event display rows and overview-layout derivation from them
 - event-frequency conversion, event-rate binning, shared rate-plot helpers, and reusable raster-plot primitives
 - shared raster-plus-rate overview layout for notebook summaries
-- sweep plot specification, placeholder rendering, per-frame rendering, and GIF assembly
+- sweep plot specification, named plot registries, placeholder rendering, per-frame rendering, and GIF assembly
 - sweep metadata persistence, reload, and saved-sweep discovery
 - ordered named-signal providers
 - dynamic signal enumeration

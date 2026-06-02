@@ -31,6 +31,14 @@ class SweepPlotSpec:
     title_fn: Any = None
 
 
+@dataclass(frozen=True)
+class SweepPlotRegistry:
+    """Named built-in sweep plots plus optional deprecated names."""
+
+    plots: Mapping[str, Any]
+    deprecated_names: frozenset[str] = frozenset()
+
+
 def make_sweep_plot_spec(
     plot: str | Any,
     *,
@@ -95,6 +103,24 @@ def normalize_sweep_plot_spec(plot_spec: SweepPlotSpec | str | Any | dict[str, A
             title_fn=plot_spec.get("title_fn"),
         )
     raise TypeError(f"Unsupported sweep-plot spec type {type(plot_spec)!r}")
+
+
+def list_registry_plot_names(registry: SweepPlotRegistry) -> list[str]:
+    """Return built-in registry plot names in stable sorted order."""
+    return sorted(str(name) for name in registry.plots.keys())
+
+
+def resolve_registry_plot(registry: SweepPlotRegistry, plot_name: str) -> Any:
+    """Resolve one named plot from a registry with consistent deprecation errors."""
+    if plot_name in registry.plots:
+        return registry.plots[plot_name]
+    if plot_name in registry.deprecated_names:
+        raise KeyError(
+            f"Sweep animation plot {plot_name!r} is deprecated and intentionally "
+            "not rendered. Use the separate KDE/signal plots instead."
+        )
+    available = ", ".join(list_registry_plot_names(registry))
+    raise KeyError(f"Unknown built-in sweep plot {plot_name!r}. Available: {available}")
 
 
 def extract_figure_from_plot_result(plot_result: Any) -> Any:

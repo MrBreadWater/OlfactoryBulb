@@ -129,7 +129,8 @@ computation, result-backed event-family specs for filtering, sample
 collection, and normalized rate computation, result-backed frequency plot
 families for KDE/time-binned rendering, stable ordered-name helpers,
 fair round-robin subgroup truncation, ordered group-row flattening with
-per-bucket limits, raster-plus-rate overview layout, and
+per-bucket limits, raster-plus-rate overview layout, and sweep plot
+registries with named built-ins plus deprecation handling, and
 the named-signal provider registry plus provider-factory layer for keyed
 traces, suffix variants, pattern-matched signals, labeled traces, and aligned
 mean traces, plus stacked labeled trace plotting that list,

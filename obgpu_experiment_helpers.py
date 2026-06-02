@@ -315,6 +315,7 @@ from neuroinfra.analysis.frequency_plots import (
     plot_result_frequency_time_binned as _neuroinfra_plot_result_frequency_time_binned,
 )
 from neuroinfra.analysis.sweeps import (
+    SweepPlotRegistry as _NeuroinfraSweepPlotRegistry,
     SweepPlotSpec,
     animate_sweep as _neuroinfra_animate_sweep,
     animate_sweep_plots as _neuroinfra_animate_sweep_plots,
@@ -328,12 +329,14 @@ from neuroinfra.analysis.sweeps import (
     iter_parallel_sweep_display_frames as _neuroinfra_iter_parallel_sweep_display_frames,
     iter_sweep_animation_frames as _neuroinfra_iter_sweep_animation_frames,
     is_deprecated_sweep_animation_spec as _neuroinfra_is_deprecated_sweep_animation_spec,
+    list_registry_plot_names as _neuroinfra_list_registry_plot_names,
     list_sweeps as _neuroinfra_list_sweeps,
     load_sweep as _neuroinfra_load_sweep,
     make_sweep_placeholder_figure as _neuroinfra_make_sweep_placeholder_figure,
     make_sweep_plot_spec as _neuroinfra_make_sweep_plot_spec,
     normalize_sweep_plot_spec as _neuroinfra_normalize_sweep_plot_spec,
     render_sweep_frame as _neuroinfra_render_sweep_frame,
+    resolve_registry_plot as _neuroinfra_resolve_registry_plot,
     save_animation as _neuroinfra_save_animation,
     save_sweep as _neuroinfra_save_sweep,
     save_sweep_animation_stream as _neuroinfra_save_sweep_animation_stream,
@@ -7612,28 +7615,8 @@ _DEPRECATED_SWEEP_ANIMATION_PLOTS = {
 }
 
 
-def get_builtin_sweep_plot_names() -> list[str]:
-    """Return built-in plot names that can be rendered across a sweep."""
-    return sorted([
-        "gc_output_frequency_kde_1d",
-        "gc_output_frequency_kde_2d",
-        "gc_output_frequency_time_binned",
-        "hfo_power_summary",
-        "named_signal",
-        "spectrogram",
-        "spike_frequency_kde_1d",
-        "spike_frequency_kde_2d",
-        "spike_frequency_time_binned",
-        "spike_raster",
-        "voltage_traces",
-        "wavelet",
-        "wavelet_band_power",
-    ])
-
-
-def _get_builtin_sweep_plot(plot_name: str) -> Any:
-    """Resolve a built-in sweep-plot name to a plotting helper."""
-    mapping = {
+_OBGPU_SWEEP_PLOT_REGISTRY = _NeuroinfraSweepPlotRegistry(
+    plots={
         "voltage_traces": plot_voltage_traces,
         "spike_raster": plot_spike_raster,
         "hfo_power_summary": plot_hfo_power_summary,
@@ -7647,16 +7630,19 @@ def _get_builtin_sweep_plot(plot_name: str) -> Any:
         "gc_output_frequency_kde_1d": plot_gc_output_frequency_kde_1d,
         "gc_output_frequency_kde_2d": plot_gc_output_frequency_kde_2d,
         "gc_output_frequency_time_binned": plot_gc_output_frequency_time_binned,
-    }
-    if plot_name not in mapping:
-        if plot_name in _DEPRECATED_SWEEP_ANIMATION_PLOTS:
-            raise KeyError(
-                f"Sweep animation plot {plot_name!r} is deprecated and intentionally "
-                "not rendered. Use the separate KDE/signal plots instead."
-            )
-        available = ", ".join(get_builtin_sweep_plot_names())
-        raise KeyError(f"Unknown built-in sweep plot {plot_name!r}. Available: {available}")
-    return mapping[plot_name]
+    },
+    deprecated_names=frozenset(_DEPRECATED_SWEEP_ANIMATION_PLOTS),
+)
+
+
+def get_builtin_sweep_plot_names() -> list[str]:
+    """Return built-in plot names that can be rendered across a sweep."""
+    return _neuroinfra_list_registry_plot_names(_OBGPU_SWEEP_PLOT_REGISTRY)
+
+
+def _get_builtin_sweep_plot(plot_name: str) -> Any:
+    """Resolve a built-in sweep-plot name to a plotting helper."""
+    return _neuroinfra_resolve_registry_plot(_OBGPU_SWEEP_PLOT_REGISTRY, plot_name)
 
 
 def make_sweep_plot_spec(

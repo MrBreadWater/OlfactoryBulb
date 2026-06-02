@@ -13,6 +13,7 @@ import tempfile
 from types import SimpleNamespace
 
 from neuroinfra.analysis.sweeps import (
+    SweepPlotRegistry,
     SweepPlotSpec,
     animate_sweep,
     animate_sweep_plots,
@@ -26,12 +27,14 @@ from neuroinfra.analysis.sweeps import (
     format_sweep_value_label,
     iter_parallel_sweep_display_frames,
     is_deprecated_sweep_animation_spec,
+    list_registry_plot_names,
     list_sweeps,
     load_sweep,
     make_sweep_placeholder_figure,
     make_sweep_plot_spec,
     normalize_sweep_plot_spec,
     render_sweep_frame,
+    resolve_registry_plot,
     save_animation,
     save_sweep,
     save_sweep_animation_stream,
@@ -55,6 +58,23 @@ def main() -> None:
     assert isinstance(spec, SweepPlotSpec)
     assert spec.name == "trace"
     assert spec.filename == "trace_anim"
+
+    registry = SweepPlotRegistry(
+        plots={"trace": _simple_plot, "other": _simple_plot},
+        deprecated_names=frozenset({"trace_anim"}),
+    )
+    assert list_registry_plot_names(registry) == ["other", "trace"]
+    assert resolve_registry_plot(registry, "trace") is _simple_plot
+    try:
+        resolve_registry_plot(registry, "trace_anim")
+        raise AssertionError("Expected deprecated registry plot lookup to fail")
+    except KeyError as exc:
+        assert "deprecated" in str(exc)
+    try:
+        resolve_registry_plot(registry, "missing")
+        raise AssertionError("Expected missing registry plot lookup to fail")
+    except KeyError as exc:
+        assert "Available:" in str(exc)
 
     normalized = normalize_sweep_plot_spec({"plot": "trace", "interval": 200, "fps": 12})
     assert isinstance(normalized, SweepPlotSpec)
