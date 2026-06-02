@@ -134,6 +134,7 @@ Current files:
 - `neuroinfra/analysis/sweeps.py`
 - `neuroinfra/analysis/signals.py`
 - `olfactorybulb/analysis_data.py`
+- `olfactorybulb/analysis_hfo_views.py`
 - `olfactorybulb/analysis_profile.py`
 - `olfactorybulb/analysis_views.py`
 - `obgpu_experiment_helpers.py`
@@ -188,6 +189,8 @@ What is domain-specific:
   repo's OBGPU-facing analysis surface
 - the concrete grouped soma presentation layer that defines MT grouping,
   colors, and bucket-specific display limits for this notebook workflow
+- the concrete HFO/LFP overview layer that defines PSD template overlays and
+  the standard LFP/HFO summary figure policy for this notebook workflow
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
 - notebook-specific signal-presentation and higher-level plot composition that
@@ -202,6 +205,8 @@ Current progress:
 - `neuroinfra.analysis.profiles` now provides the reusable profile boundary
 - the concrete OBGPU result semantics have moved into
   `olfactorybulb/analysis_data.py`
+- the concrete HFO/LFP overview policy has moved into
+  `olfactorybulb/analysis_hfo_views.py`
 - the concrete OBGPU profile assembly has moved into
   `olfactorybulb/analysis_profile.py`
 - the concrete grouped soma presentation policy has moved into

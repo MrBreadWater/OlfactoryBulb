@@ -460,6 +460,21 @@ with tempfile.TemporaryDirectory() as tmp:
         assert hfo_axes[1].get_title() == "Relative Band Power"
     finally:
         hlp.plt.close(hfo_fig)
+
+    lfp_fig, lfp_axes = hlp.plot_lfp_overview(
+        phase_result,
+        dt_ms=0.1,
+        lowcut_hz=80.0,
+        highcut_hz=120.0,
+        show_psd_target_template=False,
+    )
+    try:
+        assert len(lfp_axes) == 3
+        assert lfp_axes[0].get_title() == "Raw LFP"
+        assert lfp_axes[1].get_title() == "Band-passed LFP (80-120 Hz)"
+        assert lfp_axes[2].get_title() == "Welch Power Spectrum"
+    finally:
+        hlp.plt.close(lfp_fig)
     print("Resolved signal view wrappers: OK")
 
     freq_ax = hlp.plot_spike_frequency_kde_1d(

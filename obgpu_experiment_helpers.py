@@ -91,6 +91,12 @@ from olfactorybulb.analysis_views import (
     build_soma_voltage_plot_suite as _ob_build_soma_voltage_plot_suite,
     saved_soma_spike_rows_for_display as _ob_saved_soma_spike_rows_for_display,
 )
+from olfactorybulb.analysis_hfo_views import (
+    DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ,
+    DEFAULT_PSD_TEMPLATE_FLOOR,
+    plot_hfo_power_summary as _ob_plot_hfo_power_summary,
+    plot_lfp_overview as _ob_plot_lfp_overview,
+)
 from olfactorybulb.hfo_features import (
     apply_hfo_runtime_overrides,
     hfo_control_help,
@@ -272,7 +278,6 @@ from neuroinfra.analysis.events import (
     style_raster_axis as _neuroinfra_style_raster_axis,
 )
 from neuroinfra.analysis.signal_views import (
-    SignalPsdOverlay as _NeuroinfraSignalPsdOverlay,
     log_spectrogram_display_power as _neuroinfra_log_spectrogram_display_power,
 )
 from neuroinfra.analysis.phase_locking import (
@@ -322,8 +327,6 @@ REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
 DEFAULT_RESULTS_BASE = REPO_ROOT / "results" / "notebook_runs"
 TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
-DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ = (130.0, 230.0)
-DEFAULT_PSD_TEMPLATE_FLOOR = 1e-5
 CONTROL_HELP = {
     "mode": "Use 'fast' for 1-rank exploration or 'parity' for 2-rank comparison runs.",
     "nranks": "MPI rank count for the run. 1 is faster on this machine",
@@ -6056,43 +6059,6 @@ def compute_hfo_power_summary(
     )
 
 
-def _build_psd_template_overlays(
-    *,
-    psd_template_kind: str,
-    psd_template_fit_band_hz: tuple[float, float],
-    psd_template_scale_method: str,
-    psd_template_floor: float,
-    psd_template_color: str,
-) -> Any:
-    """Return a builder that maps one measured PSD onto overlay curves."""
-    def _builder(freqs: np.ndarray, power: np.ndarray) -> list[_NeuroinfraSignalPsdOverlay]:
-        try:
-            from olfactorybulb.hfo_optimizer import scaled_psd_template_curve
-
-            template_freqs, template_power = scaled_psd_template_curve(
-                psd_template_kind,
-                freqs,
-                power,
-                fit_band_hz=psd_template_fit_band_hz,
-                method=psd_template_scale_method,
-                floor=psd_template_floor,
-            )
-        except Exception:
-            return []
-        return [
-            _NeuroinfraSignalPsdOverlay(
-                freqs_hz=np.asarray(template_freqs, dtype=float),
-                power=np.asarray(template_power, dtype=float),
-                label=f"Template ({psd_template_kind})",
-                color=psd_template_color,
-                linewidth=1.0,
-                linestyle="--",
-            )
-        ]
-
-    return _builder
-
-
 def compute_spike_phase_locking(
     result: dict[str, Any],
     *,
@@ -6794,24 +6760,19 @@ def plot_lfp_overview(
     psd_template_color: str = "tab:orange",
 ) -> tuple[Any, Any]:
     """Plot raw LFP, band-passed LFP, and a Welch PSD summary."""
-    overlay_builder = None
-    if show_psd_target_template:
-        overlay_builder = _build_psd_template_overlays(
-            psd_template_kind=psd_template_kind,
-            psd_template_fit_band_hz=psd_template_fit_band_hz,
-            psd_template_scale_method=psd_template_scale_method,
-            psd_template_floor=psd_template_floor,
-            psd_template_color=psd_template_color,
-        )
-    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_signal_psd_overview(
+    return _ob_plot_lfp_overview(
+        _OBGPU_ANALYSIS_PROFILE,
         result,
-        signal="lfp",
         dt_ms=dt_ms,
         lowcut_hz=lowcut_hz,
         highcut_hz=highcut_hz,
         psd_xlim_hz=psd_xlim_hz,
-        signal_label="LFP",
-        psd_overlay_builder=overlay_builder,
+        show_psd_target_template=show_psd_target_template,
+        psd_template_kind=psd_template_kind,
+        psd_template_fit_band_hz=psd_template_fit_band_hz,
+        psd_template_scale_method=psd_template_scale_method,
+        psd_template_floor=psd_template_floor,
+        psd_template_color=psd_template_color,
     )
 
 
@@ -6824,7 +6785,8 @@ def plot_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> tuple[Any, Any, dict[str, Any]]:
     """Plot absolute and relative HFO band power for a named signal."""
-    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_band_power_summary(
+    return _ob_plot_hfo_power_summary(
+        _OBGPU_ANALYSIS_PROFILE,
         result,
         signal=signal,
         bands=bands,
