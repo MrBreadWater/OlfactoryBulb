@@ -52,7 +52,6 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
-from scipy.signal import hilbert
 from scipy.stats import gaussian_kde
 from modify_model import (
     add_synaptic_connection,
@@ -285,6 +284,9 @@ from neuroinfra.analysis.signal_views import (
     plot_resolved_wavelet as _neuroinfra_plot_resolved_wavelet,
     plot_resolved_wavelet_band_power as _neuroinfra_plot_resolved_wavelet_band_power,
 )
+from neuroinfra.analysis.phase_locking import (
+    compute_phase_locking_from_spike_rows as _neuroinfra_compute_phase_locking_from_spike_rows,
+)
 from neuroinfra.analysis.sweeps import (
     SweepPlotSpec,
     animate_sweep as _neuroinfra_animate_sweep,
@@ -312,7 +314,6 @@ from neuroinfra.analysis.sweeps import (
 )
 from neuroinfra.analysis.spectral import (
     DEFAULT_HFO_BANDS,
-    butter_bandpass_filter,
     compute_wavelet_map,
     normalize_time_modulus as _normalize_time_modulus,
     uniform_trace,
@@ -6233,25 +6234,8 @@ def compute_spike_phase_locking(
 ) -> dict[str, Any]:
     """Measure soma-spike phase locking to a band-passed LFP-like signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    if len(signal_t) < 4:
-        return {
-            "signal": signal,
-            "band": band,
-            "cell_types": list(cell_types),
-            "n_spikes": 0,
-            "vector_strength": 0.0,
-            "mean_phase_rad": np.nan,
-            "per_cell": [],
-        }
-
-    fs_hz = 1000.0 / float(np.median(np.diff(signal_t)))
-    bandpassed = butter_bandpass_filter(signal_y, band[0], band[1], fs_hz, order=4)
-    phase = np.angle(hilbert(bandpassed))
-    unwrapped_phase = np.unwrap(phase)
     allowed_types = tuple(str(cell_type) for cell_type in cell_types)
 
-    all_vectors = []
-    per_cell = []
     saved_rows = _saved_soma_spike_rows(
         result,
         cell_types=list(allowed_types),
@@ -6264,49 +6248,23 @@ def compute_spike_phase_locking(
                 continue
             saved_rows.append((str(label), detect_spikes(t, v, threshold=threshold)))
 
-    for label, spikes in saved_rows:
-        spikes = spikes[(spikes >= signal_t[0]) & (spikes <= signal_t[-1])]
-        if len(spikes) == 0:
-            continue
-        spike_phase = np.angle(np.exp(1j * np.interp(spikes, signal_t, unwrapped_phase)))
-        vectors = np.exp(1j * spike_phase)
-        cell_vector = np.mean(vectors)
-        per_cell.append(
-            {
-                "label": label,
-                "n_spikes": int(len(spikes)),
-                "vector_strength": float(np.abs(cell_vector)),
-                "mean_phase_rad": float(np.angle(cell_vector)),
-            }
-        )
-        all_vectors.append(vectors)
-
-    if all_vectors:
-        vectors = np.concatenate(all_vectors)
-        mean_vector = np.mean(vectors)
-        vector_strength = float(np.abs(mean_vector))
-        mean_phase = float(np.angle(mean_vector))
-        n_spikes = int(len(vectors))
-    else:
-        vector_strength = 0.0
-        mean_phase = np.nan
-        n_spikes = 0
-
+    summary = _neuroinfra_compute_phase_locking_from_spike_rows(
+        signal_t,
+        signal_y,
+        saved_rows,
+        band=band,
+        dt_ms=dt_ms,
+        order=4,
+    )
     return {
         "signal": signal,
-        "band": tuple(float(value) for value in band),
+        "band": summary["band"],
         "cell_types": list(cell_types),
-        "n_spikes": n_spikes,
-        "vector_strength": vector_strength,
-        "mean_phase_rad": mean_phase,
-        "per_cell": per_cell,
+        "n_spikes": summary["n_spikes"],
+        "vector_strength": summary["vector_strength"],
+        "mean_phase_rad": summary["mean_phase_rad"],
+        "per_cell": summary["per_row"],
     }
-
-
-def _adaptive_spike_peak_floor(v: np.ndarray) -> float:
-    """Estimate a conservative spike-height floor from one voltage trace."""
-    return adaptive_soma_spike_peak_floor(v)
-
 
 def detect_spikes(
     t: np.ndarray | list[float],

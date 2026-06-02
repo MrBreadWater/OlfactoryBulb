@@ -62,6 +62,9 @@ from .signal_views import (
     plot_resolved_wavelet,
     plot_resolved_wavelet_band_power,
 )
+from .phase_locking import (
+    compute_phase_locking_from_spike_rows,
+)
 from .sweeps import (
     SweepPlotSpec,
     animate_sweep,
@@ -121,6 +124,7 @@ __all__ = [
     "compute_wavelet_map",
     "compute_resolved_bandpassed_signal",
     "compute_resolved_band_power_summary",
+    "compute_phase_locking_from_spike_rows",
     "DEFAULT_HFO_BANDS",
     "ensure_raster_axis",
     "fit_raster_labels",

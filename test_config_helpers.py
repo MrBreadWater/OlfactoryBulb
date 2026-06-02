@@ -385,6 +385,35 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "soma_vs" not in loaded_result._lazy_loaders
     print("Compact soma spike / voltage-summary artifacts: OK")
 
+    # --- Phase-lock wrapper should reuse saved spike artifacts against named signals ---
+    phase_t = np.arange(0.0, 1000.0, 0.1, dtype=float)
+    phase_signal = np.sin(2.0 * np.pi * 100.0 * phase_t / 1000.0)
+    phase_spikes = np.arange(52.5, 950.0, 10.0, dtype=float)
+    phase_result = {
+        "lfp_t": phase_t,
+        "lfp": phase_signal,
+        "soma_spikes": {
+            "labels": ["MC0[0].soma"],
+            "spike_times": [phase_spikes],
+            "metadata": {"threshold_mv": 0.0},
+        },
+    }
+    phase_summary = hlp.compute_spike_phase_locking(
+        phase_result,
+        signal="lfp",
+        band=(80.0, 120.0),
+        cell_types=("MC",),
+        threshold=0.0,
+        dt_ms=0.1,
+    )
+    assert phase_summary["signal"] == "lfp"
+    assert phase_summary["cell_types"] == ["MC"]
+    assert phase_summary["n_spikes"] == len(phase_spikes)
+    assert phase_summary["vector_strength"] > 0.95
+    assert len(phase_summary["per_cell"]) == 1
+    assert phase_summary["per_cell"][0]["label"] == "MC0[0].soma"
+    print("Phase-lock wrapper: OK")
+
     # --- Optional int16 soma traces should round-trip with bounded quantization error ---
     quantized_dir = tmp / "quantized_soma"
     quantized_dir.mkdir()
