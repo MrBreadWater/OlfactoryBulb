@@ -427,6 +427,34 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp.plt.close(freq_ax.figure)
     print("Frequency KDE wrapper: OK")
 
+    voltage_ax = hlp.plot_voltage_traces(
+        {
+            "soma_vs": [
+                (label, np.asarray(t, dtype=float), np.asarray(v, dtype=float))
+                for label, t, v in compact_traces
+            ]
+        },
+        max_per_type=1,
+    )
+    try:
+        assert voltage_ax.get_title() == "Sample Soma Voltages (MT grouped)"
+        assert len(voltage_ax.lines) == 1
+    finally:
+        hlp.plt.close(voltage_ax.figure)
+
+    spike_ax = hlp.plot_spike_raster(
+        loaded_result,
+        max_cells_per_type=1,
+        threshold=0.0,
+    )
+    try:
+        assert spike_ax.get_title() == "Detected Soma Spike Raster (MT grouped)"
+        assert len(spike_ax.collections) > 0
+        assert len(spike_ax.get_yticklabels()) == 1
+    finally:
+        hlp.plt.close(spike_ax.figure)
+    print("Voltage / spike wrapper grouping: OK")
+
     gc_freq_result = {
         "gc_output_events": [
             {

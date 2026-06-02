@@ -122,7 +122,8 @@ time-binned sample renderers, labeled-row instantaneous-frequency sample
 collectors, spectral-analysis core, sweep plot protocol, sweep persistence and
 reload helpers, streamed GIF rendering pipeline, event-rate/raster analysis
 helpers, shared event-rate plotting, label-prefix row filtering,
-normalization-driven event-rate computation, raster-plus-rate overview layout, and
+normalization-driven event-rate computation, stable ordered-name helpers,
+fair round-robin subgroup truncation, raster-plus-rate overview layout, and
 the named-signal provider registry plus provider-factory layer for keyed
 traces, suffix variants, pattern-matched signals, labeled traces, and aligned
 mean traces that list,

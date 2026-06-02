@@ -111,6 +111,8 @@ from .catalog import (
     group_rows_by_category,
     list_available_categories,
     list_unique_labels,
+    ordered_names,
+    round_robin_limit_by_subgroup,
 )
 from .signals import (
     ResultSignalProvider,
@@ -208,6 +210,7 @@ __all__ = [
     "metadata_value_or_result_length",
     "mean_aligned_row_trace",
     "normalize_sweep_plot_spec",
+    "ordered_names",
     "pattern_result_signal_provider",
     "render_sweep_frame",
     "resolve_sweep_item_result_dir",
@@ -217,6 +220,7 @@ __all__ = [
     "save_animation",
     "save_sweep",
     "save_sweep_animation_stream",
+    "round_robin_limit_by_subgroup",
     "suffix_variant_signal_provider",
     "smooth_rate_series",
     "style_raster_axis",

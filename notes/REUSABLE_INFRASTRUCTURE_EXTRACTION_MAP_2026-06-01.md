@@ -136,6 +136,8 @@ Current files:
 What is already generic:
 
 - stable category and label cataloging
+- stable ordered-name helpers with preferred ordering and unknown-last handling
+- fair round-robin subgroup truncation for merged display buckets
 - result-overview context and summary builders
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
 - uniform-trace interpolation and time-modulus folding

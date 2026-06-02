@@ -252,6 +252,8 @@ from neuroinfra.analysis.catalog import (
     group_rows_by_category as _neuroinfra_group_rows_by_category,
     list_available_categories as _neuroinfra_list_available_categories,
     list_unique_labels as _neuroinfra_list_unique_labels,
+    ordered_names as _neuroinfra_ordered_names,
+    round_robin_limit_by_subgroup as _neuroinfra_round_robin_limit_by_subgroup,
 )
 from neuroinfra.analysis.overview import (
     build_result_overview as _neuroinfra_build_result_overview,
@@ -5526,12 +5528,11 @@ def cell_type_of(name: Any) -> str:
 
 def _ordered_cell_types(cell_types: list[str] | tuple[str, ...] | set[str]) -> list[str]:
     """Return cell types in stable notebook display order."""
-    seen = {str(cell_type) for cell_type in cell_types}
-    ordered = [cell_type for cell_type in PRIMARY_CELL_TYPE_ORDER if cell_type in seen]
-    ordered.extend(sorted(cell_type for cell_type in seen if cell_type not in set(PRIMARY_CELL_TYPE_ORDER) and cell_type != "other"))
-    if "other" in seen:
-        ordered.append("other")
-    return ordered
+    return _neuroinfra_ordered_names(
+        cell_types,
+        preferred_order=PRIMARY_CELL_TYPE_ORDER,
+        unknown_name="other",
+    )
 
 
 _OBGPU_CATEGORY_CATALOG_HOOKS = _NeuroinfraCategoryCatalogHooks(
@@ -5556,13 +5557,11 @@ def _ordered_display_groups(groups: list[str] | tuple[str, ...] | set[str], *, c
         seen = {_display_group_for_cell_type(group, combine_mt=True) for group in raw_seen}
     else:
         return _ordered_cell_types(raw_seen)
-    if not seen:
-        return []
-    ordered = [group for group in PLOT_DISPLAY_CELL_GROUPS if group in seen]
-    ordered.extend(sorted(g for g in seen if g not in set(PLOT_DISPLAY_CELL_GROUPS) and g != "other"))
-    if "other" in seen:
-        ordered.append("other")
-    return ordered
+    return _neuroinfra_ordered_names(
+        seen,
+        preferred_order=PLOT_DISPLAY_CELL_GROUPS,
+        unknown_name="other",
+    )
 
 
 def _truncate_display_rows_for_group(
@@ -5577,39 +5576,12 @@ def _truncate_display_rows_for_group(
         return []
     if not combine_mt or display_group != "MT":
         return rows[:max_rows]
-
-    subgroups: dict[str, list[tuple[str, Any]]] = {}
-    subgroup_order: list[str] = []
-    for row in rows:
-        label = str(row[0])
-        try:
-            subgroup = cell_type_of(label)
-        except ValueError:
-            subgroup = "other"
-        if subgroup not in subgroups:
-            subgroups[subgroup] = []
-            subgroup_order.append(subgroup)
-        subgroups[subgroup].append(row)
-
-    if len(subgroup_order) <= 1:
-        return rows[:max_rows]
-
-    selected: list[tuple[str, Any]] = []
-    indices = {subgroup: 0 for subgroup in subgroup_order}
-    while len(selected) < max_rows:
-        added = False
-        for subgroup in subgroup_order:
-            idx = indices[subgroup]
-            bucket = subgroups[subgroup]
-            if idx < len(bucket):
-                selected.append(bucket[idx])
-                indices[subgroup] = idx + 1
-                added = True
-                if len(selected) >= max_rows:
-                    break
-        if not added:
-            break
-    return selected
+    return _neuroinfra_round_robin_limit_by_subgroup(
+        rows,
+        subgroup_fn=lambda row: cell_type_of(str(row[0])),
+        max_rows=max_rows,
+        unknown_subgroup="other",
+    )
 
 
 def _infer_grouped_cell_types_from_labels(labels: list[str] | tuple[str, ...]) -> list[str]:
