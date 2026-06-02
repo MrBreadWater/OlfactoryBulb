@@ -368,6 +368,24 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._neuroinfra_run_and_load_workflow = original_run_and_load_workflow
     print("run_and_load wrapper delegation: OK")
 
+    # --- load_result wrapper delegates through olfactorybulb notebook result adapter ---
+    original_load_result = hlp._ob_load_result
+    load_result_calls = []
+    try:
+        def _fake_load_result(hooks, run_or_dir, *, lazy_soma_vs=False, progress=True):
+            load_result_calls.append((hooks, run_or_dir, lazy_soma_vs, progress))
+            return {"delegated": True, "result_dir": str(run_or_dir)}
+
+        hlp._ob_load_result = _fake_load_result
+        delegated_result = hlp.load_result(tmp / "delegated-result", lazy_soma_vs=True, progress=False)
+        assert delegated_result["delegated"] is True
+        assert load_result_calls and Path(load_result_calls[0][1]) == tmp / "delegated-result"
+        assert load_result_calls[0][2] is True
+        assert load_result_calls[0][3] is False
+    finally:
+        hlp._ob_load_result = original_load_result
+    print("load_result wrapper delegation: OK")
+
     # --- local sweep wrapper delegates through notebook dispatch layer ---
     original_local_sweep_dispatch = hlp._ob_run_notebook_parameter_sweep
     local_sweep_calls = []

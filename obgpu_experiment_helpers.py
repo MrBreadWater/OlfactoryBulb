@@ -135,6 +135,13 @@ from olfactorybulb.notebook_dispatch import (
     run_notebook_parameter_sweep as _ob_run_notebook_parameter_sweep,
     run_notebook_simulation as _ob_run_notebook_simulation,
 )
+from olfactorybulb.notebook_results import (
+    LazyResult,
+    NotebookResultHooks as _OlfactoryBulbNotebookResultHooks,
+    apply_loaded_result_artifact as _ob_apply_loaded_result_artifact,
+    load_result as _ob_load_result,
+    set_lazy_result_artifact_path as _ob_set_lazy_result_artifact_path,
+)
 from olfactorybulb.notebook_run_info import (
     NotebookRunInfoHooks as _OlfactoryBulbNotebookRunInfoHooks,
     merge_extra_run_info as _ob_merge_extra_run_info,
@@ -354,16 +361,9 @@ from neuroinfra.remote.git_sync import (
 )
 from neuroinfra.artifacts.loading import (
     ArtifactLoadingHooks as _NeuroinfraArtifactLoadingHooks,
-    LazyResult as _NeuroinfraLazyResult,
-    load_local_artifact_plan as _neuroinfra_load_local_artifact_plan,
 )
 from neuroinfra.artifacts.result_view import (
-    ResultArtifactBinding as _NeuroinfraResultArtifactBinding,
-    ResultFieldSpec as _NeuroinfraResultFieldSpec,
     ResultViewHooks as _NeuroinfraResultViewHooks,
-    ResultViewSchema as _NeuroinfraResultViewSchema,
-    attach_lazy_artifact_loaders as _neuroinfra_attach_lazy_artifact_loaders,
-    plan_result_view as _neuroinfra_plan_result_view,
 )
 from neuroinfra.analysis.overview import (
     build_result_overview as _neuroinfra_build_result_overview,
@@ -2493,7 +2493,7 @@ def _result_view_hooks() -> _NeuroinfraResultViewHooks:
         local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
         sync_deferred_artifact_fn=_sync_deferred_remote_artifact,
         load_pickle_fn=load_pickle,
-        set_lazy_artifact_path_fn=_OBGPU_RESULT_VIEW_SCHEMA.set_lazy_artifact_path,
+        set_lazy_artifact_path_fn=_ob_set_lazy_result_artifact_path,
         local_lazy_notice_fn=lambda key, path: (
             f"[OBGPU load] Deferred {key} ({_format_bytes(path.stat().st_size)}) until result['{key}'] is accessed."
         ),
@@ -2712,6 +2712,17 @@ def _ob_notebook_sweep_dispatch_hooks() -> _OlfactoryBulbNotebookSweepDispatchAd
     )
 
 
+def _ob_notebook_result_hooks() -> _OlfactoryBulbNotebookResultHooks:
+    """Build the concrete olfactory-bulb hooks for notebook result loading."""
+    return _OlfactoryBulbNotebookResultHooks(
+        find_soma_trace_artifact_fn=find_soma_trace_artifact,
+        preferred_soma_trace_artifact_name_fn=preferred_soma_trace_artifact_name,
+        soma_trace_artifact_candidates_fn=soma_trace_artifact_candidates,
+        result_view_hooks=_result_view_hooks(),
+        artifact_loading_hooks=_artifact_loading_hooks(),
+    )
+
+
 def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
@@ -2900,7 +2911,7 @@ def _remote_sweep_artifact_hooks(
 
 def _apply_loaded_result_artifact(result: MutableMapping[str, Any], key: str, loaded: Any) -> None:
     """Apply one loaded artifact payload to the standard notebook result dict."""
-    _OBGPU_RESULT_VIEW_SCHEMA.apply_loaded_artifact(result, key, loaded)
+    _ob_apply_loaded_result_artifact(result, key, loaded)
 
 
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
@@ -4621,67 +4632,6 @@ def _sync_deferred_remote_artifact_direct(
     )
 
 
-class LazyResult(_NeuroinfraLazyResult):
-    """Notebook result dict that adds progress and artifact-size bookkeeping."""
-
-    def _ensure_loaded(self, key: str) -> None:
-        if key not in self._lazy_loaders:
-            return
-        _progress_write(f"[OBGPU load] Lazy-loading {key}...")
-        started = time.perf_counter()
-        try:
-            super()._ensure_loaded(key)
-        finally:
-            elapsed_s = time.perf_counter() - started
-        if key == "soma_vs":
-            soma_path = dict.get(self, "soma_vs_file")
-            artifact_sizes = dict.get(self, "artifact_sizes")
-            if isinstance(soma_path, Path) and soma_path.exists() and isinstance(artifact_sizes, dict):
-                artifact_sizes[soma_path.name] = int(soma_path.stat().st_size)
-        _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
-
-
-def _apply_loaded_lfp_payload(result: MutableMapping[str, Any], loaded: Any) -> None:
-    """Apply one loaded LFP payload into the standard result mapping."""
-    lfp_t, lfp = loaded
-    result["lfp_t"] = np.asarray(lfp_t, dtype=float)
-    result["lfp"] = np.asarray(lfp, dtype=float)
-
-
-_OBGPU_RESULT_VIEW_SCHEMA = _NeuroinfraResultViewSchema(
-    fields=(
-        _NeuroinfraResultFieldSpec("input_times", default_factory=list),
-        _NeuroinfraResultFieldSpec("soma_vs", default_factory=list, lazy_path_key="soma_vs_file"),
-        _NeuroinfraResultFieldSpec("soma_spikes", default_factory=dict),
-        _NeuroinfraResultFieldSpec("voltage_summary", default_factory=dict),
-        _NeuroinfraResultFieldSpec("gc_output_events", default_factory=list),
-        _NeuroinfraResultFieldSpec("lfp_t", default_factory=lambda: np.array([])),
-        _NeuroinfraResultFieldSpec(
-            "lfp",
-            default_factory=lambda: np.array([]),
-            apply_loaded_fn=_apply_loaded_lfp_payload,
-        ),
-    ),
-    result_type=LazyResult,
-)
-
-
-def _make_result_view(
-    *,
-    result_dir: Path,
-    summary: dict[str, Any] | None,
-    run_info: dict[str, Any] | None,
-    artifact_sizes: dict[str, int],
-) -> LazyResult:
-    """Build the standard notebook result mapping before artifact payload loads."""
-    return _OBGPU_RESULT_VIEW_SCHEMA.create_result(
-        result_dir=result_dir,
-        summary=summary,
-        run_info=run_info,
-        artifact_sizes=artifact_sizes,
-    )
-
-
 def load_result(
     run_or_dir: RunRecord | str | Path,
     *,
@@ -4689,53 +4639,12 @@ def load_result(
     progress: bool = True,
 ) -> dict[str, Any]:
     """Load the standard saved outputs for a notebook run directory."""
-    result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
-    soma_path = find_soma_trace_artifact(result_dir)
-    view_plan = _neuroinfra_plan_result_view(
-        result_dir,
-        result_factory_fn=_make_result_view,
-        artifact_bindings=[
-            _NeuroinfraResultArtifactBinding("input_times", result_dir / "input_times.pkl"),
-            _NeuroinfraResultArtifactBinding(
-                "soma_vs",
-                soma_path,
-                deferred_remote_name=preferred_soma_trace_artifact_name(),
-                deferred_remote_names=soma_trace_artifact_candidates(),
-            ),
-            _NeuroinfraResultArtifactBinding("gc_output_events", result_dir / "gc_output_events.pkl"),
-            _NeuroinfraResultArtifactBinding("lfp", result_dir / "lfp.pkl"),
-            _NeuroinfraResultArtifactBinding("soma_spikes", result_dir / SOMA_SPIKES_FILENAME_NPZ),
-            _NeuroinfraResultArtifactBinding("voltage_summary", result_dir / VOLTAGE_SUMMARY_FILENAME_NPZ),
-        ],
-        lazy_keys={"soma_vs"} if lazy_soma_vs else set(),
-        hooks=_result_view_hooks(),
-    )
-    result = view_plan.result
-
-    load_timings, load_total_seconds = _neuroinfra_load_local_artifact_plan(
-        result,
-        view_plan.load_plan,
-        hooks=_artifact_loading_hooks(),
+    return _ob_load_result(
+        _ob_notebook_result_hooks(),
+        run_or_dir,
+        lazy_soma_vs=lazy_soma_vs,
         progress=progress,
     )
-
-    if lazy_soma_vs:
-        _neuroinfra_attach_lazy_artifact_loaders(
-            view_plan,
-            hooks=_result_view_hooks(),
-            progress=progress,
-        )
-
-    result["load_timing_seconds"] = load_timings
-    result["load_total_seconds"] = load_total_seconds
-    if load_timings and progress:
-        timing_summary = ", ".join(
-            f"{name}={seconds:.2f}s"
-            for name, seconds in sorted(load_timings.items(), key=lambda item: item[1], reverse=True)
-        )
-        _progress_write(f"[OBGPU load] Local file timings: {timing_summary}")
-
-    return result
 
 
 def load_run_pair(

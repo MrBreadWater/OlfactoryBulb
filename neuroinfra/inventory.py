@@ -74,6 +74,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/artifacts/result_view.py",
             "neuroinfra/artifacts/output_paths.py",
             "neuroinfra/artifacts/result_artifacts.py",
+            "olfactorybulb/notebook_results.py",
             "olfactorybulb/result_artifacts.py",
             "olfactorybulb/output_paths.py",
         ),
@@ -90,11 +91,12 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         repo_specific_couplings=(
             "artifact names still use OBGPU terminology like soma_vs and lfp",
+            "the concrete notebook-facing result field schema and lazy-result notices remain domain-specific",
         ),
         extraction_confidence="high",
         proposed_phase=1,
         current_status="internal_shim_extracted",
-        recommended_action="The first internal extraction has been done behind compatibility shims, and the local artifact-loading helpers plus the generic result-view planner/schema now live under neuroinfra.artifacts; next remove remaining OBGPU-specific naming and separate the last notebook-specific signal analysis and presentation policy from the OBGPU artifact plan.",
+        recommended_action="The first internal extraction has been done behind compatibility shims, and the local artifact-loading helpers plus the generic result-view planner/schema now live under neuroinfra.artifacts, while the concrete olfactory-bulb result schema and notebook loader now live in olfactorybulb.notebook_results; next remove remaining OBGPU-specific naming and separate the last notebook-specific signal analysis and presentation policy from the OBGPU artifact plan.",
     ),
     ExtractionCandidate(
         key="notebook_run_catalog",

@@ -114,8 +114,10 @@ Current progress:
   lives under `neuroinfra.artifacts.result_view`
 - that same module now also owns the generic result-schema machinery for
   default fields, artifact application behavior, and lazy-path bookkeeping
-- the remaining concrete OBGPU signal names and field mapping still live in
-  `obgpu_experiment_helpers.py`
+- the concrete olfactory-bulb result schema, lazy-result behavior, and
+  notebook loader now live under `olfactorybulb/notebook_results.py`
+- `obgpu_experiment_helpers.py` now delegates `load_result(...)` there instead
+  of owning the result field mapping inline
 
 ### 2b. Notebook run catalog and metadata
 

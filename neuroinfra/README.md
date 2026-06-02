@@ -162,6 +162,13 @@ explicitly in `olfactorybulb.analysis_data` and
 animation presets now in `olfactorybulb.analysis_presentations`; the remaining
 notebook-facing glue still remains in `obgpu_experiment_helpers.py`.
 
+The generic lazy-result container, timed local artifact-loading loop, and
+result-view planner/schema now live under `neuroinfra.artifacts`, while the
+concrete olfactory-bulb result schema, lazy-result behavior, and notebook
+result loader now live in `olfactorybulb.notebook_results`. The notebook helper
+now delegates `load_result(...)` there instead of owning the result field
+mapping inline.
+
 The generic run-directory catalog and metadata loader that list saved notebook
 runs, resolve prefix/index selections, recover captured stdout/stderr, and
 reload saved config snapshots now also live under `neuroinfra.notebooks.runs`,
