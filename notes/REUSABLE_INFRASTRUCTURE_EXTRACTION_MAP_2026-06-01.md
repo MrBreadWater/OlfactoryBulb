@@ -346,7 +346,44 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates both full run-info writes and
   later metadata merges there
 
-### 2h. Result analysis and signal registry
+### 2h. Notebook run and sweep workflows
+
+Current files:
+
+- `neuroinfra/notebooks/workflows.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- `run_and_load` workflow composition
+- saved run-pair loading
+- local sweep-plan execution loops
+- hook-driven post-load metadata merging
+
+What is domain-specific:
+
+- progress output strings
+- local sweep path policy
+- remote run and remote sweep orchestration
+- concrete run/load function wiring
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic notebook workflow layer now lives under
+  `neuroinfra.notebooks.workflows`
+- `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
+  and the local branches of parameter/grid sweeps there while still owning the
+  remote branches and concrete path policy
+
+### 2i. Result analysis and signal registry
 
 Current files:
 

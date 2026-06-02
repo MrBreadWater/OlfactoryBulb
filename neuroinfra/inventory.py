@@ -247,6 +247,30 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic notebook run-info protocol now lives under neuroinfra.notebooks.run_info, while the olfactory-bulb-specific payload semantics live in olfactorybulb.notebook_run_info; next keep shrinking the helper by separating the remaining local/remote runner orchestration that decides when those payloads are written.",
     ),
     ExtractionCandidate(
+        key="notebook_workflows",
+        title="Notebook run and sweep workflows",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/workflows.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "run and load workflow composition",
+            "saved run pair loading",
+            "local sweep-plan execution loops",
+            "hook-driven post-load metadata merging",
+        ),
+        repo_specific_couplings=(
+            "progress messages still come from the notebook helper",
+            "local sweep path policy still comes from the repo's results layout",
+            "remote sweep and remote run orchestration remain outside this layer",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic notebook workflow layer now lives under neuroinfra.notebooks.workflows, while the helper still owns the concrete path policy, progress messaging, and remote execution branches; next separate the remaining remote runner orchestration from the helper.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",

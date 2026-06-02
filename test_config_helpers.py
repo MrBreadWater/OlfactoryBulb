@@ -166,6 +166,39 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._neuroinfra_execute_local_run = original_local_run
     print("local run wrapper delegation: OK")
 
+    # --- run_and_load wrapper delegates through neuroinfra workflow ---
+    original_run_and_load_workflow = hlp._neuroinfra_run_and_load_workflow
+    run_and_load_calls = []
+    try:
+        def _fake_run_and_load_workflow(hooks, config=None, *, label=None):
+            run_and_load_calls.append((hooks, config, label))
+            return SimpleNamespace(result_dir=tmp / "delegated-run", label=label), {"artifact_sizes": {}}
+
+        hlp._neuroinfra_run_and_load_workflow = _fake_run_and_load_workflow
+        delegated_run, delegated_result = hlp.run_and_load(cfg, label="delegated")
+        assert delegated_run.label == "delegated"
+        assert delegated_result == {"artifact_sizes": {}}
+        assert run_and_load_calls and run_and_load_calls[0][2] == "delegated"
+    finally:
+        hlp._neuroinfra_run_and_load_workflow = original_run_and_load_workflow
+    print("run_and_load wrapper delegation: OK")
+
+    # --- local sweep wrapper delegates through neuroinfra workflow ---
+    original_local_sweep_workflow = hlp._neuroinfra_run_local_sweep_plan
+    local_sweep_calls = []
+    try:
+        def _fake_local_sweep_workflow(hooks, sweep_plan):
+            local_sweep_calls.append((hooks, sweep_plan))
+            return {"items": [], "path": sweep_plan["path"], "values": sweep_plan["values"], "paramset": sweep_plan["paramset"]}
+
+        hlp._neuroinfra_run_local_sweep_plan = _fake_local_sweep_workflow
+        sweep_result = hlp.run_parameter_sweep(cfg, "gaba_tau2_ms", [36.0, 50.0])
+        assert sweep_result["paramset"] == "GammaSignature"
+        assert local_sweep_calls and local_sweep_calls[0][1]["path"] == "gaba_tau2_ms"
+    finally:
+        hlp._neuroinfra_run_local_sweep_plan = original_local_sweep_workflow
+    print("local sweep workflow delegation: OK")
+
     # --- save_figure wrapper ---
     class _FakeFigure:
         def __init__(self) -> None:

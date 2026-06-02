@@ -41,6 +41,7 @@ The next standardized seam is also in place:
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
 - `neuroinfra.notebooks.sweeps`
+- `neuroinfra.notebooks.workflows`
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
@@ -189,6 +190,11 @@ The generic notebook `run_info.json` protocol now also lives under
 `neuroinfra.notebooks.run_info`, while the olfactory-bulb-specific env keys,
 override payloads, execution-mode summaries, and effective-param summaries
 now live in `olfactorybulb.notebook_run_info`.
+
+The generic notebook workflow layer that composes `run_and_load`,
+`load_run_pair`, and local sweep execution loops now also lives under
+`neuroinfra.notebooks.workflows`, while the helper still owns concrete path
+policy, progress messages, and the remote execution branches.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

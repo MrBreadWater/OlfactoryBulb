@@ -147,6 +147,14 @@ from neuroinfra.notebooks.sweeps import (
     set_nested_value as _neuroinfra_set_nested_value,
     split_path_parts as _neuroinfra_split_path_parts,
 )
+from neuroinfra.notebooks.workflows import (
+    LoadRunPairHooks as _NeuroinfraLoadRunPairHooks,
+    LocalSweepHooks as _NeuroinfraLocalSweepHooks,
+    RunAndLoadHooks as _NeuroinfraRunAndLoadHooks,
+    load_run_pair as _neuroinfra_load_run_pair,
+    run_and_load as _neuroinfra_run_and_load_workflow,
+    run_local_sweep_plan as _neuroinfra_run_local_sweep_plan,
+)
 from neuroinfra.remote.helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -5100,24 +5108,15 @@ def run_parameter_sweep(
     sweep_plan = _prepare_sweep_plan(base_config, sweep_path, values, grid=False)
     if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
         return _run_remote_sweep(sweep_plan)
-
-    local_sweep_dir = _sweep_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
-    local_item_runs_dir = _sweep_item_runs_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
-    local_item_runs_dir.mkdir(parents=True, exist_ok=True)
-    items = []
-    for item in sweep_plan["items"]:
-        sweep_config = deepcopy(item["config"])
-        sweep_config["results_base"] = str(local_item_runs_dir)
-        run, result = run_and_load(sweep_config, label=str(item["label"]))
-        items.append({"value": item["value"], "config": sweep_config, "run": run, "result": result})
-    sweep = {
-        "path": sweep_plan["path"],
-        "values": list(sweep_plan["values"]),
-        "items": items,
-        "paramset": sweep_plan["paramset"],
-    }
-    save_sweep(sweep, name=str(sweep_plan["sweep_label"]), base_dir=local_sweep_dir.parent)
-    return sweep
+    return _neuroinfra_run_local_sweep_plan(
+        _NeuroinfraLocalSweepHooks(
+            run_and_load_fn=lambda config, label: run_and_load(config, label=label),
+            save_sweep_fn=save_sweep,
+            item_runs_dir_fn=lambda plan: _sweep_item_runs_dir(plan["base_config"], str(plan["sweep_label"])),
+            sweep_base_dir_fn=lambda plan: _sweep_dir(plan["base_config"], str(plan["sweep_label"])).parent,
+        ),
+        sweep_plan,
+    )
 
 
 def run_grid_sweep(
@@ -5137,26 +5136,15 @@ def run_grid_sweep(
     sweep_plan = _prepare_sweep_plan(base_config, param_grid, grid=True)
     if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
         return _run_remote_sweep(sweep_plan)
-
-    local_sweep_dir = _sweep_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
-    local_item_runs_dir = _sweep_item_runs_dir(sweep_plan["base_config"], str(sweep_plan["sweep_label"]))
-    local_item_runs_dir.mkdir(parents=True, exist_ok=True)
-    items = []
-    for item in sweep_plan["items"]:
-        sweep_config = deepcopy(item["config"])
-        sweep_config["results_base"] = str(local_item_runs_dir)
-        run, result = run_and_load(sweep_config, label=str(item["label"]))
-        items.append({"value": item["value"], "config": sweep_config, "run": run, "result": result})
-
-    sweep = {
-        "path": param_grid,
-        "values": list(sweep_plan["values"]),
-        "items": items,
-        "paramset": sweep_plan["paramset"],
-        "grid": sweep_plan["grid"],
-    }
-    save_sweep(sweep, name=str(sweep_plan["sweep_label"]), base_dir=local_sweep_dir.parent)
-    return sweep
+    return _neuroinfra_run_local_sweep_plan(
+        _NeuroinfraLocalSweepHooks(
+            run_and_load_fn=lambda config, label: run_and_load(config, label=label),
+            save_sweep_fn=save_sweep,
+            item_runs_dir_fn=lambda plan: _sweep_item_runs_dir(plan["base_config"], str(plan["sweep_label"])),
+            sweep_base_dir_fn=lambda plan: _sweep_dir(plan["base_config"], str(plan["sweep_label"])).parent,
+        ),
+        sweep_plan,
+    )
 
 
 def load_pickle(path: str | Path) -> Any:
@@ -5320,13 +5308,16 @@ def load_run_pair(
     results_base: str | Path = DEFAULT_RESULTS_BASE,
 ) -> tuple[RunRecord, dict[str, Any]]:
     """Resolve a saved run and load its standard result payload."""
-    run = load_run_record(
+    return _neuroinfra_load_run_pair(
+        _NeuroinfraLoadRunPairHooks(
+            load_run_record_fn=load_run_record,
+            load_result_fn=load_result,
+        ),
         run_or_dir=run_or_dir,
         prefix=prefix,
         index=index,
         results_base=results_base,
     )
-    return run, load_result(run)
 
 
 def run_and_load(
@@ -5336,17 +5327,21 @@ def run_and_load(
 ) -> tuple[RunRecord, dict[str, Any]]:
     """Run a simulation and immediately load its outputs from disk."""
     print("[OBGPU load] Starting simulation run...", flush=True)
-    run = run_simulation(config, label=label)
-    print(f"[OBGPU load] Simulation complete. Loading results from {run.result_dir}...", flush=True)
-    result = load_result(run)
-    _merge_run_info_payload(
-        run.result_dir,
-        {
-            "artifact_sizes": result.get("artifact_sizes", {}),
-            "load_timing_seconds": result.get("load_timing_seconds", {}),
-            "load_total_seconds": result.get("load_total_seconds"),
-        },
+    run, result = _neuroinfra_run_and_load_workflow(
+        _NeuroinfraRunAndLoadHooks(
+            run_simulation_fn=run_simulation,
+            load_result_fn=load_result,
+            merge_run_info_payload_fn=_merge_run_info_payload,
+            build_merge_payload_fn=lambda result: {
+                "artifact_sizes": result.get("artifact_sizes", {}),
+                "load_timing_seconds": result.get("load_timing_seconds", {}),
+                "load_total_seconds": result.get("load_total_seconds"),
+            },
+        ),
+        config,
+        label=label,
     )
+    print(f"[OBGPU load] Simulation complete. Loading results from {run.result_dir}...", flush=True)
     print("[OBGPU load] Result load complete.", flush=True)
     return run, result
 

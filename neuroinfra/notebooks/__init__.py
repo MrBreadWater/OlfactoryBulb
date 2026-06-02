@@ -40,6 +40,14 @@ from .sweeps import (
     set_nested_value,
     split_path_parts,
 )
+from .workflows import (
+    LoadRunPairHooks,
+    LocalSweepHooks,
+    RunAndLoadHooks,
+    load_run_pair,
+    run_and_load,
+    run_local_sweep_plan,
+)
 
 __all__ = [
     "diff_values",
@@ -51,6 +59,7 @@ __all__ = [
     "list_run_dirs",
     "LocalRunHooks",
     "load_json_config",
+    "LoadRunPairHooks",
     "load_run_config",
     "load_run_record",
     "RunInfoHooks",
@@ -58,6 +67,7 @@ __all__ = [
     "DEFAULT_COMMAND_FILENAME",
     "env_subset",
     "execute_local_run",
+    "load_run_pair",
     "load_run_info_payload",
     "merge_run_info_payload",
     "persist_run_info",
@@ -68,6 +78,10 @@ __all__ = [
     "save_figure",
     "SweepPlanHooks",
     "prepare_sweep_plan",
+    "LocalSweepHooks",
+    "RunAndLoadHooks",
+    "run_and_load",
+    "run_local_sweep_plan",
     "set_nested_value",
     "split_path_parts",
 ]
