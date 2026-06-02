@@ -65,6 +65,11 @@ def notes_for(
     protocol_id: str | Iterable[str] | None = None,
     metric: str | Iterable[str] | None = None,
     source: str | Iterable[str] | None = None,
+    cell_type: str | Iterable[str] | None = None,
+    gc_subtype: str | Iterable[str] | None = None,
+    condition: str | Iterable[str] | None = None,
+    metadata: str | Iterable[str] | None = None,
+    extraction_method: str | Iterable[str] | None = None,
     note_ids: str | Iterable[str] | None = None,
 ) -> list[ValidationNote]:
     loaded_notes = list(load_notes() if notes is None else notes)
@@ -72,6 +77,11 @@ def notes_for(
     protocol_values = _as_set(protocol_id)
     metric_values = _as_set(metric)
     source_values = _as_set(source)
+    cell_type_values = _as_set(cell_type)
+    gc_subtype_values = _as_set(gc_subtype)
+    condition_values = _as_set(condition)
+    metadata_values = _as_set(metadata)
+    extraction_method_values = _as_set(extraction_method)
 
     matched: list[ValidationNote] = []
     for note in loaded_notes:
@@ -87,6 +97,21 @@ def notes_for(
                 continue
         elif note.target_type == "source" and note.target_values:
             if not note.target_values.intersection(source_values):
+                continue
+        elif note.target_type == "cell_type" and note.target_values:
+            if not note.target_values.intersection(cell_type_values):
+                continue
+        elif note.target_type == "gc_subtype" and note.target_values:
+            if not note.target_values.issubset(gc_subtype_values):
+                continue
+        elif note.target_type == "condition" and note.target_values:
+            if not note.target_values.intersection(condition_values):
+                continue
+        elif note.target_type == "metadata" and note.target_values:
+            if not note.target_values.intersection(metadata_values):
+                continue
+        elif note.target_type == "extraction_method" and note.target_values:
+            if not note.target_values.intersection(extraction_method_values):
                 continue
         matched.append(note)
 
@@ -108,19 +133,43 @@ def notes_for_rows(
         for row in row_list
         if str(row.get("Source", row.get("source", ""))).strip()
     }
+    cell_types = {str(row.get("cell_type", "")).strip() for row in row_list if str(row.get("cell_type", "")).strip()}
+    gc_subtypes = {str(row.get("gc_subtype", "")).strip() for row in row_list if str(row.get("gc_subtype", "")).strip()}
+    conditions = {
+        str(row.get("data_kind", "")).strip()
+        for row in row_list
+        if str(row.get("data_kind", "")).strip()
+    }
+    extraction_methods = {
+        str(row.get("extraction_method", "")).strip()
+        for row in row_list
+        if str(row.get("extraction_method", "")).strip()
+    }
+    metadata_tokens: set[str] = set()
+    for key in ("species", "age", "maturity", "layer_or_location"):
+        if any(str(row.get(key, "")).strip() for row in row_list):
+            metadata_tokens.add(key)
     note_ids: set[str] = set()
     for row in row_list:
         for note_id in str(row.get("note_ids", "")).split(";"):
             if note_id.strip():
                 note_ids.add(note_id.strip())
-    return notes_for(
+    matched = notes_for(
         notes=notes,
         scope=scope,
         protocol_id=protocols,
         metric=properties,
         source=sources,
-        note_ids=note_ids or None,
+        cell_type=cell_types,
+        gc_subtype=gc_subtypes,
+        condition=conditions,
+        metadata=metadata_tokens,
+        extraction_method=extraction_methods,
     )
+    if note_ids:
+        matched.extend(notes_for(notes=notes, scope=scope, note_ids=note_ids))
+    deduped = {note.note_id: note for note in matched}
+    return sorted(deduped.values(), key=lambda note: (note.display_order, note.note_id))
 
 
 def render_notes(notes: Iterable[ValidationNote], format: str = "plain") -> str:
@@ -149,4 +198,3 @@ def render_notes(notes: Iterable[ValidationNote], format: str = "plain") -> str:
         return f"<h2>Notes / protocol caveats</h2><ul>{items}</ul>"
 
     raise ValueError(f"Unsupported note-render format: {format!r}")
-

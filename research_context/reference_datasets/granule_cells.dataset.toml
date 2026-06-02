@@ -1,0 +1,1120 @@
+dataset_id = "granule_cells"
+dataset_name = "Olfactory bulb granule cell reference dataset"
+source_data_subdir = "granule_cells"
+
+[outputs]
+ephys = "GC_ephys.csv"
+fi_curve = "GC_fI_curve.csv"
+subtype_ephys = "GC_sGC_dGC_ephys.csv"
+subtype_fi_curve = "GC_sGC_dGC_fI_curve.csv"
+protocols = "GC_protocols.csv"
+identity = "GC_identity_morphology.csv"
+synaptic_latency = "GC_synaptic_latency_references.csv"
+modulation = "GC_modulation_references.csv"
+notes = "GC_validation_notes.csv"
+manual = "GC_needs_manual_extraction.csv"
+readme = "GC_extraction_README.md"
+
+[output_schemas]
+ephys = "gc_ephys"
+fi_curve = "gc_fi_curve"
+subtype_ephys = "gc_ephys"
+subtype_fi_curve = "gc_fi_curve"
+protocols = "gc_protocols"
+identity = "gc_identity"
+synaptic_latency = "gc_ephys"
+modulation = "gc_ephys"
+
+[readme]
+title = "Olfactory bulb granule-cell reference-data extraction"
+summary = "This directory contains protocol-aware, subtype-aware reference tables for olfactory-bulb granule-cell validation targets. Generic mature granule cells, superficial granule cells, deep granule cells, adult-born granule cells, and modulated granule-cell states are tracked separately."
+source_summary = [
+  "Burton & Urban 2015 contributes the primary machine-readable generic granule-cell intrinsic and spike-train summary tables through the PMC article tables.",
+  "Geramita, Burton & Urban 2016 contributes the primary superficial-versus-deep granule-cell subtype source data through Figure 4 supplementary tables in DOCX form.",
+  "Hu et al. 2016 contributes secondary adult-born granule-cell sag and resonance constraints.",
+  "Labarrera, London & Angelo 2013 contributes tonic-inhibition pharmacology constraints.",
+  "Egger, Svoboda & Mainen 2005 and Giridhar & Urban 2012 contribute identity and latency-coding constraints.",
+]
+suitable_now = [
+  "Burton 2015 generic granule-cell passive, action-potential, and spike-train summary rows.",
+  "Geramita 2016 superficial-versus-deep granule-cell subtype rows for morphology, passive properties, action-potential properties, and spike-train summary metrics.",
+  "Hu 2016 adult-born granule-cell sag and resonance reference rows.",
+  "Labarrera 2013 tonic-inhibition pharmacology rows.",
+  "Identity, morphology, and long-latency reference rows with visible protocol caveats.",
+]
+caveats = [
+  "No exact generic-GC or sGC/dGC current-vs-rate point table has been extracted yet. The f-I curve CSVs remain header-only until a machine-readable point table or manually curated point table is added.",
+  "The pipeline does not perform built-in figure digitization. Figure-only f-I curve gaps remain in GC_needs_manual_extraction.csv.",
+  "GC subtype, maturity, and modulation conditions are intentionally separated. Baseline validation should not silently include adult-born or pharmacology rows.",
+]
+
+[[sources]]
+source_id = "burton2015_article_html"
+source = "Burton & Urban (2015)"
+label = "Burton 2015 PMC article HTML"
+filename = "burton_urban_2015_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC4683680/"
+downloadable = true
+required = true
+expected_extension = ".html"
+
+[[sources]]
+source_id = "geramita2016_article_html"
+source = "Geramita, Burton & Urban (2016)"
+label = "Geramita 2016 eLife article HTML"
+filename = "geramita_burton_urban_2016_article.html"
+source_url = "https://elifesciences.org/articles/16039"
+downloadable = true
+required = true
+expected_extension = ".html"
+
+[[sources]]
+source_id = "geramita2016_fig4_source_data"
+source = "Geramita, Burton & Urban (2016)"
+label = "Geramita 2016 Figure 4 source data"
+filename = "elife-16039-fig4-data1-v2.docx"
+source_url = "https://doi.org/10.7554/eLife.16039.012"
+download_url = "https://cdn.elifesciences.org/articles/16039/elife-16039-fig4-data1-v2.docx"
+downloadable = true
+required = true
+expected_extension = ".docx"
+
+[[sources]]
+source_id = "hu2016_article_html"
+source = "Hu et al. (2016)"
+label = "Hu 2016 PMC article HTML"
+filename = "hu_et_al_2016_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC5095762/"
+downloadable = true
+required = true
+expected_extension = ".html"
+
+[[sources]]
+source_id = "egger2005_article_html"
+source = "Egger, Svoboda & Mainen (2005)"
+label = "Egger 2005 PMC article HTML"
+filename = "egger_svoboda_mainen_2005_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6725376/"
+downloadable = true
+required = true
+expected_extension = ".html"
+
+[[sources]]
+source_id = "labarrera2013_article_html"
+source = "Labarrera, London & Angelo (2013)"
+label = "Labarrera 2013 PMC article HTML"
+filename = "labarrera_london_angelo_2013_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC3624854/"
+downloadable = true
+required = true
+expected_extension = ".html"
+
+[[sources]]
+source_id = "giridhar2012_article_html"
+source = "Giridhar & Urban (2012)"
+label = "Giridhar 2012 Frontiers article HTML"
+filename = "giridhar_urban_2012_article.html"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2012.00040/full"
+downloadable = true
+required = true
+expected_extension = ".html"
+
+[[sources]]
+source_id = "balu2007_article_html"
+source = "Balu, Pressler & Strowbridge (2007)"
+label = "Balu 2007 PMC article HTML"
+filename = "balu_pressler_strowbridge_2007_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6672747/"
+downloadable = true
+required = false
+expected_extension = ".html"
+
+[[sources]]
+source_id = "kapoor2006_article_html"
+source = "Kapoor & Urban (2006)"
+label = "Kapoor 2006 JNeurosci article HTML"
+filename = "kapoor_urban_2006_article.html"
+source_url = "https://www.jneurosci.org/content/26/45/11709"
+downloadable = true
+required = false
+expected_extension = ".html"
+
+[[sources]]
+source_id = "stroh2012_article_html"
+source = "Stroh et al. (2012)"
+label = "Stroh 2012 JNeurosci article HTML"
+filename = "stroh_et_al_2012_article.html"
+source_url = "https://www.jneurosci.org/content/32/17/5737"
+downloadable = true
+required = false
+expected_extension = ".html"
+
+[[sources]]
+source_id = "pressler2007_article_html"
+source = "Pressler, Inoue & Strowbridge (2007)"
+label = "Pressler 2007 PMC article HTML"
+filename = "pressler_inoue_strowbridge_2007_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6672850/"
+downloadable = true
+required = false
+expected_extension = ".html"
+
+[[sources]]
+source_id = "dong2007_article_html"
+source = "Dong, Heinbockel, Laaris & Ennis (2007)"
+label = "Dong 2007 PMC article HTML"
+filename = "dong_heinbockel_laaris_ennis_2007_article.html"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC2596473/"
+downloadable = true
+required = false
+expected_extension = ".html"
+
+[[sources]]
+source_id = "neuroelectro_gc_page"
+source = "NeuroElectro"
+label = "NeuroElectro main olfactory-bulb granule-cell page"
+filename = "neuroelectro_gc_page.html"
+source_url = "https://neuroelectro.org/neuron/128.html"
+downloadable = false
+required = false
+expected_extension = ".html"
+
+[[static_protocol_rows]]
+protocol_id = "BU2014_MC_TC_2s_0_300pA_50pA"
+source = "Burton & Urban (2014)"
+cell_type = "MC;TC"
+gc_subtype = ""
+species = "mouse"
+age = ""
+stimulus_type = "somatic depolarizing current step"
+step_duration_ms = 2000.0
+current_start_pA = 0.0
+current_stop_pA = 300.0
+current_step_pA = 50.0
+current_values_pA = "0;50;100;150;200;250;300"
+rate_definition = "Legacy MC/TC summary metrics derived from a two-second firing-rate-versus-current protocol with gain defined as the maximum linear slope."
+spike_detection_rule = "Not explicitly preserved in the legacy CSVs; see Burton & Urban 2014 methods."
+baseline_or_holding_vm_mV = -58.0
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "MC_TC_fI"
+notes = "Retained so downstream renderers can show protocol caveats when MC/TC and GC f-I summaries appear together."
+
+[[static_protocol_rows]]
+protocol_id = "BU2015_GC_intrinsic_current_clamp"
+source = "Burton & Urban (2015)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = "mouse"
+age = "P18-P28"
+stimulus_type = "series of depolarizing step current injections"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Rheobase, gain, and peak instantaneous rate were summarized from depolarizing step current injections, but the exact step duration and current range are not preserved in the machine-readable table."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = 32.0
+compatible_group = "GC_fI_summary"
+notes = "Exact current-step timing and range remain unresolved from the local machine-readable source. Use this protocol id only for same-source summary comparisons unless the method details are re-extracted."
+
+[[static_protocol_rows]]
+protocol_id = "GERAMITA2016_sGC_dGC_intrinsic_current_clamp"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "sGC;dGC"
+species = "mouse"
+age = "P18-P28"
+stimulus_type = "intrinsic current-clamp protocol"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Subtype spike-train summary rows include rheobase, first-spike latency, gain, and peak instantaneous rate, but the exact current-step timing and range are not preserved in the Figure 4 source-data DOCX."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = 32.0
+compatible_group = "GC_subtype_fI_summary"
+notes = "Use this protocol id for subtype-aware summary comparisons only unless the exact Figure 4j/k point-set protocol is recovered."
+
+[[static_protocol_rows]]
+protocol_id = "HU2016_GC_Ih_resonance_protocol"
+source = "Hu et al. (2016)"
+cell_type = "GC"
+gc_subtype = "adult_born_GC"
+species = "mouse"
+age = "P15-P60 source cohort"
+stimulus_type = "hyperpolarization and resonance protocol"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Sag amplitude and resonant frequency summary values from mature and developing granule cells."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = "-60 or -70 mV depending on experiment"
+synaptic_blockers = "ZD7288 where noted"
+temperature_C = ""
+compatible_group = "GC_Ih_resonance"
+notes = "Secondary constraint only. Do not treat these rows as baseline generic-GC f-I references."
+
+[[static_protocol_rows]]
+protocol_id = "LABARRERA2013_GC_tonic_inhibition_protocol"
+source = "Labarrera, London & Angelo (2013)"
+cell_type = "GC"
+gc_subtype = "modulated_GC"
+species = "mouse"
+age = "P25-P30"
+stimulus_type = "in vivo odor stimulation and pharmacology"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Holding-current shift and tonic-inhibition summaries under gabazine and furosemide."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = "gabazine or furosemide depending on row"
+temperature_C = ""
+compatible_group = "GC_tonic_inhibition"
+notes = "Pharmacology-only modulation reference. Keep separate from baseline control rows."
+
+[[static_protocol_rows]]
+protocol_id = "STROH2012_GC_TRPC_NMDA_protocol"
+source = "Stroh et al. (2012)"
+cell_type = "GC"
+gc_subtype = "modulated_GC"
+species = ""
+age = ""
+stimulus_type = "NMDA receptor and TRPC synaptic activation"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Slow depolarization and pharmacology constraints only."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = "NMDA/TRPC pharmacology"
+temperature_C = ""
+compatible_group = "GC_NMDA_TRPC"
+notes = "Not a baseline intrinsic protocol."
+
+[[static_protocol_rows]]
+protocol_id = "BALU2007_GC_synaptic_excitation_protocol"
+source = "Balu, Pressler & Strowbridge (2007)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = ""
+age = ""
+stimulus_type = "synaptic excitation protocol"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Synaptic recruitment and excitation-mode reference only."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "GC_synaptic_excitation"
+notes = "Do not treat as baseline intrinsic f-I data."
+
+[[static_protocol_rows]]
+protocol_id = "KAPOOR2006_GC_glomerular_latency_protocol"
+source = "Kapoor & Urban (2006)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = ""
+age = ""
+stimulus_type = "glomerular stimulation"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Long-latency glomerulus-specific response timing only."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "GC_latency"
+notes = "Use for synaptic latency constraints, not intrinsic f-I."
+
+[[static_protocol_rows]]
+protocol_id = "GIRIDHAR2012_GC_latency_coding_protocol"
+source = "Giridhar & Urban (2012)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = "mouse"
+age = ""
+stimulus_type = "brief glomerular stimulation"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Long-latency first-spike timing and response-probability constraints only."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = 37.0
+compatible_group = "GC_latency"
+notes = "Use for network-level latency coding constraints, not intrinsic current-clamp f-I."
+
+[[static_protocol_rows]]
+protocol_id = "PRESSLER2007_GC_muscarinic_modulation_protocol"
+source = "Pressler, Inoue & Strowbridge (2007)"
+cell_type = "GC"
+gc_subtype = "modulated_GC"
+species = ""
+age = ""
+stimulus_type = "muscarinic modulation"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Muscarinic modulation constraints only."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "GC_muscarinic_modulation"
+notes = "Do not include in baseline validation unless the simulation is explicitly muscarinic-modulated."
+
+[[static_protocol_rows]]
+protocol_id = "DONG_HEINBOCKEL2007_GC_mGluR_modulation_protocol"
+source = "Dong, Heinbockel, Laaris & Ennis (2007)"
+cell_type = "GC"
+gc_subtype = "modulated_GC"
+species = ""
+age = ""
+stimulus_type = "group I mGluR modulation"
+step_duration_ms = ""
+current_start_pA = ""
+current_stop_pA = ""
+current_step_pA = ""
+current_values_pA = ""
+rate_definition = "Group I mGluR modulation constraints only."
+spike_detection_rule = ""
+baseline_or_holding_vm_mV = ""
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "GC_mGluR_modulation"
+notes = "Do not include in baseline validation unless the simulation is explicitly group-I-mGluR-modulated."
+
+[[static_note_rows]]
+note_id = "N_GC_SUBTYPE_DO_NOT_POOL"
+severity = "warning"
+scope = "granule_cell_validation"
+target_type = "gc_subtype"
+target = "sGC;dGC"
+message = "Superficial granule cells and deep granule cells have distinct morphology, recruitment, action-potential properties, and spike-train summaries. Do not pool sGC and dGC rows unless the validation target is explicitly configured to do so."
+display_order = 20
+source = "Geramita, Burton & Urban (2016)"
+source_location = "Figure 4 source-data tables and subtype comparison figures"
+
+[[static_note_rows]]
+note_id = "N_GC_PROTOCOL_DIFFERENCE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "protocol"
+target = "BU2014_MC_TC_2s_0_300pA_50pA;BU2015_GC_intrinsic_current_clamp"
+message = "MC/TC and GC firing-rate validation targets use different cell classes and may use different current-injection protocols. Existing MC/TC values use 2 s depolarizing steps from 0 to 300 pA in 50 pA increments, with gain defined as the maximum linear slope. GC rows must be compared only against matching protocol_id rows unless an explicit normalization or reanalysis step is implemented."
+display_order = 21
+source = "Burton & Urban (2014); Burton & Urban (2015)"
+source_location = "Protocol metadata rows"
+
+[[static_note_rows]]
+note_id = "N_GC_PROTOCOL_DIFFERENCE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "protocol"
+target = "BU2014_MC_TC_2s_0_300pA_50pA;GERAMITA2016_sGC_dGC_intrinsic_current_clamp"
+message = "MC/TC and GC firing-rate validation targets use different cell classes and may use different current-injection protocols. Existing MC/TC values use 2 s depolarizing steps from 0 to 300 pA in 50 pA increments, with gain defined as the maximum linear slope. GC rows must be compared only against matching protocol_id rows unless an explicit normalization or reanalysis step is implemented."
+display_order = 21
+source = "Burton & Urban (2014); Geramita, Burton & Urban (2016)"
+source_location = "Protocol metadata rows"
+
+[[static_note_rows]]
+note_id = "N_GC_MODULATION_STATE"
+severity = "warning"
+scope = "granule_cell_validation"
+target_type = "condition"
+target = "tonic_inhibition;neuromodulation;NMDA_TRPC_slow_depolarization;Ih_sag_resonance;pharmacology"
+message = "Separate baseline control granule-cell data from tonic-inhibition, muscarinic, group-I-mGluR, NMDA/TRPC, and other modulatory or pharmacological conditions. Do not include modulated rows in baseline validation unless the simulation condition explicitly matches."
+display_order = 22
+source = "Labarrera, London & Angelo (2013); Stroh et al. (2012); Pressler, Inoue & Strowbridge (2007); Dong, Heinbockel, Laaris & Ennis (2007); Hu et al. (2016)"
+source_location = "Cross-source integration rule for modulation-state handling"
+
+[[static_note_rows]]
+note_id = "N_GC_SPECIES_AND_MATURITY"
+severity = "warning"
+scope = "granule_cell_validation"
+target_type = "metadata"
+target = "species;age;maturity"
+message = "Separate mouse versus rat, juvenile versus adult, resident versus adult-born granule cells, and source-specific age ranges. Do not pool across maturity or species unless the validation target is explicitly configured to do so."
+display_order = 23
+source = "Burton & Urban (2015); Geramita, Burton & Urban (2016); Hu et al. (2016)"
+source_location = "Cross-source integration rule for GC metadata"
+
+[[static_note_rows]]
+note_id = "N_GC_FI_DIGITIZATION"
+severity = "info"
+scope = "fI_validation"
+target_type = "extraction_method"
+target = "figure_digitized"
+message = "Digitized f-I curves are lower-confidence than machine-readable source-data points. Every digitized row must include source_location, a digitization manifest, and an explicit confidence value."
+display_order = 24
+source = "Granule-cell reference-data workflow"
+source_location = "Dataset-level extraction policy"
+
+[[formatted_summary_rules]]
+output = "ephys"
+source_id = "burton2015_article_html"
+table_index = 0
+property_column = "Unnamed: 0"
+value_column = "GC"
+property_map = { "Rinput (MΩ)" = "Input Resistance", "τm (ms)" = "Membrane Time Constant", "Cm (pF)" = "Capacitance", "Vrest (mV)" = "Membrane Resting Voltage" }
+source_location = "PMC article table 1, generic GC passive properties"
+source = "Burton & Urban (2015)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "main olfactory bulb granule cell layer"
+recording_temperature_C = 32.0
+data_kind = "intrinsic_property"
+extraction_method = "source_table_summary"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+notes = "Passive-membrane summary values from the machine-readable PMC table."
+
+[[formatted_summary_rules]]
+output = "ephys"
+source_id = "burton2015_article_html"
+table_index = 1
+property_column = "Unnamed: 0"
+value_column = "GC"
+property_map = { "Vthreshold (mV)" = "AP Threshold", "Amplitude (mV)" = "AP Amplitude", "FWHM (ms)" = "AP Half-Width", "Rising slope (mV/ms)" = "AP Rising Slope", "Falling slope (mV/ms)" = "AP Falling Slope" }
+source_location = "PMC article table 2, generic GC action-potential properties"
+source = "Burton & Urban (2015)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "main olfactory bulb granule cell layer"
+recording_temperature_C = 32.0
+data_kind = "intrinsic_property"
+extraction_method = "source_table_summary"
+include_in_validation = true
+include_in_fi_validation = false
+confidence = "high"
+notes = "Action-potential summary values from the machine-readable PMC table."
+
+[[formatted_summary_rules]]
+output = "ephys"
+source_id = "burton2015_article_html"
+table_index = 3
+property_column = "Unnamed: 0"
+value_column = "GC"
+property_map = { "Rheobase (pA)" = "Rheobase Current", "Rheobase first-spike latency (ms)" = "First Spike Latency", "Gain (Hz/pA)" = "FI Curve Slope", "Peak instantaneous rate (Hz)" = "Peak Instantaneous Rate" }
+source_location = "PMC article table 4, generic GC spike-train properties"
+source = "Burton & Urban (2015)"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "main olfactory bulb granule cell layer"
+recording_temperature_C = 32.0
+protocol_id = "BU2015_GC_intrinsic_current_clamp"
+transform_scale = 1000.0
+data_kind = "fI_summary_metric"
+extraction_method = "source_table_summary"
+include_in_validation = true
+include_in_fi_validation = true
+confidence = "high"
+note_ids = ["N_GC_PROTOCOL_DIFFERENCE", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Spike-train summary values from the machine-readable PMC table. Gain was reported in Hz/pA and is converted here to Hz/nA. The exact step duration and current range remain unresolved from the local machine-readable source."
+
+[[formatted_summary_rules]]
+output = "identity"
+source_id = "geramita2016_fig4_source_data"
+table_index = 1
+property_column = ""
+value_column = "sGC"
+property_map = { "Soma area (μm 2 )" = "Soma Area", "Soma depth from MCL ( μm )" = "Soma Depth From MCL", "Basal dendrites, Σ length ( μm )" = "Basal Dendritic Total Length", "Basal dendrites, Σ volume (μm 3 )" = "Basal Dendritic Total Volume", "Apical dendrites, Σ length ( μm )" = "Apical Dendritic Total Length", "Apical dendrites, Σ volume (μm 3 )" = "Apical Dendritic Total Volume", "Apical dendrites, gemmules" = "Apical Dendrite Gemmule Count" }
+unit_map = { "Soma area (μm 2 )" = "μm^2", "Soma depth from MCL ( μm )" = "μm", "Basal dendrites, Σ length ( μm )" = "μm", "Basal dendrites, Σ volume (μm 3 )" = "μm^3", "Apical dendrites, Σ length ( μm )" = "μm", "Apical dendrites, Σ volume (μm 3 )" = "μm^3", "Apical dendrites, gemmules" = "count" }
+source_location = "Figure 4 source data supplementary table 1, superficial GC morphology"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "sGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "superficial granule cell layer"
+identity_kind = "morphology_constraint"
+data_kind = "subtype_morphology"
+extraction_method = "source_table_summary"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype morphology values from the Geramita Figure 4 source-data DOCX."
+
+[[formatted_summary_rules]]
+output = "identity"
+source_id = "geramita2016_fig4_source_data"
+table_index = 1
+property_column = ""
+value_column = "dGC"
+property_map = { "Soma area (μm 2 )" = "Soma Area", "Soma depth from MCL ( μm )" = "Soma Depth From MCL", "Basal dendrites, Σ length ( μm )" = "Basal Dendritic Total Length", "Basal dendrites, Σ volume (μm 3 )" = "Basal Dendritic Total Volume", "Apical dendrites, Σ length ( μm )" = "Apical Dendritic Total Length", "Apical dendrites, Σ volume (μm 3 )" = "Apical Dendritic Total Volume", "Apical dendrites, gemmules" = "Apical Dendrite Gemmule Count" }
+unit_map = { "Soma area (μm 2 )" = "μm^2", "Soma depth from MCL ( μm )" = "μm", "Basal dendrites, Σ length ( μm )" = "μm", "Basal dendrites, Σ volume (μm 3 )" = "μm^3", "Apical dendrites, Σ length ( μm )" = "μm", "Apical dendrites, Σ volume (μm 3 )" = "μm^3", "Apical dendrites, gemmules" = "count" }
+source_location = "Figure 4 source data supplementary table 1, deep GC morphology"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "dGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "deep granule cell layer"
+identity_kind = "morphology_constraint"
+data_kind = "subtype_morphology"
+extraction_method = "source_table_summary"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype morphology values from the Geramita Figure 4 source-data DOCX."
+
+[[formatted_summary_rules]]
+output = "subtype_ephys"
+source_id = "geramita2016_fig4_source_data"
+table_index = 2
+property_column = ""
+value_column = "sGC"
+property_map = { "V threshold (mV)" = "AP Threshold", "Amplitude (mV)" = "AP Amplitude", "FWHM ( ms )" = "AP Half-Width", "Rising slope (mV ms -1 )" = "AP Rising Slope", "Falling slope (mV ms -1 )" = "AP Falling Slope" }
+source_location = "Figure 4 source data supplementary table 2, superficial GC action-potential properties"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "sGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "superficial granule cell layer"
+recording_temperature_C = 32.0
+data_kind = "intrinsic_property"
+extraction_method = "source_table_summary"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype action-potential summary values from the Geramita Figure 4 source-data DOCX."
+
+[[formatted_summary_rules]]
+output = "subtype_ephys"
+source_id = "geramita2016_fig4_source_data"
+table_index = 2
+property_column = ""
+value_column = "dGC"
+property_map = { "V threshold (mV)" = "AP Threshold", "Amplitude (mV)" = "AP Amplitude", "FWHM ( ms )" = "AP Half-Width", "Rising slope (mV ms -1 )" = "AP Rising Slope", "Falling slope (mV ms -1 )" = "AP Falling Slope" }
+source_location = "Figure 4 source data supplementary table 2, deep GC action-potential properties"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "dGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "deep granule cell layer"
+recording_temperature_C = 32.0
+data_kind = "intrinsic_property"
+extraction_method = "source_table_summary"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype action-potential summary values from the Geramita Figure 4 source-data DOCX."
+
+[[formatted_summary_rules]]
+output = "subtype_ephys"
+source_id = "geramita2016_fig4_source_data"
+table_index = 3
+property_column = ""
+value_column = "sGC"
+property_map = { "Rheobase ( pA )" = "Rheobase Current", "Rheobase first-spike latency ( ms )" = "First Spike Latency", "Gain (Hz pA -1 )" = "FI Curve Slope", "Peak instantaneous rate (Hz)" = "Peak Instantaneous Rate" }
+source_location = "Figure 4 source data supplementary table 3, superficial GC spike-train properties"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "sGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "superficial granule cell layer"
+recording_temperature_C = 32.0
+protocol_id = "GERAMITA2016_sGC_dGC_intrinsic_current_clamp"
+transform_scale = 1000.0
+data_kind = "fI_summary_metric"
+extraction_method = "source_table_summary"
+include_in_validation = true
+include_in_fi_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_PROTOCOL_DIFFERENCE", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype spike-train summary values from the Geramita Figure 4 source-data DOCX. Gain was reported in Hz/pA and is converted here to Hz/nA. Exact point-set protocol details remain unresolved from the local source-data tables."
+
+[[formatted_summary_rules]]
+output = "subtype_ephys"
+source_id = "geramita2016_fig4_source_data"
+table_index = 3
+property_column = ""
+value_column = "dGC"
+property_map = { "Rheobase ( pA )" = "Rheobase Current", "Rheobase first-spike latency ( ms )" = "First Spike Latency", "Gain (Hz pA -1 )" = "FI Curve Slope", "Peak instantaneous rate (Hz)" = "Peak Instantaneous Rate" }
+source_location = "Figure 4 source data supplementary table 3, deep GC spike-train properties"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "dGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "deep granule cell layer"
+recording_temperature_C = 32.0
+protocol_id = "GERAMITA2016_sGC_dGC_intrinsic_current_clamp"
+transform_scale = 1000.0
+data_kind = "fI_summary_metric"
+extraction_method = "source_table_summary"
+include_in_validation = true
+include_in_fi_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_PROTOCOL_DIFFERENCE", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype spike-train summary values from the Geramita Figure 4 source-data DOCX. Gain was reported in Hz/pA and is converted here to Hz/nA. Exact point-set protocol details remain unresolved from the local source-data tables."
+
+[[formatted_summary_rules]]
+output = "subtype_ephys"
+source_id = "geramita2016_fig4_source_data"
+table_index = 4
+property_column = ""
+value_column = "sGC"
+property_map = { "R input (MΩ)" = "Input Resistance", "τ m ( ms )" = "Membrane Time Constant", "C m (pF)" = "Capacitance", "V rest (mV)" = "Membrane Resting Voltage" }
+source_location = "Figure 4 source data supplementary table 4, superficial GC passive properties"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "sGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "superficial granule cell layer"
+recording_temperature_C = 32.0
+data_kind = "intrinsic_property"
+extraction_method = "source_table_summary"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype passive-property summary values from the Geramita Figure 4 source-data DOCX."
+
+[[formatted_summary_rules]]
+output = "subtype_ephys"
+source_id = "geramita2016_fig4_source_data"
+table_index = 4
+property_column = ""
+value_column = "dGC"
+property_map = { "R input (MΩ)" = "Input Resistance", "τ m ( ms )" = "Membrane Time Constant", "C m (pF)" = "Capacitance", "V rest (mV)" = "Membrane Resting Voltage" }
+source_location = "Figure 4 source data supplementary table 4, deep GC passive properties"
+source = "Geramita, Burton & Urban (2016)"
+cell_type = "GC"
+gc_subtype = "dGC"
+species = "mouse"
+age = "P18-P28"
+maturity = "resident_GC"
+layer_or_location = "deep granule cell layer"
+recording_temperature_C = 32.0
+data_kind = "intrinsic_property"
+extraction_method = "source_table_summary"
+include_in_validation = true
+confidence = "high"
+note_ids = ["N_GC_SUBTYPE_DO_NOT_POOL", "N_GC_SPECIES_AND_MATURITY"]
+notes = "Subtype passive-property summary values from the Geramita Figure 4 source-data DOCX."
+
+[[static_identity_rows]]
+source = "Egger, Svoboda & Mainen (2005)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6725376/"
+source_file = "egger_svoboda_mainen_2005_article.html"
+source_location = "Article title and Results discussion of dendrodendritic spine signaling"
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = ""
+age = ""
+maturity = ""
+layer_or_location = "granule cell layer"
+identity_kind = "morphology_constraint"
+Property = "Axonless Morphology"
+mean = ""
+sd = ""
+sem = ""
+stat_type = "qualitative"
+unit = ""
+n = ""
+data_kind = "dendritic_integration"
+extraction_method = "html_text"
+include_in_validation = true
+confidence = "medium"
+note_ids = ["N_GC_SPECIES_AND_MATURITY"]
+notes = "This source is used here as a qualitative identity constraint: olfactory-bulb granule cells are axonless dendrodendritic interneurons with local spine amplification and global low-threshold-spike behavior."
+reported_value_raw = "Dendrodendritic synaptic signals in olfactory bulb granule cells: local spine boost and global low-threshold spike"
+
+[[static_ephys_rows]]
+output = "modulation"
+property_name = "Sag Amplitude"
+source = "Hu et al. (2016)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC5095762/"
+source_file = "hu_et_al_2016_article.html"
+source_location = "Results text near Figure 6A, 2-week adult-born MOB granule cells"
+notes = "Adult-born granule-cell sag amplitude at two weeks after electroporation. Secondary resonance constraint only."
+cell_type = "GC"
+gc_subtype = "adult_born_GC"
+species = "mouse"
+age = "2 weeks after electroporation"
+maturity = "adult_born_2_weeks"
+layer_or_location = "MOB granule cell layer"
+protocol_id = "HU2016_GC_Ih_resonance_protocol"
+mean = -1.9
+sd = 0.4
+sem = ""
+n = 5
+stat_type = "mean_sd"
+unit = "mV"
+data_kind = "Ih_sag_resonance"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "high"
+note_ids = ["N_GC_SPECIES_AND_MATURITY", "N_GC_MODULATION_STATE"]
+reported_value_raw = "−1.9 ± 0.4 mV (n = 5)"
+
+[[static_ephys_rows]]
+output = "modulation"
+property_name = "Sag Amplitude"
+source = "Hu et al. (2016)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC5095762/"
+source_file = "hu_et_al_2016_article.html"
+source_location = "Results text near Figure 6A, 6-week adult-born MOB granule cells"
+notes = "Adult-born granule-cell sag amplitude at six weeks after electroporation. Secondary resonance constraint only."
+cell_type = "GC"
+gc_subtype = "adult_born_GC"
+species = "mouse"
+age = "6 weeks after electroporation"
+maturity = "adult_born_6_weeks"
+layer_or_location = "MOB granule cell layer"
+protocol_id = "HU2016_GC_Ih_resonance_protocol"
+mean = -4.6
+sd = 0.7
+sem = ""
+n = 5
+stat_type = "mean_sd"
+unit = "mV"
+data_kind = "Ih_sag_resonance"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "high"
+note_ids = ["N_GC_SPECIES_AND_MATURITY", "N_GC_MODULATION_STATE"]
+reported_value_raw = "−4.6 ± 0.7 mV (n = 5)"
+
+[[static_ephys_rows]]
+output = "modulation"
+property_name = "Resonance Frequency"
+source = "Hu et al. (2016)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC5095762/"
+source_file = "hu_et_al_2016_article.html"
+source_location = "Results text near Figure 6B, 2-week adult-born MOB granule cells"
+notes = "Adult-born granule-cell resonant frequency at two weeks after electroporation. The text reports the mean ± spread but does not restate the cohort size in this sentence."
+cell_type = "GC"
+gc_subtype = "adult_born_GC"
+species = "mouse"
+age = "2 weeks after electroporation"
+maturity = "adult_born_2_weeks"
+layer_or_location = "MOB granule cell layer"
+protocol_id = "HU2016_GC_Ih_resonance_protocol"
+mean = 3.44
+sd = 0.98
+sem = ""
+n = ""
+stat_type = "mean_sd"
+unit = "Hz"
+data_kind = "Ih_sag_resonance"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "medium"
+note_ids = ["N_GC_SPECIES_AND_MATURITY", "N_GC_MODULATION_STATE"]
+reported_value_raw = "3.44 ± 0.98 Hz"
+
+[[static_ephys_rows]]
+output = "modulation"
+property_name = "Resonance Frequency"
+source = "Hu et al. (2016)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC5095762/"
+source_file = "hu_et_al_2016_article.html"
+source_location = "Results text near Figure 6B, 6-week adult-born MOB granule cells"
+notes = "Adult-born granule-cell resonant frequency at six weeks after electroporation. The text reports the mean ± spread but does not restate the cohort size in this sentence."
+cell_type = "GC"
+gc_subtype = "adult_born_GC"
+species = "mouse"
+age = "6 weeks after electroporation"
+maturity = "adult_born_6_weeks"
+layer_or_location = "MOB granule cell layer"
+protocol_id = "HU2016_GC_Ih_resonance_protocol"
+mean = 7.32
+sd = 0.79
+sem = ""
+n = ""
+stat_type = "mean_sd"
+unit = "Hz"
+data_kind = "Ih_sag_resonance"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "medium"
+note_ids = ["N_GC_SPECIES_AND_MATURITY", "N_GC_MODULATION_STATE"]
+reported_value_raw = "7.32 ± 0.79 Hz"
+
+[[static_ephys_rows]]
+output = "modulation"
+property_name = "Tonic Inhibitory Current"
+source = "Labarrera, London & Angelo (2013)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC3624854/"
+source_file = "labarrera_london_angelo_2013_article.html"
+source_location = "Figure 5A, gabazine-sensitive holding-current shift"
+notes = "Pharmacological tonic-current estimate from gabazine blockade. Keep separate from baseline rows."
+cell_type = "GC"
+gc_subtype = "modulated_GC"
+species = "mouse"
+age = "P25-P30"
+maturity = "resident_GC"
+layer_or_location = "main olfactory bulb granule cell layer"
+protocol_id = "LABARRERA2013_GC_tonic_inhibition_protocol"
+mean = 24.3
+sd = 10.3
+sem = ""
+n = 4
+stat_type = "mean_sd"
+unit = "pA"
+data_kind = "tonic_inhibition"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "high"
+note_ids = ["N_GC_MODULATION_STATE", "N_GC_SPECIES_AND_MATURITY"]
+reported_value_raw = "ΔI = 24.3 ± 10.3 pA (n = 4)"
+
+[[static_ephys_rows]]
+output = "modulation"
+property_name = "Tonic Inhibitory Current"
+source = "Labarrera, London & Angelo (2013)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC3624854/"
+source_file = "labarrera_london_angelo_2013_article.html"
+source_location = "Figure 5B, furosemide-sensitive holding-current shift"
+notes = "Pharmacological tonic-current estimate from furosemide blockade. Keep separate from baseline rows."
+cell_type = "GC"
+gc_subtype = "modulated_GC"
+species = "mouse"
+age = "P25-P30"
+maturity = "resident_GC"
+layer_or_location = "main olfactory bulb granule cell layer"
+protocol_id = "LABARRERA2013_GC_tonic_inhibition_protocol"
+mean = 42.0
+sd = 19.3
+sem = ""
+n = 4
+stat_type = "mean_sd"
+unit = "pA"
+data_kind = "tonic_inhibition"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "high"
+note_ids = ["N_GC_MODULATION_STATE", "N_GC_SPECIES_AND_MATURITY"]
+reported_value_raw = "ΔI = 42.0 ± 19.3 pA (n = 4)"
+
+[[static_ephys_rows]]
+output = "synaptic_latency"
+property_name = "First Spike Latency"
+source = "Giridhar & Urban (2012)"
+source_url = "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2012.00040/full"
+source_file = "giridhar_urban_2012_article.html"
+source_location = "Abstract and introduction discussion of granule-cell long-latency responses"
+notes = "Network-level latency-coding reference only. The paper reports widely distributed but reliable granule-cell first-spike latencies over a 0-1000 ms window after brief stimulation."
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = "mouse"
+age = ""
+maturity = ""
+layer_or_location = "main olfactory bulb granule cell layer"
+protocol_id = "GIRIDHAR2012_GC_latency_coding_protocol"
+mean = ""
+sd = ""
+sem = ""
+n = ""
+stat_type = "qualitative"
+unit = "ms"
+data_kind = "synaptic_latency"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "medium"
+note_ids = ["N_GC_SPECIES_AND_MATURITY"]
+reported_value_raw = "widely distributed (0–1000 ms) yet reliable first spike latencies"
+
+[[static_ephys_rows]]
+output = "synaptic_latency"
+property_name = "First Spike Latency"
+source = "Kapoor & Urban (2006)"
+source_url = "https://www.jneurosci.org/content/26/45/11709"
+source_file = "kapoor_urban_2006_article.html"
+source_location = "Paper title and long-latency granule-cell network description"
+notes = "Glomerulus-specific long-latency response constraint only."
+cell_type = "GC"
+gc_subtype = "generic_or_unspecified"
+species = ""
+age = ""
+maturity = ""
+layer_or_location = "main olfactory bulb granule cell layer"
+protocol_id = "KAPOOR2006_GC_glomerular_latency_protocol"
+mean = ""
+sd = ""
+sem = ""
+n = ""
+stat_type = "qualitative"
+unit = "ms"
+data_kind = "synaptic_latency"
+extraction_method = "html_text"
+include_in_validation = false
+include_in_fi_validation = false
+confidence = "low"
+note_ids = []
+reported_value_raw = "Glomerulus-specific, long-latency activity in the olfactory bulb granule cell network"
+
+[[static_manual_rows]]
+source = "Burton & Urban (2015)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC4683680/"
+source_file = "burton_urban_2015_article.html"
+figure_or_table = "generic GC depolarizing current-step protocol details"
+target_metric = "Exact current-step duration, current range, and increment for GC spike-train summaries"
+reason = "The machine-readable PMC tables expose rheobase, gain, and peak-rate summaries but not the exact current-step grid used to compute them."
+suggested_action = "Recover the protocol details from the full methods text or a supplementary source before treating BU2015 summary rows as exact protocol-equivalent to other current-clamp references."
+
+[[static_manual_rows]]
+source = "Burton & Urban (2015)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC4683680/"
+source_file = "burton_urban_2015_article.html"
+figure_or_table = "generic GC f-I curves"
+target_metric = "Generic GC current-vs-firing-rate points"
+reason = "No machine-readable current-rate point table was found in the PMC article tables."
+suggested_action = "Add a manually curated current-rate CSV with provenance if exact generic-GC f-I point-set validation is needed."
+
+[[static_manual_rows]]
+source = "Geramita, Burton & Urban (2016)"
+source_url = "https://doi.org/10.7554/eLife.16039.012"
+source_file = "elife-16039-fig4-data1-v2.docx"
+figure_or_table = "Figure 4j/k"
+target_metric = "Subtype-specific sGC and dGC current-vs-firing-rate points"
+reason = "The Figure 4 source-data DOCX exposes subtype spike-train summary rows but not an explicit current-rate point table."
+suggested_action = "Add a manually curated point table or committed digitized CSV before populating GC_sGC_dGC_fI_curve.csv."
+
+[[static_manual_rows]]
+source = "Geramita, Burton & Urban (2016)"
+source_url = "https://doi.org/10.7554/eLife.16039.012"
+source_file = "elife-16039-fig4-data1-v2.docx"
+figure_or_table = "Supplementary Table 5"
+target_metric = "Subtype-specific spontaneous EPSP, EPSC, and IPSC rows"
+reason = "The DOCX source table merges section labels with repeated metric names, which makes unambiguous declarative extraction of the spontaneous-synaptic subsection incomplete in this pass."
+suggested_action = "Either add a manually curated subtype synaptic-event table or extend the engine with section-aware row parsing before promoting these rows into GC_sGC_dGC_ephys.csv."
+
+[[static_manual_rows]]
+source = "Stroh et al. (2012)"
+source_url = "https://www.jneurosci.org/content/32/17/5737"
+source_file = "stroh_et_al_2012_article.html"
+figure_or_table = "slow NMDA/TRPC depolarization figures"
+target_metric = "Numeric slow-depolarization amplitudes and pharmacology effect sizes"
+reason = "This pass does not yet include a reliable machine-readable table for the NMDA/TRPC slow-depolarization figures."
+suggested_action = "Extract a manually curated numeric table before using Stroh 2012 as a quantitative slow-depolarization target."
+
+[[static_manual_rows]]
+source = "Balu, Pressler & Strowbridge (2007)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6672747/"
+source_file = "balu_pressler_strowbridge_2007_article.html"
+figure_or_table = "synaptic excitation mode figures"
+target_metric = "Quantitative synaptic excitation-mode response distributions"
+reason = "This pass keeps Balu 2007 as a source manifest entry but does not yet normalize its figure-level excitation-mode distributions into canonical rows."
+suggested_action = "Add a curated source table if quantitative excitation-mode validation becomes necessary."
+
+[[static_manual_rows]]
+source = "Pressler, Inoue & Strowbridge (2007)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC6672850/"
+source_file = "pressler_inoue_strowbridge_2007_article.html"
+figure_or_table = "muscarinic modulation figures"
+target_metric = "Quantitative muscarinic modulation effect sizes"
+reason = "The current GC modulation file does not yet include normalized muscarinic rows."
+suggested_action = "Add a manually curated table if the model will be validated under muscarinic modulation."
+
+[[static_manual_rows]]
+source = "Dong, Heinbockel, Laaris & Ennis (2007)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC2596473/"
+source_file = "dong_heinbockel_laaris_ennis_2007_article.html"
+figure_or_table = "group I mGluR modulation figures"
+target_metric = "Quantitative group-I-mGluR modulation effect sizes"
+reason = "The current GC modulation file does not yet include normalized group-I-mGluR rows."
+suggested_action = "Add a manually curated table if the model will be validated under group-I-mGluR modulation."
+
+[[conditional_note_rows]]
+condition = "output_empty"
+condition_output = "fi_curve"
+note_id = "N_GC_GENERIC_FI_POINTS_UNAVAILABLE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "source"
+target = "GC_fI_curve.csv"
+message = "No validated generic-granule-cell current-rate point set was extracted. GC_fI_curve.csv remains empty until a machine-readable or manually curated point table is added."
+display_order = 25
+source = "Burton & Urban (2015)"
+source_location = "Generic GC f-I extraction status"
+
+[[conditional_note_rows]]
+condition = "output_empty"
+condition_output = "subtype_fi_curve"
+note_id = "N_GC_SUBTYPE_FI_POINTS_UNAVAILABLE"
+severity = "warning"
+scope = "fI_validation"
+target_type = "source"
+target = "GC_sGC_dGC_fI_curve.csv"
+message = "No validated subtype-specific sGC/dGC current-rate point set was extracted. GC_sGC_dGC_fI_curve.csv remains empty until a machine-readable or manually curated point table is added."
+display_order = 26
+source = "Geramita, Burton & Urban (2016)"
+source_location = "Subtype GC f-I extraction status"
+
+[[conditional_manual_rows]]
+condition = "missing_source"
+source_id = "burton2015_article_html"
+source = "Burton & Urban (2015)"
+source_url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC4683680/"
+source_file = "burton_urban_2015_article.html"
+figure_or_table = "PMC article tables"
+target_metric = "Generic GC passive, action-potential, and spike-train tables"
+reason = "Primary Burton 2015 source could not be acquired automatically."
+suggested_action = "Re-run the downloader or provide the Burton 2015 source file locally."
+
+[[conditional_manual_rows]]
+condition = "missing_source"
+source_id = "geramita2016_fig4_source_data"
+source = "Geramita, Burton & Urban (2016)"
+source_url = "https://doi.org/10.7554/eLife.16039.012"
+source_file = "elife-16039-fig4-data1-v2.docx"
+figure_or_table = "Figure 4 source data"
+target_metric = "Subtype morphology and intrinsic-property tables"
+reason = "Primary Geramita Figure 4 source-data DOCX could not be acquired automatically."
+suggested_action = "Re-run the downloader or provide the Figure 4 source-data DOCX locally."

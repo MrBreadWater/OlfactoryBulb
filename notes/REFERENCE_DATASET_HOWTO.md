@@ -53,6 +53,26 @@ Every dataset config declares output filenames for:
 - `manual`
 - `readme`
 
+Datasets can also declare additional outputs when one project needs multiple
+files with the same row shape. The current granule-cell dataset uses:
+
+- `subtype_ephys`
+- `subtype_fi_curve`
+- `synaptic_latency`
+- `modulation`
+
+If an output key does not match a built-in schema name, add an
+`[output_schemas]` section that maps output keys to schema presets such as:
+
+- `ephys`
+- `fi_curve`
+- `protocols`
+- `identity`
+- `notes`
+- `manual`
+- dataset-specific presets such as `gc_ephys`, `gc_fi_curve`, `gc_protocols`,
+  and `gc_identity`
+
 For the current EPL-FSI dataset those become:
 
 - `PV_CRH_EPL_FSI_ephys.csv`
@@ -62,6 +82,20 @@ For the current EPL-FSI dataset those become:
 - `validation_notes.csv`
 - `needs_manual_extraction.csv`
 - `PV_CRH_EPL_FSI_extraction_README.md`
+
+For the current GC dataset those become:
+
+- `GC_ephys.csv`
+- `GC_fI_curve.csv`
+- `GC_sGC_dGC_ephys.csv`
+- `GC_sGC_dGC_fI_curve.csv`
+- `GC_protocols.csv`
+- `GC_identity_morphology.csv`
+- `GC_synaptic_latency_references.csv`
+- `GC_modulation_references.csv`
+- `GC_validation_notes.csv`
+- `GC_needs_manual_extraction.csv`
+- `GC_extraction_README.md`
 
 ## Quick start
 
@@ -86,12 +120,14 @@ set:
 - `dataset_name`
 - `source_data_subdir`
 - `[outputs]`
+- `[output_schemas]` if you use nonstandard output keys
 - `[readme]`
 - at least one `[[sources]]`
 - at least one `[[static_protocol_rows]]`
 - at least one `[[static_note_rows]]` if protocol caveats must survive into
   downstream validation
-- at least one extraction rule such as `[[summary_rules]]` or `[[point_rules]]`
+- at least one extraction rule such as `[[summary_rules]]`,
+  `[[formatted_summary_rules]]`, or `[[point_rules]]`
 
 ### 3. Download sources
 
@@ -156,8 +192,8 @@ ephys = "EXAMPLE_ephys.csv"
 fi_curve = "EXAMPLE_fI_curve.csv"
 protocols = "EXAMPLE_protocols.csv"
 identity = "EXAMPLE_identity.csv"
-notes = "validation_notes.csv"
-manual = "needs_manual_extraction.csv"
+notes = "EXAMPLE_validation_notes.csv"
+manual = "EXAMPLE_needs_manual_extraction.csv"
 readme = "EXAMPLE_extraction_README.md"
 
 [readme]
@@ -176,6 +212,10 @@ source_url = "https://example.org/example_table.csv"
 downloadable = true
 required = true
 expected_extension = ".csv"
+
+# Optional: use download_url when the stable citation URL differs from the
+# direct download endpoint.
+# download_url = "https://example.org/download/example_table.csv"
 
 [[static_protocol_rows]]
 protocol_id = "EXAMPLE_PROTOCOL"
@@ -247,6 +287,10 @@ The downloader:
 - stores the file under
   `research_context/source_data/<source_data_subdir>/`
 - preserves the stable `source_url` from the config in downstream outputs
+- optionally uses `download_url` for the transfer while still preserving the
+  stable `source_url` in the normalized rows
+- falls back to `curl` with a browser-like user agent when a site returns an
+  HTML block page or challenge page instead of the requested file
 
 ### Local-only sources
 
@@ -346,7 +390,41 @@ This is useful for unit conversions such as:
 
 - `Hz/pA -> Hz/nA`
 
-### 3. `point_rules`
+### 3. `formatted_summary_rules`
+
+Use `[[formatted_summary_rules]]` when a source table already stores values in
+formatted cells such as:
+
+- `74.9 ± 25.9 (19)`
+- `52.7 +/- 7.6`
+
+This is common in:
+
+- DOCX source-data tables
+- supplemental tables exported from journal sites
+- HTML tables where each cohort is a separate column
+
+The engine will:
+
+- read the table as text
+- normalize property labels
+- parse mean/spread/sample-count from the formatted cell text
+- emit canonical rows into the requested output
+
+Typical fields:
+
+- `output`
+- `source_id`
+- `table_index`
+- `value_column`
+- `property_map`
+- optional `unit_map`
+- `source_location`
+
+Use `property_map` to normalize paper-facing labels into canonical property
+names, and `unit_map` when units should be overridden for specific labels.
+
+### 4. `point_rules`
 
 Use `[[point_rules]]` when a source table contains actual current-rate points.
 
@@ -381,7 +459,7 @@ Useful optional fields:
 - `baseline_or_holding_vm_mV`
 - `note_ids`
 
-### 4. Conditional rows
+### 5. Conditional rows
 
 Use:
 
@@ -400,6 +478,17 @@ Examples:
 
 - add a warning note if a required supplement could not be downloaded
 - add a manual-extraction row if no valid `fi_curve` rows were produced
+
+When the note/manual row belongs in one output file but the emptiness check
+should watch another output, set:
+
+```toml
+condition = "output_empty"
+condition_output = "fi_curve"
+```
+
+That lets a dataset write a note into `notes` when `fi_curve` is empty without
+pretending that the `notes` output itself is empty.
 
 ## Notes and protocol caveats
 
@@ -448,6 +537,9 @@ Use:
 - `identity` for marker/morphology/axonless/population constraints
 - `notes` for visible validation caveats
 - `manual` for unresolved extraction tasks
+- dataset-specific extra outputs such as `subtype_ephys`, `modulation`, or
+  `synaptic_latency` when those rows should stay separate from baseline
+  intrinsic validation
 
 If you are unsure whether something belongs in `fi_curve`, use this rule:
 
@@ -539,10 +631,12 @@ Prefer:
 6. Add `point_rules` only for real current-rate points.
 7. Add `static_*_rows` for direct text-derived or hand-curated values.
 8. Add `conditional_manual_rows` for any source that might fail acquisition.
-9. Run the downloader.
-10. Run the extractor.
-11. Inspect the generated CSVs and README.
-12. Run the dataset-specific tests.
+9. If a source uses cohort-style formatted tables, prefer
+   `formatted_summary_rules` over handwritten parsing code.
+10. Run the downloader.
+11. Run the extractor.
+12. Inspect the generated CSVs and README.
+13. Run the dataset-specific tests.
 
 ## Current example commands
 
@@ -558,12 +652,26 @@ python test_pv_crh_epl_fsi_reference_data.py
 python tools/verify_pv_crh_epl_fsi_reference_data.py
 ```
 
+Using the current GC dataset:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python tools/download_reference_dataset_sources.py --dataset-id granule_cells
+python tools/extract_reference_dataset.py --dataset-id granule_cells
+python test_reference_dataset_engine.py
+python test_download_gc_reference_sources.py
+python test_gc_reference_data.py
+python tools/verify_gc_reference_data.py
+```
+
 Backward-compatible wrappers still exist:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
 python tools/download_epl_fsi_reference_sources.py
 python tools/extract_pv_crh_epl_fsi_reference_data.py
+python tools/download_gc_reference_sources.py
+python tools/extract_gc_reference_data.py
 ```
 
 ## When to add code versus when to add config

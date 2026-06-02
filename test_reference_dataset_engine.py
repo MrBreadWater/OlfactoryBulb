@@ -39,4 +39,38 @@ for output_key in ("ephys", "fi_curve", "protocols", "identity", "notes", "manua
 
 assert written["rows"]["fi_curve"][0]["protocol_id"] == "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
 
+gc_config_path = dataset_config_path("granule_cells")
+assert gc_config_path.exists(), gc_config_path
+gc_config = load_dataset_config(dataset_id="granule_cells")
+assert gc_config["dataset_id"] == "granule_cells"
+assert gc_config["source_data_subdir"] == "granule_cells"
+assert len(gc_config["sources"]) >= 7
+
+gc_result = extract_reference_dataset(dataset_id="granule_cells")
+assert gc_result["rows"]["ephys"], "expected GC ephys rows"
+assert gc_result["rows"]["subtype_ephys"], "expected GC subtype ephys rows"
+assert gc_result["rows"]["protocols"], "expected GC protocol rows"
+assert gc_result["rows"]["identity"], "expected GC identity rows"
+assert gc_result["rows"]["modulation"], "expected GC modulation rows"
+assert gc_result["rows"]["synaptic_latency"], "expected GC latency rows"
+assert gc_result["rows"]["notes"], "expected GC note rows"
+
+gc_written = write_reference_dataset_outputs(dataset_id="granule_cells")
+for output_key in (
+    "ephys",
+    "fi_curve",
+    "subtype_ephys",
+    "subtype_fi_curve",
+    "protocols",
+    "identity",
+    "synaptic_latency",
+    "modulation",
+    "notes",
+    "manual",
+    "readme",
+):
+    assert dataset_output_path(gc_config, output_key).exists(), output_key
+
+assert gc_written["rows"]["protocols"][0]["protocol_id"] == "BU2014_MC_TC_2s_0_300pA_50pA"
+
 print("reference_dataset_engine: OK")

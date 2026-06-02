@@ -8,9 +8,16 @@ ephys = "EXAMPLE_ephys.csv"
 fi_curve = "EXAMPLE_fI_curve.csv"
 protocols = "EXAMPLE_protocols.csv"
 identity = "EXAMPLE_identity.csv"
-notes = "validation_notes.csv"
-manual = "needs_manual_extraction.csv"
+notes = "EXAMPLE_validation_notes.csv"
+manual = "EXAMPLE_needs_manual_extraction.csv"
 readme = "EXAMPLE_extraction_README.md"
+
+# Optional: override the default schema preset for any output key.
+# Use this when you need multiple outputs with the same row type, or a
+# dataset-specific schema such as gc_ephys / gc_fi_curve / gc_identity.
+# [output_schemas]
+# extra_ephys = "gc_ephys"
+# subtype_fi_curve = "gc_fi_curve"
 
 [readme]
 title = "Example reference-data extraction"
@@ -43,6 +50,7 @@ expected_extension = ".csv"
 # label = "Example 2026 article PDF"
 # filename = "example_2026_article.pdf"
 # source_url = "https://example.org/example_2026_article.pdf"
+# download_url = "https://example.org/redirected/download/path.pdf"
 # downloadable = true
 # required = false
 # expected_extension = ".pdf"
@@ -172,6 +180,26 @@ marker_profile = "Example Marker"
 # include_in_fi_validation = true
 # note_ids = ["N_EXAMPLE_PROTOCOL_CAVEAT"]
 
+# Optional formatted-summary rule for tables that already store values in cells
+# like "74.9 ± 25.9 (19)". This is useful for paper-ready supplemental tables
+# and DOCX table exports where each cohort lives in its own column.
+# [[formatted_summary_rules]]
+# output = "identity"
+# source_id = "example_primary_table"
+# table_index = 1
+# property_column = ""
+# value_column = "Example Cohort"
+# property_map = { "Soma area (um^2)" = "Soma Area", "Input resistance (MOhm)" = "Input Resistance" }
+# unit_map = { "Soma area (um^2)" = "um^2" }
+# source_location = "Supplementary table 1, Example cohort"
+# source = "Example et al. (2026)"
+# cell_type = "Example Cell"
+# identity_kind = "morphology_constraint"
+# extraction_method = "source_table_summary"
+# include_in_validation = true
+# confidence = "high"
+# notes = "Pre-formatted mean ± spread rows extracted directly from the source table."
+
 # Optional point-rule example for current-rate point tables.
 # [[point_rules]]
 # source_id = "example_primary_table"
@@ -211,6 +239,21 @@ marker_profile = "Example Marker"
 # display_order = 20
 # source = "Example et al. (2026)"
 # source_location = "Remote acquisition step"
+
+# Optional conditional note when one output is empty but the note itself still
+# belongs in the notes file.
+# [[conditional_note_rows]]
+# condition = "output_empty"
+# condition_output = "fi_curve"
+# note_id = "N_EXAMPLE_FI_POINTS_UNAVAILABLE"
+# severity = "warning"
+# scope = "fI_validation"
+# target_type = "source"
+# target = "EXAMPLE_fI_curve.csv"
+# message = "No validated current-rate point set was extracted."
+# display_order = 30
+# source = "Example et al. (2026)"
+# source_location = "Extraction status"
 
 # Optional conditional manual-extraction row if a required source is missing.
 # [[conditional_manual_rows]]

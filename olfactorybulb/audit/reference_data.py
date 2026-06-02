@@ -23,6 +23,19 @@ VALIDATION_NOTES_FILENAME = "validation_notes.csv"
 PV_CRH_EPL_FSI_EXTRACTION_README_FILENAME = "PV_CRH_EPL_FSI_extraction_README.md"
 NEEDS_MANUAL_EXTRACTION_FILENAME = "needs_manual_extraction.csv"
 
+GC_DATASET_ID = "granule_cells"
+GC_EPHYS_FILENAME = "GC_ephys.csv"
+GC_FI_CURVE_FILENAME = "GC_fI_curve.csv"
+GC_SGC_DGC_EPHYS_FILENAME = "GC_sGC_dGC_ephys.csv"
+GC_SGC_DGC_FI_CURVE_FILENAME = "GC_sGC_dGC_fI_curve.csv"
+GC_PROTOCOLS_FILENAME = "GC_protocols.csv"
+GC_IDENTITY_FILENAME = "GC_identity_morphology.csv"
+GC_SYNAPTIC_LATENCY_FILENAME = "GC_synaptic_latency_references.csv"
+GC_MODULATION_FILENAME = "GC_modulation_references.csv"
+GC_VALIDATION_NOTES_FILENAME = "GC_validation_notes.csv"
+GC_EXTRACTION_README_FILENAME = "GC_extraction_README.md"
+GC_NEEDS_MANUAL_EXTRACTION_FILENAME = "GC_needs_manual_extraction.csv"
+
 BU2014_MC_TC_PROTOCOL_ID = "BU2014_MC_TC_2s_0_300pA_50pA"
 BMU2024_EPL_FSI_PROTOCOL_ID = "BMU2024_EPL_FSI_500ms_50_600pA_50pA"
 HUANG2013_CRH_EPL_PROTOCOL_ID = "HUANG2013_CRH_EPL_current_injection"
@@ -47,6 +60,8 @@ PROPERTY_UNITS = {
     "AP Threshold": "mV",
     "AP Amplitude": "mV",
     "AP Half-Width": "ms",
+    "AP Rising Slope": "mV/ms",
+    "AP Falling Slope": "mV/ms",
     "AHP Amplitude": "mV",
     "AHP Duration": "ms",
     "Rheobase Current": "pA",
@@ -55,6 +70,12 @@ PROPERTY_UNITS = {
     "Spontaneous Firing Rate": "Hz",
     "ISI Coefficient of Variation": "",
     "Spiking Rate Accommodation": "Hz",
+    "Resonance Frequency": "Hz",
+    "Peak Instantaneous Rate": "Hz",
+    "First Spike Latency": "ms",
+    "Firing Probability": "",
+    "Tonic Inhibitory Current": "pA",
+    "Slow Depolarization Amplitude": "mV",
 }
 
 FI_RELATED_PROPERTIES = {
@@ -176,12 +197,138 @@ VALIDATION_NOTES_COLUMNS = [
 
 NEEDS_MANUAL_EXTRACTION_COLUMNS = [
     "source",
+    "source_url",
     "source_file",
     "figure_or_table",
     "target_metric",
     "reason",
     "suggested_action",
 ]
+
+GC_EPHYS_COLUMNS = [
+    "Property",
+    "mean +/- sd",
+    "n",
+    "Source",
+    "Notes",
+    "cell_type",
+    "gc_subtype",
+    "species",
+    "age",
+    "maturity",
+    "layer_or_location",
+    "recording_temperature_C",
+    "protocol_id",
+    "mean",
+    "sd",
+    "sem",
+    "stat_type",
+    "unit",
+    "source_file",
+    "source_url",
+    "source_location",
+    "data_kind",
+    "extraction_method",
+    "include_in_validation",
+    "include_in_fi_validation",
+    "confidence",
+    "note_ids",
+    "reported_value_raw",
+]
+
+GC_FI_CURVE_COLUMNS = [
+    "source",
+    "source_url",
+    "source_file",
+    "source_location",
+    "cell_type",
+    "gc_subtype",
+    "cell_id",
+    "species",
+    "age",
+    "maturity",
+    "protocol_id",
+    "current_pA",
+    "firing_rate_Hz",
+    "rate_definition",
+    "step_duration_ms",
+    "current_start_pA",
+    "current_stop_pA",
+    "current_step_pA",
+    "baseline_or_holding_vm_mV",
+    "synaptic_blockers",
+    "temperature_C",
+    "sample_scope",
+    "extraction_method",
+    "include_in_validation",
+    "confidence",
+    "note_ids",
+    "notes",
+]
+
+GC_PROTOCOLS_COLUMNS = [
+    "protocol_id",
+    "source",
+    "cell_type",
+    "gc_subtype",
+    "species",
+    "age",
+    "stimulus_type",
+    "step_duration_ms",
+    "current_start_pA",
+    "current_stop_pA",
+    "current_step_pA",
+    "current_values_pA",
+    "rate_definition",
+    "spike_detection_rule",
+    "baseline_or_holding_vm_mV",
+    "synaptic_blockers",
+    "temperature_C",
+    "compatible_group",
+    "notes",
+]
+
+GC_IDENTITY_COLUMNS = [
+    "source",
+    "source_url",
+    "source_file",
+    "source_location",
+    "cell_type",
+    "gc_subtype",
+    "species",
+    "age",
+    "maturity",
+    "layer_or_location",
+    "identity_kind",
+    "Property",
+    "mean",
+    "sd",
+    "sem",
+    "stat_type",
+    "unit",
+    "n",
+    "data_kind",
+    "extraction_method",
+    "include_in_validation",
+    "confidence",
+    "note_ids",
+    "notes",
+    "reported_value_raw",
+]
+
+REFERENCE_OUTPUT_SCHEMA_PRESETS = {
+    "ephys": {"row_type": "ephys", "columns": PV_CRH_EPL_FSI_EPHYS_COLUMNS},
+    "fi_curve": {"row_type": "fi_curve", "columns": PV_CRH_EPL_FSI_FI_CURVE_COLUMNS},
+    "protocols": {"row_type": "protocols", "columns": PV_CRH_EPL_FSI_PROTOCOLS_COLUMNS},
+    "identity": {"row_type": "identity", "columns": PV_CRH_EPL_FSI_IDENTITY_COLUMNS},
+    "notes": {"row_type": "notes", "columns": VALIDATION_NOTES_COLUMNS},
+    "manual": {"row_type": "manual", "columns": NEEDS_MANUAL_EXTRACTION_COLUMNS},
+    "readme": {"row_type": "readme", "columns": []},
+    "gc_ephys": {"row_type": "ephys", "columns": GC_EPHYS_COLUMNS},
+    "gc_fi_curve": {"row_type": "fi_curve", "columns": GC_FI_CURVE_COLUMNS},
+    "gc_protocols": {"row_type": "protocols", "columns": GC_PROTOCOLS_COLUMNS},
+    "gc_identity": {"row_type": "identity", "columns": GC_IDENTITY_COLUMNS},
+}
 
 
 def reference_data_path(filename: str) -> Path:
@@ -272,6 +419,38 @@ def load_pv_crh_epl_fsi_protocol_rows() -> list[dict[str, str]]:
 
 def load_pv_crh_epl_fsi_identity_rows() -> list[dict[str, str]]:
     return csv_rows(reference_data_path(PV_CRH_EPL_FSI_IDENTITY_FILENAME))
+
+
+def load_gc_ephys_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_EPHYS_FILENAME))
+
+
+def load_gc_fi_curve_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_FI_CURVE_FILENAME))
+
+
+def load_gc_sgc_dgc_ephys_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_SGC_DGC_EPHYS_FILENAME))
+
+
+def load_gc_sgc_dgc_fi_curve_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_SGC_DGC_FI_CURVE_FILENAME))
+
+
+def load_gc_protocol_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_PROTOCOLS_FILENAME))
+
+
+def load_gc_identity_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_IDENTITY_FILENAME))
+
+
+def load_gc_synaptic_latency_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_SYNAPTIC_LATENCY_FILENAME))
+
+
+def load_gc_modulation_rows() -> list[dict[str, str]]:
+    return csv_rows(reference_data_path(GC_MODULATION_FILENAME))
 
 
 def _matches(value: str, criterion: str | Iterable[str] | None) -> bool:

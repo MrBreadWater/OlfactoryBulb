@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 from typing import Any
 
 import requests
@@ -141,7 +142,8 @@ def download_source_entry(
     if tmp_path.exists():
         tmp_path.unlink()
 
-    response = requests.get(str(entry["source_url"]), allow_redirects=True, timeout=timeout_s, stream=True)
+    download_url = str(entry.get("download_url") or entry["source_url"])
+    response = requests.get(download_url, allow_redirects=True, timeout=timeout_s, stream=True)
     try:
         response.raise_for_status()
         with tmp_path.open("wb") as handle:
@@ -150,6 +152,10 @@ def download_source_entry(
                     handle.write(chunk)
     finally:
         response.close()
+
+    if _looks_like_block_page(tmp_path):
+        tmp_path.unlink(missing_ok=True)
+        _download_with_curl(download_url, tmp_path, timeout_s=timeout_s)
 
     if not tmp_path.exists() or tmp_path.stat().st_size == 0:
         raise RuntimeError(f"Downloaded reference-data source is empty: {entry['source_id']}")
@@ -164,6 +170,36 @@ def download_source_entry(
 
     tmp_path.replace(destination)
     return destination
+
+
+def _looks_like_block_page(path: Path) -> bool:
+    if not path.exists() or path.stat().st_size == 0:
+        return False
+    try:
+        head = path.read_text(errors="ignore")[:4096].lower()
+    except Exception:
+        return False
+    return "recaptcha/challengepage" in head or "google.com/recaptcha" in head
+
+
+def _download_with_curl(download_url: str, destination: Path, *, timeout_s: float) -> None:
+    command = [
+        "curl",
+        "-L",
+        "--fail",
+        "-A",
+        "Mozilla/5.0",
+        "--max-time",
+        str(int(max(timeout_s, 1.0))),
+        "-o",
+        str(destination),
+        download_url,
+    ]
+    completed = subprocess.run(command, capture_output=True, text=True, check=False)
+    if completed.returncode != 0:
+        destination.unlink(missing_ok=True)
+        stderr = completed.stderr.strip() or completed.stdout.strip() or "curl download failed"
+        raise RuntimeError(stderr)
 
 
 def ensure_reference_sources(

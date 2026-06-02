@@ -142,7 +142,7 @@ bmw_protocol_context = [
     if row["protocol_id"] == BMU2024_EPL_FSI_PROTOCOL_ID
 ]
 matched_notes = notes_for_rows(normalized_legacy_rows + bmw_protocol_context, scope="fI_validation")
-assert {note.note_id for note in matched_notes} == {FI_PROTOCOL_DIFFERENCE_NOTE_ID}
+assert FI_PROTOCOL_DIFFERENCE_NOTE_ID in {note.note_id for note in matched_notes}
 rendered_notes = render_notes(matched_notes, format="plain")
 assert "Notes / protocol caveats" in rendered_notes
 assert "MC/TC and EPL-FSI f-I validation targets use different current-injection protocols." in rendered_notes

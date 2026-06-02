@@ -32,4 +32,5 @@ This directory contains a protocol-aware reference-data set for a PV/CRH-overlap
 - `identity` rows: 22
 - `notes` rows: 3
 - `manual` rows: 4
+- `readme` rows: 0
 - Missing required sources after acquisition: none
