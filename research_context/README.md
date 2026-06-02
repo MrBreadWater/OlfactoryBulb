@@ -107,5 +107,6 @@ source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.dashboard.control_center
 ```
 
-That serves immediately at `http://127.0.0.1:6010/` by default and fills the
+That serves immediately at `http://127.0.0.1:6006/` by default, falls forward
+to the next available local port if `6006` is already busy, and fills the
 audit/optimization tabs as their background renders complete.

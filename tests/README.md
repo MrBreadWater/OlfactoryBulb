@@ -53,7 +53,8 @@ python -m olfactorybulb.dashboard.control_center
 
 - The control-center command should print a reachable URL immediately and keep
   the heavy audit/optimization rendering in the background. Test that real
-  serve path when changing dashboard startup behavior.
+  serve path when changing dashboard startup behavior, including the port
+  fallback path when the default local port is occupied.
 
 - `repo_health` should call grouped suite audits for maintained test categories.
   Keep low-level developer tests under `tests/` rather than promoting every

@@ -54,7 +54,8 @@ use:
 - `python -m olfactorybulb.dashboard.control_center`
 
 That maintained command auto-detects the active optimization campaign when it
-can, serves immediately at `http://127.0.0.1:6010/` by default, and renders
+can, serves immediately at `http://127.0.0.1:6006/` by default, falls forward
+to the next available local port if `6006` is already occupied, and renders
 the default maintained audit into the page in the background. Use
 `--open-browser` if you want it to launch a local browser automatically.
 

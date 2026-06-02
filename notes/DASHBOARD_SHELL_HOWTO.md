@@ -52,16 +52,18 @@ That command:
   or optimization results tree
 - runs the default maintained audit (`repo_health --profile maintained`)
 - opens on the audit tab first
-- serves immediately at `http://127.0.0.1:6010/` by default
+- serves immediately at `http://127.0.0.1:6006/` by default
 - prints startup progress to the terminal while the audit and optimization
   views are rendering in the background
 - shows loading placeholders in the audit/optimization tabs until those views
   are ready
+- if `6006` is already in use, it automatically picks the next available local
+  port and prints the actual URL
 
 Open the page directly:
 
 ```text
-http://127.0.0.1:6010/
+http://127.0.0.1:6006/
 ```
 
 Open it automatically in a local browser:

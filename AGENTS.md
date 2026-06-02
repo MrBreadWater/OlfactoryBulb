@@ -332,12 +332,16 @@ contract for future sessions.
     - default audit: `repo_health --profile maintained`
     - campaign auto-detection from the maintained optimization status path or
       optimization results tree
-    - default local URL: `http://127.0.0.1:6010/`
+    - default local URL: `http://127.0.0.1:6006/`
     - startup should print a user-facing reachable URL immediately, then keep
       audit/optimization rendering in the background
+    - if the default local port is occupied, the control center should fall
+      forward to the next available local port and print the actual URL
   - do not treat export-only coverage as sufficient for dashboard launch
     changes; verify the actual zero-argument serve path and confirm the shell
     is reachable before the heavy audit render finishes
+  - when you start a local server during validation, shut it down before
+    finishing the task unless the user explicitly asked you to leave it running
   - if relevant, also check the optimization module directly:
     - `http://127.0.0.1:6006/`
     - `http://127.0.0.1:6006/visual_dashboard/`

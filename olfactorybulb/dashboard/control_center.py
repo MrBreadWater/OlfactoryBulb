@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import http.server
 import json
 import os
@@ -27,7 +28,7 @@ DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "dashboard" / "control_center"
 DEFAULT_STATUS_JSON = (REPO_ROOT / hfo_dashboard.SUMMARY_STATUS_PATH).resolve()
 DEFAULT_OPTIMIZATION_ROOT = REPO_ROOT / "results" / "notebook_runs" / "optimization"
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 6010
+DEFAULT_PORT = 6006
 DEFAULT_AUDIT_ID = "repo_health"
 DEFAULT_AUDIT_ARGS = ["--profile", "maintained"]
 
@@ -360,6 +361,32 @@ def _safe_static_path(base_dir: Path, relative_path: str) -> Path:
     return candidate
 
 
+def _bind_control_center_server(
+    host: str,
+    port: int,
+    handler_cls: type[http.server.BaseHTTPRequestHandler],
+    *,
+    fallback_attempts: int = 20,
+) -> tuple[http.server.ThreadingHTTPServer, int]:
+    requested_port = int(port)
+    if requested_port == 0:
+        server = http.server.ThreadingHTTPServer((host, 0), handler_cls)
+        return server, int(server.server_port)
+
+    last_error: OSError | None = None
+    for offset in range(max(int(fallback_attempts), 1)):
+        candidate_port = requested_port + offset
+        try:
+            server = http.server.ThreadingHTTPServer((host, candidate_port), handler_cls)
+            return server, int(server.server_port)
+        except OSError as exc:
+            last_error = exc
+            if exc.errno != errno.EADDRINUSE:
+                raise
+    assert last_error is not None
+    raise last_error
+
+
 def serve_control_center(
     campaign_dir: str | Path | None = None,
     *,
@@ -380,8 +407,9 @@ def serve_control_center(
     resolved_audit_args = list(DEFAULT_AUDIT_ARGS if audit_args is None else audit_args)
     campaign_path = resolve_control_center_campaign(campaign_dir, status_json=status_json)
     root_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else DEFAULT_OUTPUT_DIR.resolve()
-    url = f"http://{host}:{int(port)}/"
-    _progress(f"preparing control center at {url}")
+    requested_port = int(port)
+    requested_url = f"http://{host}:{requested_port}/" if requested_port else f"http://{host}:<auto>/"
+    _progress(f"preparing control center at {requested_url}")
     root_dir.mkdir(parents=True, exist_ok=True)
     optimization_dir = root_dir / "optimization"
     audits_dir = root_dir / "audits"
@@ -506,7 +534,10 @@ def serve_control_center(
                 return
             self.send_error(404, "Not found")
 
-    server = http.server.ThreadingHTTPServer((host, int(port)), ControlCenterRequestHandler)
+    server, bound_port = _bind_control_center_server(host, requested_port, ControlCenterRequestHandler)
+    if bound_port != requested_port and requested_port != 0:
+        _progress(f"port {requested_port} is busy; using http://{host}:{bound_port}/ instead")
+    url = f"http://{host}:{bound_port}/"
     _progress(f"ready at {url}")
     if open_browser:
         try:

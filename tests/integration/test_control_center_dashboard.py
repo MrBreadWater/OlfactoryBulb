@@ -5,6 +5,7 @@ from __future__ import annotations
 import http.server
 import json
 from pathlib import Path
+import socket
 from tempfile import TemporaryDirectory
 import threading
 import time
@@ -158,3 +159,67 @@ with TemporaryDirectory() as tmp:
         assert not thread.is_alive()
 
 print("control_center_dashboard_serve: OK")
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    campaign_dir = root / "campaign"
+    campaign_dir.mkdir()
+    server_holder: dict[str, http.server.ThreadingHTTPServer] = {}
+
+    class CapturingServer(http.server.ThreadingHTTPServer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            server_holder["server"] = self
+
+    blocker = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    blocker.bind(("127.0.0.1", 0))
+    blocker.listen(1)
+    blocked_port = blocker.getsockname()[1]
+
+    def _fake_fast_export(campaign_dir_arg, *, output_dir: Path, **_kwargs):
+        output_dir.mkdir(parents=True, exist_ok=True)
+        audits_dir = output_dir / "audits"
+        optimization_dir = output_dir / "optimization"
+        audits_dir.mkdir(parents=True, exist_ok=True)
+        optimization_dir.mkdir(parents=True, exist_ok=True)
+        (audits_dir / "index.html").write_text("<html><body>audit ready</body></html>")
+        (optimization_dir / "index.html").write_text("<html><body>optimization ready</body></html>")
+        (output_dir / "index.html").write_text("<html><body>ready</body></html>")
+        return {
+            "campaign_dir": str(campaign_dir_arg),
+            "output_dir": str(output_dir),
+            "generated_at": "now",
+            "audit_id": "repo_health",
+            "audit_args": ["--profile", "maintained"],
+            "audits": {"output_dir": str(audits_dir)},
+            "optimization": {"output_dir": str(optimization_dir), "placeholder": False},
+            "docs_root": str(root),
+        }
+
+    thread = threading.Thread(
+        target=serve_control_center,
+        kwargs={
+            "campaign_dir": campaign_dir,
+            "output_dir": root / "control_center_fallback",
+            "port": blocked_port,
+            "watch_optimization": False,
+        },
+        daemon=True,
+    )
+    with patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer), patch(
+        "olfactorybulb.dashboard.control_center.export_control_center",
+        side_effect=_fake_fast_export,
+    ):
+        thread.start()
+        deadline = time.time() + 5.0
+        while "server" not in server_holder and time.time() < deadline:
+            time.sleep(0.05)
+        assert "server" in server_holder
+        server = server_holder["server"]
+        assert server.server_port != blocked_port
+        server.shutdown()
+        thread.join(timeout=5.0)
+        assert not thread.is_alive()
+    blocker.close()
+
+print("control_center_dashboard_port_fallback: OK")
