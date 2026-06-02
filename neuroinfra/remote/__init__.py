@@ -92,6 +92,11 @@ from .sweep_monitor import (
     RemoteSweepMonitorResult,
     monitor_remote_sweep,
 )
+from .sweep_artifacts import (
+    RemoteSweepArtifactHooks,
+    RemoteSweepArtifactResult,
+    finalize_remote_sweep_artifacts,
+)
 from .deferred_artifacts import (
     DeferredArtifactSyncHooks,
     sync_deferred_remote_artifact,
@@ -269,6 +274,9 @@ __all__ = [
     "RemoteSweepMonitorHooks",
     "RemoteSweepMonitorResult",
     "monitor_remote_sweep",
+    "RemoteSweepArtifactHooks",
+    "RemoteSweepArtifactResult",
+    "finalize_remote_sweep_artifacts",
     "DeferredArtifactSyncHooks",
     "sync_deferred_remote_artifact",
     "sync_deferred_remote_artifact_direct",

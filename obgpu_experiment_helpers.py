@@ -204,6 +204,10 @@ from neuroinfra.remote.sweep_monitor import (
     RemoteSweepMonitorHooks as _NeuroinfraRemoteSweepMonitorHooks,
     monitor_remote_sweep as _neuroinfra_monitor_remote_sweep,
 )
+from neuroinfra.remote.sweep_artifacts import (
+    RemoteSweepArtifactHooks as _NeuroinfraRemoteSweepArtifactHooks,
+    finalize_remote_sweep_artifacts as _neuroinfra_finalize_remote_sweep_artifacts,
+)
 from neuroinfra.remote.deferred_artifacts import (
     DeferredArtifactSyncHooks as _NeuroinfraDeferredArtifactSyncHooks,
     sync_deferred_remote_artifact as _neuroinfra_sync_deferred_remote_artifact,
@@ -2540,6 +2544,29 @@ def _remote_sweep_monitor_hooks(
         progress_write=_progress_write,
         sleep_fn=time.sleep,
         monotonic_fn=time.monotonic,
+    )
+
+
+def _remote_sweep_artifact_hooks(
+    *,
+    refresh_remote_leases_fn: Callable[..., None],
+    notebook_timings: dict[str, float],
+) -> _NeuroinfraRemoteSweepArtifactHooks:
+    """Build reusable hooks for remote sweep final sync and artifact collection."""
+    return _NeuroinfraRemoteSweepArtifactHooks(
+        sync_remote_result_dir_fn=_sync_remote_result_dir,
+        sync_remote_sweep_compact_items_fn=_sync_remote_sweep_compact_items,
+        read_json_if_present_fn=_read_json_if_present,
+        recover_local_sweep_summary_fn=_recover_local_sweep_summary,
+        remote_sweep_metadata_files_fn=_remote_sweep_metadata_files,
+        remote_sweep_item_sync_files_fn=_remote_sweep_item_sync_files,
+        remote_sweep_item_diagnostic_files_fn=_remote_sweep_item_diagnostic_files,
+        local_sweep_item_sync_complete_fn=_local_sweep_item_sync_complete,
+        local_result_dir_has_diagnostics_fn=_local_result_dir_has_diagnostics,
+        progress_write=_progress_write,
+        refresh_remote_leases_fn=refresh_remote_leases_fn,
+        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        perf_counter_fn=time.perf_counter,
     )
 
 
@@ -5033,128 +5060,6 @@ def _run_remote_sweep(
             synced_labels.add(label)
             synced_this_poll += 1
 
-    def sync_final_sweep_results() -> tuple[subprocess.CompletedProcess[str], dict[str, Any]]:
-        stdout_parts: list[str] = []
-        stderr_parts: list[str] = []
-
-        def record_completed(prefix: str, completed: subprocess.CompletedProcess[str]) -> None:
-            if completed.stdout:
-                stdout_parts.append(f"[{prefix}]\n{completed.stdout}")
-            if completed.stderr:
-                stderr_parts.append(f"[{prefix}]\n{completed.stderr}")
-
-        final_progress_payload = (final_status or {}).get("progress_payload") if final_status else None
-        if isinstance(final_progress_payload, dict) and not (local_sweep_dir / "sim_progress.json").exists():
-            (local_sweep_dir / "sim_progress.json").write_text(json.dumps(final_progress_payload, indent=2, sort_keys=True))
-
-        refresh_remote_leases()
-        metadata_sync = _sync_remote_result_dir(
-            effective_config,
-            remote_result_dir=remote_sweep_root,
-            local_result_dir=local_sweep_dir,
-            expected_files=("summary.json",),
-            include_files=_remote_sweep_metadata_files(),
-        )
-        refresh_remote_leases()
-        record_completed("sweep-metadata", metadata_sync)
-        sweep_summary = _read_json_if_present(local_sweep_dir / "summary.json") or _recover_local_sweep_summary(
-            local_sweep_dir,
-            sweep_label=sweep_label,
-            total_items=len(manifest_items),
-        )
-        if metadata_sync.returncode != 0 and sweep_summary:
-            stderr_parts.append(
-                "[OBGPU load] Incremental sweep metadata sync reported an error, "
-                "but local progress metadata was sufficient to recover a sweep summary.\n"
-            )
-        if not sweep_summary:
-            stderr_parts.append(
-                "[OBGPU load] Incremental sweep final sync could not fetch summary metadata; "
-                "not attempting a bulk sweep-root sync because that would pull raw soma traces.\n"
-            )
-            return (
-                subprocess.CompletedProcess(
-                    args=["remote-sweep-compact-sync", remote_sweep_root.as_posix(), str(local_sweep_dir)],
-                    returncode=metadata_sync.returncode or 1,
-                    stdout="".join(stdout_parts),
-                    stderr="".join(stderr_parts),
-                ),
-                {},
-            )
-
-        summary_by_label: dict[str, dict[str, Any]] = {}
-        for bucket in ("completed_items", "failed_items", "items"):
-            for payload in sweep_summary.get(bucket, []) or []:
-                if isinstance(payload, dict) and payload.get("label"):
-                    summary_by_label[str(payload["label"])] = dict(payload)
-
-        bulk_sync_entries: list[dict[str, Any]] = []
-        for item in manifest_items:
-            label = str(item["label"])
-            payload = summary_by_label.get(label)
-            if payload is None:
-                continue
-            local_result_dir = local_runs_dir / label
-            ok = bool(payload.get("ok", False))
-            if ok and _local_sweep_item_sync_complete(local_result_dir):
-                continue
-            if not ok and _local_result_dir_has_diagnostics(local_result_dir):
-                continue
-            remote_result_dir = PurePosixPath(str(payload.get("result_dir") or item["result_dir"]))
-            include_files = (
-                _remote_sweep_item_sync_files(effective_config)
-                if ok
-                else _remote_sweep_item_diagnostic_files()
-            )
-            bulk_sync_entries.append(
-                {
-                    "label": label,
-                    "result_dir": remote_result_dir.as_posix(),
-                    "include_files": list(include_files),
-                    "ok": ok,
-                }
-            )
-
-        if bulk_sync_entries:
-            _progress_write(
-                f"[OBGPU load] Syncing compact artifacts for {len(bulk_sync_entries)} sweep items in one stream..."
-            )
-            refresh_remote_leases()
-            bulk_sync = _sync_remote_sweep_compact_items(
-                effective_config,
-                local_sweep_dir=local_sweep_dir,
-                entries=bulk_sync_entries,
-            )
-            refresh_remote_leases()
-            record_completed("sweep-items-bulk", bulk_sync)
-            if bulk_sync.returncode != 0:
-                stderr_parts.append(
-                    "[OBGPU load] Bulk compact sweep item sync reported an error; "
-                    "continuing with any local artifacts already available.\n"
-                )
-            for entry in bulk_sync_entries:
-                label = str(entry["label"])
-                local_result_dir = local_runs_dir / label
-                if bool(entry.get("ok", False)):
-                    if not _local_sweep_item_sync_complete(local_result_dir):
-                        stderr_parts.append(
-                            f"[OBGPU load] Compact artifacts for {label} are still incomplete after bulk sync.\n"
-                        )
-                elif not _local_result_dir_has_diagnostics(local_result_dir):
-                    stderr_parts.append(
-                        f"[OBGPU load] Diagnostics for failed sweep item {label} are still incomplete after bulk sync.\n"
-                    )
-
-        return (
-            subprocess.CompletedProcess(
-                args=["remote-sweep-compact-sync", remote_sweep_root.as_posix(), str(local_sweep_dir)],
-                returncode=0,
-                stdout="".join(stdout_parts),
-                stderr="".join(stderr_parts),
-            ),
-            sweep_summary,
-        )
-
     _progress_write(
         f"[Sol remote] Submitted sweep job {submission['job_id']} "
         f"for {len(manifest_items)} items (parallelism={max_concurrent})."
@@ -5179,22 +5084,29 @@ def _run_remote_sweep(
     )
     final_status = monitor_result.final_status
 
-    started = time.perf_counter()
-    final_sync, sweep_summary = sync_final_sweep_results()
-    _record_timing(notebook_timings, "sync_s", started)
-    (local_sweep_dir / "sync_stdout.txt").write_text(final_sync.stdout or "")
-    (local_sweep_dir / "sync_stderr.txt").write_text(final_sync.stderr or "")
+    sweep_artifacts = _neuroinfra_finalize_remote_sweep_artifacts(
+        effective_config,
+        final_status=final_status,
+        local_sweep_dir=local_sweep_dir,
+        local_runs_dir=local_runs_dir,
+        remote_sweep_root=remote_sweep_root,
+        sweep_label=sweep_label,
+        manifest_items=manifest_items,
+        item_status_by_label=item_status_by_label,
+        hooks=_remote_sweep_artifact_hooks(
+            refresh_remote_leases_fn=refresh_remote_leases,
+            notebook_timings=notebook_timings,
+        ),
+    )
+    final_sync = sweep_artifacts.final_sync
+    sweep_summary = sweep_artifacts.sweep_summary
+    item_status_by_label = sweep_artifacts.item_status_by_label
     if final_sync.returncode != 0:
         raise RuntimeError(
             "Remote sweep result sync failed.\n"
             f"Sweep dir: {local_sweep_dir}\n"
             f"Stderr:\n{final_sync.stderr}"
         )
-
-    for bucket in ("completed_items", "failed_items", "items"):
-        for payload in sweep_summary.get(bucket, []) or []:
-            if isinstance(payload, dict) and payload.get("label"):
-                item_status_by_label[str(payload["label"])] = dict(payload)
 
     sweep_items = []
     load_errors: dict[str, str] = {}

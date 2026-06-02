@@ -237,8 +237,12 @@ Current progress:
 - the remote sweep live monitoring policy that manages sacct poll cadence,
   UNKNOWN-state forced repolls, sweep progress status summaries, incremental
   finished-item sync triggering, and interrupt-driven cancellation now lives
-  under `neuroinfra.remote.sweep_monitor`, while compact final sync and
-  sweep-result finalization still remain in `obgpu_experiment_helpers.py`
+  under `neuroinfra.remote.sweep_monitor`
+- the remote sweep compact final-sync, summary-recovery, bulk compact-item
+  sync, and merged item-status finalization policy now lives under
+  `neuroinfra.remote.sweep_artifacts`, while notebook-specific sweep-item
+  loading and final `run`/`result` object assembly still remain in
+  `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework
