@@ -135,6 +135,7 @@ Current files:
 - `neuroinfra/analysis/signals.py`
 - `olfactorybulb/analysis_data.py`
 - `olfactorybulb/analysis_profile.py`
+- `olfactorybulb/analysis_views.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
@@ -185,10 +186,12 @@ What is domain-specific:
   saved spike artifacts, cell-family aliases, and olfactory-bulb result labels
 - the concrete profile assembly that binds the reusable suites into this
   repo's OBGPU-facing analysis surface
+- the concrete grouped soma presentation layer that defines MT grouping,
+  colors, and bucket-specific display limits for this notebook workflow
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- notebook-specific signal-presentation, concrete cell-family display semantics,
-  and higher-level plot composition that still live in the notebook helper
+- notebook-specific signal-presentation and higher-level plot composition that
+  still live in the notebook helper
 
 Extraction confidence:
 
@@ -201,6 +204,8 @@ Current progress:
   `olfactorybulb/analysis_data.py`
 - the concrete OBGPU profile assembly has moved into
   `olfactorybulb/analysis_profile.py`
+- the concrete grouped soma presentation policy has moved into
+  `olfactorybulb/analysis_views.py`
 - `obgpu_experiment_helpers.py` now consumes that explicit domain module instead
   of carrying the result semantics and concrete profile assembly inline
 

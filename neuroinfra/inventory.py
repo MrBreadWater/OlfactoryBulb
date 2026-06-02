@@ -222,6 +222,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/analysis/signals.py",
             "olfactorybulb/analysis_data.py",
             "olfactorybulb/analysis_profile.py",
+            "olfactorybulb/analysis_views.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -269,13 +270,14 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         repo_specific_couplings=(
             "the concrete olfactory-bulb result semantics now live in olfactorybulb.analysis_data",
             "the concrete olfactory-bulb analysis profile now lives in olfactorybulb.analysis_profile",
+            "the concrete olfactory-bulb grouped presentation policy now lives in olfactorybulb.analysis_views",
             "concrete OBGPU signal families like lfp and gc_output_rate now live in explicit olfactorybulb domain modules rather than only the notebook helper",
             "signal semantics still assume this repository's saved result structure",
         ),
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, stable ordered-name helpers, fair round-robin subgroup truncation, ordered group-row flattening with per-bucket limits, grouped row-display policies, grouped stacked-trace and event-raster suites, result-overview builders, shared plotting primitives including stacked labeled traces, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, result-backed frequency plot families plus family-bound suites, labeled-row and trace-derived frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, result-backed event-family specs plus family suites and event plot suites, reusable event-rate series assembly, prepared labeled event display rows, overview-layout derivation from them, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, named sweep plot registries, sweep persistence and animation pipeline, the named-signal provider/registry/view layer, and domain analysis profiles that aggregate concrete repo definitions now live under neuroinfra.analysis, with the current concrete OBGPU result semantics and profile now assembled in olfactorybulb.analysis_data and olfactorybulb.analysis_profile; next move the remaining notebook presentation logic out of obgpu_experiment_helpers.py and into explicit domain view modules.",
+        recommended_action="The generic result-catalog helpers, stable ordered-name helpers, fair round-robin subgroup truncation, ordered group-row flattening with per-bucket limits, grouped row-display policies, grouped stacked-trace and event-raster suites, result-overview builders, shared plotting primitives including stacked labeled traces, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, result-backed frequency plot families plus family-bound suites, labeled-row and trace-derived frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, result-backed event-family specs plus family suites and event plot suites, reusable event-rate series assembly, prepared labeled event display rows, overview-layout derivation from them, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, named sweep plot registries, sweep persistence and animation pipeline, the named-signal provider/registry/view layer, and domain analysis profiles that aggregate concrete repo definitions now live under neuroinfra.analysis, with the current concrete OBGPU result semantics, profile, and grouped soma presentation now assembled in olfactorybulb.analysis_data, olfactorybulb.analysis_profile, and olfactorybulb.analysis_views; next move the remaining notebook presentation logic out of obgpu_experiment_helpers.py and into explicit domain view modules.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",
