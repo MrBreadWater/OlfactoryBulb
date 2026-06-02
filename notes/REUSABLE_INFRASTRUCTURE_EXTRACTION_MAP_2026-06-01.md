@@ -401,9 +401,12 @@ Current progress:
   and the OBGPU run-record shape
 - the generic notebook remote sweep workflow now also lives under
   `neuroinfra.notebooks.remote_sweeps`
-- `obgpu_experiment_helpers.py` now delegates `_run_remote_sweep(...)` there
-  while still owning concrete manifest construction, live item-sync policy,
-  item finalization, and the OBGPU sweep item payload shape
+- the concrete olfactory-bulb sweep payload/workflow adapters now also live
+  under `olfactorybulb.notebook_remote_sweeps`
+- `obgpu_experiment_helpers.py` now delegates `_run_remote_sweep(...)` through
+  that explicit domain module instead of owning concrete manifest construction,
+  live item-sync policy, item finalization, and the OBGPU sweep item payload
+  shape inline
 - the generic notebook workflow layer now lives under
   `neuroinfra.notebooks.workflows`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,

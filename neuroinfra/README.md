@@ -216,9 +216,9 @@ shape.
 The generic notebook remote sweep workflow that ties together manifest upload,
 JSON submission, live sweep monitoring, compact final sync, partial-result
 bookkeeping, and saved-sweep persistence now also lives under
-`neuroinfra.notebooks.remote_sweeps`, while the helper still owns concrete
-manifest construction, item-sync policy, item finalization, and the OBGPU
-sweep item payload shape.
+`neuroinfra.notebooks.remote_sweeps`, and the concrete olfactory-bulb sweep
+payload/workflow adapters now live under `olfactorybulb.notebook_remote_sweeps`,
+instead of staying inline in the notebook helper.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

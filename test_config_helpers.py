@@ -23,6 +23,7 @@ import obgpu_experiment_helpers as hlp
 from neuroinfra.remote.deferred_artifacts import DeferredArtifactSyncHooks
 from neuroinfra.remote.helper_bundle import helper_bundle_manifest
 from neuroinfra.remote.result_sync import RemoteResultSyncHooks
+from olfactorybulb.notebook_remote_sweeps import build_remote_sweep_payload
 
 REMOTE_TOOLS_DIR = Path(__file__).resolve().parent / "tools" / "remote"
 if str(REMOTE_TOOLS_DIR) not in sys.path:
@@ -349,6 +350,8 @@ with tempfile.TemporaryDirectory() as tmp:
         assert sweep_result["paramset"] == "GammaSignature"
         assert remote_sweep_workflow_calls
         assert remote_sweep_workflow_calls[0]["remote_repo_root"] == PurePosixPath("/remote/OlfactoryBulb")
+        assert len(remote_sweep_workflow_calls[0]["manifest_items"]) == 2
+        assert remote_sweep_workflow_calls[0]["remote_metadata"]["sweep_items"] == 2
     finally:
         hlp._neuroinfra_execute_remote_sweep_workflow = original_remote_sweep_workflow
     print("remote sweep workflow delegation: OK")
@@ -1173,11 +1176,15 @@ with tempfile.TemporaryDirectory() as tmp:
         sweep_engine="remote_batch",
     )
     sweep_plan = hlp._prepare_sweep_plan(sweep_cfg, "gaba_gmax", [0.0, 0.1])
-    driver_command, manifest_items, manifest_json, manifest_path, _parallelism = hlp._build_remote_sweep_driver_command(
+    driver_command, manifest_items, manifest_json, manifest_path, _parallelism, _metadata = build_remote_sweep_payload(
+        hlp._ob_remote_sweep_payload_hooks(),
         sweep_cfg,
         sweep_plan=sweep_plan,
+        sweep_label="test_sweep",
         remote_repo_root=PurePosixPath("/remote/OlfactoryBulb"),
+        remote_sweeps_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/sweeps"),
         remote_sweep_root=PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs/sweeps/test_sweep"),
+        remote_git_ref="HEAD",
     )
     assert "--items-json" in driver_command
     assert "--items-b64" not in driver_command
