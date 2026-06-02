@@ -32,6 +32,11 @@ from .plotting import (
     plot_time_series,
     time_axis_label,
 )
+from .grouped_views import (
+    GroupedEventRasterSuite,
+    GroupedRowPolicy,
+    GroupedTracePlotSuite,
+)
 from .events import (
     EventOverviewLayout,
     ResultEventFamilySuite,
@@ -220,6 +225,9 @@ __all__ = [
     "plot_stacked_labeled_traces",
     "plot_time_frequency_map",
     "plot_time_series",
+    "GroupedEventRasterSuite",
+    "GroupedRowPolicy",
+    "GroupedTracePlotSuite",
     "prepare_event_display_rows",
     "rate_series_label",
     "recommended_raster_fontsize",

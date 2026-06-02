@@ -26,6 +26,7 @@ The next standardized seam is also in place:
 
 - `neuroinfra.analysis.overview`
 - `neuroinfra.analysis.frequency_plots`
+- `neuroinfra.analysis.grouped_views`
 - `neuroinfra.analysis.phase_locking`
 - `neuroinfra.analysis.events`
 - `neuroinfra.analysis.plotting`
@@ -130,7 +131,8 @@ collection, normalized rate computation, and raster/rate/overview composition,
 result-backed frequency plot families plus family-bound plotting suites for
 KDE/time-binned rendering, stable ordered-name helpers,
 fair round-robin subgroup truncation, ordered group-row flattening with
-per-bucket limits, raster-plus-rate overview layout, and sweep plot
+per-bucket limits, grouped row-display policies, grouped stacked-trace and
+event-raster suites, raster-plus-rate overview layout, and sweep plot
 registries with named built-ins plus deprecation handling, and
 the named-signal provider registry, ordered named-signal registries,
 registry-backed resolved-signal view suites, result-backed event family and

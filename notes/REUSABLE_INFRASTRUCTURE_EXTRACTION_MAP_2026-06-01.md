@@ -124,6 +124,7 @@ Current files:
 - `neuroinfra/analysis/events.py`
 - `neuroinfra/analysis/catalog.py`
 - `neuroinfra/analysis/frequency_plots.py`
+- `neuroinfra/analysis/grouped_views.py`
 - `neuroinfra/analysis/overview.py`
 - `neuroinfra/analysis/phase_locking.py`
 - `neuroinfra/analysis/plotting.py`
@@ -139,6 +140,8 @@ What is already generic:
 - stable ordered-name helpers with preferred ordering and unknown-last handling
 - fair round-robin subgroup truncation for merged display buckets
 - ordered group-row flattening across display buckets with per-bucket limits
+- grouped row-display policies for stable bucketed ordering and per-bucket limits
+- grouped stacked-trace and event-raster suites built on those row policies
 - result-overview context and summary builders
 - stacked labeled trace plotting with configurable offsets and styling
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
@@ -175,7 +178,8 @@ What is domain-specific:
 
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- notebook-specific signal-presentation, plot composition, and built-in sweep plot registry
+- notebook-specific signal-presentation, concrete cell-family display semantics,
+  plot composition, and built-in sweep plot registry
 
 Extraction confidence:
 

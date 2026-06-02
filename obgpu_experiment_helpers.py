@@ -251,7 +251,6 @@ from neuroinfra.analysis.catalog import (
     group_rows_by_category as _neuroinfra_group_rows_by_category,
     list_available_categories as _neuroinfra_list_available_categories,
     list_unique_labels as _neuroinfra_list_unique_labels,
-    ordered_group_rows as _neuroinfra_ordered_group_rows,
     ordered_names as _neuroinfra_ordered_names,
     round_robin_limit_by_subgroup as _neuroinfra_round_robin_limit_by_subgroup,
 )
@@ -274,7 +273,6 @@ from neuroinfra.analysis.events import (
     ResultEventFamilySuite as _NeuroinfraResultEventFamilySuite,
     ResultEventPlotSuite as _NeuroinfraResultEventPlotSuite,
     ResultEventFamilySpec as _NeuroinfraResultEventFamilySpec,
-    plot_event_raster_rows as _neuroinfra_plot_event_raster_rows,
     rate_series_label as _neuroinfra_rate_series_label,
     recommended_raster_fontsize as _neuroinfra_recommended_raster_fontsize,
     recommended_raster_height as _neuroinfra_recommended_raster_height,
@@ -289,8 +287,10 @@ from neuroinfra.analysis.signal_views import (
 from neuroinfra.analysis.phase_locking import (
     compute_phase_locking_from_spike_rows as _neuroinfra_compute_phase_locking_from_spike_rows,
 )
-from neuroinfra.analysis.plotting import (
-    plot_stacked_labeled_traces as _neuroinfra_plot_stacked_labeled_traces,
+from neuroinfra.analysis.grouped_views import (
+    GroupedEventRasterSuite as _NeuroinfraGroupedEventRasterSuite,
+    GroupedRowPolicy as _NeuroinfraGroupedRowPolicy,
+    GroupedTracePlotSuite as _NeuroinfraGroupedTracePlotSuite,
 )
 from neuroinfra.analysis.frequency_plots import (
     FrequencyPlotConfig,
@@ -5581,6 +5581,97 @@ def _truncate_display_rows_for_group(
     )
 
 
+def _soma_display_grouping(
+    *,
+    max_rows_per_group: int,
+    combine_mt: bool,
+) -> _NeuroinfraGroupedRowPolicy:
+    """Build the stable soma display grouping used by trace and raster views."""
+    return _NeuroinfraGroupedRowPolicy(
+        bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
+        order_buckets_fn=lambda buckets: _ordered_display_groups(buckets, combine_mt=combine_mt),
+        limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
+            list(bucket_rows),
+            max_rows_per_group,
+            combine_mt=combine_mt,
+            display_group=bucket,
+        ),
+        unknown_bucket="other",
+    )
+
+
+def _soma_trace_line_kwargs(row: tuple[str, Any, Any]) -> dict[str, Any]:
+    """Return plotting color for one saved soma trace row."""
+    label = row[0]
+    try:
+        color_key = cell_type_of(label)
+    except ValueError:
+        color_key = "other"
+    return {"color": _cell_color(color_key)}
+
+
+def _soma_trace_offset_step(row: tuple[str, Any, Any], *, combine_mt: bool) -> float:
+    """Return the vertical offset spacing for one grouped soma trace row."""
+    label = row[0]
+    try:
+        display_group = _display_group_for_cell_type(cell_type_of(label), combine_mt=combine_mt)
+    except ValueError:
+        display_group = "other"
+    return 40.0 if display_group == "GC" else 120.0
+
+
+def _soma_spike_raster_colors(rows: list[tuple[str, np.ndarray]]) -> list[str]:
+    """Return stable colors for one grouped soma-spike raster."""
+    return [
+        _cell_color(cell_type_of(label) if re.match(r"([A-Z]+)", normalize_cell_name(label)) else "other")
+        for label, _spikes in rows
+    ]
+
+
+def _soma_voltage_plot_suite(
+    *,
+    max_per_type: int,
+    combine_mt: bool,
+) -> _NeuroinfraGroupedTracePlotSuite:
+    """Build the grouped soma-voltage plot suite for one notebook call."""
+    return _NeuroinfraGroupedTracePlotSuite(
+        grouping=_soma_display_grouping(
+            max_rows_per_group=max_per_type,
+            combine_mt=combine_mt,
+        ),
+        title="Sample Soma Voltages" + (" (MT grouped)" if combine_mt else ""),
+        ylabel="Offset Voltage",
+        line_kwargs_fn=_soma_trace_line_kwargs,
+        offset_step_fn=lambda row: _soma_trace_offset_step(row, combine_mt=combine_mt),
+        legend_loc="upper right",
+        legend_fontsize=8.0,
+        legend_ncol=2,
+    )
+
+
+def _soma_spike_raster_suite(
+    *,
+    max_cells_per_type: int,
+    combine_mt: bool,
+) -> _NeuroinfraGroupedEventRasterSuite:
+    """Build the grouped soma-spike raster suite for one notebook call."""
+    return _NeuroinfraGroupedEventRasterSuite(
+        grouping=_soma_display_grouping(
+            max_rows_per_group=max_cells_per_type,
+            combine_mt=combine_mt,
+        ),
+        ylabel="Cell",
+        title="Detected Soma Spike Raster" + (" (MT grouped)" if combine_mt else ""),
+        width=14.0,
+        min_height=4.5,
+        per_row_height=0.10,
+        default_fontsize=7.0,
+        line_spacing=1.3,
+        colors_fn=lambda rows: _soma_spike_raster_colors(list(rows)),
+        no_data_message="No soma spikes saved",
+    )
+
+
 def _infer_grouped_cell_types_from_labels(labels: list[str] | tuple[str, ...]) -> list[str]:
     """Infer ordered cell-family buckets from one list of saved labels."""
     inferred = []
@@ -6315,18 +6406,10 @@ def _saved_soma_spike_rows_by_type(
     rows = _saved_soma_spike_rows(result, threshold=threshold)
     if rows is None:
         return None
-    return _neuroinfra_ordered_group_rows(
-        rows,
-        bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
-        order_buckets_fn=lambda buckets: _ordered_display_groups(buckets, combine_mt=combine_mt),
-        limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
-            list(bucket_rows),
-            max_cells_per_type,
-            combine_mt=combine_mt,
-            display_group=bucket,
-        ),
-        unknown_bucket="other",
-    )
+    return _soma_display_grouping(
+        max_rows_per_group=max_cells_per_type,
+        combine_mt=combine_mt,
+    ).prepare_rows(rows)
 
 
 def _saved_voltage_summary_signal(
@@ -7168,53 +7251,12 @@ def plot_voltage_traces(
     combine_mt: bool = True,
 ) -> Any:
     """Plot a small representative subset of saved soma voltages."""
-    grouped = split_traces_by_type(result)
-    ordered_cell_types = _ordered_display_groups(
-        [
-            _display_group_for_cell_type(cell_type, combine_mt=combine_mt)
-            for cell_type in _ordered_cell_types(grouped.keys())
-        ],
+    return _soma_voltage_plot_suite(
+        max_per_type=max_per_type,
         combine_mt=combine_mt,
-    )
-    rows = _neuroinfra_ordered_group_rows(
+    ).plot(
         list(result["soma_vs"]),
-        bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
-        order_buckets_fn=lambda buckets: ordered_cell_types,
-        limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
-            list(bucket_rows),
-            max_per_type,
-            combine_mt=combine_mt,
-            display_group=bucket,
-        ),
-        unknown_bucket="other",
-    )
-
-    def _line_kwargs(row: tuple[str, Any, Any]) -> dict[str, Any]:
-        label = row[0]
-        try:
-            color_key = cell_type_of(label)
-        except ValueError:
-            color_key = "other"
-        return {"color": _cell_color(color_key)}
-
-    def _offset_step(row: tuple[str, Any, Any]) -> float:
-        label = row[0]
-        try:
-            display_group = _display_group_for_cell_type(cell_type_of(label), combine_mt=combine_mt)
-        except ValueError:
-            display_group = "other"
-        return 40.0 if display_group == "GC" else 120.0
-
-    return _neuroinfra_plot_stacked_labeled_traces(
-        rows,
         ax=ax,
-        title="Sample Soma Voltages" + (" (MT grouped)" if combine_mt else ""),
-        ylabel="Offset Voltage",
-        line_kwargs_fn=_line_kwargs,
-        offset_step_fn=_offset_step,
-        legend_loc="upper right",
-        legend_fontsize=8.0,
-        legend_ncol=2,
     )
 
 
@@ -7228,6 +7270,10 @@ def plot_spike_raster(
     combine_mt: bool = True,
 ) -> Any:
     """Plot a soma-spike raster, preferring compact runtime spike artifacts."""
+    suite = _soma_spike_raster_suite(
+        max_cells_per_type=max_cells_per_type,
+        combine_mt=combine_mt,
+    )
     saved_rows = _saved_soma_spike_rows_by_type(
         result,
         max_cells_per_type=max_cells_per_type,
@@ -7235,44 +7281,20 @@ def plot_spike_raster(
         combine_mt=combine_mt,
     )
     if saved_rows is None:
-        grouped = split_traces_by_type(result)
-        raw_rows = _neuroinfra_ordered_group_rows(
+        raw_rows = suite.prepare_rows(
             [
                 trace
-                for cell_type in _ordered_cell_types(grouped.keys())
-                for trace in grouped[cell_type][:max_cells_per_type]
+                for trace in result.get("soma_vs", [])
                 if isinstance(trace, tuple) and len(trace) == 3
-            ],
-            bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
-            order_buckets_fn=lambda buckets: _ordered_display_groups(buckets, combine_mt=combine_mt),
-            limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
-                list(bucket_rows),
-                max_cells_per_type,
-                combine_mt=combine_mt,
-                display_group=bucket,
-            ),
-            unknown_bucket="other",
+            ]
         )
         rows = [(label, detect_spikes(t, v, threshold=threshold)) for label, t, v in raw_rows]
     else:
         rows = saved_rows
-    colors = [
-        _cell_color(cell_type_of(label) if re.match(r"([A-Z]+)", normalize_cell_name(label)) else "other")
-        for label, _spikes in rows
-    ]
-    return _neuroinfra_plot_event_raster_rows(
+    return suite.plot_prepared_rows(
         rows,
         ax=ax,
-        ylabel="Cell",
-        title="Detected Soma Spike Raster" + (" (MT grouped)" if combine_mt else ""),
-        width=14.0,
-        min_height=4.5,
-        per_row_height=0.10,
-        fontsize=_recommended_raster_fontsize(len(rows)),
-        line_spacing=1.3,
         modulus=modulus,
-        colors=colors,
-        no_data_message="No soma spikes saved",
     )
 
 
