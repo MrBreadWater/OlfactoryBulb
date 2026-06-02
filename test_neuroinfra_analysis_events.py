@@ -15,6 +15,7 @@ from neuroinfra.analysis.events import (
     EventRateNormalizationRule,
     FrequencySampleCollection,
     PreparedEventRows,
+    ResultEventFamilySpec,
     binned_event_rate,
     build_event_overview_layout,
     build_event_overview_layout_for_rows,
@@ -22,9 +23,12 @@ from neuroinfra.analysis.events import (
     calculate_event_frequency,
     calculate_trace_event_frequency,
     compute_event_rate_from_rows,
+    compute_result_event_family_rate,
     collect_frequency_samples_from_rows,
     collect_frequency_samples_from_trace_rows,
+    collect_result_event_family_samples,
     ensure_raster_axis,
+    filter_result_event_family_rows,
     filter_rows_by_label_prefix,
     fit_raster_labels,
     overview_left_margin,
@@ -149,6 +153,63 @@ def main() -> None:
     assert np.allclose(traces[0].rate_hz, [1.0, 2.0])
     assert np.allclose(traces[1].rate_hz, [0.5, 1.5])
     assert traces[1].metadata["n_target_cells"] == 1
+
+    family_spec = ResultEventFamilySpec(
+        rows_from_result_fn=lambda result: list(result["rows"]),
+        filter_label_fn=lambda row: row["dest"],
+        times_fn=lambda row: row["times"],
+        sample_label_fn=lambda row: f"{row['src']}->{row['dest']}",
+        normalize_label_fn=str,
+        normalization_rules={
+            "total": EventRateNormalizationRule(
+                unit="events/s",
+                aliases=(),
+                denominator_fn=lambda rows: 1.0,
+                metadata_fn=lambda rows: {"n_rows": len(rows)},
+            ),
+            "per_target_cell": EventRateNormalizationRule(
+                unit="events/s per cell",
+                aliases=("per_cell",),
+                denominator_fn=lambda rows: float(len({row["dest"] for row in rows})),
+                metadata_fn=lambda rows: {"n_targets": len({row["dest"] for row in rows})},
+            ),
+        },
+        default_normalization="per_target_cell",
+    )
+    family_result = {
+        "rows": [
+            {"src": "GC0", "dest": "MC0", "times": np.array([0.0, 20.0, 40.0])},
+            {"src": "GC1", "dest": "TC0", "times": np.array([10.0, 30.0])},
+        ]
+    }
+    filtered_family_rows = filter_result_event_family_rows(
+        family_result,
+        family_spec,
+        include_prefixes=("MC",),
+    )
+    assert len(filtered_family_rows) == 1
+    family_samples = collect_result_event_family_samples(
+        family_result,
+        family_spec,
+        include_prefixes=("MC",),
+        modulus=25.0,
+    )
+    assert family_samples.labels == ("GC0->MC0",)
+    assert np.allclose(family_samples.times_ms, [10.0, 5.0])
+    assert np.allclose(family_samples.freqs_hz, [50.0, 50.0])
+    family_rate_t, family_rate_hz, family_rate_meta = compute_result_event_family_rate(
+        family_result,
+        family_spec,
+        t_stop=50.0,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_cell",
+        return_metadata=True,
+    )
+    assert family_rate_meta["normalization"] == "per_target_cell"
+    assert family_rate_meta["n_targets"] == 2
+    np.testing.assert_allclose(family_rate_t, [5.0, 15.0, 25.0, 35.0, 45.0])
+    np.testing.assert_allclose(family_rate_hz, [50.0, 50.0, 50.0, 50.0, 50.0])
 
     prepared_rows = prepare_event_display_rows(
         [

@@ -72,6 +72,19 @@ class EventRateNormalizationRule:
     metadata_fn: Callable[[Sequence[Any]], dict[str, Any]] = lambda _rows: {}
 
 
+@dataclass(frozen=True)
+class ResultEventFamilySpec:
+    """One reusable event-family definition backed by a loaded result mapping."""
+
+    rows_from_result_fn: Callable[[dict[str, Any]], Sequence[Any]]
+    filter_label_fn: Callable[[Any], str]
+    times_fn: Callable[[Any], np.ndarray | list[float]]
+    sample_label_fn: Callable[[Any], str] | None = None
+    normalize_label_fn: Callable[[str], str] | None = None
+    normalization_rules: Mapping[str, EventRateNormalizationRule] | None = None
+    default_normalization: str = "total"
+
+
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
     """Convert event times into midpoint/frequency samples."""
     times = np.asarray(times, dtype=float)
@@ -284,6 +297,76 @@ def build_event_rate_trace_series(
             )
         )
     return traces
+
+
+def filter_result_event_family_rows(
+    result: dict[str, Any],
+    family_spec: ResultEventFamilySpec,
+    *,
+    include_prefixes: Sequence[str] | None = None,
+) -> list[Any]:
+    """Filter one result-backed event family by normalized label prefixes."""
+    return filter_rows_by_label_prefix(
+        list(family_spec.rows_from_result_fn(result)),
+        label_fn=family_spec.filter_label_fn,
+        include_prefixes=include_prefixes,
+        normalize_label_fn=family_spec.normalize_label_fn,
+    )
+
+
+def collect_result_event_family_samples(
+    result: dict[str, Any],
+    family_spec: ResultEventFamilySpec,
+    *,
+    indices: Sequence[int] | range | None = None,
+    include_prefixes: Sequence[str] | None = None,
+    modulus: float | int | None = None,
+) -> FrequencySampleCollection:
+    """Collect frequency samples from one reusable result-backed event family."""
+    rows = filter_result_event_family_rows(
+        result,
+        family_spec,
+        include_prefixes=include_prefixes,
+    )
+    return collect_frequency_samples_from_rows(
+        rows,
+        label_fn=family_spec.sample_label_fn or family_spec.filter_label_fn,
+        times_fn=family_spec.times_fn,
+        indices=indices,
+        modulus=modulus,
+    )
+
+
+def compute_result_event_family_rate(
+    result: dict[str, Any],
+    family_spec: ResultEventFamilySpec,
+    *,
+    t_stop: float,
+    bin_ms: float,
+    smooth_sigma_ms: float,
+    include_prefixes: Sequence[str] | None = None,
+    normalization: str | None = None,
+    return_metadata: bool = False,
+) -> Any:
+    """Compute one normalized event-rate trace from a reusable result-backed event family."""
+    if family_spec.normalization_rules is None:
+        raise ValueError("Result event family spec does not define normalization rules")
+    rows = filter_result_event_family_rows(
+        result,
+        family_spec,
+        include_prefixes=include_prefixes,
+    )
+    return compute_event_rate_from_rows(
+        rows,
+        times_fn=family_spec.times_fn,
+        t_stop=t_stop,
+        bin_ms=bin_ms,
+        smooth_sigma_ms=smooth_sigma_ms,
+        normalization=normalization,
+        default_normalization=family_spec.default_normalization,
+        normalization_rules=family_spec.normalization_rules,
+        return_metadata=return_metadata,
+    )
 
 
 def prepare_event_display_rows(

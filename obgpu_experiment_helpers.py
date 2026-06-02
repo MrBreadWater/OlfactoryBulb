@@ -270,12 +270,14 @@ from neuroinfra.analysis.events import (
     build_event_rate_trace_series as _neuroinfra_build_event_rate_trace_series,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
     calculate_trace_event_frequency as _neuroinfra_calculate_trace_event_frequency,
-    compute_event_rate_from_rows as _neuroinfra_compute_event_rate_from_rows,
+    compute_result_event_family_rate as _neuroinfra_compute_result_event_family_rate,
     collect_frequency_samples_from_rows as _neuroinfra_collect_frequency_samples_from_rows,
     collect_frequency_samples_from_trace_rows as _neuroinfra_collect_frequency_samples_from_trace_rows,
+    collect_result_event_family_samples as _neuroinfra_collect_result_event_family_samples,
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
-    filter_rows_by_label_prefix as _neuroinfra_filter_rows_by_label_prefix,
+    ResultEventFamilySpec as _NeuroinfraResultEventFamilySpec,
+    filter_result_event_family_rows as _neuroinfra_filter_result_event_family_rows,
     prepare_event_display_rows as _neuroinfra_prepare_event_display_rows,
     plot_event_overview as _neuroinfra_plot_event_overview,
     plot_event_rate_traces as _neuroinfra_plot_event_rate_traces,
@@ -6583,12 +6585,10 @@ def filter_gc_output_events(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     """Filter saved GC inhibitory-output events by destination cell family."""
-    events = list(result.get("gc_output_events", []))
-    return _neuroinfra_filter_rows_by_label_prefix(
-        events,
-        label_fn=lambda entry: entry.get("dest_section", ""),
+    return _neuroinfra_filter_result_event_family_rows(
+        result,
+        _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
         include_prefixes=target_types,
-        normalize_label_fn=normalize_cell_name,
     )
 
 
@@ -6599,15 +6599,11 @@ def collect_gc_output_frequency_samples(
     modulus: float | None = None,
 ) -> dict[str, Any]:
     """Collect instantaneous GC inhibitory-output frequency samples for KDE plots."""
-    events = filter_gc_output_events(result, target_types=target_types)
-    sample_collection = _neuroinfra_collect_frequency_samples_from_rows(
-        events,
-        label_fn=lambda entry: (
-            f"{normalize_cell_name(entry.get('source_section', 'GC'))}->"
-            f"{normalize_cell_name(entry.get('dest_section', 'cell'))}"
-        ),
-        times_fn=lambda entry: entry.get("times", []),
+    sample_collection = _neuroinfra_collect_result_event_family_samples(
+        result,
+        _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
         indices=indices,
+        include_prefixes=target_types,
         modulus=modulus,
     )
 
@@ -6835,15 +6831,6 @@ def _event_rate_from_series(
     )
 
 
-def _gc_rate_normalizer(events: list[dict[str, Any]], normalization: str) -> tuple[float, str]:
-    """Return the denominator and ylabel for GC-output rate normalization."""
-    requested = str(normalization or "per_target_cell")
-    for canonical_name, rule in _gc_output_rate_normalization_rules().items():
-        if requested == canonical_name or requested in rule.aliases:
-            return float(rule.denominator_fn(events)), str(rule.unit)
-    raise ValueError(f"Unsupported GC normalization mode {requested!r}")
-
-
 def _gc_output_rate_normalization_rules() -> dict[str, _NeuroinfraEventRateNormalizationRule]:
     """Return reusable normalization rules for GC-output event rates."""
     return {
@@ -6894,6 +6881,20 @@ def _gc_output_rate_normalization_rules() -> dict[str, _NeuroinfraEventRateNorma
     }
 
 
+_OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC = _NeuroinfraResultEventFamilySpec(
+    rows_from_result_fn=lambda result: list(result.get("gc_output_events", [])),
+    filter_label_fn=lambda entry: entry.get("dest_section", ""),
+    times_fn=lambda entry: entry.get("times", []),
+    sample_label_fn=lambda entry: (
+        f"{normalize_cell_name(entry.get('source_section', 'GC'))}->"
+        f"{normalize_cell_name(entry.get('dest_section', 'cell'))}"
+    ),
+    normalize_label_fn=normalize_cell_name,
+    normalization_rules=_gc_output_rate_normalization_rules(),
+    default_normalization="per_target_cell",
+)
+
+
 def compute_gc_output_rate(
     result: dict[str, Any],
     bin_ms: float = 5.0,
@@ -6906,15 +6907,14 @@ def compute_gc_output_rate(
     events = filter_gc_output_events(result, target_types=target_types)
     event_series = [np.asarray(entry.get("times", []), dtype=float) for entry in events]
     t_stop = _resolve_event_tstop(result, event_series)
-    computed = _neuroinfra_compute_event_rate_from_rows(
-        events,
-        times_fn=lambda entry: entry.get("times", []),
+    computed = _neuroinfra_compute_result_event_family_rate(
+        result,
+        _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
         t_stop=t_stop,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
+        include_prefixes=target_types,
         normalization=normalization,
-        default_normalization="per_target_cell",
-        normalization_rules=_gc_output_rate_normalization_rules(),
         return_metadata=return_metadata,
     )
     return computed
@@ -6925,22 +6925,11 @@ def filter_input_events(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> list[tuple[str, Any]]:
     """Filter odor-input event rows by destination cell family."""
-    rows = list(result.get("input_times", []))
-    return _neuroinfra_filter_rows_by_label_prefix(
-        rows,
-        label_fn=lambda row: row[0],
+    return _neuroinfra_filter_result_event_family_rows(
+        result,
+        _OBGPU_INPUT_EVENT_FAMILY_SPEC,
         include_prefixes=target_types,
-        normalize_label_fn=normalize_cell_name,
     )
-
-
-def _input_rate_normalizer(rows: list[tuple[str, Any]], normalization: str) -> tuple[float, str]:
-    """Return the denominator and ylabel for odor-input rate normalization."""
-    requested = str(normalization or "per_target_cell")
-    for canonical_name, rule in _input_rate_normalization_rules().items():
-        if requested == canonical_name or requested in rule.aliases:
-            return float(rule.denominator_fn(rows)), str(rule.unit)
-    raise ValueError(f"Unsupported input normalization mode {requested!r}")
 
 
 def _input_rate_normalization_rules() -> dict[str, _NeuroinfraEventRateNormalizationRule]:
@@ -6978,6 +6967,16 @@ def _input_rate_normalization_rules() -> dict[str, _NeuroinfraEventRateNormaliza
     }
 
 
+_OBGPU_INPUT_EVENT_FAMILY_SPEC = _NeuroinfraResultEventFamilySpec(
+    rows_from_result_fn=lambda result: list(result.get("input_times", [])),
+    filter_label_fn=lambda row: row[0],
+    times_fn=lambda row: row[1],
+    normalize_label_fn=normalize_cell_name,
+    normalization_rules=_input_rate_normalization_rules(),
+    default_normalization="per_target_cell",
+)
+
+
 def compute_input_rate(
     result: dict[str, Any],
     bin_ms: float = 5.0,
@@ -6990,15 +6989,14 @@ def compute_input_rate(
     rows = filter_input_events(result, target_types=target_types)
     event_series = [np.asarray(times, dtype=float) for _section_name, times in rows]
     t_stop = _resolve_event_tstop(result, event_series)
-    computed = _neuroinfra_compute_event_rate_from_rows(
-        rows,
-        times_fn=lambda row: row[1],
+    computed = _neuroinfra_compute_result_event_family_rate(
+        result,
+        _OBGPU_INPUT_EVENT_FAMILY_SPEC,
         t_stop=t_stop,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
+        include_prefixes=target_types,
         normalization=normalization,
-        default_normalization="per_target_cell",
-        normalization_rules=_input_rate_normalization_rules(),
         return_metadata=return_metadata,
     )
     return computed

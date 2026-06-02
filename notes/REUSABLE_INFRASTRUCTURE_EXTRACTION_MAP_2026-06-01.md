@@ -151,6 +151,7 @@ What is already generic:
 - trace-derived instantaneous frequency sample collection from labeled continuous-trace rows
 - row filtering by label-prefix families
 - normalization-driven event-rate computation from arbitrary event rows
+- result-backed event-family specs for filtering, frequency sample collection, and normalized rate computation
 - reusable event-rate series assembly for named subset plots
 - prepared labeled event display rows and overview-layout derivation from them
 - event-frequency conversion, event-rate binning, shared rate-plot helpers, and reusable raster-plot primitives
