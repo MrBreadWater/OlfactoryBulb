@@ -39,6 +39,7 @@ The next standardized seam is also in place:
 - `neuroinfra.notebooks.local_runs`
 - `neuroinfra.notebooks.remote_jobs`
 - `neuroinfra.notebooks.remote_runs`
+- `neuroinfra.notebooks.remote_sweeps`
 - `neuroinfra.notebooks.run_info`
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
@@ -211,6 +212,13 @@ final artifact collection, and run-info persistence now also lives under
 `neuroinfra.notebooks.remote_runs`, while the helper still owns concrete
 payload construction, monitor/artifact hook wiring, and the OBGPU run-record
 shape.
+
+The generic notebook remote sweep workflow that ties together manifest upload,
+JSON submission, live sweep monitoring, compact final sync, partial-result
+bookkeeping, and saved-sweep persistence now also lives under
+`neuroinfra.notebooks.remote_sweeps`, while the helper still owns concrete
+manifest construction, item-sync policy, item finalization, and the OBGPU
+sweep item payload shape.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

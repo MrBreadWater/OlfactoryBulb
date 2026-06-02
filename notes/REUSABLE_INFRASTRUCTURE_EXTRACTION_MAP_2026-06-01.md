@@ -352,6 +352,7 @@ Current files:
 
 - `neuroinfra/notebooks/remote_jobs.py`
 - `neuroinfra/notebooks/remote_runs.py`
+- `neuroinfra/notebooks/remote_sweeps.py`
 - `neuroinfra/notebooks/workflows.py`
 - `obgpu_experiment_helpers.py`
 
@@ -362,6 +363,9 @@ What is already generic:
 - submit stdout/stderr persistence with JSON response parsing
 - remote single-run preflight failure persistence and error reporting
 - remote single-run submit, monitor, and final-artifact workflow composition
+- remote sweep manifest upload, submit, monitor, and compact final-sync
+  workflow composition
+- partial-result bookkeeping and saved sweep persistence
 - `run_and_load` workflow composition
 - saved run-pair loading
 - local sweep-plan execution loops
@@ -395,6 +399,11 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates `_run_remote_simulation(...)`
   there while still owning concrete remote payload construction, hook wiring,
   and the OBGPU run-record shape
+- the generic notebook remote sweep workflow now also lives under
+  `neuroinfra.notebooks.remote_sweeps`
+- `obgpu_experiment_helpers.py` now delegates `_run_remote_sweep(...)` there
+  while still owning concrete manifest construction, live item-sync policy,
+  item finalization, and the OBGPU sweep item payload shape
 - the generic notebook workflow layer now lives under
   `neuroinfra.notebooks.workflows`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,

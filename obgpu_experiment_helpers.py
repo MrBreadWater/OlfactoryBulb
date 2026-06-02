@@ -144,6 +144,10 @@ from neuroinfra.notebooks.remote_runs import (
     RemoteRunWorkflowHooks as _NeuroinfraRemoteRunWorkflowHooks,
     execute_remote_run_workflow as _neuroinfra_execute_remote_run_workflow,
 )
+from neuroinfra.notebooks.remote_sweeps import (
+    RemoteSweepWorkflowHooks as _NeuroinfraRemoteSweepWorkflowHooks,
+    execute_remote_sweep_workflow as _neuroinfra_execute_remote_sweep_workflow,
+)
 from neuroinfra.notebooks.reporting import (
     diff_values as _neuroinfra_diff_values,
     flatten_for_diff as _neuroinfra_flatten_for_diff,
@@ -2714,6 +2718,296 @@ def _remote_run_workflow_hooks(
     )
 
 
+def _remote_sweep_workflow_hooks(
+    *,
+    sweep_label: str,
+    timestamp: str,
+    remote_repo_root: PurePosixPath,
+    remote_sweeps_root: PurePosixPath,
+    remote_sweep_root: PurePosixPath,
+    remote_driver_command: list[str],
+    remote_git_ref: str | None,
+    manifest_json: str,
+    manifest_items: list[dict[str, Any]],
+    remote_manifest_path: PurePosixPath,
+    max_concurrent: int,
+    local_runs_dir: Path,
+) -> _NeuroinfraRemoteSweepWorkflowHooks:
+    """Build reusable hooks for notebook-facing remote sweep orchestration."""
+    workflow_state: dict[str, Any] = {
+        "notebook_timings": None,
+        "manifest_items": manifest_items,
+        "local_runs_dir": local_runs_dir,
+        "remote_job_heartbeat_path": None,
+        "allocation_heartbeat_path": None,
+    }
+
+    def prepare_remote_session(
+        config: dict[str, Any],
+        *,
+        remote_repo_root: PurePosixPath,
+        remote_git_ref: str | None,
+        remote_metadata: dict[str, Any],
+    ) -> Any:
+        notebook_timings: dict[str, float] = {}
+        workflow_state["notebook_timings"] = notebook_timings
+        return _neuroinfra_prepare_remote_job_session(
+            config,
+            remote_repo_root=remote_repo_root,
+            remote_git_ref=remote_git_ref,
+            remote_metadata=remote_metadata,
+            preflight_message="[Sol remote] Running remote preflight checks for sweep...",
+            hooks=_remote_job_session_hooks(notebook_timings),
+            notebook_timings=notebook_timings,
+        )
+
+    def upload_manifest(config: dict[str, Any]) -> dict[str, Any]:
+        notebook_timings = workflow_state["notebook_timings"]
+        if notebook_timings is None:
+            raise RuntimeError("remote sweep workflow timings were not initialized before manifest upload")
+        _progress_write("[Sol remote] Uploading remote sweep manifest...")
+        started = time.perf_counter()
+        _upload_remote_text_file(
+            config,
+            remote_path=remote_manifest_path,
+            text=manifest_json,
+        )
+        _record_timing(notebook_timings, "manifest_upload_s", started)
+        return {"sweep_manifest_path": remote_manifest_path.as_posix()}
+
+    def build_submit_shell(config: dict[str, Any], remote_helper_dir: PurePosixPath | None) -> str:
+        return _build_remote_submit_command(
+            config,
+            label=sweep_label,
+            remote_repo_root=remote_repo_root,
+            remote_results_root=remote_sweeps_root,
+            benchmark_command=remote_driver_command,
+            remote_mpi_exec=str(config.get("remote_mpi_exec") or default_remote_mpi_exec()),
+            remote_git_ref=remote_git_ref,
+            step_ntasks=1,
+            remote_helper_dir=remote_helper_dir,
+        )
+
+    def submit_remote_job(
+        config: dict[str, Any],
+        *,
+        submit_shell: str,
+        local_output_dir: str | Path,
+    ) -> Any:
+        notebook_timings = workflow_state["notebook_timings"]
+        if notebook_timings is None:
+            raise RuntimeError("remote sweep workflow timings were not initialized before submit")
+        return _neuroinfra_submit_remote_json_job(
+            config,
+            submit_shell=submit_shell,
+            local_output_dir=local_output_dir,
+            hooks=_remote_job_submit_hooks(notebook_timings),
+        )
+
+    def monitor_remote_job(
+        *,
+        effective_config: dict[str, Any],
+        submission: dict[str, Any],
+        remote_job_heartbeat_path: str | None,
+        allocation_heartbeat_path: str | None,
+        remote_repo_root: PurePosixPath,
+        remote_sweep_root: PurePosixPath,
+        remote_helper_dir: PurePosixPath | None,
+        notebook_timings: dict[str, float],
+        synced_labels: set[str],
+        item_status_by_label: dict[str, dict[str, Any]],
+    ) -> Any:
+        workflow_state["remote_job_heartbeat_path"] = remote_job_heartbeat_path
+        workflow_state["allocation_heartbeat_path"] = allocation_heartbeat_path
+        manifest_by_label = {str(item["label"]): item for item in workflow_state["manifest_items"]}
+        live_sync_max_items_per_poll = max(
+            int(effective_config.get("sweep_live_sync_max_items_per_poll", 8) or 0),
+            0,
+        )
+
+        def refresh_remote_leases(*, warn: bool = False) -> None:
+            _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
+            _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
+
+        def sync_finished_items(status: dict[str, Any]) -> None:
+            progress_payload = status.get("progress_payload") or {}
+            pending_labels = progress_payload.get("pending_labels") or []
+            running_items = progress_payload.get("running_items") or []
+            if not _should_sync_remote_sweep_finished_items(
+                effective_config,
+                pending_count=len(pending_labels),
+                running_count=len(running_items),
+            ):
+                return
+            finished_items = progress_payload.get("finished_items") or []
+            synced_this_poll = 0
+            for finished in finished_items:
+                if not isinstance(finished, dict):
+                    continue
+                label = str(finished.get("label") or "").strip()
+                if not label or label in synced_labels or label not in manifest_by_label:
+                    continue
+                if live_sync_max_items_per_poll and synced_this_poll >= live_sync_max_items_per_poll:
+                    break
+                manifest_item = manifest_by_label[label]
+                remote_result_dir = PurePosixPath(str(finished.get("result_dir") or manifest_item["result_dir"]))
+                local_result_dir = Path(workflow_state["local_runs_dir"]) / label
+                refresh_remote_leases()
+                sync_completed = _sync_remote_result_dir(
+                    effective_config,
+                    remote_result_dir=remote_result_dir,
+                    local_result_dir=local_result_dir,
+                    expected_files=("summary.json",),
+                    include_files=_remote_sweep_item_sync_files(effective_config),
+                )
+                refresh_remote_leases()
+                if sync_completed.returncode != 0:
+                    continue
+                item_status_by_label[label] = dict(finished)
+                synced_labels.add(label)
+                synced_this_poll += 1
+
+        poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
+        log_poll_interval_s = max(
+            float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
+            poll_interval_s,
+        )
+        live_status = bool(effective_config.get("remote_live_status", True))
+        return _neuroinfra_monitor_remote_sweep(
+            job_id=str(submission["job_id"]),
+            poll_interval_s=poll_interval_s,
+            log_poll_interval_s=log_poll_interval_s,
+            live_status=live_status,
+            hooks=_remote_sweep_monitor_hooks(
+                effective_config=effective_config,
+                remote_job_heartbeat_path=remote_job_heartbeat_path,
+                allocation_heartbeat_path=allocation_heartbeat_path,
+                remote_repo_root=remote_repo_root,
+                remote_sweep_root=remote_sweep_root,
+                remote_helper_dir=remote_helper_dir,
+                notebook_timings=notebook_timings,
+                submission=submission,
+                synced_labels=synced_labels,
+                sync_finished_items_fn=sync_finished_items,
+            ),
+        )
+
+    def finalize_remote_artifacts(
+        effective_config: dict[str, Any],
+        *,
+        final_status: dict[str, Any] | None,
+        local_sweep_dir: Path,
+        local_runs_dir: Path,
+        remote_sweep_root: PurePosixPath,
+        sweep_label: str,
+        manifest_items: list[dict[str, Any]],
+        item_status_by_label: dict[str, dict[str, Any]],
+        notebook_timings: dict[str, float],
+    ) -> Any:
+        def refresh_remote_leases(*, warn: bool = False) -> None:
+            _refresh_remote_heartbeat(
+                effective_config,
+                workflow_state["remote_job_heartbeat_path"],
+                warn=warn,
+            )
+            _refresh_remote_heartbeat(
+                effective_config,
+                workflow_state["allocation_heartbeat_path"],
+                warn=warn,
+            )
+
+        return _neuroinfra_finalize_remote_sweep_artifacts(
+            effective_config,
+            final_status=final_status,
+            local_sweep_dir=local_sweep_dir,
+            local_runs_dir=local_runs_dir,
+            remote_sweep_root=remote_sweep_root,
+            sweep_label=sweep_label,
+            manifest_items=manifest_items,
+            item_status_by_label=item_status_by_label,
+            hooks=_remote_sweep_artifact_hooks(
+                refresh_remote_leases_fn=refresh_remote_leases,
+                notebook_timings=notebook_timings,
+            ),
+        )
+
+    def finalize_local_items(
+        *,
+        manifest_items: list[dict[str, Any]],
+        sweep_plan: dict[str, Any],
+        local_runs_dir: Path,
+        timestamp: str,
+        remote_metadata: dict[str, Any],
+        notebook_timings: dict[str, float],
+        item_status_by_label: dict[str, dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], list[str], dict[str, str]]:
+        sweep_items = []
+        load_errors: dict[str, str] = {}
+        for item in manifest_items:
+            plan_item = sweep_plan["items"][int(item["index"])]
+            finalize_item = {**item, "config": plan_item["config"], "value": plan_item["value"]}
+            local_result_dir = _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"]))
+            status_payload = item_status_by_label.get(item["label"], {})
+            item_entry = {
+                "index": int(item["index"]),
+                "label": str(item["label"]),
+                "value": plan_item["value"],
+                "config": plan_item["config"],
+                "run": None,
+                "result": None,
+                "status": status_payload,
+            }
+            if local_result_dir is None:
+                sweep_items.append(item_entry)
+                continue
+            if not _local_sync_artifact_is_usable(local_result_dir / "summary.json"):
+                summary = _synthesize_partial_sync_summary(
+                    local_result_dir,
+                    label=str(item["label"]),
+                    timestamp=timestamp,
+                    config=plan_item["config"],
+                )
+                (local_result_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
+            remote_metadata["notebook_timing_seconds"] = notebook_timings
+            try:
+                run, result = _finalize_synced_sweep_item(
+                    item=finalize_item,
+                    local_result_dir=local_result_dir,
+                    timestamp=timestamp,
+                    remote_payload=remote_metadata,
+                    returncode=int(status_payload.get("returncode", 0) or 0),
+                )
+            except Exception as exc:
+                load_errors[str(item["label"])] = str(exc)
+                item_entry["status"] = {**status_payload, "load_error": str(exc)}
+            else:
+                item_entry["run"] = run
+                item_entry["result"] = result
+            sweep_items.append(item_entry)
+
+        missing_labels = [
+            item["label"]
+            for item in manifest_items
+            if _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"])) is None
+        ]
+        return sweep_items, missing_labels, load_errors
+
+    return _NeuroinfraRemoteSweepWorkflowHooks(
+        prepare_remote_session_fn=prepare_remote_session,
+        upload_manifest_fn=upload_manifest,
+        build_submit_shell_fn=build_submit_shell,
+        submit_remote_job_fn=submit_remote_job,
+        monitor_remote_job_fn=monitor_remote_job,
+        finalize_remote_artifacts_fn=finalize_remote_artifacts,
+        finalize_local_items_fn=finalize_local_items,
+        persist_sweep_fn=_write_sweep_info,
+        merge_sweep_info_payload_fn=_merge_run_info_payload,
+        summarize_status_fn=_summarize_remote_status,
+        timing_summary_text_fn=_timing_summary_text,
+        progress_write=_progress_write,
+    )
+
+
 def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
@@ -4719,290 +5013,36 @@ def _run_remote_sweep(
         "sweep_parallelism": int(max_concurrent),
         "sweep_items": len(manifest_items),
     }
-    (local_sweep_dir / "sweep_manifest.submit.json").write_text(manifest_json)
-
-    session = _neuroinfra_prepare_remote_job_session(
+    return _neuroinfra_execute_remote_sweep_workflow(
         effective_config,
-        remote_repo_root=remote_repo_root,
-        remote_git_ref=remote_git_ref,
-        remote_metadata=remote_metadata,
-        preflight_message="[Sol remote] Running remote preflight checks for sweep...",
-        hooks=_remote_job_session_hooks({}),
-    )
-    effective_config = session.effective_config
-    remote_metadata = session.remote_metadata
-    notebook_timings = session.notebook_timings
-    preflight_completed = session.preflight_completed
-    remote_helper_dir = session.remote_helper_dir
-    allocation_heartbeat_path = session.allocation_heartbeat_path
-    if preflight_completed.returncode != 0:
-        raise RuntimeError(
-            "Remote sweep preflight failed.\n"
-            f"Stdout:\n{preflight_completed.stdout}\n\n"
-            f"Stderr:\n{preflight_completed.stderr}"
-        )
-
-    _progress_write("[Sol remote] Uploading remote sweep manifest...")
-    started = time.perf_counter()
-    _upload_remote_text_file(
-        effective_config,
-        remote_path=remote_manifest_path,
-        text=manifest_json,
-    )
-    _record_timing(notebook_timings, "manifest_upload_s", started)
-    remote_metadata["sweep_manifest_path"] = remote_manifest_path.as_posix()
-
-    submit_shell = _build_remote_submit_command(
-        effective_config,
-        label=sweep_label,
-        remote_repo_root=remote_repo_root,
-        remote_results_root=remote_sweeps_root,
-        benchmark_command=remote_driver_command,
-        remote_mpi_exec=str(effective_config.get("remote_mpi_exec") or default_remote_mpi_exec()),
-        remote_git_ref=remote_git_ref,
-        step_ntasks=1,
-        remote_helper_dir=remote_helper_dir,
-    )
-
-    _progress_write("[Sol remote] Submitting remote sweep batch job...")
-    submit_result = _neuroinfra_submit_remote_json_job(
-        effective_config,
-        submit_shell=submit_shell,
-        local_output_dir=local_sweep_dir,
-        hooks=_remote_job_submit_hooks(notebook_timings),
-    )
-    submit_completed = submit_result.completed
-    if submit_completed.returncode != 0:
-        raise RuntimeError(
-            "Remote sweep submission failed.\n"
-            f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-        )
-
-    if submit_result.submission is None:
-        raise RuntimeError(
-            "Remote sweep submission did not return valid JSON.\n"
-            f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-        ) from submit_result.json_error
-    submission = submit_result.submission
-
-    remote_job_heartbeat_path = submit_result.job_heartbeat_path
-    remote_metadata["job_heartbeat_path"] = remote_job_heartbeat_path
-    remote_metadata["heartbeat_timeout_s"] = submit_result.heartbeat_timeout_s
-
-    manifest_by_label = {item["label"]: item for item in manifest_items}
-    synced_labels: set[str] = set()
-    item_status_by_label: dict[str, dict[str, Any]] = {}
-    final_status: dict[str, Any] | None = None
-    live_status = bool(effective_config.get("remote_live_status", True))
-    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
-    log_poll_interval_s = max(
-        float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
-        poll_interval_s,
-    )
-    live_sync_max_items_per_poll = max(
-        int(effective_config.get("sweep_live_sync_max_items_per_poll", 8) or 0),
-        0,
-    )
-
-    def refresh_remote_leases(*, warn: bool = False) -> None:
-        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
-        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
-
-    def sync_finished_items(status: dict[str, Any]) -> None:
-        progress_payload = status.get("progress_payload") or {}
-        pending_labels = progress_payload.get("pending_labels") or []
-        running_items = progress_payload.get("running_items") or []
-        if not _should_sync_remote_sweep_finished_items(
-            effective_config,
-            pending_count=len(pending_labels),
-            running_count=len(running_items),
-        ):
-            return
-        finished_items = progress_payload.get("finished_items") or []
-        synced_this_poll = 0
-        for finished in finished_items:
-            if not isinstance(finished, dict):
-                continue
-            label = str(finished.get("label") or "").strip()
-            if not label or label in synced_labels or label not in manifest_by_label:
-                continue
-            if live_sync_max_items_per_poll and synced_this_poll >= live_sync_max_items_per_poll:
-                break
-            manifest_item = manifest_by_label[label]
-            remote_result_dir = PurePosixPath(str(finished.get("result_dir") or manifest_item["result_dir"]))
-            local_result_dir = local_runs_dir / label
-            refresh_remote_leases()
-            sync_completed = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_result_dir,
-                local_result_dir=local_result_dir,
-                expected_files=("summary.json",),
-                include_files=_remote_sweep_item_sync_files(effective_config),
-            )
-            refresh_remote_leases()
-            if sync_completed.returncode != 0:
-                continue
-            item_status_by_label[label] = dict(finished)
-            synced_labels.add(label)
-            synced_this_poll += 1
-
-    _progress_write(
-        f"[Sol remote] Submitted sweep job {submission['job_id']} "
-        f"for {len(manifest_items)} items (parallelism={max_concurrent})."
-    )
-    monitor_result = _neuroinfra_monitor_remote_sweep(
-        job_id=str(submission["job_id"]),
-        poll_interval_s=poll_interval_s,
-        log_poll_interval_s=log_poll_interval_s,
-        live_status=live_status,
-        hooks=_remote_sweep_monitor_hooks(
-            effective_config=effective_config,
-            remote_job_heartbeat_path=remote_job_heartbeat_path,
-            allocation_heartbeat_path=allocation_heartbeat_path,
-            remote_repo_root=remote_repo_root,
-            remote_sweep_root=remote_sweep_root,
-            remote_helper_dir=remote_helper_dir,
-            notebook_timings=notebook_timings,
-            submission=submission,
-            synced_labels=synced_labels,
-            sync_finished_items_fn=sync_finished_items,
-        ),
-    )
-    final_status = monitor_result.final_status
-
-    sweep_artifacts = _neuroinfra_finalize_remote_sweep_artifacts(
-        effective_config,
-        final_status=final_status,
+        sweep_plan=sweep_plan,
+        sweep_label=sweep_label,
+        timestamp=timestamp,
         local_sweep_dir=local_sweep_dir,
         local_runs_dir=local_runs_dir,
+        remote_repo_root=remote_repo_root,
+        remote_git_ref=remote_git_ref,
+        remote_sweeps_root=remote_sweeps_root,
         remote_sweep_root=remote_sweep_root,
-        sweep_label=sweep_label,
         manifest_items=manifest_items,
-        item_status_by_label=item_status_by_label,
-        hooks=_remote_sweep_artifact_hooks(
-            refresh_remote_leases_fn=refresh_remote_leases,
-            notebook_timings=notebook_timings,
+        manifest_json=manifest_json,
+        max_concurrent=max_concurrent,
+        remote_metadata=remote_metadata,
+        hooks=_remote_sweep_workflow_hooks(
+            sweep_label=sweep_label,
+            timestamp=timestamp,
+            remote_repo_root=remote_repo_root,
+            remote_sweeps_root=remote_sweeps_root,
+            remote_sweep_root=remote_sweep_root,
+            remote_driver_command=remote_driver_command,
+            remote_git_ref=remote_git_ref,
+            manifest_json=manifest_json,
+            manifest_items=manifest_items,
+            remote_manifest_path=remote_manifest_path,
+            max_concurrent=max_concurrent,
+            local_runs_dir=local_runs_dir,
         ),
     )
-    final_sync = sweep_artifacts.final_sync
-    sweep_summary = sweep_artifacts.sweep_summary
-    item_status_by_label = sweep_artifacts.item_status_by_label
-    if final_sync.returncode != 0:
-        raise RuntimeError(
-            "Remote sweep result sync failed.\n"
-            f"Sweep dir: {local_sweep_dir}\n"
-            f"Stderr:\n{final_sync.stderr}"
-        )
-
-    sweep_items = []
-    load_errors: dict[str, str] = {}
-    for item in manifest_items:
-        plan_item = sweep_plan["items"][int(item["index"])]
-        finalize_item = {**item, "config": plan_item["config"], "value": plan_item["value"]}
-        local_result_dir = _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"]))
-        status_payload = item_status_by_label.get(item["label"], {})
-        item_entry = {
-            "index": int(item["index"]),
-            "label": str(item["label"]),
-            "value": plan_item["value"],
-            "config": plan_item["config"],
-            "run": None,
-            "result": None,
-            "status": status_payload,
-        }
-        if local_result_dir is None:
-            sweep_items.append(item_entry)
-            continue
-        if not _local_sync_artifact_is_usable(local_result_dir / "summary.json"):
-            summary = _synthesize_partial_sync_summary(
-                local_result_dir,
-                label=str(item["label"]),
-                timestamp=timestamp,
-                config=plan_item["config"],
-            )
-            (local_result_dir / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True))
-        remote_metadata["notebook_timing_seconds"] = notebook_timings
-        try:
-            run, result = _finalize_synced_sweep_item(
-                item=finalize_item,
-                local_result_dir=local_result_dir,
-                timestamp=timestamp,
-                remote_payload=remote_metadata,
-                returncode=int(status_payload.get("returncode", 0) or 0),
-            )
-        except Exception as exc:
-            load_errors[str(item["label"])] = str(exc)
-            item_entry["status"] = {**status_payload, "load_error": str(exc)}
-        else:
-            item_entry["run"] = run
-            item_entry["result"] = result
-        sweep_items.append(item_entry)
-
-    missing_labels = [
-        item["label"]
-        for item in manifest_items
-        if _resolve_local_sweep_item_dir(local_runs_dir, str(item["label"])) is None
-    ]
-
-    sweep = {
-        "path": sweep_plan["path"],
-        "values": list(sweep_plan["values"]),
-        "items": sweep_items,
-        "paramset": sweep_plan["paramset"],
-    }
-    if sweep_plan.get("grid") is not None:
-        sweep["grid"] = sweep_plan["grid"]
-    _write_sweep_info(sweep, sweep_dir=local_sweep_dir, timestamp=timestamp)
-    _merge_run_info_payload(
-        local_sweep_dir,
-        {
-            "remote": {
-                **remote_metadata,
-                "job_id": submission.get("job_id"),
-                "final_status": _summarize_remote_status(final_status),
-                "notebook_timing_seconds": notebook_timings,
-            }
-        },
-    )
-    timing_summary = _timing_summary_text(notebook_timings)
-    if timing_summary:
-        _progress_write(f"[OBGPU load] Sweep notebook pipeline timings: {timing_summary}")
-
-    failed_labels = []
-    for failed in sweep_summary.get("failed_items", []):
-        if isinstance(failed, dict) and failed.get("label"):
-            failed_labels.append(str(failed["label"]))
-    result_labels = {str(item.get("label")) for item in sweep_items if item.get("result") is not None}
-    failed_without_result = [label for label in failed_labels if label not in result_labels]
-    recovered_failed_labels = [label for label in failed_labels if label in result_labels]
-    loaded_count = sum(1 for item in sweep_items if item.get("result") is not None)
-    partial_reasons = []
-    if failed_without_result:
-        partial_reasons.append(f"{len(failed_without_result)} failed")
-    if missing_labels:
-        partial_reasons.append(f"{len(missing_labels)} missing")
-    if load_errors:
-        partial_reasons.append(f"{len(load_errors)} load errors")
-    sweep["partial"] = bool(partial_reasons)
-    sweep["failed_labels"] = failed_labels
-    sweep["failed_without_result"] = failed_without_result
-    sweep["recovered_failed_labels"] = recovered_failed_labels
-    sweep["missing_labels"] = missing_labels
-    sweep["load_errors"] = load_errors
-    if partial_reasons:
-        _write_sweep_info(sweep, sweep_dir=local_sweep_dir, timestamp=timestamp)
-        _progress_write(
-            "[OBGPU load] Remote sweep returned partial results: "
-            f"{loaded_count}/{len(manifest_items)} usable items "
-            f"({', '.join(partial_reasons)})."
-        )
-    if final_status is not None and not final_status.get("ok", True) and not sweep_summary and loaded_count == 0:
-        raise RuntimeError(
-            "Remote sweep failed before writing a summary.\n"
-            f"Sweep dir: {local_sweep_dir}\n"
-            f"State: {final_status.get('state')}"
-        )
-    return sweep
 
 
 def run_parameter_sweep(

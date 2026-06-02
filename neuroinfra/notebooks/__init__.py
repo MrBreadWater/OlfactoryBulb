@@ -31,6 +31,10 @@ from .remote_runs import (
     RemoteRunWorkflowHooks,
     execute_remote_run_workflow,
 )
+from .remote_sweeps import (
+    RemoteSweepWorkflowHooks,
+    execute_remote_sweep_workflow,
+)
 from .run_info import (
     RunInfoHooks,
     build_run_info_payload,
@@ -75,6 +79,7 @@ __all__ = [
     "RemoteJobSubmission",
     "RemoteJobSubmitHooks",
     "RemoteRunWorkflowHooks",
+    "RemoteSweepWorkflowHooks",
     "load_json_config",
     "LoadRunPairHooks",
     "load_run_config",
@@ -93,6 +98,7 @@ __all__ = [
     "read_json_if_present",
     "resolve_run_dir",
     "execute_remote_run_workflow",
+    "execute_remote_sweep_workflow",
     "save_json_config",
     "save_figure",
     "SweepPlanHooks",

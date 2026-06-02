@@ -317,6 +317,29 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic notebook remote single-run workflow now lives under neuroinfra.notebooks.remote_runs, while the helper still owns concrete remote payload construction, monitor/artifact hook wiring, and domain return shaping; next separate the remaining remote sweep orchestration and shared domain adapters above this layer.",
     ),
     ExtractionCandidate(
+        key="notebook_remote_sweep_workflow",
+        title="Notebook remote sweep workflow",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/remote_sweeps.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "remote sweep manifest upload and submit workflow composition",
+            "remote sweep monitoring and compact final-sync orchestration",
+            "partial-result bookkeeping and saved sweep persistence",
+        ),
+        repo_specific_couplings=(
+            "manifest item construction still depends on the repo's benchmark command conventions",
+            "incremental item sync and item-finalization hooks still depend on the repo's result layout",
+            "returned sweep item payloads still depend on the notebook helper's domain result model",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic notebook remote sweep workflow now lives under neuroinfra.notebooks.remote_sweeps, while the helper still owns concrete manifest construction, live item-sync policy, item finalization, and domain result shaping; next extract the remaining shared domain adapters that both remote and local sweep paths still use.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",

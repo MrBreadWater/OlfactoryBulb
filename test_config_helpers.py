@@ -294,6 +294,65 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._neuroinfra_execute_remote_run_workflow = original_remote_run_workflow
     print("remote single-run workflow delegation: OK")
 
+    # --- remote sweep wrapper delegates through neuroinfra remote sweep workflow ---
+    original_remote_sweep_workflow = hlp._neuroinfra_execute_remote_sweep_workflow
+    remote_sweep_workflow_calls = []
+    try:
+        def _fake_remote_sweep_workflow(
+            config,
+            *,
+            sweep_plan,
+            sweep_label,
+            timestamp,
+            local_sweep_dir,
+            local_runs_dir,
+            remote_repo_root,
+            remote_git_ref,
+            remote_sweeps_root,
+            remote_sweep_root,
+            manifest_items,
+            manifest_json,
+            max_concurrent,
+            remote_metadata,
+            hooks,
+        ):
+            remote_sweep_workflow_calls.append(
+                {
+                    "config": dict(config),
+                    "sweep_label": sweep_label,
+                    "timestamp": timestamp,
+                    "local_sweep_dir": Path(local_sweep_dir),
+                    "local_runs_dir": Path(local_runs_dir),
+                    "remote_repo_root": remote_repo_root,
+                    "remote_git_ref": remote_git_ref,
+                    "remote_sweeps_root": remote_sweeps_root,
+                    "remote_sweep_root": remote_sweep_root,
+                    "manifest_items": manifest_items,
+                    "manifest_json": manifest_json,
+                    "max_concurrent": max_concurrent,
+                    "remote_metadata": dict(remote_metadata),
+                }
+            )
+            return {"items": [], "path": sweep_plan["path"], "values": sweep_plan["values"], "paramset": sweep_plan["paramset"]}
+
+        hlp._neuroinfra_execute_remote_sweep_workflow = _fake_remote_sweep_workflow
+        remote_cfg = build_run_config(
+            paramset="GammaSignature",
+            runner_backend="slurm_remote",
+            remote_host="user@host",
+            remote_repo_root="/remote/OlfactoryBulb",
+            remote_results_root="/remote/OlfactoryBulb/results/notebook_runs",
+            sweep_engine="remote_batch",
+            results_base=str(tmp / "remote_sweeps_workflow"),
+        )
+        sweep_result = hlp.run_parameter_sweep(remote_cfg, "gaba_tau2_ms", [36.0, 50.0])
+        assert sweep_result["paramset"] == "GammaSignature"
+        assert remote_sweep_workflow_calls
+        assert remote_sweep_workflow_calls[0]["remote_repo_root"] == PurePosixPath("/remote/OlfactoryBulb")
+    finally:
+        hlp._neuroinfra_execute_remote_sweep_workflow = original_remote_sweep_workflow
+    print("remote sweep workflow delegation: OK")
+
     # --- run_and_load wrapper delegates through neuroinfra workflow ---
     original_run_and_load_workflow = hlp._neuroinfra_run_and_load_workflow
     run_and_load_calls = []
