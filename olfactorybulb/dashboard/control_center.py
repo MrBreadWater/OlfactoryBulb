@@ -20,6 +20,7 @@ from urllib.parse import unquote, urlparse
 
 from neuroinfra.dashboard import ShellTabSpec, render_dashboard_shell
 from olfactorybulb.audit.cli import available_audit_entries, run_audit_by_id
+from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.audit.dashboard import export_audit_dashboard
 import tools.analysis.hfo_visual_dashboard as hfo_dashboard
 
@@ -475,6 +476,111 @@ def _parse_audit_args_text(text: str) -> list[str]:
     return shlex.split(str(text or "").strip())
 
 
+def _audit_history_path(audits_dir: Path) -> Path:
+    return audits_dir / "history.json"
+
+
+def _audit_history_entry_key(audit_id: str, audit_args: list[str]) -> str:
+    return json.dumps({"audit_id": str(audit_id), "audit_args": list(audit_args)}, sort_keys=True)
+
+
+def _audit_history_group_id(entry_index: int, audit_id: str, audit_args: list[str]) -> str:
+    slug = str(audit_id or "audit").replace("/", "_").replace(" ", "_")
+    return f"{slug}-{entry_index:03d}"
+
+
+def _audit_history_group_title(audit_id: str, audit_args: list[str]) -> str:
+    args_text = " ".join(str(arg) for arg in audit_args if str(arg).strip()).strip()
+    return f"{audit_id} {args_text}".strip()
+
+
+def _load_audit_history(audits_dir: Path) -> list[dict[str, Any]]:
+    payload = _read_json_dict(_audit_history_path(audits_dir))
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if not isinstance(entries, list):
+        return []
+    return [dict(entry) for entry in entries if isinstance(entry, dict)]
+
+
+def _write_audit_history(audits_dir: Path, entries: list[dict[str, Any]]) -> None:
+    _write_json_atomic(
+        _audit_history_path(audits_dir),
+        {
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+            "entries": entries,
+        },
+    )
+
+
+def _combine_audit_history(entries: list[dict[str, Any]]) -> AuditReport:
+    combined_items: list[AuditItem] = []
+    for index, entry in enumerate(entries, start=1):
+        report_payload = entry.get("report") if isinstance(entry.get("report"), dict) else {}
+        item_payloads = report_payload.get("items") if isinstance(report_payload, dict) else None
+        if not isinstance(item_payloads, list):
+            continue
+        group_id = str(entry.get("group_id") or _audit_history_group_id(index, str(entry.get("audit_id") or "audit"), list(entry.get("audit_args") or [])))
+        group_title = str(entry.get("group_title") or _audit_history_group_title(str(entry.get("audit_id") or "audit"), list(entry.get("audit_args") or [])))
+        for item_payload in item_payloads:
+            if not isinstance(item_payload, dict):
+                continue
+            item = AuditItem(**item_payload)
+            combined_items.append(
+                AuditItem(
+                    check_id=f"{group_id}.{item.check_id}",
+                    status=item.status,
+                    title=item.title,
+                    criterion=item.criterion,
+                    description=item.description,
+                    acceptable=item.acceptable,
+                    acceptable_basis=item.acceptable_basis,
+                    evidence=item.evidence,
+                    note=item.note,
+                    human_review_status=item.human_review_status,
+                    human_review_note=item.human_review_note,
+                    human_review_reviewer=item.human_review_reviewer,
+                    group_id=group_id,
+                    group_title=group_title,
+                    detail_level=item.detail_level,
+                )
+            )
+    if not combined_items:
+        return AuditReport(audit_id="control_center_audits", title="Control center audits", items=[])
+    return AuditReport(audit_id="control_center_audits", title="Control center audits", items=combined_items)
+
+
+def _append_or_replace_audit_history_entry(
+    audits_dir: Path,
+    *,
+    audit_id: str,
+    audit_args: list[str],
+    report: AuditReport,
+) -> list[dict[str, Any]]:
+    entries = _load_audit_history(audits_dir)
+    key = _audit_history_entry_key(audit_id, audit_args)
+    entry = {
+        "entry_key": key,
+        "audit_id": str(audit_id),
+        "audit_args": list(audit_args),
+        "group_title": _audit_history_group_title(audit_id, audit_args),
+        "report": report.to_dict(),
+        "updated_at": datetime.now().isoformat(timespec="seconds"),
+    }
+    replaced = False
+    for index, existing in enumerate(entries):
+        if str(existing.get("entry_key") or "") == key:
+            entries[index] = {**existing, **entry}
+            replaced = True
+            break
+    if not replaced:
+        entries.append(entry)
+    for index, existing in enumerate(entries, start=1):
+        existing["group_id"] = _audit_history_group_id(index, str(existing.get("audit_id") or "audit"), list(existing.get("audit_args") or []))
+        existing["group_title"] = _audit_history_group_title(str(existing.get("audit_id") or "audit"), list(existing.get("audit_args") or []))
+    _write_audit_history(audits_dir, entries)
+    return entries
+
+
 def _compose_control_center_state(
     *,
     base_state: dict[str, Any],
@@ -483,20 +589,20 @@ def _compose_control_center_state(
 ) -> dict[str, Any]:
     state = json.loads(json.dumps(base_state))
     audit_manifest = _read_json_dict(audits_dir / "manifest.json")
+    audit_history = _load_audit_history(audits_dir)
     optimization_manifest = _read_json_dict(optimization_dir / "manifest.json")
 
     audit_state = state.setdefault("audit", {})
     if audit_state.get("status") not in {"running", "starting", "error"}:
         if audit_manifest:
+            latest_history = audit_history[-1] if audit_history else {}
+            latest_label = str(latest_history.get("group_title") or audit_state.get("audit_id") or audit_manifest.get("title") or "")
             audit_state.update(
                 {
                     "status": "ready",
                     "badge": str(audit_manifest.get("worst_status") or "ready"),
                     "badge_tone": _badge_tone(str(audit_manifest.get("worst_status") or "READY")),
-                    "message": (
-                        f"{audit_manifest.get('title') or audit_state.get('audit_id')}: "
-                        f"{audit_manifest.get('summary') or {}}"
-                    ),
+                    "message": f"{latest_label}: {audit_manifest.get('summary') or {}}".strip(": "),
                     "summary": audit_manifest.get("summary") or {},
                     "worst_status": audit_manifest.get("worst_status") or "PASS",
                     "generated_at": audit_manifest.get("generated_at") or "",
@@ -721,9 +827,17 @@ def export_control_center(
         )
         campaign_label = str(campaign_path)
     log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
+    _write_audit_history(audits_dir, [])
     audit_report = run_audit_by_id(audit_id, resolved_audit_args)
+    history_entries = _append_or_replace_audit_history_entry(
+        audits_dir,
+        audit_id=audit_id,
+        audit_args=resolved_audit_args,
+        report=audit_report,
+    )
+    combined_report = _combine_audit_history(history_entries)
     audit_manifest = export_audit_dashboard(
-        audit_report,
+        combined_report,
         audits_dir,
         refresh_endpoint="/__audit_refresh__",
     )
@@ -862,6 +976,7 @@ def serve_control_center(
         title="Audit starting",
         message=f"Running {audit_id} {' '.join(resolved_audit_args)}".strip(),
     )
+    _write_audit_history(audits_dir, [])
     _write_loading_frame(
         optimization_dir,
         title="Optimization dashboard starting",
@@ -907,8 +1022,15 @@ def serve_control_center(
         )
         try:
             report = run_audit_by_id(audit_id_to_run, audit_args_to_run)
+            history_entries = _append_or_replace_audit_history_entry(
+                audits_dir,
+                audit_id=audit_id_to_run,
+                audit_args=audit_args_to_run,
+                report=report,
+            )
+            combined_report = _combine_audit_history(history_entries)
             audit_manifest = export_audit_dashboard(
-                report,
+                combined_report,
                 audits_dir,
                 refresh_endpoint="/__audit_refresh__",
             )

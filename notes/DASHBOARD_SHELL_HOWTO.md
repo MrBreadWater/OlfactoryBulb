@@ -109,6 +109,9 @@ Once the shell is open:
   - `--profile maintained`
   - `--suite reference_bundles --details`
   - `--dataset-id granule_cells`
+- each audit run stays visible as its own group in the audit tab for the life
+  of the current shell session; running another audit should not wipe the
+  earlier groups from the page
 - the shell state endpoint keeps the audit/optimization/doc badges in sync with
   the real rendered content
 - the audit page itself now provides display controls for:

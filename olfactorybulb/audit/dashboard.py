@@ -124,7 +124,7 @@ def _render_group(group: dict[str, Any]) -> str:
             f"<section id='group-{_esc(group['group_id'])}' class='group-section' data-group-section "
             f"data-group-id='{_esc(group['group_id'])}' data-worst-status='{_esc(group['worst_status'])}'>",
             "<header class='group-header'>",
-            f"<div><h2>{_esc(_expand_terms(group['title'], sentence_case=True))}</h2>",
+            f"<div class='group-heading'><h2>{_esc(_expand_terms(group['title'], sentence_case=True))}</h2>",
             f"<p>{_esc(group['group_id'])}</p></div>",
             "<div class='group-header-actions'>",
             f"<div class='summary-row'>{_render_summary(group['summary'])}</div>",
@@ -147,7 +147,7 @@ def render_audit_dashboard_html(
     group_nav = "\n".join(
         (
             f"<a href='#group-{_esc(group['group_id'])}' class='group-link'>"
-            f"<span>{_esc(group['group_id'])}</span>"
+            f"<span class='group-link-label'>{_esc(group['group_id'])}</span>"
             f"<small>{int(group.get('item_count', 0))} items</small>"
             f"{_render_status_badge(str(group['worst_status']))}"
             "</a>"
@@ -233,11 +233,14 @@ def render_audit_dashboard_html(
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      flex: 0 0 auto;
+      max-width: 100%;
       border-radius: 999px;
       padding: 3px 8px;
       font-size: 12px;
       font-weight: 700;
       border: 1px solid transparent;
+      white-space: nowrap;
     }}
     .status-pass {{ color: var(--green); background: #ecfdf3; border-color: #a7f3d0; }}
     .status-warn {{ color: var(--amber); background: #fff7ed; border-color: #fed7aa; }}
@@ -266,6 +269,12 @@ def render_audit_dashboard_html(
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 10px;
       margin-bottom: 16px;
+      position: sticky;
+      top: 76px;
+      z-index: 28;
+      padding-bottom: 4px;
+      background: linear-gradient(to bottom, rgba(247, 248, 251, 0.98), rgba(247, 248, 251, 0.92));
+      backdrop-filter: blur(8px);
     }}
     .control-card {{
       background: var(--panel);
@@ -273,6 +282,7 @@ def render_audit_dashboard_html(
       border-radius: 8px;
       box-shadow: var(--shadow);
       padding: 12px;
+      overflow: visible;
     }}
     .control-card h2 {{
       margin: 0 0 10px;
@@ -309,10 +319,11 @@ def render_audit_dashboard_html(
       gap: 10px;
       align-items: center;
     }}
-    .toggle-chip {{
+    .toggle-button {{
+      appearance: none;
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      justify-content: center;
       padding: 7px 10px;
       border: 1px solid #dbe3ef;
       border-radius: 999px;
@@ -321,14 +332,25 @@ def render_audit_dashboard_html(
       font-weight: 600;
       color: #334155;
       cursor: pointer;
+      box-shadow: none;
     }}
-    .toggle-chip input {{
-      margin: 0;
+    .toggle-button:hover {{
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+    }}
+    .toggle-button[aria-pressed="true"] {{
+      background: #eff6ff;
+      border-color: #93c5fd;
+      color: #1d4ed8;
+      box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.10);
     }}
     .layout {{
       display: grid;
       grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
       gap: 18px;
+      position: relative;
+      z-index: 1;
     }}
     .sidebar, .group-section {{
       background: var(--panel);
@@ -339,15 +361,17 @@ def render_audit_dashboard_html(
     .sidebar {{
       position: sticky;
       top: 88px;
+      z-index: 18;
       align-self: start;
       padding: 14px;
+      overflow: visible;
     }}
     .sidebar h2 {{ margin: 0 0 10px; font-size: 16px; }}
     .group-links {{ display: flex; flex-direction: column; gap: 8px; }}
     .group-link {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: start;
       gap: 8px;
       padding: 8px 10px;
       border: 1px solid #e6eaf1;
@@ -356,21 +380,32 @@ def render_audit_dashboard_html(
       text-decoration: none;
       background: #fbfcfe;
     }}
+    .group-link-label {{
+      min-width: 0;
+      overflow-wrap: anywhere;
+      font-weight: 700;
+      line-height: 1.25;
+    }}
     .group-link small {{
-      margin-left: auto;
       color: var(--muted);
       font-size: 11px;
       font-weight: 600;
+      white-space: nowrap;
+      align-self: center;
     }}
     .content {{ display: flex; flex-direction: column; gap: 16px; }}
     .group-header {{
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
       padding: 13px 16px;
       border-bottom: 1px solid var(--line);
       background: #fbfcfe;
+    }}
+    .group-heading {{
+      min-width: 0;
+      flex: 1 1 auto;
     }}
     .group-header h2 {{ margin: 0; font-size: 16px; }}
     .group-header p {{ margin: 4px 0 0; color: var(--muted); font-size: 12px; }}
@@ -380,8 +415,10 @@ def render_audit_dashboard_html(
       gap: 8px;
       align-items: center;
       justify-content: flex-end;
+      min-width: 0;
+      flex: 0 1 auto;
     }}
-    .summary-row {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+    .summary-row {{ display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }}
     .items-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
@@ -390,6 +427,11 @@ def render_audit_dashboard_html(
     }}
     .group-section.group-collapsed .items-grid {{
       display: none;
+    }}
+    .group-section {{
+      position: relative;
+      z-index: 1;
+      overflow: visible;
     }}
     .item-card {{
       border: 1px solid var(--line);
@@ -435,8 +477,28 @@ def render_audit_dashboard_html(
     @media (max-width: 980px) {{
       header {{ padding: 14px 16px; }}
       main {{ padding: 16px; }}
+      .control-strip {{
+        position: static;
+        padding-bottom: 0;
+        background: transparent;
+        backdrop-filter: none;
+      }}
       .layout {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; }}
+      .group-link {{
+        grid-template-columns: minmax(0, 1fr) auto;
+      }}
+      .group-link .status-badge {{
+        grid-column: 1 / -1;
+        justify-self: start;
+      }}
+      .group-header-actions {{
+        width: 100%;
+        justify-content: flex-start;
+      }}
+      .summary-row {{
+        justify-content: flex-start;
+      }}
     }}
   </style>
 </head>
@@ -463,9 +525,9 @@ def render_audit_dashboard_html(
           <div class="control-field">
             <label>Filters</label>
             <div class="toggle-row">
-              <label class="toggle-chip"><input id="failures-only-toggle" type="checkbox">Failures and warnings only</label>
-              <label class="toggle-chip"><input id="hide-passed-groups-toggle" type="checkbox">Hide fully passing groups</label>
-              <label class="toggle-chip"><input id="show-detail-toggle" type="checkbox" checked>Show detail items</label>
+              <button class="toggle-button" type="button" id="failures-only-toggle" aria-pressed="false">Failures and warnings only</button>
+              <button class="toggle-button" type="button" id="hide-passed-groups-toggle" aria-pressed="false">Hide fully passing groups</button>
+              <button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>
             </div>
           </div>
           <div class="control-field">
@@ -501,7 +563,17 @@ def render_audit_dashboard_html(
       const resultsMeta = document.getElementById("results-meta");
       const emptyState = document.getElementById("audit-empty-state");
       const groupSections = Array.from(document.querySelectorAll("[data-group-section]"));
-      const statusOrder = ["FAIL", "WARN", "PASS"];
+
+      function togglePressed(button) {{
+        if (!button) return false;
+        const next = String(button.getAttribute("aria-pressed") || "false") !== "true";
+        button.setAttribute("aria-pressed", next ? "true" : "false");
+        return next;
+      }}
+
+      function isPressed(button) {{
+        return String(button?.getAttribute("aria-pressed") || "false") === "true";
+      }}
 
       function toggleGroup(section, collapse) {{
         if (!section) return;
@@ -514,9 +586,9 @@ def render_audit_dashboard_html(
 
       function applyFilters() {{
         const query = String(searchInput?.value || "").trim().toLowerCase();
-        const failuresOnly = Boolean(failuresOnlyToggle?.checked);
-        const hidePassedGroups = Boolean(hidePassedGroupsToggle?.checked);
-        const showDetail = Boolean(showDetailToggle?.checked);
+        const failuresOnly = isPressed(failuresOnlyToggle);
+        const hidePassedGroups = isPressed(hidePassedGroupsToggle);
+        const showDetail = isPressed(showDetailToggle);
         let visibleItems = 0;
         let visibleGroups = 0;
 
@@ -566,10 +638,14 @@ def render_audit_dashboard_html(
       document.getElementById("collapse-all-groups")?.addEventListener("click", () => {{
         groupSections.forEach((section) => toggleGroup(section, true));
       }});
-      [searchInput, failuresOnlyToggle, hidePassedGroupsToggle, showDetailToggle].forEach((element) => {{
-        element?.addEventListener("input", applyFilters);
-        element?.addEventListener("change", applyFilters);
+      [failuresOnlyToggle, hidePassedGroupsToggle, showDetailToggle].forEach((button) => {{
+        button?.addEventListener("click", () => {{
+          togglePressed(button);
+          applyFilters();
+        }});
       }});
+      searchInput?.addEventListener("input", applyFilters);
+      searchInput?.addEventListener("change", applyFilters);
       applyFilters();
     }})();
   </script>

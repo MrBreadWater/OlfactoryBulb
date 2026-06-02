@@ -102,11 +102,15 @@ with TemporaryDirectory() as tmp:
     assert (output_dir / "audits" / "report.json").exists()
     assert (output_dir / "optimization" / "index.html").exists()
     html = (output_dir / "index.html").read_text()
+    audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert "OlfactoryBulb Control Center" in html
     assert "Run selected audit" in html
     assert "/__control_center_state__" in html
     assert ">default<" in html
     assert ">all<" in html
+    assert audit_report["audit_id"] == "control_center_audits"
+    assert len(audit_report["groups"]) == 1
+    assert audit_report["groups"][0]["title"] == "repo_health --profile maintained"
     assert _export_call_kwargs["generate_packets_top_n"] == 0
     assert _export_call_kwargs["cleanup_stale_packets_before_render"] is False
     assert _export_call_kwargs["asset_url_prefix"] == "/repo"
@@ -254,10 +258,16 @@ with TemporaryDirectory() as tmp:
         assert ready_state["optimization"]["status"] == "ready"
         assert ready_state["optimization"]["badge"] == "5 packets"
 
-        audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+        audits_html = ""
+        audits_deadline = time.time() + 4.0
+        while time.time() < audits_deadline:
+            audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+            if "--profile maintained" in audits_html:
+                break
+            time.sleep(0.1)
         assert "Display controls" in audits_html
         assert "Collapse all groups" in audits_html
-        assert "repo_health report" in audits_html
+        assert "--profile maintained" in audits_html
 
         run_status, run_payload = _json_post(
             f"{base_url}/__audit_run__",
@@ -274,8 +284,18 @@ with TemporaryDirectory() as tmp:
             time.sleep(0.1)
         assert rerun_state["audit"]["audit_id"] == "test_suite_status"
         assert rerun_state["audit"]["audit_args"] == ["--suite", "maintained_core", "--details"]
-        rerun_audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
-        assert "test_suite_status report" in rerun_audits_html
+        rerun_audits_html = ""
+        rerun_html_deadline = time.time() + 4.0
+        while time.time() < rerun_html_deadline:
+            rerun_audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+            if "--suite maintained_core --details" in rerun_audits_html:
+                break
+            time.sleep(0.1)
+        assert "--profile maintained" in rerun_audits_html
+        assert "--suite maintained_core --details" in rerun_audits_html
+        combined_report = json.loads(urlopen(f"{base_url}/audits/report.json", timeout=3).read().decode("utf-8"))
+        assert combined_report["audit_id"] == "control_center_audits"
+        assert len(combined_report["groups"]) == 2
 
         refresh_status, refresh_payload = _json_post(f"{base_url}/__audit_refresh__", {})
         assert refresh_status == 202

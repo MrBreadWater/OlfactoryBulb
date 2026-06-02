@@ -221,6 +221,9 @@ python -m olfactorybulb.dashboard.control_center serve \
 <li><code>--profile maintained</code></li>
 <li><code>--suite reference_bundles --details</code></li>
 <li><code>--dataset-id granule_cells</code></li>
+<li>each audit run stays visible as its own group in the audit tab for the life
+  of the current shell session; running another audit should not wipe the
+  earlier groups from the page</li>
 <li>the shell state endpoint keeps the audit/optimization/doc badges in sync with
   the real rendered content</li>
 <li>the audit page itself now provides display controls for:</li>

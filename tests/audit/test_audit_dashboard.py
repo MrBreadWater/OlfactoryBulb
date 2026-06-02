@@ -58,6 +58,8 @@ with TemporaryDirectory() as tmp:
     assert "Display controls" in html
     assert "Failures and warnings only" in html
     assert "Collapse all groups" in html
+    assert "aria-pressed=\"false\"" in html
+    assert "group-link-label" in html
     assert "data-item-card" in html
 
 print("audit_dashboard: OK")

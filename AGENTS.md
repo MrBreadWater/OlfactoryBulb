@@ -348,6 +348,8 @@ contract for future sessions.
       error transitions
     - a real audit rerun through the maintained UI/backend path updates both the
       tab badge state and `/audits/index.html`
+    - when two different audits are run in one control-center session, the
+      audit page keeps both groups visible instead of wiping the earlier one
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed
@@ -428,6 +430,8 @@ contract for future sessions.
   - `python -m olfactorybulb.audit.dashboard <audit_id> --output-dir <dir> [-- <audit args>]`
   - The audit dashboard should be driven from `AuditReport.to_dict()` rather
     than a separate ad hoc report schema.
+  - In the control-center shell, sequential audit runs should accumulate as
+    separate audit groups for the current session.
 
 - Do not hardcode the current audit roster here.
   - Audit IDs change over time.
