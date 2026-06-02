@@ -151,6 +151,8 @@ What is already generic:
 - ordered named-signal providers
 - dynamic signal enumeration
 - provider-based signal resolution
+- provider factories for keyed traces, suffix variants, pattern-matched signals, and labeled traces
+- aligned mean traces from grouped time/value rows
 - separation between signal registry mechanics and concrete signal families
 
 What is domain-specific:

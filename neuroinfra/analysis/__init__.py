@@ -111,8 +111,13 @@ from .catalog import (
 )
 from .signals import (
     ResultSignalProvider,
+    keyed_trace_signal_provider,
     list_available_result_signals,
+    labeled_trace_signal_provider,
+    mean_aligned_row_trace,
+    pattern_result_signal_provider,
     resolve_result_signal,
+    suffix_variant_signal_provider,
 )
 
 __all__ = [
@@ -186,6 +191,7 @@ __all__ = [
     "iter_parallel_sweep_display_frames",
     "iter_sweep_animation_frames",
     "is_deprecated_sweep_animation_spec",
+    "keyed_trace_signal_provider",
     "list_available_categories",
     "list_unique_labels",
     "list_available_result_signals",
@@ -194,7 +200,9 @@ __all__ = [
     "make_sweep_placeholder_figure",
     "make_sweep_plot_spec",
     "metadata_value_or_result_length",
+    "mean_aligned_row_trace",
     "normalize_sweep_plot_spec",
+    "pattern_result_signal_provider",
     "render_sweep_frame",
     "resolve_sweep_item_result_dir",
     "result_file_metadata",
@@ -203,6 +211,7 @@ __all__ = [
     "save_animation",
     "save_sweep",
     "save_sweep_animation_stream",
+    "suffix_variant_signal_provider",
     "smooth_rate_series",
     "style_raster_axis",
     "time_axis_label",

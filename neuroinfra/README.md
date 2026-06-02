@@ -122,7 +122,9 @@ time-binned sample renderers, labeled-row instantaneous-frequency sample
 collectors, spectral-analysis core, sweep plot protocol, sweep persistence and
 reload helpers, streamed GIF rendering pipeline, event-rate/raster analysis
 helpers, shared event-rate plotting, raster-plus-rate overview layout, and
-named-signal provider registry that list,
+the named-signal provider registry plus provider-factory layer for keyed
+traces, suffix variants, pattern-matched signals, labeled traces, and aligned
+mean traces that list,
 summarize, transform, plot, animate, persist, reload, and resolve analysis
 signals in a stable ordered way now also live under `neuroinfra.analysis`,
 while the concrete OBGPU signal families and notebook-specific presentation
