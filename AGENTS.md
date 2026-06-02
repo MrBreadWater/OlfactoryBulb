@@ -478,7 +478,9 @@ contract for future sessions.
   - explicit `Description`
   - `Acceptable result`
   - `How Acceptable Result Was Determined`
-  - visible `Human Review` line when review metadata exists
+  - explicit warning reason text for `WARN` items, especially when the warning
+    comes from pending/provisional validation-design review state or an
+    intentionally surfaced caveat
   - evidence blocks readable in plain text
   - grouped summaries should collapse cleanly in large multi-audit reports
     without hiding warning/failure detail

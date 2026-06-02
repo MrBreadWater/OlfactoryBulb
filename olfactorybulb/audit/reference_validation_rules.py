@@ -151,6 +151,15 @@ def _apply_rule_level_human_review(
             item.human_review_note = metadata["note"]
         if not item.human_review_reviewer and metadata["reviewer"]:
             item.human_review_reviewer = metadata["reviewer"]
+        if item.status == "WARN" and not item.status_reason:
+            if item.human_review_status == "pending_review":
+                item.status_reason = (
+                    "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review."
+                )
+            elif item.human_review_status == "provisional":
+                item.status_reason = (
+                    "This item is intentionally surfaced as a warning because the validation-design choice behind it is still provisional."
+                )
 
 
 def _rule_item(
@@ -159,6 +168,7 @@ def _rule_item(
     status: str,
     evidence: dict[str, Any] | None = None,
     note: str = "",
+    status_reason: str = "",
     title: str | None = None,
     criterion: str | None = None,
     description: str | None = None,
@@ -176,6 +186,7 @@ def _rule_item(
         acceptable_basis=str(acceptable_basis or rule["acceptable_basis"]),
         evidence=evidence or {},
         note=note,
+        status_reason=status_reason,
     )
 
 
@@ -992,7 +1003,12 @@ def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list
         "note_ids": [note.note_id for note in matched_notes],
     }
     status = "WARN" if matched_notes else "PASS"
-    return [_rule_item(rule, status=status, evidence=evidence)]
+    status_reason = ""
+    if status == "WARN":
+        status_reason = (
+            "This item is a warning because relevant validation caveats matched the current rows and should remain visible in the report."
+        )
+    return [_rule_item(rule, status=status, evidence=evidence, status_reason=status_reason)]
 
 
 @register_validation_rule("reference_curve_match")

@@ -12,7 +12,7 @@ from typing import Any
 import time
 
 from olfactorybulb.audit.cli import run_audit_by_id
-from olfactorybulb.audit.core import AuditItem, AuditReport, _summary_chunks, _expand_terms
+from olfactorybulb.audit.core import AuditItem, AuditReport, _summary_chunks, _expand_terms, status_reason_text
 
 
 def _esc(value: object) -> str:
@@ -272,6 +272,7 @@ def _item_search_blob(item: AuditItem) -> str:
         item.description,
         item.acceptable,
         item.acceptable_basis,
+        item.status_reason,
         item.note,
         json.dumps(item.evidence, sort_keys=True),
     ]
@@ -300,6 +301,12 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ),
         _render_evidence(item),
     ]
+    status_reason = status_reason_text(item)
+    if status_reason:
+        sections.append(
+            "<div class='item-block status-reason-block'><h4>Why this is a warning</h4>"
+            f"<p>{_esc(_expand_terms(status_reason, sentence_case=True))}</p></div>"
+        )
     if item.note:
         sections.append(
             "<div class='item-block'><h4>Note</h4>"
@@ -674,6 +681,12 @@ def render_audit_dashboard_html(
     .item-body {{ padding: 14px; display: flex; flex-direction: column; gap: 12px; }}
     .item-block h4 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); }}
     .item-block p {{ margin: 0; }}
+    .status-reason-block {{
+      border: 1px solid #f3d8a2;
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: #fffaf0;
+    }}
     .interval-block {{
       border: 1px solid #e2e8f0;
       border-radius: 10px;

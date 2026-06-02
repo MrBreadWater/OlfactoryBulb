@@ -35,10 +35,10 @@ sample_report = AuditReport(
             group_title="Audit alpha",
         ),
         AuditItem(
-            check_id="audit_beta.beta_fail",
-            status="FAIL",
-            title="Beta fail",
-            criterion="Beta should fail.",
+            check_id="audit_beta.beta_warn",
+            status="WARN",
+            title="Beta warn",
+            criterion="Beta should warn.",
             description="Description",
             acceptable="Acceptable",
             acceptable_basis="Configured",
@@ -77,6 +77,7 @@ with TemporaryDirectory() as tmp:
     assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html
+    assert "Why this is a warning" in html
     assert "Human review" not in html
     assert "reviewer: human" not in html
 

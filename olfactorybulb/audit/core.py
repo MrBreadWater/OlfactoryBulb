@@ -82,6 +82,7 @@ class AuditItem:
     acceptable_basis: str = ""
     evidence: dict[str, Any] = field(default_factory=dict)
     note: str = ""
+    status_reason: str = ""
     human_review_status: str = ""
     human_review_note: str = ""
     human_review_reviewer: str = ""
@@ -280,6 +281,32 @@ def _default_acceptable_basis(item: AuditItem) -> str:
     )
 
 
+def status_reason_text(item: AuditItem) -> str:
+    explicit = str(item.status_reason or "").strip()
+    if explicit:
+        return explicit
+    status = str(item.status or "").upper()
+    if status != "WARN":
+        return ""
+    review_status = str(item.human_review_status or "").strip()
+    if review_status == "pending_review":
+        return (
+            "This item is a warning because the validation-design choice behind this check is still pending human review."
+        )
+    if review_status == "provisional":
+        return (
+            "This item is a warning because the validation-design choice behind this check is still provisional."
+        )
+    title_text = str(item.title or "").lower()
+    if "caveat" in title_text or "notes / protocol caveats" in title_text or "note" in title_text:
+        return (
+            "This item is a warning because relevant validation caveats apply to the current context and are being surfaced intentionally."
+        )
+    return (
+        "This item is a warning because the audit is surfacing a caveat or unresolved condition that is important but not treated as a hard failure."
+    )
+
+
 def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
     lines: list[str] = []
     status_tag = _paint(f"[{item.status}]", STATUS_COLOR.get(item.status, "37"), "1", enabled=enabled)
@@ -299,6 +326,12 @@ def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
         f"  {_paint('How Acceptable Result Was Determined', LABEL_COLOR, enabled=enabled)}  "
         f"{_expand_terms(item.acceptable_basis or _default_acceptable_basis(item), sentence_case=True)}"
     )
+    status_reason = status_reason_text(item)
+    if status_reason:
+        lines.append(
+            f"  {_paint('Why This Is A Warning', NOTE_COLOR, enabled=enabled)}  "
+            f"{_paint(_expand_terms(status_reason, sentence_case=True), DIM, enabled=enabled)}"
+        )
     if item.evidence:
         lines.append(f"  {_paint('Evidence', LABEL_COLOR, enabled=enabled)}")
         for evidence_line in _pretty_evidence_lines(item.evidence):

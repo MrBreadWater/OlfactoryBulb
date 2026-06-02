@@ -31,6 +31,14 @@ payload = json.loads(completed.stdout)
 assert payload["audit_id"] == "gc_intrinsic_validation"
 assert any(item["check_id"] == "gc_intrinsic_protocol_executed" for item in payload["items"])
 assert any(item["check_id"] == "gc_generic_fi_caveats" for item in payload["items"])
+warn_items = [item for item in payload["items"] if item["status"] == "WARN"]
+assert warn_items
+assert all(str(item.get("status_reason", "")).strip() for item in warn_items)
+assert any(
+    "pending human review" in str(item.get("status_reason", "")).lower()
+    for item in warn_items
+    if item.get("human_review_status") == "pending_review"
+)
 
 listed = subprocess.run([sys.executable, "tools/run_audit.py", "--list"], capture_output=True, text=True, check=False)
 assert listed.returncode == 0, listed
