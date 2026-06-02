@@ -234,6 +234,11 @@ Current progress:
   `neuroinfra.remote.run_monitor`, while notebook-specific poll-command
   construction and `run_info` persistence still remain in
   `obgpu_experiment_helpers.py`
+- the remote sweep live monitoring policy that manages sacct poll cadence,
+  UNKNOWN-state forced repolls, sweep progress status summaries, incremental
+  finished-item sync triggering, and interrupt-driven cancellation now lives
+  under `neuroinfra.remote.sweep_monitor`, while compact final sync and
+  sweep-result finalization still remain in `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

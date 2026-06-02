@@ -31,7 +31,7 @@ from getpass import getpass
 from hashlib import sha1, sha256
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import Any, MutableMapping
+from typing import Any, Callable, MutableMapping
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -199,6 +199,10 @@ from neuroinfra.remote.run_artifacts import (
 from neuroinfra.remote.run_monitor import (
     RemoteRunMonitorHooks as _NeuroinfraRemoteRunMonitorHooks,
     monitor_remote_run as _neuroinfra_monitor_remote_run,
+)
+from neuroinfra.remote.sweep_monitor import (
+    RemoteSweepMonitorHooks as _NeuroinfraRemoteSweepMonitorHooks,
+    monitor_remote_sweep as _neuroinfra_monitor_remote_sweep,
 )
 from neuroinfra.remote.deferred_artifacts import (
     DeferredArtifactSyncHooks as _NeuroinfraDeferredArtifactSyncHooks,
@@ -2477,6 +2481,65 @@ def _remote_run_monitor_hooks(
         sleep_fn=time.sleep,
         monotonic_fn=time.monotonic,
         time_fn=time.time,
+    )
+
+
+def _remote_sweep_monitor_hooks(
+    *,
+    effective_config: dict[str, Any],
+    remote_job_heartbeat_path: str | None,
+    allocation_heartbeat_path: str | None,
+    remote_repo_root: PurePosixPath,
+    remote_sweep_root: PurePosixPath,
+    remote_helper_dir: PurePosixPath | None,
+    notebook_timings: dict[str, float],
+    submission: dict[str, Any],
+    synced_labels: set[str],
+    sync_finished_items_fn: Callable[[dict[str, Any]], None],
+) -> _NeuroinfraRemoteSweepMonitorHooks:
+    """Build reusable hooks for live remote sweep monitoring."""
+
+    def refresh_remote_leases(*, warn: bool = False) -> None:
+        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
+        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
+
+    def poll_status_once(*, refresh_heartbeat: bool = True, include_sacct: bool = True) -> dict[str, Any]:
+        if refresh_heartbeat:
+            refresh_remote_leases()
+        poll_shell = _build_remote_poll_command(
+            effective_config,
+            remote_repo_root=remote_repo_root,
+            remote_result_dir=remote_sweep_root,
+            job_id=str(submission["job_id"]),
+            wrapper_dir=str(submission.get("wrapper_dir") or ""),
+            worktree_path=str(submission.get("worktree_path") or ""),
+            remote_helper_dir=remote_helper_dir,
+            include_sacct=include_sacct,
+            include_tails=False,
+        )
+        return _neuroinfra_poll_remote_json_status(
+            poll_shell,
+            poll_json_retries=max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1),
+            error_prefix="Remote sweep status poll",
+            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
+            timeout_s=_remote_poll_command_timeout_s(effective_config),
+        )
+
+    def cancel_job() -> subprocess.CompletedProcess[str]:
+        return _run_ssh_shell(
+            effective_config,
+            _build_remote_cancel_command(job_id=str(submission["job_id"])),
+        )
+
+    return _NeuroinfraRemoteSweepMonitorHooks(
+        refresh_remote_leases_fn=refresh_remote_leases,
+        poll_status_fn=poll_status_once,
+        sync_finished_items_fn=sync_finished_items_fn,
+        cancel_job_fn=cancel_job,
+        synced_count_fn=lambda: len(synced_labels),
+        progress_write=_progress_write,
+        sleep_fn=time.sleep,
+        monotonic_fn=time.monotonic,
     )
 
 
@@ -4918,7 +4981,6 @@ def _run_remote_sweep(
     item_status_by_label: dict[str, dict[str, Any]] = {}
     final_status: dict[str, Any] | None = None
     live_status = bool(effective_config.get("remote_live_status", True))
-    last_signature: tuple[Any, ...] | None = None
     poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
     log_poll_interval_s = max(
         float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
@@ -4928,34 +4990,10 @@ def _run_remote_sweep(
         int(effective_config.get("sweep_live_sync_max_items_per_poll", 8) or 0),
         0,
     )
-    poll_json_retries = max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1)
-    next_sacct_poll_at = time.monotonic()
 
     def refresh_remote_leases(*, warn: bool = False) -> None:
         _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
         _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
-
-    def poll_status_once(*, refresh_heartbeat: bool = True, include_sacct: bool = True) -> dict[str, Any]:
-        if refresh_heartbeat:
-            refresh_remote_leases()
-        poll_shell = _build_remote_poll_command(
-            effective_config,
-            remote_repo_root=remote_repo_root,
-            remote_result_dir=remote_sweep_root,
-            job_id=str(submission["job_id"]),
-            wrapper_dir=str(submission.get("wrapper_dir") or ""),
-            worktree_path=str(submission.get("worktree_path") or ""),
-            remote_helper_dir=remote_helper_dir,
-            include_sacct=include_sacct,
-            include_tails=False,
-        )
-        return _neuroinfra_poll_remote_json_status(
-            poll_shell,
-            poll_json_retries=poll_json_retries,
-            error_prefix="Remote sweep status poll",
-            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
-            timeout_s=_remote_poll_command_timeout_s(effective_config),
-        )
 
     def sync_finished_items(status: dict[str, Any]) -> None:
         progress_payload = status.get("progress_payload") or {}
@@ -5121,76 +5159,25 @@ def _run_remote_sweep(
         f"[Sol remote] Submitted sweep job {submission['job_id']} "
         f"for {len(manifest_items)} items (parallelism={max_concurrent})."
     )
-    try:
-        while True:
-            include_sacct = time.monotonic() >= next_sacct_poll_at
-            status = poll_status_once(refresh_heartbeat=True, include_sacct=include_sacct)
-            if include_sacct:
-                next_sacct_poll_at = time.monotonic() + log_poll_interval_s
-            if not include_sacct and status.get("state") == "UNKNOWN":
-                status = poll_status_once(refresh_heartbeat=False, include_sacct=True)
-                next_sacct_poll_at = time.monotonic() + log_poll_interval_s
-            status_signature = (
-                status.get("state"),
-                status.get("progress_current_ms"),
-                status.get("progress_total_ms"),
-                bool(status.get("summary_exists")),
-            )
-            progress_payload = status.get("progress_payload") or {}
-            finished_items = progress_payload.get("finished_items") or []
-            completed_count = len(progress_payload.get("completed_items") or [])
-            failed_count = len(progress_payload.get("failed_items") or [])
-            if finished_items:
-                completed_count = sum(1 for item in finished_items if isinstance(item, dict) and bool(item.get("ok", False)))
-                failed_count = sum(1 for item in finished_items if isinstance(item, dict) and not bool(item.get("ok", False)))
-            running_count = len(progress_payload.get("running_items") or [])
-            pending_count = len(progress_payload.get("pending_labels") or [])
-            status_signature = (
-                *status_signature,
-                completed_count,
-                failed_count,
-                running_count,
-                pending_count,
-                len(synced_labels),
-            )
-            if live_status and status_signature != last_signature:
-                detail = f"{status.get('state', 'UNKNOWN')}"
-                current = status.get("progress_current_ms")
-                total = status.get("progress_total_ms")
-                if current is not None and total not in (None, 0, ""):
-                    detail += f" ({int(float(current))}/{int(float(total))} items)"
-                elif completed_count or failed_count or running_count or pending_count:
-                    detail += (
-                        f" ({completed_count} done"
-                        f", {failed_count} failed"
-                        f", {running_count} running"
-                        f", {pending_count} pending"
-                        f", {len(synced_labels)} synced)"
-                    )
-                reason = str(status.get("reason") or "").strip()
-                location = str(status.get("location") or "").strip()
-                if detail.startswith("PENDING") and reason:
-                    detail += f"; reason={reason}"
-                elif location and not detail.startswith("PENDING"):
-                    detail += f"; where={location}"
-                _progress_write(f"[Sol remote] Sweep job {submission['job_id']}: {detail}")
-                last_signature = status_signature
-            sync_finished_items(status)
-            if status.get("done"):
-                final_status = status
-                break
-            time.sleep(poll_interval_s)
-    except KeyboardInterrupt:
-        _progress_write(f"[Sol remote] Interrupt received; cancelling sweep job {submission['job_id']}...")
-        try:
-            _run_ssh_shell(
-                effective_config,
-                _build_remote_cancel_command(job_id=str(submission["job_id"])),
-            )
-        finally:
-            raise KeyboardInterrupt(
-                f"Interrupted remote sweep and requested cancellation for job {submission['job_id']}."
-            )
+    monitor_result = _neuroinfra_monitor_remote_sweep(
+        job_id=str(submission["job_id"]),
+        poll_interval_s=poll_interval_s,
+        log_poll_interval_s=log_poll_interval_s,
+        live_status=live_status,
+        hooks=_remote_sweep_monitor_hooks(
+            effective_config=effective_config,
+            remote_job_heartbeat_path=remote_job_heartbeat_path,
+            allocation_heartbeat_path=allocation_heartbeat_path,
+            remote_repo_root=remote_repo_root,
+            remote_sweep_root=remote_sweep_root,
+            remote_helper_dir=remote_helper_dir,
+            notebook_timings=notebook_timings,
+            submission=submission,
+            synced_labels=synced_labels,
+            sync_finished_items_fn=sync_finished_items,
+        ),
+    )
+    final_status = monitor_result.final_status
 
     started = time.perf_counter()
     final_sync, sweep_summary = sync_final_sweep_results()

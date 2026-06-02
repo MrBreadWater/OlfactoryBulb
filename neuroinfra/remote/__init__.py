@@ -87,6 +87,11 @@ from .run_monitor import (
     RemoteRunMonitorResult,
     monitor_remote_run,
 )
+from .sweep_monitor import (
+    RemoteSweepMonitorHooks,
+    RemoteSweepMonitorResult,
+    monitor_remote_sweep,
+)
 from .deferred_artifacts import (
     DeferredArtifactSyncHooks,
     sync_deferred_remote_artifact,
@@ -261,6 +266,9 @@ __all__ = [
     "RemoteRunMonitorHooks",
     "RemoteRunMonitorResult",
     "monitor_remote_run",
+    "RemoteSweepMonitorHooks",
+    "RemoteSweepMonitorResult",
+    "monitor_remote_sweep",
     "DeferredArtifactSyncHooks",
     "sync_deferred_remote_artifact",
     "sync_deferred_remote_artifact_direct",

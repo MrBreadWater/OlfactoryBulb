@@ -47,6 +47,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.status_poll`
 - `neuroinfra.remote.run_artifacts`
 - `neuroinfra.remote.run_monitor`
+- `neuroinfra.remote.sweep_monitor`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -212,6 +213,12 @@ missing-artifact retry handling, and interrupt/error-driven cancel-plus-partial-
 behavior now also lives under `neuroinfra.remote.run_monitor`, while the
 notebook-specific poll command construction and `run_info` persistence still
 remain in `obgpu_experiment_helpers.py`.
+
+The remote sweep live monitoring policy that manages sacct poll cadence,
+UNKNOWN-state forced repolls, sweep progress status summaries, incremental
+finished-item sync triggering, and interrupt-driven cancellation now also
+lives under `neuroinfra.remote.sweep_monitor`, while compact final sync and
+sweep-result finalization still remain in `obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
