@@ -335,6 +335,11 @@ def render_audit_dashboard_html(
     refresh_endpoint: str | None = None,
 ) -> str:
     groups = list(payload.get("groups") or [])
+    has_non_detail_items = any(
+        str(item.get("detail_level") or "detail") != "detail"
+        for group in groups
+        for item in list(group.get("items") or [])
+    )
     generated_at = datetime.now().isoformat(timespec="seconds")
     group_nav = "\n".join(
         (
@@ -379,6 +384,9 @@ def render_audit_dashboard_html(
         }});
       }}
 """
+    detail_toggle_html = ""
+    if has_non_detail_items:
+        detail_toggle_html = '<button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -871,7 +879,7 @@ def render_audit_dashboard_html(
             <div class="toggle-row">
               <button class="toggle-button" type="button" id="failures-only-toggle" aria-pressed="false">Failures and warnings only</button>
               <button class="toggle-button" type="button" id="hide-passed-groups-toggle" aria-pressed="false">Hide fully passing groups</button>
-              <button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>
+              {detail_toggle_html}
             </div>
           </div>
           <div class="control-field">
@@ -933,7 +941,7 @@ def render_audit_dashboard_html(
         const query = String(searchInput?.value || "").trim().toLowerCase();
         const failuresOnly = isPressed(failuresOnlyToggle);
         const hidePassedGroups = isPressed(hidePassedGroupsToggle);
-        const showDetail = isPressed(showDetailToggle);
+        const showDetail = !showDetailToggle || isPressed(showDetailToggle);
         let visibleItems = 0;
         let visibleGroups = 0;
 

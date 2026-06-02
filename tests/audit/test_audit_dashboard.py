@@ -70,6 +70,7 @@ with TemporaryDirectory() as tmp:
     assert "Failures and warnings only" in html
     assert "Collapse all groups" in html
     assert "aria-pressed=\"false\"" in html
+    assert "Show detail items" not in html
     assert "group-link-label" in html
     assert "data-item-card" in html
     assert "data-interval-visual" in html
@@ -78,5 +79,44 @@ with TemporaryDirectory() as tmp:
     assert "evidence-lines" not in html
     assert "Human review" not in html
     assert "reviewer: human" not in html
+
+summary_report = AuditReport(
+    audit_id="summary_toggle",
+    title="Summary toggle",
+    items=[
+        AuditItem(
+            check_id="summary_toggle.summary_item",
+            status="PASS",
+            title="Summary item",
+            criterion="Criterion",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"count": 1},
+            group_id="summary_toggle",
+            group_title="Summary toggle",
+            detail_level="summary",
+        ),
+        AuditItem(
+            check_id="summary_toggle.detail_item",
+            status="PASS",
+            title="Detail item",
+            criterion="Criterion",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"count": 2},
+            group_id="summary_toggle",
+            group_title="Summary toggle",
+            detail_level="detail",
+        ),
+    ],
+)
+
+with TemporaryDirectory() as tmp:
+    output_dir = Path(tmp)
+    export_audit_dashboard(summary_report, output_dir)
+    html = (output_dir / "index.html").read_text()
+    assert "Show detail items" in html
 
 print("audit_dashboard: OK")
