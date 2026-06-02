@@ -10,7 +10,9 @@ import tempfile
 from neuroinfra.artifacts.loading import LazyResult
 from neuroinfra.artifacts.result_view import (
     ResultArtifactBinding,
+    ResultFieldSpec,
     ResultViewHooks,
+    ResultViewSchema,
     attach_lazy_artifact_loaders,
     plan_result_view,
 )
@@ -44,6 +46,38 @@ def _load_pickle(path: str | Path):
 
 
 def main() -> None:
+    schema = ResultViewSchema(
+        fields=(
+            ResultFieldSpec("events", default_factory=list),
+            ResultFieldSpec("lfp_t", default_factory=list),
+            ResultFieldSpec(
+                "lfp",
+                default_factory=list,
+                apply_loaded_fn=lambda result, loaded: (
+                    result.__setitem__("lfp_t", list(loaded[0])),
+                    result.__setitem__("lfp", list(loaded[1])),
+                ),
+            ),
+            ResultFieldSpec("soma_vs", default_factory=list, lazy_path_key="soma_vs_file"),
+        ),
+        result_type=LazyResult,
+    )
+    schema_result = schema.create_result(
+        result_dir=Path("/tmp/example"),
+        summary={"ok": True},
+        run_info={"remote": {}},
+        artifact_sizes={"a": 1},
+    )
+    assert schema_result["events"] == []
+    schema.apply_loaded_artifact(schema_result, "events", [1, 2])
+    schema.apply_loaded_artifact(schema_result, "lfp", ([0.0, 0.1], [1.0, 2.0]))
+    schema.set_lazy_artifact_path(schema_result, "soma_vs", Path("/tmp/example/soma_vs.pkl"))
+    assert schema_result["events"] == [1, 2]
+    assert schema_result["lfp_t"] == [0.0, 0.1]
+    assert schema_result["lfp"] == [1.0, 2.0]
+    assert schema_result["soma_vs_file"] == Path("/tmp/example/soma_vs.pkl")
+    print("artifact result-view schema path: OK")
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         result_dir = tmpdir_path / "result"

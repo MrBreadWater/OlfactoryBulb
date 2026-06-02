@@ -10,6 +10,70 @@ from .loading import LazyResult
 
 
 @dataclass(frozen=True)
+class ResultFieldSpec:
+    """One field in a loaded result mapping."""
+
+    key: str
+    default_factory: Callable[[], Any]
+    lazy_path_key: str | None = None
+    apply_loaded_fn: Callable[[MutableMapping[str, Any], Any], None] | None = None
+
+
+@dataclass(frozen=True)
+class ResultViewSchema:
+    """Schema for a loaded result mapping and artifact application behavior."""
+
+    fields: tuple[ResultFieldSpec, ...]
+    result_type: type[MutableMapping[str, Any]] = LazyResult
+
+    def create_result(
+        self,
+        *,
+        result_dir: Path,
+        summary: dict[str, Any] | None,
+        run_info: dict[str, Any] | None,
+        artifact_sizes: dict[str, int],
+    ) -> MutableMapping[str, Any]:
+        payload: dict[str, Any] = {
+            "result_dir": result_dir,
+            "summary": summary,
+            "run_info": run_info,
+            "artifact_sizes": artifact_sizes,
+        }
+        for field in self.fields:
+            payload[field.key] = field.default_factory()
+        return self.result_type(payload)
+
+    def apply_loaded_artifact(
+        self,
+        result: MutableMapping[str, Any],
+        key: str,
+        loaded: Any,
+    ) -> None:
+        field = self._field_by_key(key)
+        if field is not None and field.apply_loaded_fn is not None:
+            field.apply_loaded_fn(result, loaded)
+            return
+        result[key] = loaded
+
+    def set_lazy_artifact_path(
+        self,
+        result: MutableMapping[str, Any],
+        key: str,
+        path: Path,
+    ) -> None:
+        field = self._field_by_key(key)
+        lazy_path_key = field.lazy_path_key if field is not None else None
+        result[lazy_path_key or f"{key}_file"] = path
+
+    def _field_by_key(self, key: str) -> ResultFieldSpec | None:
+        for field in self.fields:
+            if field.key == key:
+                return field
+        return None
+
+
+@dataclass(frozen=True)
 class ResultArtifactBinding:
     """One result artifact that may be loaded eagerly or lazily."""
 

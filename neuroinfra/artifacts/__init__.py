@@ -18,8 +18,10 @@ from .loading import (
 )
 from .result_view import (
     ResultArtifactBinding,
+    ResultFieldSpec,
     ResultViewHooks,
     ResultViewPlan,
+    ResultViewSchema,
     attach_lazy_artifact_loaders,
     plan_result_view,
 )
@@ -29,8 +31,10 @@ __all__ = [
     "ArtifactLoadingHooks",
     "LazyResult",
     "ResultArtifactBinding",
+    "ResultFieldSpec",
     "ResultViewHooks",
     "ResultViewPlan",
+    "ResultViewSchema",
     "TIMESTAMP_FORMAT",
     "TIMESTAMP_SUFFIX_RE",
     "attach_lazy_artifact_loaders",

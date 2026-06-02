@@ -86,6 +86,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "lazy artifact result containers",
             "timed local artifact load plans with progress reporting",
             "result-view planning with eager and deferred artifact wiring",
+            "configurable result schemas for default fields and artifact application",
         ),
         repo_specific_couplings=(
             "artifact names still use OBGPU terminology like soma_vs and lfp",
@@ -93,7 +94,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="high",
         proposed_phase=1,
         current_status="internal_shim_extracted",
-        recommended_action="The first internal extraction has been done behind compatibility shims, and the local artifact-loading helpers plus the generic result-view planner now live under neuroinfra.artifacts; next remove remaining OBGPU-specific naming and separate the last notebook-specific signal/field mapping from the OBGPU artifact plan.",
+        recommended_action="The first internal extraction has been done behind compatibility shims, and the local artifact-loading helpers plus the generic result-view planner/schema now live under neuroinfra.artifacts; next remove remaining OBGPU-specific naming and separate the last notebook-specific signal analysis and presentation policy from the OBGPU artifact plan.",
     ),
     ExtractionCandidate(
         key="remote_slurm_execution",
@@ -147,7 +148,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium-high",
         proposed_phase=2,
         current_status="config_sync_launch_state_transport_allocation_runtime_sftp_stream_result_sync_deferred_artifact_status_poll_run_artifacts_run_monitor_sweep_monitor_sweep_artifacts_script_common_submit_polling_allocations_sweeps_git_helper_cache_and_allocation_seams_standardized",
-        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook-managed reusable-allocation orchestration, low-level Paramiko archive/direct stream helpers, higher-level result-sync retry/fallback policy, deferred remote-artifact sync policy, shared JSON status-poll retry/parsing, remote single-run final sync and artifact-collection policy, remote single-run live monitoring policy, remote sweep live monitoring policy, remote sweep compact final-sync/finalization policy, notebook runtime/session policy, Paramiko transport/session logic, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote single-run submit helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract the OBGPU-specific result-loading policy from obgpu_experiment_helpers.py without breaking the live wrappers.",
+        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook-managed reusable-allocation orchestration, low-level Paramiko archive/direct stream helpers, higher-level result-sync retry/fallback policy, deferred remote-artifact sync policy, shared JSON status-poll retry/parsing, remote single-run final sync and artifact-collection policy, remote single-run live monitoring policy, remote sweep live monitoring policy, remote sweep compact final-sync/finalization policy, notebook runtime/session policy, Paramiko transport/session logic, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote single-run submit helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next focus on the remaining notebook-facade orchestration in obgpu_experiment_helpers.py rather than low-level remote plumbing.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",

@@ -242,7 +242,9 @@ from neuroinfra.artifacts.loading import (
 )
 from neuroinfra.artifacts.result_view import (
     ResultArtifactBinding as _NeuroinfraResultArtifactBinding,
+    ResultFieldSpec as _NeuroinfraResultFieldSpec,
     ResultViewHooks as _NeuroinfraResultViewHooks,
+    ResultViewSchema as _NeuroinfraResultViewSchema,
     attach_lazy_artifact_loaders as _neuroinfra_attach_lazy_artifact_loaders,
     plan_result_view as _neuroinfra_plan_result_view,
 )
@@ -2381,7 +2383,7 @@ def _result_view_hooks() -> _NeuroinfraResultViewHooks:
         local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
         sync_deferred_artifact_fn=_sync_deferred_remote_artifact,
         load_pickle_fn=load_pickle,
-        set_lazy_artifact_path_fn=lambda result, key, path: result.__setitem__(f"{key}_file", path),
+        set_lazy_artifact_path_fn=_OBGPU_RESULT_VIEW_SCHEMA.set_lazy_artifact_path,
         local_lazy_notice_fn=lambda key, path: (
             f"[OBGPU load] Deferred {key} ({_format_bytes(path.stat().st_size)}) until result['{key}'] is accessed."
         ),
@@ -2597,12 +2599,7 @@ def _remote_sweep_artifact_hooks(
 
 def _apply_loaded_result_artifact(result: MutableMapping[str, Any], key: str, loaded: Any) -> None:
     """Apply one loaded artifact payload to the standard notebook result dict."""
-    if key == "lfp":
-        lfp_t, lfp = loaded
-        result["lfp_t"] = np.asarray(lfp_t, dtype=float)
-        result["lfp"] = np.asarray(lfp, dtype=float)
-    else:
-        result[key] = loaded
+    _OBGPU_RESULT_VIEW_SCHEMA.apply_loaded_artifact(result, key, loaded)
 
 
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
@@ -5388,6 +5385,31 @@ class LazyResult(_NeuroinfraLazyResult):
         _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
 
 
+def _apply_loaded_lfp_payload(result: MutableMapping[str, Any], loaded: Any) -> None:
+    """Apply one loaded LFP payload into the standard result mapping."""
+    lfp_t, lfp = loaded
+    result["lfp_t"] = np.asarray(lfp_t, dtype=float)
+    result["lfp"] = np.asarray(lfp, dtype=float)
+
+
+_OBGPU_RESULT_VIEW_SCHEMA = _NeuroinfraResultViewSchema(
+    fields=(
+        _NeuroinfraResultFieldSpec("input_times", default_factory=list),
+        _NeuroinfraResultFieldSpec("soma_vs", default_factory=list, lazy_path_key="soma_vs_file"),
+        _NeuroinfraResultFieldSpec("soma_spikes", default_factory=dict),
+        _NeuroinfraResultFieldSpec("voltage_summary", default_factory=dict),
+        _NeuroinfraResultFieldSpec("gc_output_events", default_factory=list),
+        _NeuroinfraResultFieldSpec("lfp_t", default_factory=lambda: np.array([])),
+        _NeuroinfraResultFieldSpec(
+            "lfp",
+            default_factory=lambda: np.array([]),
+            apply_loaded_fn=_apply_loaded_lfp_payload,
+        ),
+    ),
+    result_type=LazyResult,
+)
+
+
 def _make_result_view(
     *,
     result_dir: Path,
@@ -5396,19 +5418,12 @@ def _make_result_view(
     artifact_sizes: dict[str, int],
 ) -> LazyResult:
     """Build the standard notebook result mapping before artifact payload loads."""
-    return LazyResult({
-        "result_dir": result_dir,
-        "summary": summary,
-        "run_info": run_info,
-        "input_times": [],
-        "soma_vs": [],
-        "soma_spikes": {},
-        "voltage_summary": {},
-        "gc_output_events": [],
-        "lfp_t": np.array([]),
-        "lfp": np.array([]),
-        "artifact_sizes": artifact_sizes,
-    })
+    return _OBGPU_RESULT_VIEW_SCHEMA.create_result(
+        result_dir=result_dir,
+        summary=summary,
+        run_info=run_info,
+        artifact_sizes=artifact_sizes,
+    )
 
 
 def load_result(

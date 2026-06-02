@@ -101,8 +101,10 @@ field mapping still remain in `obgpu_experiment_helpers.py`.
 The generic result-view planner that reads summary/run-info metadata, decides
 which artifacts should load eagerly, wires deferred remote artifacts, and
 attaches lazy local/remote loaders now also lives under
-`neuroinfra.artifacts.result_view`, while the concrete OBGPU signal names and
-field mapping still remain in `obgpu_experiment_helpers.py`.
+`neuroinfra.artifacts.result_view`. That same module now also owns the generic
+result-schema machinery for default fields, artifact application behavior, and
+lazy-path bookkeeping, while the concrete OBGPU signal names and higher-level
+presentation policy still remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

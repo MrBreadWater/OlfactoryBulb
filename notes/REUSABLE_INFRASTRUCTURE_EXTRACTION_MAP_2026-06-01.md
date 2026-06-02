@@ -111,6 +111,8 @@ Current progress:
 - the generic result-view planner that reads summary/run-info metadata,
   decides eager vs deferred artifacts, and wires lazy local/remote loaders now
   lives under `neuroinfra.artifacts.result_view`
+- that same module now also owns the generic result-schema machinery for
+  default fields, artifact application behavior, and lazy-path bookkeeping
 - the remaining concrete OBGPU signal names and field mapping still live in
   `obgpu_experiment_helpers.py`
 
