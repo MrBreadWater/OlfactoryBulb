@@ -122,12 +122,14 @@ Current progress:
 Current files:
 
 - `neuroinfra/analysis/catalog.py`
+- `neuroinfra/analysis/overview.py`
 - `neuroinfra/analysis/signals.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
 
 - stable category and label cataloging
+- result-overview context and summary builders
 - ordered named-signal providers
 - dynamic signal enumeration
 - provider-based signal resolution
@@ -137,7 +139,7 @@ What is domain-specific:
 
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- result-overview and signal-presentation conventions
+- notebook-specific signal-presentation conventions
 
 Extraction confidence:
 

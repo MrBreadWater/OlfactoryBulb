@@ -259,6 +259,12 @@ from neuroinfra.analysis.catalog import (
     list_available_categories as _neuroinfra_list_available_categories,
     list_unique_labels as _neuroinfra_list_unique_labels,
 )
+from neuroinfra.analysis.overview import (
+    build_result_overview as _neuroinfra_build_result_overview,
+    build_result_overview_context as _neuroinfra_build_result_overview_context,
+    first_result_file_metadata as _neuroinfra_first_result_file_metadata,
+    metadata_value_or_result_length as _neuroinfra_metadata_value_or_result_length,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -6124,44 +6130,34 @@ def get_cell_section_parent_map(model: Any, cell_name: str) -> dict[str, str | N
 
 def result_overview(result: dict[str, Any]) -> dict[str, Any]:
     """Summarize the key dimensions and timing fields of a loaded result."""
-    summary = result.get("summary") or {}
-    params = summary.get("params", {})
-    timings = summary.get("timing_seconds", {})
-    files = summary.get("files") or {}
-    soma_meta = {}
-    for filename in soma_trace_artifact_candidates():
-        payload = files.get(filename)
-        if isinstance(payload, dict):
-            soma_meta = payload
-            break
-    input_meta = files.get("input_times.pkl") if isinstance(files.get("input_times.pkl"), dict) else {}
-    lfp_meta = files.get("lfp.pkl") if isinstance(files.get("lfp.pkl"), dict) else {}
-    n_inputs = input_meta.get("items")
-    if not isinstance(n_inputs, int):
-        n_inputs = len(dict.get(result, "input_times", []))
-    n_soma_traces = soma_meta.get("items")
-    if not isinstance(n_soma_traces, int):
-        # Bypass LazyResult.get() so summaries do not trigger deferred remote sync.
-        n_soma_traces = len(dict.get(result, "soma_vs", []))
-    n_lfp_samples = lfp_meta.get("len_1")
-    if not isinstance(n_lfp_samples, int):
-        n_lfp_samples = int(len(dict.get(result, "lfp", [])))
-    return {
-        "result_dir": str(result["result_dir"]),
-        "label": summary.get("label"),
-        "paramset": summary.get("paramset"),
-        "nranks": summary.get("nranks"),
-        "tstop_ms": params.get("tstop"),
-        "sim_dt_ms": params.get("sim_dt"),
-        "actual_dt_ms": params.get("actual_dt"),
-        "recording_period_ms": params.get("recording_period"),
-        "run_seconds": timings.get("run_max_rank"),
-        "total_seconds": timings.get("total_max_rank"),
-        "n_inputs": n_inputs,
-        "n_soma_traces": n_soma_traces,
-        "n_gc_output_connections": len(result.get("gc_output_events", [])),
-        "n_lfp_samples": n_lfp_samples,
-    }
+    context = _neuroinfra_build_result_overview_context(result)
+    soma_meta = _neuroinfra_first_result_file_metadata(context, soma_trace_artifact_candidates())
+    input_meta = context.files.get("input_times.pkl") if isinstance(context.files.get("input_times.pkl"), dict) else {}
+    lfp_meta = context.files.get("lfp.pkl") if isinstance(context.files.get("lfp.pkl"), dict) else {}
+    return _neuroinfra_build_result_overview(
+        context,
+        extra_fields={
+            "n_inputs": _neuroinfra_metadata_value_or_result_length(
+                context,
+                metadata=input_meta,
+                metadata_key="items",
+                result_key="input_times",
+            ),
+            "n_soma_traces": _neuroinfra_metadata_value_or_result_length(
+                context,
+                metadata=soma_meta,
+                metadata_key="items",
+                result_key="soma_vs",
+            ),
+            "n_gc_output_connections": len(result.get("gc_output_events", [])),
+            "n_lfp_samples": _neuroinfra_metadata_value_or_result_length(
+                context,
+                metadata=lfp_meta,
+                metadata_key="len_1",
+                result_key="lfp",
+            ),
+        },
+    )
 
 
 def uniform_trace(
