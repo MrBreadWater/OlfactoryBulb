@@ -196,6 +196,10 @@ from neuroinfra.remote.run_artifacts import (
     RemoteRunArtifactHooks as _NeuroinfraRemoteRunArtifactHooks,
     finalize_remote_run_artifacts as _neuroinfra_finalize_remote_run_artifacts,
 )
+from neuroinfra.remote.run_monitor import (
+    RemoteRunMonitorHooks as _NeuroinfraRemoteRunMonitorHooks,
+    monitor_remote_run as _neuroinfra_monitor_remote_run,
+)
 from neuroinfra.remote.deferred_artifacts import (
     DeferredArtifactSyncHooks as _NeuroinfraDeferredArtifactSyncHooks,
     sync_deferred_remote_artifact as _neuroinfra_sync_deferred_remote_artifact,
@@ -2394,6 +2398,88 @@ def _remote_run_artifact_hooks(
     )
 
 
+def _remote_run_monitor_hooks(
+    *,
+    effective_config: dict[str, Any],
+    remote_job_heartbeat_path: str | None,
+    allocation_heartbeat_path: str | None,
+    remote_repo_root: PurePosixPath,
+    remote_result_dir: PurePosixPath,
+    remote_helper_dir: PurePosixPath | None,
+    notebook_timings: dict[str, float],
+    submission: dict[str, Any],
+    local_result_dir: Path,
+) -> _NeuroinfraRemoteRunMonitorHooks:
+    """Build reusable hooks for live remote single-run monitoring."""
+
+    def refresh_remote_leases(*, warn: bool = False) -> None:
+        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
+        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
+
+    def poll_status_once(
+        *,
+        refresh_heartbeat: bool = True,
+        include_logs: bool = True,
+        include_sacct: bool = True,
+    ) -> dict[str, Any]:
+        if refresh_heartbeat:
+            refresh_remote_leases()
+        poll_shell = _build_remote_poll_command(
+            effective_config,
+            remote_repo_root=remote_repo_root,
+            remote_result_dir=remote_result_dir,
+            job_id=str(submission["job_id"]),
+            wrapper_dir=str(submission.get("wrapper_dir") or ""),
+            worktree_path=str(submission.get("worktree_path") or ""),
+            remote_helper_dir=remote_helper_dir,
+            include_sacct=include_sacct,
+            include_tails=include_logs,
+        )
+        return _neuroinfra_poll_remote_json_status(
+            poll_shell,
+            poll_json_retries=max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1),
+            error_prefix="Remote Sol status poll",
+            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
+        )
+
+    def cancel_job() -> subprocess.CompletedProcess[str]:
+        return _run_ssh_shell(
+            effective_config,
+            _build_remote_cancel_command(job_id=str(submission["job_id"])),
+        )
+
+    def sync_partial_artifacts() -> subprocess.CompletedProcess[str]:
+        sync_started = time.perf_counter()
+        sync_completed = _sync_remote_result_dir(
+            effective_config,
+            remote_result_dir=remote_result_dir,
+            local_result_dir=local_result_dir,
+        )
+        _record_timing(notebook_timings, "partial_sync_s", sync_started)
+        (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
+        (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
+        return sync_completed
+
+    return _NeuroinfraRemoteRunMonitorHooks(
+        refresh_remote_leases_fn=refresh_remote_leases,
+        poll_status_fn=poll_status_once,
+        cancel_job_fn=cancel_job,
+        sync_partial_artifacts_fn=sync_partial_artifacts,
+        remote_status_has_artifacts_fn=_remote_status_has_artifacts,
+        progress_bar_factory_fn=lambda total_ms, desc: _ProgressBar(
+            total=total_ms,
+            desc=desc,
+            unit="ms",
+            unit_scale=False,
+        ),
+        filter_live_log_line_fn=_filter_live_remote_log_line,
+        progress_write=_progress_write,
+        sleep_fn=time.sleep,
+        monotonic_fn=time.monotonic,
+        time_fn=time.time,
+    )
+
+
 def _apply_loaded_result_artifact(result: MutableMapping[str, Any], key: str, loaded: Any) -> None:
     """Apply one loaded artifact payload to the standard notebook result dict."""
     if key == "lfp":
@@ -4016,322 +4102,27 @@ def _run_remote_simulation(
     )
     live_status = bool(effective_config.get("remote_live_status", True))
     live_logs = bool(effective_config.get("remote_live_logs", True))
-    poll_json_retries = max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1)
-    poll_transcript: list[dict[str, Any]] = []
-    final_status: dict[str, Any] | None = None
-    missing_artifact_retries = 0
-    last_status_signature: tuple[Any, ...] | None = None
-    last_live_tails = {
-        "bootstrap": "",
-        "stdout": "",
-        "stderr": "",
-        "slurm": "",
-    }
-    last_live_lines = {
-        "bootstrap": None,
-        "stdout": None,
-        "stderr": None,
-        "slurm": None,
-    }
-    last_live_partials = {
-        "bootstrap": "",
-        "stdout": "",
-        "stderr": "",
-        "slurm": "",
-    }
-    sim_progress_bar: _ProgressBar | None = None
-    sim_progress_total_ms: int | None = None
-    sim_last_progress_ms: int | None = None
-    sim_waiting_for_progress_logged = False
-    sim_progress_complete = False
-    sim_finalizing_logged = False
-    next_full_poll_at = time.monotonic()
-    last_polled_state: tuple[Any, Any, Any] | None = None
-
-    def refresh_remote_leases(*, warn: bool = False) -> None:
-        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
-        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
-
-    def poll_remote_status_once(
-        *,
-        refresh_heartbeat: bool = True,
-        include_logs: bool = True,
-        include_sacct: bool = True,
-    ) -> dict[str, Any]:
-        if refresh_heartbeat:
-            refresh_remote_leases()
-        poll_shell = _build_remote_poll_command(
-            effective_config,
+    monitor_result = _neuroinfra_monitor_remote_run(
+        job_id=str(submission["job_id"]),
+        poll_interval_s=poll_interval_s,
+        log_poll_interval_s=log_poll_interval_s,
+        live_status=live_status,
+        live_logs=live_logs,
+        missing_artifact_retry_limit=3,
+        hooks=_remote_run_monitor_hooks(
+            effective_config=effective_config,
+            remote_job_heartbeat_path=remote_job_heartbeat_path,
+            allocation_heartbeat_path=allocation_heartbeat_path,
             remote_repo_root=remote_repo_root,
             remote_result_dir=remote_result_dir,
-            job_id=str(submission["job_id"]),
-            wrapper_dir=str(submission.get("wrapper_dir") or ""),
-            worktree_path=str(submission.get("worktree_path") or ""),
             remote_helper_dir=remote_helper_dir,
-            include_sacct=include_sacct,
-            include_tails=include_logs,
-        )
-        status = _neuroinfra_poll_remote_json_status(
-            poll_shell,
-            poll_json_retries=poll_json_retries,
-            error_prefix="Remote Sol status poll",
-            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
-        )
-        poll_transcript.append(status)
-        return status
-
-    def emit_live_remote_updates(status: dict[str, Any]) -> None:
-        nonlocal last_status_signature
-        nonlocal sim_progress_bar
-        nonlocal sim_progress_total_ms
-        nonlocal sim_last_progress_ms
-        nonlocal sim_waiting_for_progress_logged
-        nonlocal sim_progress_complete
-        nonlocal sim_finalizing_logged
-        status_signature = (
-            status.get("state"),
-            bool(status.get("summary_exists")),
-            bool(status.get("stdout_exists")),
-            bool(status.get("stderr_exists")),
-            bool(status.get("bootstrap_exists")),
-            bool(status.get("command_exists")),
-            bool(status.get("slurm_log_exists")),
-        )
-        if live_status and status_signature != last_status_signature:
-            state = str(status.get("state", "UNKNOWN"))
-            reason = str(status.get("reason") or "").strip()
-            location = str(status.get("location") or "").strip()
-            flags = []
-            if status.get("bootstrap_exists"):
-                flags.append("bootstrap")
-            if status.get("command_exists"):
-                flags.append("command")
-            if status.get("stdout_exists"):
-                flags.append("stdout")
-            if status.get("stderr_exists"):
-                flags.append("stderr")
-            if status.get("slurm_log_exists"):
-                flags.append("slurm")
-            if status.get("summary_exists"):
-                flags.append("summary")
-            flag_text = ", ".join(flags) if flags else "no artifacts yet"
-            if state == "PENDING" and reason:
-                flag_text = f"{flag_text}; reason={reason}"
-            elif location and state not in {"PENDING", "UNKNOWN"}:
-                flag_text = f"{flag_text}; where={location}"
-            _progress_write(f"[Sol remote] Job {submission['job_id']}: {state} ({flag_text})")
-            last_status_signature = status_signature
-        progress_total_ms = status.get("progress_total_ms")
-        progress_current_ms = status.get("progress_current_ms")
-        if (
-            not sim_progress_complete
-            and progress_total_ms not in (None, "", 0)
-            and progress_current_ms is not None
-        ):
-            total_ms = max(int(float(progress_total_ms)), 0)
-            current_ms = max(0, min(int(float(progress_current_ms)), total_ms))
-            if total_ms > 0:
-                if sim_progress_bar is None or sim_progress_total_ms != total_ms:
-                    if sim_progress_bar is not None:
-                        sim_progress_bar.close()
-                    sim_progress_total_ms = total_ms
-                    sim_progress_bar = _ProgressBar(
-                        total=total_ms,
-                        desc="Sim",
-                        unit="ms",
-                        unit_scale=False,
-                    )
-                    sim_waiting_for_progress_logged = False
-                sim_progress_bar.update_to(current_ms)
-                sim_last_progress_ms = current_ms
-        state = str(status.get("state", "UNKNOWN"))
-        if (
-            state == "RUNNING"
-            and sim_progress_bar is None
-            and not sim_waiting_for_progress_logged
-            and not sim_progress_complete
-            and not status.get("summary_exists")
-        ):
-            _progress_write("[Sol remote] Simulation started; waiting for first progress update...")
-            sim_waiting_for_progress_logged = True
-        if (
-            sim_progress_bar is not None
-            and sim_progress_total_ms is not None
-            and sim_last_progress_ms is not None
-            and sim_last_progress_ms >= sim_progress_total_ms
-        ) or status.get("summary_exists"):
-            if sim_progress_bar is not None:
-                sim_progress_bar.close()
-                sim_progress_bar = None
-                sim_progress_total_ms = None
-            if status.get("summary_exists") and not sim_finalizing_logged:
-                _progress_write("[Sol remote] Remote simulation finished; finalizing artifacts...")
-                sim_finalizing_logged = True
-            sim_progress_complete = True
-        if live_logs:
-            for kind in ("bootstrap", "stdout", "stderr", "slurm"):
-                tail_text = str(status.get(f"{kind}_tail") or "")
-                if not tail_text or tail_text == last_live_tails[kind]:
-                    continue
-                previous = last_live_tails[kind]
-                if previous and tail_text.startswith(previous):
-                    delta_text = tail_text[len(previous):]
-                else:
-                    delta_text = tail_text
-                delta_text = last_live_partials[kind] + delta_text.replace("\r", "\n")
-                if delta_text:
-                    segments = delta_text.split("\n")
-                    if delta_text.endswith("\n"):
-                        last_live_partials[kind] = ""
-                    else:
-                        last_live_partials[kind] = segments.pop() if segments else delta_text
-                    for line in segments:
-                        filtered = _filter_live_remote_log_line(kind, line)
-                        if filtered is None:
-                            continue
-                        if filtered == last_live_lines[kind]:
-                            continue
-                        _progress_write(f"[Sol remote][{kind}] {filtered}")
-                        last_live_lines[kind] = filtered
-                else:
-                    last_live_partials[kind] = ""
-                last_live_tails[kind] = tail_text
-        if status.get("done"):
-            if sim_progress_bar is not None:
-                sim_progress_bar.close()
-                sim_progress_bar = None
-                sim_progress_total_ms = None
-
-    def close_live_progress_bars() -> None:
-        nonlocal sim_progress_bar, sim_progress_total_ms
-        if sim_progress_bar is not None:
-            sim_progress_bar.close()
-            sim_progress_bar = None
-            sim_progress_total_ms = None
-
-    def cancel_remote_job_and_sync(reason_text: str) -> None:
-        nonlocal final_status
-        close_live_progress_bars()
-        _progress_write(
-            f"[Sol remote] {reason_text}; beginning shutdown for job {submission['job_id']}..."
-        )
-        try:
-            cancel_completed = _run_ssh_shell(
-                effective_config,
-                _build_remote_cancel_command(job_id=str(submission["job_id"])),
-            )
-            if cancel_completed.returncode != 0 and (cancel_completed.stderr or "").strip():
-                _progress_write(f"[Sol remote] scancel stderr: {(cancel_completed.stderr or '').strip()}")
-            else:
-                _progress_write(f"[Sol remote] Cancellation requested; waiting for remote cleanup...")
-        except Exception as exc:
-            _progress_write(f"[Sol remote] Failed to request cancellation: {exc}")
-
-        cancel_deadline = time.time() + 30.0
-        cancel_confirmed = False
-        while time.time() < cancel_deadline:
-            try:
-                status = poll_remote_status_once(
-                    refresh_heartbeat=False,
-                    include_logs=True,
-                    include_sacct=True,
-                )
-            except Exception as exc:
-                _progress_write(f"[Sol remote] Remote shutdown poll failed: {exc}")
-                break
-            try:
-                emit_live_remote_updates(status)
-            except Exception as exc:
-                _progress_write(f"[Sol remote] Remote shutdown status rendering failed: {exc}")
-            if status.get("done"):
-                final_status = status
-                cancel_confirmed = True
-                _progress_write(
-                    f"[Sol remote] Job {submission['job_id']} reached terminal state {status.get('state', 'UNKNOWN')}."
-                )
-                break
-            time.sleep(1.0)
-
-        if not cancel_confirmed:
-            _progress_write(
-                f"[Sol remote] Remote shutdown not yet confirmed; syncing partial artifacts anyway..."
-            )
-        else:
-            _progress_write(f"[Sol remote] Syncing partial remote artifacts...")
-        try:
-            sync_started = time.perf_counter()
-            sync_completed = _sync_remote_result_dir(
-                effective_config,
-                remote_result_dir=remote_result_dir,
-                local_result_dir=local_result_dir,
-            )
-            _record_timing(notebook_timings, "partial_sync_s", sync_started)
-            (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
-            (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
-            if sync_completed.returncode == 0:
-                _progress_write(f"[Sol remote] Partial artifacts synced to {local_result_dir}")
-            else:
-                _progress_write(
-                    f"[Sol remote] Partial artifact sync failed (rc={sync_completed.returncode})."
-                )
-        except Exception as exc:
-            _progress_write(f"[Sol remote] Partial artifact sync failed: {exc}")
-
-    try:
-        while True:
-            refresh_remote_leases(warn=True)
-            include_logs = time.monotonic() >= next_full_poll_at
-            include_sacct = include_logs
-            status = poll_remote_status_once(
-                refresh_heartbeat=False,
-                include_logs=include_logs,
-                include_sacct=include_sacct,
-            )
-            state_signature = (
-                status.get("state"),
-                status.get("reason"),
-                status.get("location"),
-            )
-            if (
-                not include_logs
-                and (
-                    state_signature != last_polled_state
-                    or status.get("done")
-                    or status.get("summary_exists")
-                    or status.get("state") == "UNKNOWN"
-                )
-            ):
-                status = poll_remote_status_once(
-                    refresh_heartbeat=False,
-                    include_logs=live_logs,
-                    include_sacct=True,
-                )
-                include_logs = True
-                state_signature = (
-                    status.get("state"),
-                    status.get("reason"),
-                    status.get("location"),
-                )
-            if include_logs:
-                next_full_poll_at = time.monotonic() + log_poll_interval_s
-            last_polled_state = state_signature
-            emit_live_remote_updates(status)
-            if status.get("done"):
-                if not status.get("ok") and not _remote_status_has_artifacts(status) and missing_artifact_retries < 3:
-                    missing_artifact_retries += 1
-                    time.sleep(3.0)
-                    continue
-                final_status = status
-                break
-            time.sleep(poll_interval_s)
-    except KeyboardInterrupt:
-        cancel_remote_job_and_sync("Interrupt received")
-        raise KeyboardInterrupt(
-            f"Interrupted remote Sol run and requested cancellation for job {submission['job_id']}."
-        )
-    except Exception:
-        cancel_remote_job_and_sync("Local notebook error while monitoring remote run")
-        raise
+            notebook_timings=notebook_timings,
+            submission=submission,
+            local_result_dir=local_result_dir,
+        ),
+    )
+    final_status = monitor_result.final_status
+    poll_transcript = monitor_result.poll_transcript
 
     deferred_remote_artifacts: list[str] = []
     final_sync_include_files: tuple[str, ...] | None = None

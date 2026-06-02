@@ -82,6 +82,11 @@ from .run_artifacts import (
     RemoteRunArtifactResult,
     finalize_remote_run_artifacts,
 )
+from .run_monitor import (
+    RemoteRunMonitorHooks,
+    RemoteRunMonitorResult,
+    monitor_remote_run,
+)
 from .deferred_artifacts import (
     DeferredArtifactSyncHooks,
     sync_deferred_remote_artifact,
@@ -253,6 +258,9 @@ __all__ = [
     "RemoteRunArtifactHooks",
     "RemoteRunArtifactResult",
     "finalize_remote_run_artifacts",
+    "RemoteRunMonitorHooks",
+    "RemoteRunMonitorResult",
+    "monitor_remote_run",
     "DeferredArtifactSyncHooks",
     "sync_deferred_remote_artifact",
     "sync_deferred_remote_artifact_direct",

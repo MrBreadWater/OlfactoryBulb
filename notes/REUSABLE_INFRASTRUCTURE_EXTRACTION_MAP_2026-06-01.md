@@ -227,6 +227,13 @@ Current progress:
   policy now live under `neuroinfra.remote.run_artifacts`, while the live
   monitoring loop and notebook-specific `run_info` persistence still remain in
   `obgpu_experiment_helpers.py`
+- the remote single-run live monitoring policy that manages poll cadence,
+  summary-aware full-log repolls, progress-bar lifecycle, live tail emission,
+  missing-artifact retry handling, and interrupt/error-driven
+  cancel-plus-partial-sync behavior now lives under
+  `neuroinfra.remote.run_monitor`, while notebook-specific poll-command
+  construction and `run_info` persistence still remain in
+  `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework
