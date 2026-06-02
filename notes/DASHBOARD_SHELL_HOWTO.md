@@ -52,6 +52,24 @@ That command:
   or optimization results tree
 - runs the default maintained audit (`repo_health --profile maintained`)
 - opens on the audit tab first
+- serves immediately at `http://127.0.0.1:6010/` by default
+- prints startup progress to the terminal while the audit and optimization
+  views are rendering in the background
+- shows loading placeholders in the audit/optimization tabs until those views
+  are ready
+
+Open the page directly:
+
+```text
+http://127.0.0.1:6010/
+```
+
+Open it automatically in a local browser:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center --open-browser
+```
 
 Export the unified shell:
 

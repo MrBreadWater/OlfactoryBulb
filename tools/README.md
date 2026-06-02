@@ -54,7 +54,9 @@ use:
 - `python -m olfactorybulb.dashboard.control_center`
 
 That maintained command auto-detects the active optimization campaign when it
-can and renders the default maintained audit into the page on startup.
+can, serves immediately at `http://127.0.0.1:6010/` by default, and renders
+the default maintained audit into the page in the background. Use
+`--open-browser` if you want it to launch a local browser automatically.
 
 For a local docs portal that points at the maintained markdown docs first and
 historical generated pages second, open:

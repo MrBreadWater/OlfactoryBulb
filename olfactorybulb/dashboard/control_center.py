@@ -9,6 +9,7 @@ import os
 import posixpath
 import threading
 import time
+import webbrowser
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,10 @@ DEFAULT_AUDIT_ID = "repo_health"
 DEFAULT_AUDIT_ARGS = ["--profile", "maintained"]
 
 
+def _progress(message: str) -> None:
+    print(f"[control_center] {message}", flush=True)
+
+
 def _write_text_atomic(path: Path, text: str) -> None:
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(text)
@@ -39,6 +44,77 @@ def _write_text_atomic(path: Path, text: str) -> None:
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
     _write_text_atomic(path, json.dumps(payload, indent=2, sort_keys=True) + "\n")
+
+
+def _render_frame_message_html(*, title: str, message: str, auto_refresh_s: float | None = None) -> str:
+    refresh_meta = ""
+    if auto_refresh_s is not None and auto_refresh_s > 0:
+        refresh_meta = f"<meta http-equiv='refresh' content='{float(auto_refresh_s):g}'>"
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {refresh_meta}
+  <title>{title}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --ink: #17202a;
+      --muted: #667085;
+      --line: #d9dee8;
+      --panel: #ffffff;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+    }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }}
+    main {{
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 40px 20px 64px;
+    }}
+    section {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }}
+    h1 {{ margin: 0 0 10px; font-size: 22px; }}
+    p {{ margin: 0; color: var(--muted); }}
+  </style>
+</head>
+<body>
+  <main>
+    <section>
+      <h1>{title}</h1>
+      <p>{message}</p>
+    </section>
+  </main>
+</body>
+</html>
+"""
+
+
+def _write_loading_frame(output_dir: Path, *, title: str, message: str, auto_refresh_s: float = 3.0) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_text_atomic(
+        output_dir / "index.html",
+        _render_frame_message_html(title=title, message=message, auto_refresh_s=auto_refresh_s),
+    )
+
+
+def _write_error_frame(output_dir: Path, *, title: str, message: str) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    _write_text_atomic(
+        output_dir / "index.html",
+        _render_frame_message_html(title=title, message=message),
+    )
 
 
 def _module_tabs(*, audit_badge: str, optimization_badge: str) -> tuple[ShellTabSpec, ...]:
@@ -64,6 +140,25 @@ def _module_tabs(*, audit_badge: str, optimization_badge: str) -> tuple[ShellTab
             description="Maintained markdown docs and current operational guidance.",
         ),
     )
+
+
+def _write_control_center_shell(
+    root_dir: Path,
+    *,
+    campaign_label: str,
+    audit_badge: str,
+    optimization_badge: str,
+) -> None:
+    shell_html = render_dashboard_shell(
+        title="OlfactoryBulb Control Center",
+        subtitle=f"{campaign_label} | docs, audits, and optimization in one maintained shell",
+        tabs=_module_tabs(
+            audit_badge=audit_badge,
+            optimization_badge=optimization_badge,
+        ),
+        initial_tab="audits",
+    )
+    _write_text_atomic(root_dir / "index.html", shell_html)
 
 
 def _read_json_dict(path: Path) -> dict[str, Any]:
@@ -191,7 +286,9 @@ def export_control_center(
     generate_packet_workers: int = hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS,
     cleanup_stale_packets_before_render: bool = hfo_dashboard.DEFAULT_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
+    progress: bool = False,
 ) -> dict[str, Any]:
+    log = _progress if progress else (lambda _message: None)
     resolved_audit_args = list(DEFAULT_AUDIT_ARGS if audit_args is None else audit_args)
     campaign_path = resolve_control_center_campaign(campaign_dir, status_json=status_json)
     root_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else DEFAULT_OUTPUT_DIR.resolve()
@@ -202,6 +299,7 @@ def export_control_center(
     audits_dir.mkdir(parents=True, exist_ok=True)
 
     if campaign_path is None:
+        log("no active optimization campaign detected; using placeholder optimization tab")
         optimization_manifest = _write_optimization_placeholder(
             optimization_dir,
             reason="No active optimization campaign could be auto-detected from the maintained status file or optimization results directory.",
@@ -209,6 +307,7 @@ def export_control_center(
         campaign_label = "no active optimization campaign detected"
         optimization_badge = "unavailable"
     else:
+        log(f"rendering optimization dashboard from {campaign_path}")
         optimization_manifest = hfo_dashboard.export_visual_dashboard(
             campaign_path,
             output_dir=optimization_dir,
@@ -221,23 +320,21 @@ def export_control_center(
         )
         campaign_label = str(campaign_path)
         optimization_badge = f"{int(optimization_manifest.get('packet_count', 0))} packets"
+    log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
     audit_report = run_audit_by_id(audit_id, resolved_audit_args)
     audit_manifest = export_audit_dashboard(
         audit_report,
         audits_dir,
         refresh_endpoint="/__audit_refresh__",
     )
+    log("writing unified dashboard shell")
 
-    shell_html = render_dashboard_shell(
-        title="OlfactoryBulb Control Center",
-        subtitle=f"{campaign_label} | docs, audits, and optimization in one maintained shell",
-        tabs=_module_tabs(
-            audit_badge=str(audit_report.worst_status),
-            optimization_badge=optimization_badge,
-        ),
-        initial_tab="audits",
+    _write_control_center_shell(
+        root_dir,
+        campaign_label=campaign_label,
+        audit_badge=str(audit_report.worst_status),
+        optimization_badge=optimization_badge,
     )
-    _write_text_atomic(root_dir / "index.html", shell_html)
     manifest = {
         "campaign_dir": str(campaign_path) if campaign_path is not None else None,
         "output_dir": str(root_dir),
@@ -278,44 +375,42 @@ def serve_control_center(
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
     watch_optimization: bool = True,
+    open_browser: bool = False,
 ) -> None:
     resolved_audit_args = list(DEFAULT_AUDIT_ARGS if audit_args is None else audit_args)
     campaign_path = resolve_control_center_campaign(campaign_dir, status_json=status_json)
     root_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else DEFAULT_OUTPUT_DIR.resolve()
-    manifest = export_control_center(
-        campaign_path,
-        output_dir=root_dir,
-        audit_id=audit_id,
-        audit_args=resolved_audit_args,
-        top_n=top_n,
-        refresh_s=refresh_s,
-        generate_packets_top_n=generate_packets_top_n,
-        generate_packet_workers=generate_packet_workers,
-        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-        status_json=status_json,
+    url = f"http://{host}:{int(port)}/"
+    _progress(f"preparing control center at {url}")
+    root_dir.mkdir(parents=True, exist_ok=True)
+    optimization_dir = root_dir / "optimization"
+    audits_dir = root_dir / "audits"
+    optimization_dir.mkdir(parents=True, exist_ok=True)
+    audits_dir.mkdir(parents=True, exist_ok=True)
+    campaign_label = str(campaign_path) if campaign_path is not None else "no active optimization campaign detected"
+    _write_loading_frame(
+        audits_dir,
+        title="Audit starting",
+        message=f"Running {audit_id} {' '.join(resolved_audit_args)}".strip(),
     )
-    optimization_dir = Path(manifest["optimization"]["output_dir"])
-    audits_dir = Path(manifest["audits"]["output_dir"])
+    _write_loading_frame(
+        optimization_dir,
+        title="Optimization dashboard starting",
+        message=(
+            f"Preparing optimization view for {campaign_label}"
+            if campaign_path is not None
+            else "No active optimization campaign was detected yet."
+        ),
+    )
+    _write_control_center_shell(
+        root_dir,
+        campaign_label=campaign_label,
+        audit_badge="starting",
+        optimization_badge="loading",
+    )
     stop_event = threading.Event()
-    watcher_thread: threading.Thread | None = None
-    if watch_optimization and campaign_path is not None and not bool(manifest["optimization"].get("placeholder")):
-        watcher_thread = threading.Thread(
-            target=hfo_dashboard.watch_visual_dashboard,
-            kwargs={
-                "campaign_dir": campaign_path,
-                "output_dir": optimization_dir,
-                "top_n": top_n,
-                "refresh_s": refresh_s,
-                "generate_packets_top_n": generate_packets_top_n,
-                "generate_packet_workers": generate_packet_workers,
-                "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
-                "status_json": status_json,
-                "stop_event": stop_event,
-            },
-            name="control-center-optimization-watch",
-            daemon=True,
-        )
-        watcher_thread.start()
+    watcher_holder: dict[str, threading.Thread | None] = {"thread": None}
+    manifest_holder: dict[str, Any] = {}
 
     root_index = (root_dir / "index.html").resolve()
 
@@ -412,11 +507,70 @@ def serve_control_center(
             self.send_error(404, "Not found")
 
     server = http.server.ThreadingHTTPServer((host, int(port)), ControlCenterRequestHandler)
-    print(f"Serving control center at http://{host}:{int(port)}/", flush=True)
+    _progress(f"ready at {url}")
+    if open_browser:
+        try:
+            webbrowser.open(url, new=2, autoraise=True)
+        except Exception:
+            pass
+
+    def _render_initial_content() -> None:
+        try:
+            manifest = export_control_center(
+                campaign_path,
+                output_dir=root_dir,
+                audit_id=audit_id,
+                audit_args=resolved_audit_args,
+                top_n=top_n,
+                refresh_s=refresh_s,
+                generate_packets_top_n=generate_packets_top_n,
+                generate_packet_workers=generate_packet_workers,
+                cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                status_json=status_json,
+                progress=True,
+            )
+            manifest_holder.update(manifest)
+            optimization_manifest = manifest.get("optimization") or {}
+            if watch_optimization and campaign_path is not None and not bool(optimization_manifest.get("placeholder")):
+                watcher_thread = threading.Thread(
+                    target=hfo_dashboard.watch_visual_dashboard,
+                    kwargs={
+                        "campaign_dir": campaign_path,
+                        "output_dir": optimization_dir,
+                        "top_n": top_n,
+                        "refresh_s": refresh_s,
+                        "generate_packets_top_n": generate_packets_top_n,
+                        "generate_packet_workers": generate_packet_workers,
+                        "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
+                        "status_json": status_json,
+                        "stop_event": stop_event,
+                    },
+                    name="control-center-optimization-watch",
+                    daemon=True,
+                )
+                watcher_holder["thread"] = watcher_thread
+                watcher_thread.start()
+        except Exception as exc:
+            _progress(f"startup render failed: {exc}")
+            _write_error_frame(
+                audits_dir,
+                title="Audit startup failed",
+                message=str(exc),
+            )
+
+    render_thread = threading.Thread(
+        target=_render_initial_content,
+        name="control-center-initial-render",
+        daemon=True,
+    )
+    render_thread.start()
     try:
         server.serve_forever()
     finally:
         stop_event.set()
+        if render_thread.is_alive():
+            render_thread.join(timeout=max(float(refresh_s), 1.0) + 2.0)
+        watcher_thread = watcher_holder["thread"]
         if watcher_thread is not None:
             watcher_thread.join(timeout=max(float(refresh_s), 1.0) + 2.0)
 
@@ -447,6 +601,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-watch-optimization", action="store_true")
+    parser.add_argument("--open-browser", action="store_true", help="Open the control center in a local browser after startup.")
     args, extra_args = parser.parse_known_args(argv)
     if extra_args[:1] == ["--"]:
         extra_args = extra_args[1:]
@@ -463,13 +618,14 @@ def main(argv: list[str] | None = None) -> int:
         "status_json": str(args.status_json or "") or None,
     }
     if args.mode == "export":
-        export_control_center(campaign_arg, **common_kwargs)
+        export_control_center(campaign_arg, progress=True, **common_kwargs)
         return 0
     serve_control_center(
         campaign_arg,
         host=str(args.host),
         port=int(args.port),
         watch_optimization=not bool(args.no_watch_optimization),
+        open_browser=bool(args.open_browser),
         **common_kwargs,
     )
     return 0

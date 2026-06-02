@@ -51,6 +51,10 @@ python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -
 python -m olfactorybulb.dashboard.control_center
 ```
 
+- The control-center command should print a reachable URL immediately and keep
+  the heavy audit/optimization rendering in the background. Test that real
+  serve path when changing dashboard startup behavior.
+
 - `repo_health` should call grouped suite audits for maintained test categories.
   Keep low-level developer tests under `tests/` rather than promoting every
   single file into its own first-class audit.

@@ -55,8 +55,11 @@ python -m olfactorybulb.dashboard.control_center
 That command now:
 
 - auto-detects the active maintained optimization campaign when possible
-- runs the default maintained audit into the page on startup
+- serves immediately at `http://127.0.0.1:6010/` by default
+- runs the default maintained audit into the page in the background
 - opens with the audit tab first
+- prints startup progress in the terminal while the audit and optimization
+  views are being prepared
 
 ## Maintained Runtime
 

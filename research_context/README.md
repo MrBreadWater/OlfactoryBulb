@@ -106,3 +106,6 @@ web shell:
 source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.dashboard.control_center
 ```
+
+That serves immediately at `http://127.0.0.1:6010/` by default and fills the
+audit/optimization tabs as their background renders complete.
