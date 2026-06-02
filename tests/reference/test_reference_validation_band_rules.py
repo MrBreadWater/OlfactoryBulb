@@ -22,8 +22,8 @@ log_band = compute_reference_acceptance_band(
 )
 assert 0.0 < log_band.low < 0.2
 assert 1.0 < log_band.high < 1.3
-assert "lognormal distribution" in log_band.description
-assert log_band.standard_label == "lognormal-reconstructed dispersion band"
+assert "lognormal interval reconstructed" in log_band.description
+assert log_band.standard_label == "lognormal reference interval"
 
 beta_band = compute_reference_acceptance_band(
     reference_mean=0.4,
@@ -32,8 +32,8 @@ beta_band = compute_reference_acceptance_band(
     band_mode="beta_sd",
 )
 assert 0.0 < beta_band.low < beta_band.high < 1.0
-assert beta_band.standard_label == "beta-reconstructed bounded probability band"
-assert "beta-distribution central interval" in beta_band.description
+assert beta_band.standard_label == "bounded probability interval"
+assert "beta-distribution interval" in beta_band.description
 
 quantile_band = compute_reference_acceptance_band(
     reference_mean=10.0,
@@ -59,7 +59,7 @@ binary_band = compute_reference_acceptance_band(
 assert binary_band.low == 1.0
 assert binary_band.high == 1.0
 assert binary_band.standard_label == "exact binary indicator"
-assert "categorical rather than a continuous dispersion measure" in binary_band.description
+assert "categorical rather than continuous" in binary_band.description
 
 clipped_band = compute_reference_acceptance_band(
     reference_mean=0.4,
@@ -109,10 +109,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
     }
     log_item = build_rule_items([log_rule], context)[0]
     assert log_item.evidence["accepted_interval_mode"] == "lognormal_sd"
-    assert log_item.evidence["accepted_interval_standard"] == "lognormal-reconstructed dispersion band"
+    assert log_item.evidence["accepted_interval_standard"] == "lognormal reference interval"
     assert log_item.evidence["accepted_low"] > 0.0
-    assert "lognormal distribution" in log_item.acceptable_basis
-    assert "not a formal confidence interval" in log_item.acceptable_basis
+    assert log_item.evidence["reference_mean"] == 0.45
+    assert "lognormal interval reconstructed" in log_item.acceptable_basis
+    assert "configured lognormal reference interval" in log_item.acceptable_basis
 
     beta_rule = {
         "kind": "reference_band_rows",
@@ -131,9 +132,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
     }
     beta_item = build_rule_items([beta_rule], context)[0]
     assert beta_item.evidence["accepted_interval_mode"] == "beta_sd"
-    assert beta_item.evidence["accepted_interval_standard"] == "beta-reconstructed bounded probability band"
+    assert beta_item.evidence["accepted_interval_standard"] == "bounded probability interval"
     assert 0.0 < beta_item.evidence["accepted_low"] < beta_item.evidence["accepted_high"] < 1.0
-    assert "beta-distribution central interval" in beta_item.acceptable_basis
+    assert "beta-distribution interval" in beta_item.acceptable_basis
 
     quantile_rule = {
         "kind": "reference_band_rows",

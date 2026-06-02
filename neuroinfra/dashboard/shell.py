@@ -171,6 +171,17 @@ def render_dashboard_shell(
       font-size: 13px;
       line-height: 1.3;
     }}
+    .shell-status-chip strong.tone-neutral,
+    .shell-status-chip strong.tone-pass,
+    .shell-status-chip strong.tone-warn,
+    .shell-status-chip strong.tone-fail,
+    .shell-status-chip strong.tone-running,
+    .shell-status-chip strong.tone-info {{
+      padding: 0;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+    }}
     .shell-status-chip small {{
       color: var(--muted);
       font-size: 11px;
@@ -274,6 +285,11 @@ def render_dashboard_shell(
       color: var(--muted);
       font-size: 12px;
       font-weight: 600;
+    }}
+    .form-help {{
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
     }}
     .form-field input,
     .form-field select {{

@@ -838,6 +838,8 @@ def _single_cell_type_reference_evidence(
     observed_value: float,
     cell_type: str,
     metric_key: str,
+    reference_mean: float,
+    reference_units: str,
     accepted_low: float,
     accepted_high: float,
     reference_sigma_multiplier: float,
@@ -849,6 +851,8 @@ def _single_cell_type_reference_evidence(
     evidence = _rounded_dict(
         {
             label_key: observed_value,
+            "reference_mean": reference_mean,
+            "reference_unit": reference_units,
             "accepted_low": accepted_low,
             "accepted_high": accepted_high,
             "accepted_sigma_multiplier": reference_sigma_multiplier,
@@ -937,15 +941,16 @@ def _build_burton_reference_fit_items(
                         f"{rounded(accepted_high)}{units_suffix}, using the configured {band.standard_label}."
                     ),
                     acceptable_basis=(
-                        f"The accepted interval is computed from the uploaded Burton and Urban 2014 row for "
-                        f"{_cell_label(cell_type)} {metric_label} as {band.description}. The acceptance standard used "
-                        f"here is {band.standard_label}. The sigma multiplier is configurable, and the default is 2.0 "
-                        f"when that standard needs one. This is a dispersion band, not a formal confidence interval."
+                        f"Derived from the uploaded Burton and Urban 2014 row for {_cell_label(cell_type)} "
+                        f"{metric_label} using the configured {band.standard_label}: {band.description}. "
+                        f"The sigma multiplier is configurable, and the default is 2.0 when that standard needs one."
                     ),
                     evidence=_single_cell_type_reference_evidence(
                         observed_value=observed_value,
                         cell_type=cell_type,
                         metric_key=metric_key,
+                        reference_mean=reference.mean,
+                        reference_units=reference.units,
                         accepted_low=accepted_low,
                         accepted_high=accepted_high,
                         reference_sigma_multiplier=reference_sigma_multiplier,

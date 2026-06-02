@@ -22,7 +22,15 @@ sample_report = AuditReport(
             description="Description",
             acceptable="Acceptable",
             acceptable_basis="Configured",
-            evidence={"count": 3},
+            evidence={
+                "MC_mean": 0.21,
+                "reference_mean": 0.45,
+                "reference_unit": "Hz",
+                "accepted_low": 0.12,
+                "accepted_high": 1.03,
+                "accepted_interval_mode": "lognormal_sd",
+                "accepted_interval_standard": "lognormal reference interval",
+            },
             group_id="audit_alpha",
             group_title="Audit alpha",
         ),
@@ -64,6 +72,10 @@ with TemporaryDirectory() as tmp:
     assert "aria-pressed=\"false\"" in html
     assert "group-link-label" in html
     assert "data-item-card" in html
+    assert "data-interval-visual" in html
+    assert "Reference interval" in html
+    assert "Details" in html
+    assert "evidence-lines" not in html
     assert "Human review" not in html
     assert "reviewer: human" not in html
 

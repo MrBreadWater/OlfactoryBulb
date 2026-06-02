@@ -245,7 +245,7 @@ def compute_reference_acceptance_band(
     if mode == "symmetric_sd":
         raw_low = float(reference_mean - reference_sd * sigma_multiplier)
         raw_high = float(reference_mean + reference_sd * sigma_multiplier)
-        standard_label = "symmetric standard-deviation band"
+        standard_label = "symmetric reference interval"
         description = (
             f"the uploaded arithmetic mean plus or minus {sigma_phrase}"
         )
@@ -263,10 +263,10 @@ def compute_reference_acceptance_band(
         mu_log = math.log(float(reference_mean)) - 0.5 * sigma_log**2
         raw_low = float(math.exp(mu_log - float(sigma_multiplier) * sigma_log))
         raw_high = float(math.exp(mu_log + float(sigma_multiplier) * sigma_log))
-        standard_label = "lognormal-reconstructed dispersion band"
+        standard_label = "lognormal reference interval"
         description = (
-            f"a log-space band reconstructed from the uploaded arithmetic mean and standard deviation "
-            f"assuming a lognormal distribution, then exponentiated back to the original units over {sigma_phrase}"
+            f"a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation "
+            f"over {sigma_phrase}"
         )
     elif mode == "beta_sd":
         if reference_mean < 0.0 or reference_mean > 1.0:
@@ -282,7 +282,7 @@ def compute_reference_acceptance_band(
             raw_low = float(reference_mean)
             raw_high = float(reference_mean)
             coverage_fraction = _central_mass_from_sigma(sigma_multiplier)
-            standard_label = "beta-reconstructed bounded probability band"
+            standard_label = "bounded probability interval"
             description = (
                 f"an exact point interval at the uploaded mean because the reported standard deviation is zero; "
                 f"the nominal central-mass target implied by {sigma_phrase} would have been {rounded(coverage_fraction * 100.0)} percent"
@@ -301,9 +301,9 @@ def compute_reference_acceptance_band(
             tail_probability = (1.0 - coverage_fraction) / 2.0
             raw_low = float(beta_distribution.ppf(tail_probability, alpha, beta_param))
             raw_high = float(beta_distribution.ppf(1.0 - tail_probability, alpha, beta_param))
-            standard_label = "beta-reconstructed bounded probability band"
+            standard_label = "bounded probability interval"
             description = (
-                f"a beta-distribution central interval reconstructed from the uploaded arithmetic mean and standard deviation, "
+                f"a beta-distribution interval reconstructed from the uploaded arithmetic mean and standard deviation, "
                 f"with central mass matched to the normal-space coverage implied by {sigma_phrase} "
                 f"({rounded(coverage_fraction * 100.0)} percent)"
             )
@@ -330,7 +330,7 @@ def compute_reference_acceptance_band(
         standard_label = "exact binary indicator"
         description = (
             "the exact binary indicator encoded by the uploaded reference row; the reported standard deviation is ignored "
-            "because this metric is categorical rather than a continuous dispersion measure"
+            "because this metric is categorical rather than continuous"
         )
     else:
         raise ValueError(
@@ -901,8 +901,11 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
         passed = _is_finite_number(observed_value) and accepted_low <= observed_value <= accepted_high
         item_id = f"{group.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_")
         evidence_key = f"{group}_mean"
+        unit_text = str(row.get("unit", "")).strip()
         evidence_payload: dict[str, Any] = {
             evidence_key: observed_value,
+            "reference_mean": reference_mean,
+            "reference_unit": unit_text,
             "accepted_low": accepted_low,
             "accepted_high": accepted_high,
             "accepted_sigma_multiplier": sigma_multiplier,
@@ -919,7 +922,6 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
         if not np.isclose(band.raw_high, band.high):
             evidence_payload["unbounded_high"] = band.raw_high
         evidence = _rounded_dict(evidence_payload)
-        unit_text = str(row.get("unit", "")).strip()
         range_text = f"between {rounded(accepted_low)} and {rounded(accepted_high)}"
         if unit_text:
             range_text = f"{range_text} {unit_text}"
@@ -940,10 +942,9 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                     f"{band.standard_label}."
                 ),
                 acceptable_basis=(
-                    f"The accepted interval is computed from the uploaded literature row for {property_name} as "
-                    f"{band.description}. The acceptance standard used here is {band.standard_label}. "
-                    f"The sigma multiplier comes from the configurable '{sigma_arg_name}' setting when that standard needs one. "
-                    f"This is a dispersion band, not a formal confidence interval."
+                    f"Derived from the uploaded literature row for {property_name} using the configured "
+                    f"{band.standard_label}: {band.description}. "
+                    f"The sigma multiplier comes from '{sigma_arg_name}' when that standard needs one."
                 ),
                 evidence=evidence,
                 note=str(_property_override(rule, "property_notes", property_name, "")),

@@ -229,13 +229,15 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
   <div class="form-grid">
     <label class="form-field">
       <span>Audit id</span>
-      <select id="control-center-audit-id">
+      <small id="control-center-audit-id-help" class="form-help">Choose a registered audit. <code>all</code> matches bare <code>python tools/run_audit.py</code> and runs the full sweep.</small>
+      <select id="control-center-audit-id" title="Choose a registered audit to run from this page" aria-label="Audit id" aria-describedby="control-center-audit-id-help audit-selection-description">
         {options_html}
       </select>
     </label>
     <label class="form-field form-field-wide">
       <span>Audit arguments</span>
-      <input id="control-center-audit-args" type="text" value="{audit_args_text}" placeholder="Leave blank for the audit default, or pass explicit args like --suite maintained_core --details">
+      <small id="control-center-audit-args-help" class="form-help">Optional extra flags for the selected audit, using the same syntax you would pass on the command line.</small>
+      <input id="control-center-audit-args" type="text" value="{audit_args_text}" title="Optional extra command-line flags for the selected audit" aria-label="Audit arguments" aria-describedby="control-center-audit-args-help audit-selection-description" placeholder="Leave blank for the audit default, or pass explicit args like --suite maintained_core --details">
     </label>
   </div>
   <div class="toolbar-actions">

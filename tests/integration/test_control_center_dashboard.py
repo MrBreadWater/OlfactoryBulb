@@ -225,6 +225,10 @@ with TemporaryDirectory() as tmp:
     assert "No audit is running yet." in html
     assert ">default<" in html
     assert ">all<" in html
+    assert "control-center-audit-id-help" in html
+    assert "control-center-audit-args-help" in html
+    assert 'aria-describedby="control-center-audit-id-help audit-selection-description"' in html
+    assert 'aria-describedby="control-center-audit-args-help audit-selection-description"' in html
     assert 'id="control-center-audit-args" type="text" value=""' in html
     assert audit_report["audit_id"] == "control_center_audits"
     assert len(audit_report["groups"]) == 0
@@ -597,6 +601,22 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert ready is True
+            described = client.eval(
+                "(() => {"
+                "  const select = document.getElementById('control-center-audit-id');"
+                "  const input = document.getElementById('control-center-audit-args');"
+                "  return {"
+                "    selectDescribedBy: select.getAttribute('aria-describedby'),"
+                "    inputDescribedBy: input.getAttribute('aria-describedby'),"
+                "    selectTitle: select.getAttribute('title'),"
+                "    inputTitle: input.getAttribute('title')"
+                "  };"
+                "})()"
+            )
+            assert described["selectDescribedBy"] == "control-center-audit-id-help audit-selection-description"
+            assert described["inputDescribedBy"] == "control-center-audit-args-help audit-selection-description"
+            assert "registered audit" in described["selectTitle"]
+            assert "command-line flags" in described["inputTitle"]
 
             blanked = client.eval(
                 "(() => {"

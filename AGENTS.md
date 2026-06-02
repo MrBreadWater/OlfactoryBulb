@@ -189,11 +189,14 @@ contract for future sessions.
 
 - Do not claim a fix without checking the actual result path the user will rely
   on.
-  - For CLI/reporting work, run the real command.
-  - For dashboard/runtime work, hit the served page or live artifact, not just
-    the generator.
-  - For notebook-facing defaults, verify the actual notebook/runtime paths that
-    consume them.
+- For CLI/reporting work, run the real command.
+- For dashboard/runtime work, hit the served page or live artifact, not just
+  the generator.
+  - For interactive dashboard changes, verify the actual control behavior
+    (draft preservation, reruns, loading/progress states, and tab content) in
+    the served page, not only exported HTML or static snapshots.
+- For notebook-facing defaults, verify the actual notebook/runtime paths that
+  consume them.
   - If a user reports that a just-delivered change failed, reproduce that exact
     command or launch path before changing code again, then add or tighten a
     regression for the missed path when practical.
@@ -453,6 +456,9 @@ contract for future sessions.
   - `python -m olfactorybulb.audit.dashboard <audit_id> --output-dir <dir> [-- <audit args>]`
   - The audit dashboard should be driven from `AuditReport.to_dict()` rather
     than a separate ad hoc report schema.
+  - Numeric interval-style validation items should render as structured
+    reference-interval visuals rather than raw evidence dumps when the evidence
+    includes accepted bounds plus the observed/reference mean values.
   - In the control-center shell, sequential audit runs should accumulate as
     separate audit groups for the current session.
 

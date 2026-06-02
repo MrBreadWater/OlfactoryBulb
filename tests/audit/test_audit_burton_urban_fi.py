@@ -130,8 +130,9 @@ with _burton_note_fixture():
     assert item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].status == "PASS"
     assert "two standard deviations" in item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].acceptable_basis
     assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_low"] > 0.0
-    assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_interval_standard"] == "lognormal-reconstructed dispersion band"
-    assert "not a formal confidence interval" in item_by_id["mc_cv_isi_within_uploaded_reference_band"].acceptable_basis
+    assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_interval_standard"] == "lognormal reference interval"
+    assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["reference_mean"] == 0.45
+    assert "configured lognormal reference interval" in item_by_id["mc_cv_isi_within_uploaded_reference_band"].acceptable_basis
     assert item_by_id["mc_ahp_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
     assert item_by_id["mc_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
     assert item_by_id["mc_fwhm_ms_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
