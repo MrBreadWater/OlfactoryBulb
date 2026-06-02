@@ -240,6 +240,12 @@ from neuroinfra.artifacts.loading import (
     LazyResult as _NeuroinfraLazyResult,
     load_local_artifact_plan as _neuroinfra_load_local_artifact_plan,
 )
+from neuroinfra.artifacts.result_view import (
+    ResultArtifactBinding as _NeuroinfraResultArtifactBinding,
+    ResultViewHooks as _NeuroinfraResultViewHooks,
+    attach_lazy_artifact_loaders as _neuroinfra_attach_lazy_artifact_loaders,
+    plan_result_view as _neuroinfra_plan_result_view,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -2364,6 +2370,25 @@ def _artifact_loading_hooks() -> _NeuroinfraArtifactLoadingHooks:
         format_bytes_fn=_format_bytes,
         render_progress_bar_fn=_render_progress_bar,
         perf_counter_fn=time.perf_counter,
+    )
+
+
+def _result_view_hooks() -> _NeuroinfraResultViewHooks:
+    """Build reusable hooks for result-view planning and lazy artifact wiring."""
+    return _NeuroinfraResultViewHooks(
+        read_json_if_present_fn=_read_json_if_present,
+        standard_result_artifact_sizes_fn=_standard_result_artifact_sizes,
+        local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
+        sync_deferred_artifact_fn=_sync_deferred_remote_artifact,
+        load_pickle_fn=load_pickle,
+        set_lazy_artifact_path_fn=lambda result, key, path: result.__setitem__(f"{key}_file", path),
+        local_lazy_notice_fn=lambda key, path: (
+            f"[OBGPU load] Deferred {key} ({_format_bytes(path.stat().st_size)}) until result['{key}'] is accessed."
+        ),
+        remote_lazy_notice_fn=lambda key, _path: (
+            f"[OBGPU load] Deferred {key} stays remote until result['{key}'] is accessed."
+        ),
+        progress_write=_progress_write,
     )
 
 
@@ -5363,21 +5388,15 @@ class LazyResult(_NeuroinfraLazyResult):
         _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
 
 
-def load_result(
-    run_or_dir: RunRecord | str | Path,
+def _make_result_view(
     *,
-    lazy_soma_vs: bool = False,
-    progress: bool = True,
-) -> dict[str, Any]:
-    """Load the standard saved outputs for a notebook run directory."""
-    result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
-    summary = _read_json_if_present(result_dir / "summary.json")
-    run_info = _read_json_if_present(result_dir / "run_info.json")
-    remote_payload_value = (run_info or {}).get("remote") if isinstance(run_info, dict) else {}
-    remote_payload = remote_payload_value if isinstance(remote_payload_value, dict) else {}
-    deferred_remote_artifacts = set(remote_payload.get("deferred_remote_artifacts") or [])
-    artifact_sizes = _standard_result_artifact_sizes(result_dir)
-    result = LazyResult({
+    result_dir: Path,
+    summary: dict[str, Any] | None,
+    run_info: dict[str, Any] | None,
+    artifact_sizes: dict[str, int],
+) -> LazyResult:
+    """Build the standard notebook result mapping before artifact payload loads."""
+    return LazyResult({
         "result_dir": result_dir,
         "summary": summary,
         "run_info": run_info,
@@ -5391,64 +5410,50 @@ def load_result(
         "artifact_sizes": artifact_sizes,
     })
 
-    load_plan: list[tuple[str, Path]] = []
-    input_path = result_dir / "input_times.pkl"
-    if _local_sync_artifact_is_usable(input_path):
-        load_plan.append(("input_times", input_path))
+
+def load_result(
+    run_or_dir: RunRecord | str | Path,
+    *,
+    lazy_soma_vs: bool = False,
+    progress: bool = True,
+) -> dict[str, Any]:
+    """Load the standard saved outputs for a notebook run directory."""
+    result_dir = Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
     soma_path = find_soma_trace_artifact(result_dir)
-    deferred_soma_name = next(
-        (name for name in soma_trace_artifact_candidates() if name in deferred_remote_artifacts),
-        None,
+    view_plan = _neuroinfra_plan_result_view(
+        result_dir,
+        result_factory_fn=_make_result_view,
+        artifact_bindings=[
+            _NeuroinfraResultArtifactBinding("input_times", result_dir / "input_times.pkl"),
+            _NeuroinfraResultArtifactBinding(
+                "soma_vs",
+                soma_path,
+                deferred_remote_name=preferred_soma_trace_artifact_name(),
+                deferred_remote_names=soma_trace_artifact_candidates(),
+            ),
+            _NeuroinfraResultArtifactBinding("gc_output_events", result_dir / "gc_output_events.pkl"),
+            _NeuroinfraResultArtifactBinding("lfp", result_dir / "lfp.pkl"),
+            _NeuroinfraResultArtifactBinding("soma_spikes", result_dir / SOMA_SPIKES_FILENAME_NPZ),
+            _NeuroinfraResultArtifactBinding("voltage_summary", result_dir / VOLTAGE_SUMMARY_FILENAME_NPZ),
+        ],
+        lazy_keys={"soma_vs"} if lazy_soma_vs else set(),
+        hooks=_result_view_hooks(),
     )
-    if soma_path is None and deferred_soma_name is not None and not lazy_soma_vs:
-        soma_path = result_dir / deferred_soma_name
-        soma_path = _sync_deferred_remote_artifact(
-            result_dir,
-            run_info=run_info,
-            filename=deferred_soma_name,
-        )
-        artifact_sizes[soma_path.name] = int(soma_path.stat().st_size)
-    if isinstance(soma_path, Path) and _local_sync_artifact_is_usable(soma_path) and not lazy_soma_vs:
-        load_plan.append(("soma_vs", soma_path))
-    gc_output_path = result_dir / "gc_output_events.pkl"
-    if _local_sync_artifact_is_usable(gc_output_path):
-        load_plan.append(("gc_output_events", gc_output_path))
-    lfp_path = result_dir / "lfp.pkl"
-    if _local_sync_artifact_is_usable(lfp_path):
-        load_plan.append(("lfp", lfp_path))
-    soma_spikes_path = result_dir / SOMA_SPIKES_FILENAME_NPZ
-    if _local_sync_artifact_is_usable(soma_spikes_path):
-        load_plan.append(("soma_spikes", soma_spikes_path))
-    voltage_summary_path = result_dir / VOLTAGE_SUMMARY_FILENAME_NPZ
-    if _local_sync_artifact_is_usable(voltage_summary_path):
-        load_plan.append(("voltage_summary", voltage_summary_path))
+    result = view_plan.result
 
     load_timings, load_total_seconds = _neuroinfra_load_local_artifact_plan(
         result,
-        load_plan,
+        view_plan.load_plan,
         hooks=_artifact_loading_hooks(),
         progress=progress,
     )
 
-    if isinstance(soma_path, Path) and _local_sync_artifact_is_usable(soma_path) and lazy_soma_vs:
-        result["soma_vs_file"] = soma_path
-        result._lazy_loaders["soma_vs"] = lambda path=soma_path: load_pickle(path)
-        if progress:
-            _progress_write(
-                f"[OBGPU load] Deferred soma traces ({_format_bytes(soma_path.stat().st_size)}) until result['soma_vs'] is accessed."
-            )
-    elif deferred_soma_name is not None and lazy_soma_vs:
-        soma_path = result_dir / deferred_soma_name
-        result["soma_vs_file"] = soma_path
-        result._lazy_loaders["soma_vs"] = (
-            lambda path=soma_path, info=run_info, directory=result_dir: load_pickle(
-                _sync_deferred_remote_artifact(directory, run_info=info, filename=path.name)
-            )
+    if lazy_soma_vs:
+        _neuroinfra_attach_lazy_artifact_loaders(
+            view_plan,
+            hooks=_result_view_hooks(),
+            progress=progress,
         )
-        if progress:
-            _progress_write(
-                "[OBGPU load] Deferred soma traces remain remote until result['soma_vs'] is accessed."
-            )
 
     result["load_timing_seconds"] = load_timings
     result["load_total_seconds"] = load_total_seconds

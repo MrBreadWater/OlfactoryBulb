@@ -108,7 +108,10 @@ Current progress:
 - the artifact/output-path helpers already live under `neuroinfra.artifacts`
 - the generic lazy-result container and timed local artifact-loading loop now
   live under `neuroinfra.artifacts.loading`
-- the remaining concrete OBGPU artifact plan and field mapping still live in
+- the generic result-view planner that reads summary/run-info metadata,
+  decides eager vs deferred artifacts, and wires lazy local/remote loaders now
+  lives under `neuroinfra.artifacts.result_view`
+- the remaining concrete OBGPU signal names and field mapping still live in
   `obgpu_experiment_helpers.py`
 
 ### 3. Remote Slurm execution layer

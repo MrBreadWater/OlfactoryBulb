@@ -18,6 +18,7 @@ The first implemented artifact is the component inventory:
 The first live internal extraction is now also present:
 
 - `neuroinfra.artifacts.loading`
+- `neuroinfra.artifacts.result_view`
 - `neuroinfra.artifacts.output_paths`
 - `neuroinfra.artifacts.result_artifacts`
 
@@ -95,6 +96,12 @@ The result-artifact and output-path helpers have already been mirrored into
 The generic lazy-result container plus the timed local artifact-loading loop
 that powers notebook result ingestion now also live under
 `neuroinfra.artifacts.loading`, while the concrete OBGPU artifact plan and
+field mapping still remain in `obgpu_experiment_helpers.py`.
+
+The generic result-view planner that reads summary/run-info metadata, decides
+which artifacts should load eagerly, wires deferred remote artifacts, and
+attaches lazy local/remote loaders now also lives under
+`neuroinfra.artifacts.result_view`, while the concrete OBGPU signal names and
 field mapping still remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
