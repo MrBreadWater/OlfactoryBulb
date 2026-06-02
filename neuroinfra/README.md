@@ -146,10 +146,10 @@ signals in a stable ordered way now also live under `neuroinfra.analysis`,
 while the concrete OBGPU result semantics and profile are now assembled
 explicitly in `olfactorybulb.analysis_data` and
 `olfactorybulb.analysis_profile`, with grouped soma presentation policy now in
-`olfactorybulb.analysis_views`, and HFO/LFP overview policy now in
-`olfactorybulb.analysis_hfo_views`; the remaining notebook-specific
-presentation and higher-level plot composition still remain in
-`obgpu_experiment_helpers.py`.
+`olfactorybulb.analysis_views`, HFO/LFP overview policy now in
+`olfactorybulb.analysis_hfo_views`, and standard notebook output plus sweep
+animation presets now in `olfactorybulb.analysis_presentations`; the remaining
+notebook-facing glue still remains in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

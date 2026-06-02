@@ -135,6 +135,7 @@ Current files:
 - `neuroinfra/analysis/signals.py`
 - `olfactorybulb/analysis_data.py`
 - `olfactorybulb/analysis_hfo_views.py`
+- `olfactorybulb/analysis_presentations.py`
 - `olfactorybulb/analysis_profile.py`
 - `olfactorybulb/analysis_views.py`
 - `obgpu_experiment_helpers.py`
@@ -191,10 +192,11 @@ What is domain-specific:
   colors, and bucket-specific display limits for this notebook workflow
 - the concrete HFO/LFP overview layer that defines PSD template overlays and
   the standard LFP/HFO summary figure policy for this notebook workflow
+- the concrete notebook presentation layer that defines standard output bundles
+  and sweep-animation presets for this notebook workflow
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- notebook-specific signal-presentation and higher-level plot composition that
-  still live in the notebook helper
+- the remaining notebook entrypoint glue that still lives in the notebook helper
 
 Extraction confidence:
 
@@ -207,6 +209,8 @@ Current progress:
   `olfactorybulb/analysis_data.py`
 - the concrete HFO/LFP overview policy has moved into
   `olfactorybulb/analysis_hfo_views.py`
+- the concrete notebook presentation presets have moved into
+  `olfactorybulb/analysis_presentations.py`
 - the concrete OBGPU profile assembly has moved into
   `olfactorybulb/analysis_profile.py`
 - the concrete grouped soma presentation policy has moved into

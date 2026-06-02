@@ -97,6 +97,15 @@ from olfactorybulb.analysis_hfo_views import (
     plot_hfo_power_summary as _ob_plot_hfo_power_summary,
     plot_lfp_overview as _ob_plot_lfp_overview,
 )
+from olfactorybulb.analysis_presentations import (
+    StandardOutputHooks as _OlfactoryBulbStandardOutputHooks,
+    SweepAnimationHooks as _OlfactoryBulbSweepAnimationHooks,
+    animate_lfp_sweep as _ob_animate_lfp_sweep,
+    animate_sniff_average_sweep as _ob_animate_sniff_average_sweep,
+    animate_spectrogram_sweep as _ob_animate_spectrogram_sweep,
+    animate_wavelet_sweep as _ob_animate_wavelet_sweep,
+    show_all_outputs as _ob_show_all_outputs,
+)
 from olfactorybulb.hfo_features import (
     apply_hfo_runtime_overrides,
     hfo_control_help,
@@ -7346,18 +7355,20 @@ def animate_lfp_sweep(
     interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate trace-style outputs across a one-parameter sweep."""
-    if signal != "lfp":
-        return animate_sweep(
-            sweep,
-            lambda result: plot_named_signal(result, signal=signal, dt_ms=dt_ms),
-            figsize=(12, 4),
-            interval=interval,
-        )
-
-    return animate_sweep(
+    return _ob_animate_lfp_sweep(
+        _OlfactoryBulbSweepAnimationHooks(
+            animate_sweep_fn=animate_sweep,
+            plot_named_signal_fn=plot_named_signal,
+            plot_lfp_overview_fn=plot_lfp_overview,
+            plot_spectrogram_fn=plot_spectrogram,
+            plot_wavelet_fn=plot_wavelet,
+            get_named_signal_fn=get_named_signal,
+            compute_wavelet_map_fn=compute_wavelet_map,
+            plt_module=plt,
+        ),
         sweep,
-        lambda result: plot_lfp_overview(result, dt_ms=dt_ms),
-        figsize=(12, 7),
+        signal=signal,
+        dt_ms=dt_ms,
         interval=interval,
     )
 
@@ -7372,17 +7383,23 @@ def animate_spectrogram_sweep(
     interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate spectrograms across a one-parameter sweep."""
-    return animate_sweep(
-        sweep,
-        lambda result: plot_spectrogram(
-            result,
-            signal=signal,
-            dt_ms=dt_ms,
-            max_freq_hz=max_freq_hz,
-            nperseg=nperseg,
-            noverlap=noverlap,
+    return _ob_animate_spectrogram_sweep(
+        _OlfactoryBulbSweepAnimationHooks(
+            animate_sweep_fn=animate_sweep,
+            plot_named_signal_fn=plot_named_signal,
+            plot_lfp_overview_fn=plot_lfp_overview,
+            plot_spectrogram_fn=plot_spectrogram,
+            plot_wavelet_fn=plot_wavelet,
+            get_named_signal_fn=get_named_signal,
+            compute_wavelet_map_fn=compute_wavelet_map,
+            plt_module=plt,
         ),
-        figsize=(12, 4),
+        sweep,
+        signal=signal,
+        dt_ms=dt_ms,
+        max_freq_hz=max_freq_hz,
+        nperseg=nperseg,
+        noverlap=noverlap,
         interval=interval,
     )
 
@@ -7394,10 +7411,20 @@ def animate_wavelet_sweep(
     interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate wavelet maps across a one-parameter sweep."""
-    return animate_sweep(
+    return _ob_animate_wavelet_sweep(
+        _OlfactoryBulbSweepAnimationHooks(
+            animate_sweep_fn=animate_sweep,
+            plot_named_signal_fn=plot_named_signal,
+            plot_lfp_overview_fn=plot_lfp_overview,
+            plot_spectrogram_fn=plot_spectrogram,
+            plot_wavelet_fn=plot_wavelet,
+            get_named_signal_fn=get_named_signal,
+            compute_wavelet_map_fn=compute_wavelet_map,
+            plt_module=plt,
+        ),
         sweep,
-        lambda result: plot_wavelet(result, signal=signal, dt_ms=dt_ms),
-        figsize=(12, 4),
+        signal=signal,
+        dt_ms=dt_ms,
         interval=interval,
     )
 
@@ -7409,38 +7436,22 @@ def animate_sniff_average_sweep(
     interval: int = 100,
 ) -> animation.FuncAnimation:
     """Animate sniff-averaged wavelet views across a sweep."""
-    def _plot(result: dict[str, Any]) -> Any:
-        signal_t, signal_y = get_named_signal(result, signal="lfp", dt_ms=dt_ms)
-        _t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
-        sniff_duration_ms = 200.0
-        skip_first_n_sniffs = 1
-        step = max(1, int(round(sniff_duration_ms / dt_ms)))
-        start_index = step * skip_first_n_sniffs
-        available_columns = max(0, power.shape[1] - start_index)
-        chunk_count = min(int(sniff_count), available_columns // step)
-        if chunk_count > 0:
-            chunks = [
-                power[:, start_index + i * step : start_index + (i + 1) * step]
-                for i in range(chunk_count)
-            ]
-            averaged = np.mean(np.asarray(chunks, dtype=float), axis=0)
-        else:
-            averaged = power[:, :step]
-        plot_t = np.arange(averaged.shape[1], dtype=float) * dt_ms
-        fig, ax = plt.subplots(figsize=(5, 5))
-        ax.contourf(
-            plot_t,
-            freqs,
-            averaged,
-            256,
-            cmap="jet",
-        )
-        ax.set_ylim((20, 140))
-        ax.set_xlabel("Time Since Sniff Onset [ms]")
-        ax.set_ylabel("Frequency [Hz]")
-        return fig
-
-    return animate_sweep(sweep, _plot, figsize=(5, 5), interval=interval)
+    return _ob_animate_sniff_average_sweep(
+        _OlfactoryBulbSweepAnimationHooks(
+            animate_sweep_fn=animate_sweep,
+            plot_named_signal_fn=plot_named_signal,
+            plot_lfp_overview_fn=plot_lfp_overview,
+            plot_spectrogram_fn=plot_spectrogram,
+            plot_wavelet_fn=plot_wavelet,
+            get_named_signal_fn=get_named_signal,
+            compute_wavelet_map_fn=compute_wavelet_map,
+            plt_module=plt,
+        ),
+        sweep,
+        dt_ms=dt_ms,
+        sniff_count=sniff_count,
+        interval=interval,
+    )
 
 
 SWEEPS_BASE = DEFAULT_RESULTS_BASE / "sweeps"
@@ -7660,91 +7671,21 @@ def save_figure(
 
 def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = None) -> None:
     """Render the standard notebook figure set for one loaded result."""
-    config = config or {}
-    dt_ms = float(config.get("analysis_dt_ms", 0.1))
-    input_bin_ms = float(config.get("input_bin_ms", 5.0))
-    input_smooth_ms = float(config.get("input_smooth_sigma_ms", 10.0))
-    input_max_segments = int(config.get("input_max_segments", 120))
-    input_norm = str(config.get("input_rate_normalization", "per_target_cell"))
-    max_voltage = int(config.get("max_voltage_traces_per_type", 4))
-    max_raster = int(config.get("max_spike_raster_cells_per_type", 24))
-    gc_bin_ms = float(config.get("gc_output_bin_ms", 5.0))
-    gc_smooth_ms = float(config.get("gc_output_smooth_sigma_ms", 10.0))
-    gc_max_connections = int(config.get("gc_output_max_connections", 120))
-    gc_norm = str(config.get("gc_output_rate_normalization", "per_target_cell"))
-    show_raw_voltage_traces = bool(config.get("show_voltage_traces", False))
-    show_psd_template = bool(config.get("lfp_show_psd_target_template", True))
-    psd_template_kind = str(config.get("lfp_psd_template_kind", "ketamine"))
-    psd_template_fit = config.get("lfp_psd_template_fit_band_hz", DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ)
-    psd_template_floor = config.get("lfp_psd_template_floor", DEFAULT_PSD_TEMPLATE_FLOOR)
-    if isinstance(psd_template_fit, (list, tuple)) and len(psd_template_fit) == 2:
-        psd_template_fit = (float(psd_template_fit[0]), float(psd_template_fit[1]))
-    else:
-        psd_template_fit = DEFAULT_PSD_TEMPLATE_FIT_BAND_HZ
-    try:
-        psd_template_floor = float(psd_template_floor)
-    except (TypeError, ValueError):
-        psd_template_floor = DEFAULT_PSD_TEMPLATE_FLOOR
-    psd_xlim_hz = config.get("lfp_psd_xlim_hz", (0.0, 300.0))
-    if isinstance(psd_xlim_hz, (list, tuple)) and len(psd_xlim_hz) == 2:
-        psd_xlim_hz = (float(psd_xlim_hz[0]), float(psd_xlim_hz[1]))
-    else:
-        psd_xlim_hz = None
-    spectrogram_max_freq_hz = float(config.get("spectrogram_max_freq_hz", 250.0))
-    spectrogram_nperseg = int(config.get("spectrogram_nperseg", 256))
-    spectrogram_noverlap = int(config.get("spectrogram_noverlap", 192))
-
-    plot_input_overview(
+    return _ob_show_all_outputs(
+        _OlfactoryBulbStandardOutputHooks(
+            plot_input_overview_fn=plot_input_overview,
+            plot_voltage_traces_fn=plot_voltage_traces,
+            plot_spike_raster_fn=plot_spike_raster,
+            plot_gc_output_overview_fn=plot_gc_output_overview,
+            plot_lfp_overview_fn=plot_lfp_overview,
+            plot_spectrogram_fn=plot_spectrogram,
+            plot_wavelet_fn=plot_wavelet,
+            plot_wavelet_band_power_fn=plot_wavelet_band_power,
+            plt_show_fn=plt.show,
+        ),
         result,
-        bin_ms=input_bin_ms,
-        smooth_sigma_ms=input_smooth_ms,
-        max_segments=input_max_segments,
-        normalization=input_norm,
+        config=config,
     )
-    plt.show()
-
-    if show_raw_voltage_traces:
-        plot_voltage_traces(result, max_per_type=max_voltage)
-        plt.show()
-
-    plot_spike_raster(result, max_cells_per_type=max_raster)
-    plt.show()
-
-    plot_gc_output_overview(
-        result,
-        bin_ms=gc_bin_ms,
-        smooth_sigma_ms=gc_smooth_ms,
-        max_connections=gc_max_connections,
-        normalization=gc_norm,
-    )
-    plt.show()
-
-    plot_lfp_overview(
-        result,
-        dt_ms=dt_ms,
-        show_psd_target_template=show_psd_template,
-        psd_template_kind=psd_template_kind,
-        psd_template_fit_band_hz=psd_template_fit,
-        psd_template_floor=psd_template_floor,
-        psd_xlim_hz=psd_xlim_hz,
-    )
-    plt.show()
-
-    plot_spectrogram(
-        result,
-        signal=config.get("spectrogram_signal", "lfp"),
-        dt_ms=dt_ms,
-        max_freq_hz=spectrogram_max_freq_hz,
-        nperseg=spectrogram_nperseg,
-        noverlap=spectrogram_noverlap,
-    )
-    plt.show()
-
-    plot_wavelet(result, signal=config.get("wavelet_signal", "lfp"), dt_ms=dt_ms)
-    plt.show()
-
-    plot_wavelet_band_power(result, signal=config.get("wavelet_signal", "lfp"), dt_ms=dt_ms)
-    plt.show()
 
 
 def print_run_summary(
