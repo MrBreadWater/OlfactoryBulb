@@ -97,6 +97,31 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The first internal extraction has been done behind compatibility shims, and the local artifact-loading helpers plus the generic result-view planner/schema now live under neuroinfra.artifacts; next remove remaining OBGPU-specific naming and separate the last notebook-specific signal analysis and presentation policy from the OBGPU artifact plan.",
     ),
     ExtractionCandidate(
+        key="notebook_run_catalog",
+        title="Notebook run catalog and metadata",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/runs.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "saved run metadata datatypes",
+            "run directory listing and prefix filtering",
+            "prefix and index based run resolution",
+            "captured stdout and stderr recovery",
+            "saved config snapshot reload",
+        ),
+        repo_specific_couplings=(
+            "the wrapper still chooses the default OBGPU results base",
+            "config normalization after reload remains domain-specific",
+            "summary and run_info filename conventions still come from this repo's run layout",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic run-directory catalog and metadata loader now live under neuroinfra.notebooks.runs; next separate the remaining config normalization, run summary presentation, and simulation/result wiring from the notebook helper.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",
@@ -363,7 +388,10 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         key="notebook_helper_surface",
         title="Notebook helper surface",
         target_module="neuroinfra.notebooks",
-        source_paths=("obgpu_experiment_helpers.py",),
+        source_paths=(
+            "neuroinfra/notebooks/runs.py",
+            "obgpu_experiment_helpers.py",
+        ),
         generic_capabilities=(
             "none in current file as a whole because responsibilities are mixed",
         ),
@@ -378,7 +406,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="low",
         proposed_phase=2,
         current_status="blocked_by_refactor",
-        recommended_action="Split this file by responsibility before extraction; it is the main architectural blocker.",
+        recommended_action="The generic notebook run catalog/metadata layer now lives under neuroinfra.notebooks.runs, but the rest of this helper still mixes config defaults, remote execution, result loading, and presentation; keep splitting it by responsibility because it remains the main architectural blocker.",
     ),
 )
 

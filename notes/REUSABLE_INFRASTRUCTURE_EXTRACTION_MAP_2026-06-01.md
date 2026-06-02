@@ -117,7 +117,44 @@ Current progress:
 - the remaining concrete OBGPU signal names and field mapping still live in
   `obgpu_experiment_helpers.py`
 
-### 2b. Result analysis and signal registry
+### 2b. Notebook run catalog and metadata
+
+Current files:
+
+- `neuroinfra/notebooks/runs.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- saved run metadata datatypes
+- run directory listing and prefix filtering
+- prefix/index-based run resolution
+- captured stdout/stderr recovery
+- saved config snapshot reload
+
+What is domain-specific:
+
+- the default OBGPU results-base location
+- config normalization after reload
+- run summary presentation
+- simulation and result-loading wiring
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic run-directory catalog and metadata loader now live under
+  `neuroinfra.notebooks.runs`
+- `obgpu_experiment_helpers.py` now delegates the generic saved-run listing,
+  resolution, metadata loading, and config snapshot reload paths there
+
+### 2c. Result analysis and signal registry
 
 Current files:
 

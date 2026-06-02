@@ -23,7 +23,7 @@ import builtins
 import warnings
 from collections import Counter
 from copy import deepcopy
-from dataclasses import asdict, dataclass, is_dataclass, replace
+from dataclasses import asdict, is_dataclass, replace
 from datetime import datetime
 from getpass import getpass
 from hashlib import sha1, sha256
@@ -115,6 +115,14 @@ from neuroinfra.remote.helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
     helper_bundle_signature,
+)
+from neuroinfra.notebooks.runs import (
+    RunRecord as _NeuroinfraRunRecord,
+    list_run_dirs as _neuroinfra_list_run_dirs,
+    load_run_config as _neuroinfra_load_run_config,
+    load_run_record as _neuroinfra_load_run_record,
+    read_json_if_present as _neuroinfra_read_json_if_present,
+    resolve_run_dir as _neuroinfra_resolve_run_dir,
 )
 from neuroinfra.remote.helper_cache import (
     helper_cache_dir as _neuroinfra_helper_cache_dir,
@@ -441,19 +449,7 @@ CONTROL_HELP = {
 CONTROL_HELP.update(hfo_control_help())
 
 
-@dataclass
-class RunRecord:
-    """Metadata and captured stdout/stderr for a timestamped notebook run."""
-
-    label: str
-    timestamp: str
-    result_dir: Path
-    summary: dict
-    config: dict
-    overrides: dict
-    command: list[str]
-    stdout: str
-    stderr: str
+RunRecord = _NeuroinfraRunRecord
 
 
 def _format_bytes(num_bytes: int | float) -> str:
@@ -4543,22 +4539,12 @@ def list_notebook_runs(
     results_base: str | Path = DEFAULT_RESULTS_BASE,
 ) -> list[Path]:
     """List saved notebook-run directories, optionally filtered by label prefix."""
-    results_base = Path(results_base)
-    if not results_base.exists():
-        return []
-    runs = [path for path in results_base.iterdir() if path.is_dir()]
-    if prefix:
-        runs = [path for path in runs if path.name.startswith(prefix)]
-    return sorted(runs)
+    return _neuroinfra_list_run_dirs(prefix=prefix, results_base=results_base)
 
 
-def _read_json_if_present(path: str | Path) -> dict[str, Any] | None:
+def _read_json_if_present(path: str | Path) -> Any | None:
     """Return parsed JSON when a file exists and is non-empty."""
-    path = Path(path)
-    if not path.exists() or path.stat().st_size == 0:
-        return None
-    with open(path) as f:
-        return json.load(f)
+    return _neuroinfra_read_json_if_present(path)
 
 
 def resolve_notebook_run(
@@ -4568,13 +4554,12 @@ def resolve_notebook_run(
     results_base: str | Path = DEFAULT_RESULTS_BASE,
 ) -> Path:
     """Resolve a run identifier, path, or prefix/index pair into a run directory."""
-    if run_or_dir is not None:
-        return Path(run_or_dir.result_dir if isinstance(run_or_dir, RunRecord) else run_or_dir)
-
-    runs = list_notebook_runs(prefix=prefix, results_base=results_base)
-    if not runs:
-        raise FileNotFoundError(f"No notebook runs found in {results_base} with prefix={prefix!r}")
-    return runs[index]
+    return _neuroinfra_resolve_run_dir(
+        run_or_dir=run_or_dir,
+        prefix=prefix,
+        index=index,
+        results_base=results_base,
+    )
 
 
 def load_run_record(
@@ -4584,44 +4569,11 @@ def load_run_record(
     results_base: str | Path = DEFAULT_RESULTS_BASE,
 ) -> RunRecord:
     """Load notebook-run metadata from a timestamped results directory."""
-    result_dir = resolve_notebook_run(
+    return _neuroinfra_load_run_record(
         run_or_dir=run_or_dir,
         prefix=prefix,
         index=index,
         results_base=results_base,
-    )
-    summary = _read_json_if_present(result_dir / "summary.json") or {}
-    run_info = _read_json_if_present(result_dir / "run_info.json") or {}
-
-    stdout = ""
-    stdout_path = result_dir / "stdout.txt"
-    if stdout_path.exists():
-        stdout = stdout_path.read_text()
-
-    stderr = ""
-    stderr_path = result_dir / "stderr.txt"
-    if stderr_path.exists():
-        stderr = stderr_path.read_text()
-
-    label = (
-        run_info.get("label")
-        or summary.get("label")
-        or run_info.get("requested_label")
-        or summary.get("requested_label")
-        or result_dir.name
-    )
-    timestamp = run_info.get("timestamp") or summary.get("timestamp") or ""
-
-    return RunRecord(
-        label=label,
-        timestamp=timestamp,
-        result_dir=result_dir,
-        summary=summary,
-        config=run_info.get("config", {}),
-        overrides=run_info.get("overrides", {}),
-        command=run_info.get("command", []),
-        stdout=stdout,
-        stderr=stderr,
     )
 
 
@@ -7814,10 +7766,12 @@ def config_from_run(
         cfg["gaba_tau2_ms"] = 50         # tweak one parameter
         run, result = run_and_load(cfg)  # re-run with the change
     """
-    record = load_run_record(
-        run_or_dir, prefix=prefix, index=index, results_base=results_base
+    return _neuroinfra_load_run_config(
+        run_or_dir=run_or_dir,
+        prefix=prefix,
+        index=index,
+        results_base=results_base,
     )
-    return deepcopy(record.config)
 
 
 def list_saved_configs(directory: str | Path | None = None) -> list[Path]:

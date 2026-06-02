@@ -47,8 +47,11 @@ from obgpu_experiment_helpers import (
     build_param_overrides,
     build_run_config,
     config_diff,
+    config_from_run,
     list_paramsets,
+    list_notebook_runs,
     list_saved_configs,
+    load_run_record,
     load_config,
     save_config,
 )
@@ -83,6 +86,32 @@ with tempfile.TemporaryDirectory() as tmp:
     assert len(results) == 2
     assert all(p.suffix == ".json" for p in results)
     print("list_saved_configs: OK")
+
+    # --- notebook run catalog wrappers ---
+    run_dir = tmp / "2026-06-02_demo_run"
+    run_dir.mkdir()
+    (run_dir / "summary.json").write_text(json.dumps({"label": "demo-summary", "timestamp": "2026-06-02T00:00:00"}))
+    (run_dir / "run_info.json").write_text(
+        json.dumps(
+            {
+                "requested_label": "demo-requested",
+                "timestamp": "2026-06-02T00:00:00",
+                "config": cfg,
+                "overrides": {"gaba_tau2_ms": 36.0},
+                "command": ["python", "demo.py"],
+            }
+        )
+    )
+    (run_dir / "stdout.txt").write_text("demo stdout\n")
+    listed_runs = list_notebook_runs(results_base=tmp)
+    assert run_dir in listed_runs
+    record = load_run_record(run_dir, results_base=tmp)
+    assert record.label == "demo-summary"
+    assert record.command == ["python", "demo.py"]
+    restored_cfg = config_from_run(run_dir, results_base=tmp)
+    assert restored_cfg["paramset"] == "GammaSignature"
+    assert restored_cfg["gaba_tau2_ms"] == 36.0
+    print("notebook run catalog wrappers: OK")
 
     # --- list_paramsets (builtin only) ---
     names = list_paramsets()

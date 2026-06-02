@@ -35,6 +35,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.spectral`
 - `neuroinfra.analysis.sweeps`
 - `neuroinfra.analysis.signals`
+- `neuroinfra.notebooks.runs`
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
@@ -150,6 +151,12 @@ explicitly in `olfactorybulb.analysis_data` and
 `olfactorybulb.analysis_hfo_views`, and standard notebook output plus sweep
 animation presets now in `olfactorybulb.analysis_presentations`; the remaining
 notebook-facing glue still remains in `obgpu_experiment_helpers.py`.
+
+The generic run-directory catalog and metadata loader that list saved notebook
+runs, resolve prefix/index selections, recover captured stdout/stderr, and
+reload saved config snapshots now also live under `neuroinfra.notebooks.runs`,
+while the concrete config normalization and simulation/result wiring remain in
+`obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus
