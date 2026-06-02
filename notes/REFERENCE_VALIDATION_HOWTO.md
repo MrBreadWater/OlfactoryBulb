@@ -140,6 +140,7 @@ Optional but useful:
 - `[defaults]`
 - `[protocol]`
 - `[skip_item]`
+- `[human_review]`
 - `notes_path`
 - `skip_neuron_mode`
 
@@ -182,6 +183,64 @@ The framework now supports two skip behaviors:
     slice-export checks should still run when NEURON-backed morphology or
     behavior checks are skipped
 
+## Human review status is mandatory
+
+Every declarative validation item should resolve to a human-review state.
+
+Use the shared vocabulary:
+
+- `accepted`
+- `provisional`
+- `pending_review`
+- `not_applicable`
+
+At minimum, set:
+
+```toml
+[human_review]
+default_status = "pending_review"
+```
+
+Then override where needed:
+
+- `human_review_status` on a single check
+- `human_review_reviewer` and `human_review_note` on a single check
+- `property_human_review_statuses` for `reference_band_rows`
+- `property_human_review_notes` for per-property caveats
+
+Example:
+
+```toml
+[human_review]
+default_status = "pending_review"
+
+[[checks]]
+kind = "reference_band_rows"
+...
+human_review_reviewer = "human"
+property_human_review_statuses = {
+  "ISI Coefficient of Variation" = "accepted",
+  "AHP Duration" = "provisional",
+}
+property_human_review_notes = {
+  "AHP Duration" = "Temporary stopgap until source-backed quantiles are available.",
+}
+```
+
+Run the dedicated coverage audit to check this metadata:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py human_review_status
+```
+
+That audit:
+
+- fails if any declarative item resolves to no review status
+- fails if a config uses an unknown status string
+- warns on `pending_review`
+- warns on `provisional`
+
 ## Built-in rule kinds
 
 The built-in rule layer already covers common cases:
@@ -221,6 +280,7 @@ Use these config knobs deliberately:
     - `lognormal_sd`
     - `beta_sd`
     - `binary_indicator`
+  - this choice is required for every property; there is no fallback mode
     - `quantile_interval`
 - `property_lower_bounds`
   - clip naturally non-negative metrics at zero

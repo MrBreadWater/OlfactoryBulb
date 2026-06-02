@@ -32,6 +32,9 @@ sample_report = AuditReport(
             acceptable="The tufted-cell value must exceed the mitral-cell value.",
             acceptable_basis="This simplified sample uses an ordering rule instead of a numeric range.",
             note="This is only a note.",
+            human_review_status="accepted",
+            human_review_note="Manually reviewed and accepted.",
+            human_review_reviewer="human",
         ),
     ],
 )
@@ -44,10 +47,12 @@ assert "Evidence" in plain
 assert "Description" in plain
 assert "Acceptable result" in plain
 assert "How Acceptable Result Was Determined" in plain
+assert "Human Review" in plain
 assert "count: 3 (reference: 4 +/- 1 counts from Demo Source (n=8))" in plain
 assert "Tufted cell coefficient of variation of interspike intervals item" in plain
 assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
+assert "Accepted | reviewer: human | Manually reviewed and accepted." in plain
 
 colored = format_report(sample_report, color=True)
 assert "\033[" in colored

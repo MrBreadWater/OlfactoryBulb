@@ -137,8 +137,42 @@ def build_rule_items(
         except KeyError as exc:
             known = ", ".join(sorted(RULE_HANDLERS))
             raise KeyError(f"Unknown validation rule kind {kind!r}. Known rule kinds: {known}") from exc
-        items.extend(handler(rule, context))
+        rule_items = handler(rule, context)
+        _apply_rule_level_human_review(rule_items, rule, context)
+        items.extend(rule_items)
     return items
+
+
+def _config_human_review_defaults(context: ValidationRuleContext) -> dict[str, Any]:
+    defaults = context.config.get("human_review", {})
+    return dict(defaults) if isinstance(defaults, dict) else {}
+
+
+def _resolved_rule_human_review(
+    rule: dict[str, Any],
+    context: ValidationRuleContext,
+) -> dict[str, str]:
+    defaults = _config_human_review_defaults(context)
+    return {
+        "status": str(rule.get("human_review_status", defaults.get("default_status", ""))).strip(),
+        "note": str(rule.get("human_review_note", defaults.get("default_note", ""))).strip(),
+        "reviewer": str(rule.get("human_review_reviewer", defaults.get("default_reviewer", ""))).strip(),
+    }
+
+
+def _apply_rule_level_human_review(
+    items: list[AuditItem],
+    rule: dict[str, Any],
+    context: ValidationRuleContext,
+) -> None:
+    metadata = _resolved_rule_human_review(rule, context)
+    for item in items:
+        if not item.human_review_status and metadata["status"]:
+            item.human_review_status = metadata["status"]
+        if not item.human_review_note and metadata["note"]:
+            item.human_review_note = metadata["note"]
+        if not item.human_review_reviewer and metadata["reviewer"]:
+            item.human_review_reviewer = metadata["reviewer"]
 
 
 def _rule_item(
@@ -453,6 +487,25 @@ def _property_override(
     if not isinstance(overrides, dict):
         return default
     return overrides.get(property_name, default)
+
+
+def _property_review_metadata(
+    rule: dict[str, Any],
+    context: ValidationRuleContext,
+    property_name: str,
+) -> dict[str, str]:
+    defaults = _resolved_rule_human_review(rule, context)
+    return {
+        "status": str(
+            _property_override(rule, "property_human_review_statuses", property_name, defaults["status"])
+        ).strip(),
+        "note": str(
+            _property_override(rule, "property_human_review_notes", property_name, defaults["note"])
+        ).strip(),
+        "reviewer": str(
+            _property_override(rule, "property_human_review_reviewers", property_name, defaults["reviewer"])
+        ).strip(),
+    }
 
 
 def _property_band_modes(rule: dict[str, Any], property_metric_map: dict[str, str]) -> dict[str, str]:
@@ -884,6 +937,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
         range_text = f"between {rounded(accepted_low)} and {rounded(accepted_high)}"
         if unit_text:
             range_text = f"{range_text} {unit_text}"
+        review_metadata = _property_review_metadata(rule, context, property_name)
         items.append(
             _rule_item(
                 rule,
@@ -906,8 +960,12 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                     f"This is a dispersion band, not a formal confidence interval."
                 ),
                 evidence=evidence,
+                note=str(_property_override(rule, "property_notes", property_name, "")),
             )
         )
+        items[-1].human_review_status = review_metadata["status"]
+        items[-1].human_review_note = review_metadata["note"]
+        items[-1].human_review_reviewer = review_metadata["reviewer"]
     return items
 
 

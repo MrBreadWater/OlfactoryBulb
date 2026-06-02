@@ -177,12 +177,12 @@ BURTON_PROPERTY_LABELS = {
     "spike_accommodation_time_constant_ms": "spiking-rate accommodation time constant",
 }
 BURTON_REFERENCE_BAND_MODES = {
-    "AHP_amplitude_mV": "lognormal_sd",
+    "AHP_amplitude_mV": "symmetric_sd",
     "T_AHP50_ms": "lognormal_sd",
-    "Amplitude_mV": "lognormal_sd",
+    "Amplitude_mV": "symmetric_sd",
     "AP_onset_mV": "symmetric_sd",
-    "FWHM_ms": "lognormal_sd",
-    "cell_capacitance_pF": "lognormal_sd",
+    "FWHM_ms": "symmetric_sd",
+    "cell_capacitance_pF": "symmetric_sd",
     "fi_gain_Hz_per_50pA": "lognormal_sd",
     "cv_isi": "lognormal_sd",
     "input_resistance_MOhm": "lognormal_sd",
@@ -195,11 +195,7 @@ BURTON_REFERENCE_BAND_MODES = {
     "spike_accommodation_time_constant_ms": "lognormal_sd",
 }
 BURTON_REFERENCE_LOWER_BOUNDS = {
-    "AHP_amplitude_mV": 0.0,
     "T_AHP50_ms": 0.0,
-    "Amplitude_mV": 0.0,
-    "FWHM_ms": 0.0,
-    "cell_capacitance_pF": 0.0,
     "fi_gain_Hz_per_50pA": 0.0,
     "cv_isi": 0.0,
     "input_resistance_MOhm": 0.0,
@@ -235,6 +231,7 @@ def _burton_item(
         acceptable_basis=acceptable_basis,
         evidence=evidence or {},
         note=note,
+        human_review_status="not_applicable",
     )
 
 
@@ -982,6 +979,7 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
             "covered_property_count": len(uploaded_property_names),
             "covered_properties": uploaded_property_names,
         },
+        human_review_status="not_applicable",
     )
 
 
@@ -1012,6 +1010,7 @@ def _build_fi_protocol_caveat_item() -> AuditItem:
             acceptable="Relevant protocol caveats are displayed whenever matching notes exist for the protocol set in scope.",
             acceptable_basis="The note set is resolved from validation_notes.csv against the current protocol identifiers in scope.",
             evidence={"protocol_ids_in_scope": [BU2014_MC_TC_PROTOCOL_ID, BMU2024_EPL_FSI_PROTOCOL_ID], "notes": []},
+            human_review_status="not_applicable",
         )
     return AuditItem(
         check_id="fi_protocol_caveats",
@@ -1026,6 +1025,7 @@ def _build_fi_protocol_caveat_item() -> AuditItem:
             "notes": [note.message for note in matched_notes],
             "note_ids": [note.note_id for note in matched_notes],
         },
+        human_review_status="not_applicable",
     )
 
 
@@ -1587,6 +1587,7 @@ def run(args: argparse.Namespace) -> AuditReport:
                 "reference_sigma_multiplier": reference_sigma_multiplier,
                 "candidate_slice": candidate_slice,
             },
+            human_review_status="not_applicable",
         )
     return run_reference_validation(
         args=args,

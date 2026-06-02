@@ -5,6 +5,9 @@ protocol_runner = "epli_correctness_structural"
 metric_group_field = "validation_group"
 skip_neuron_mode = "protocol_handles_skip"
 
+[human_review]
+default_status = "pending_review"
+
 [[checks]]
 kind = "summary_metric_min"
 check_id = "baseline_slice_population_counts"

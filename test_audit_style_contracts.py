@@ -11,6 +11,7 @@ from olfactorybulb.audit.env_install import run as run_env_install
 from olfactorybulb.audit.epli_correctness import run as run_epli_correctness
 from olfactorybulb.audit.gc_intrinsic_validation import run as run_gc_intrinsic_validation
 from olfactorybulb.audit.hfo_feature_contracts import run as run_hfo_feature_contracts
+from olfactorybulb.audit.human_review_status import run as run_human_review_status
 
 
 def _assert_human_metadata(report) -> None:
@@ -89,6 +90,9 @@ _assert_human_metadata(epl_fsi_report)
 
 hfo_report = run_hfo_feature_contracts(argparse.Namespace())
 _assert_human_metadata(hfo_report)
+
+human_review_report = run_human_review_status(argparse.Namespace())
+_assert_human_metadata(human_review_report)
 
 new_sweep_report = run_new_sweep(["--skip-neuron", "--skip-imports"])
 _assert_human_metadata(new_sweep_report)

@@ -96,12 +96,21 @@ assert "two standard deviations" in item_by_id["mc_membrane_time_constant_ms_wit
 assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_low"] > 0.0
 assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_interval_standard"] == "lognormal-reconstructed dispersion band"
 assert "not a formal confidence interval" in item_by_id["mc_cv_isi_within_uploaded_reference_band"].acceptable_basis
+assert item_by_id["mc_ahp_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
+assert item_by_id["mc_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
+assert item_by_id["mc_fwhm_ms_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
+assert item_by_id["mc_cell_capacitance_pf_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
 assert item_by_id["mc_rebound_potential_presence_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "binary_indicator"
 assert "binary reference indicator exactly" in item_by_id["mc_rebound_potential_presence_within_uploaded_reference_band"].criterion
 assert item_by_id["mc_sag_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
 assert item_by_id["mc_sag_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_low"] < 0.0
 assert "N_FI_PROTOCOL_DIFFERENCE" in item_by_id["fi_protocol_caveats"].evidence["note_ids"]
 assert "N_BURTON_RECONSTRUCTED_POSITIVE_BANDS" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
+assert "N_BURTON_AHP_DURATION_PROVISIONAL" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
+assert "N_BURTON_ACCOMMODATION_TAU_PROVISIONAL" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
+assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].human_review_status == "accepted"
+assert item_by_id["mc_t_ahp50_ms_within_uploaded_reference_band"].human_review_status == "provisional"
+assert "provisional" in item_by_id["mc_t_ahp50_ms_within_uploaded_reference_band"].human_review_note.lower()
 assert callable(find_spike_times_milliseconds)
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1
 assert _resolved_jobs(10, 99, use_gpu=False) == 10
@@ -138,6 +147,7 @@ assert item_by_id_json["requested_birgiolas_models_registered"]["status"] == "PA
 assert item_by_id_json["birgiolas_model_morphology_skipped"]["status"] == "WARN"
 assert item_by_id_json["burton_urban_fi_skipped"]["evidence"]["jobs"] == 4
 assert item_by_id_json["burton_urban_fi_skipped"]["evidence"]["reference_sigma_multiplier"] == 2.0
+assert item_by_id_json["burton_urban_fi_skipped"]["human_review_status"] == "not_applicable"
 
 generic = subprocess.run(
     [sys.executable, "tools/run_audit.py", "burton_urban_fi", "--skip-neuron", "--json"],
@@ -159,6 +169,7 @@ def _assert_new_sweep_payload(run: subprocess.CompletedProcess[str]) -> None:
     assert "burton_urban_fi.burton_urban_fi_skipped" in check_ids
     assert "burton_urban_fi.baseline_slice_population_counts" in check_ids
     assert "burton_urban_fi.requested_birgiolas_models_registered" in check_ids
+    assert any(check_id.startswith("human_review_status.") for check_id in check_ids)
     assert any(check_id.startswith("epli_correctness.") for check_id in check_ids)
     expected_code = 1 if payload["summary"]["FAIL"] else 0
     assert run.returncode == expected_code

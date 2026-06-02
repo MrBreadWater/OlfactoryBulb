@@ -124,6 +124,15 @@ def validation_skip_neuron_mode(config: dict[str, Any]) -> str:
     return mode
 
 
+def validation_human_review_defaults(config: dict[str, Any]) -> dict[str, Any]:
+    defaults = config.get("human_review", {})
+    if defaults is None:
+        return {}
+    if not isinstance(defaults, dict):
+        raise ValueError("Reference validation config 'human_review' must be a table")
+    return dict(defaults)
+
+
 __all__ = [
     "DEFAULT_REFERENCE_VALIDATION_ID",
     "REFERENCE_VALIDATION_CONFIG_DIR",
@@ -132,6 +141,7 @@ __all__ = [
     "load_validation_extensions",
     "validation_defaults",
     "validation_extension_specs",
+    "validation_human_review_defaults",
     "validation_protocol_defaults",
     "validation_protocol_runner_id",
     "validation_rule_specs",
