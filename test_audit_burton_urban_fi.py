@@ -87,6 +87,7 @@ items = build_validation_items(fixture_metrics, BurtonUrbanProtocol())
 item_by_id = {item.check_id: item for item in items}
 assert item_by_id["uploaded_burton_reference_coverage"].status == "PASS"
 assert item_by_id["fi_protocol_caveats"].status == "WARN"
+assert item_by_id["burton_reference_band_caveats"].status == "WARN"
 assert item_by_id["tc_fi_gain_higher"].status == "PASS"
 assert item_by_id["rheobase_in_paper_regime"].status == "PASS"
 assert item_by_id["tc_cv_isi_higher"].status == "PASS"
@@ -100,6 +101,7 @@ assert "binary reference indicator exactly" in item_by_id["mc_rebound_potential_
 assert item_by_id["mc_sag_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
 assert item_by_id["mc_sag_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_low"] < 0.0
 assert "N_FI_PROTOCOL_DIFFERENCE" in item_by_id["fi_protocol_caveats"].evidence["note_ids"]
+assert "N_BURTON_RECONSTRUCTED_POSITIVE_BANDS" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
 assert callable(find_spike_times_milliseconds)
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1
 assert _resolved_jobs(10, 99, use_gpu=False) == 10

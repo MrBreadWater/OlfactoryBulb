@@ -53,6 +53,19 @@ row_contexts = [
 ]
 
 [[checks]]
+kind = "note_presence"
+check_id = "burton_reference_band_caveats"
+title = "Reference-band caveats"
+criterion = "Audit-side distribution-shape assumptions for Burton and Urban reference bands should be shown explicitly whenever those reference-band checks are rendered."
+description = "This section makes it clear that non-symmetric positive-only bands are validation-layer reconstructions from the reported Burton and Urban mean and standard deviation, not source-reported distribution fits."
+acceptable = "Any configured Burton-specific reference-band caveats are displayed here."
+acceptable_basis = "The messages are loaded from validation notes by matching the Burton and Urban source rows currently in scope."
+scope = "reference_validation"
+row_contexts = [
+  { loader = "legacy_mc_tc_ephys", filter_field = "Source", filter_values = ["Burton & Urban (2014)"] },
+]
+
+[[checks]]
 kind = "protocol_executed"
 check_id = "burton_urban_protocol_executed"
 title = "Burton and Urban mitral-cell and tufted-cell firing-rate-versus-current protocol executed"
