@@ -157,6 +157,12 @@ That boundary matters.
 If you need a new measured quantity, add it to the protocol runner output.
 If you need a new decision rule, add a new rule kind.
 
+One consequence of that split is that **reference-band assumptions belong in
+config**, not hidden in Python defaults. A metric such as membrane resting
+voltage can often tolerate a symmetric arithmetic band, while a metric such as
+the interspike-interval coefficient of variation is positive-only and usually
+needs a different shape.
+
 The framework now supports two skip behaviors:
 
 - `short_circuit`
@@ -188,6 +194,65 @@ The built-in rule layer already covers common cases:
 - `note_presence`
 
 Use config alone whenever one of these can express the paper cleanly.
+
+## Choosing acceptable bands for literature rows
+
+`reference_band_rows` no longer assumes that every metric should use the same
+arithmetic `mean +/- sigma * sd` interval.
+
+Use these config knobs deliberately:
+
+- `property_band_modes`
+  - per-property band shape
+  - built-ins:
+    - `symmetric_sd`
+    - `lognormal_sd`
+- `property_lower_bounds`
+  - clip naturally non-negative metrics at zero
+- `property_upper_bounds`
+  - clip bounded metrics such as probabilities at one
+
+Example:
+
+```toml
+[[checks]]
+kind = "reference_band_rows"
+loader = "csv:research_context/EXAMPLE_ephys.csv"
+reference_source = "Example et al. (2026)"
+group_field = "cell_type"
+sigma_arg_name = "reference_sigma_multiplier"
+property_metric_map = {
+  "Membrane Resting Voltage" = "resting_potential_mV",
+  "ISI Coefficient of Variation" = "cv_isi",
+  "Firing Probability" = "firing_probability",
+}
+property_band_modes = { "ISI Coefficient of Variation" = "lognormal_sd" }
+property_lower_bounds = {
+  "ISI Coefficient of Variation" = 0.0,
+  "Firing Probability" = 0.0,
+}
+property_upper_bounds = { "Firing Probability" = 1.0 }
+title = "Reference band placeholder"
+criterion = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
+description = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
+acceptable = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
+acceptable_basis = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
+```
+
+Use `lognormal_sd` when all of the following are true:
+
+- the metric is strictly positive,
+- the literature value is better treated as right-skewed than symmetric, and
+- the source gives only arithmetic mean and standard deviation.
+
+Use `property_lower_bounds` / `property_upper_bounds` when the metric has a
+hard physical or definitional bound even if you still want a symmetric band in
+the interior.
+
+Do not describe these bands as formal confidence intervals unless the source
+actually reports a confidence interval and you model it that way. In this
+framework, the default `reference_sigma_multiplier` is a configurable
+**dispersion-band width**, not a statistical confidence level.
 
 If the paper needs a genuinely different comparison rule, register a new rule
 kind in an extension module.

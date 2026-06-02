@@ -143,6 +143,7 @@ filter_field = "gc_subtype"
 filter_values_arg = "reference_gc_subtypes"
 sigma_arg_name = "reference_sigma_multiplier"
 property_metric_map = { "Input Resistance" = "input_resistance_MOhm", "Membrane Time Constant" = "membrane_time_constant_ms", "Capacitance" = "cell_capacitance_pF", "Membrane Resting Voltage" = "resting_potential_mV", "AP Threshold" = "AP_onset_mV", "AP Amplitude" = "Amplitude_mV", "AP Half-Width" = "FWHM_ms", "AP Rising Slope" = "Rise_slope_mV_per_ms", "AP Falling Slope" = "Fall_slope_mV_per_ms" }
+property_lower_bounds = { "Input Resistance" = 0.0, "Membrane Time Constant" = 0.0, "Capacitance" = 0.0, "AP Amplitude" = 0.0, "AP Half-Width" = 0.0, "AP Rising Slope" = 0.0 }
 title = "Uploaded generic granule-cell intrinsic reference bands"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped generic granule-cell reference row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped generic granule-cell reference row."
@@ -160,6 +161,7 @@ filter_values_arg = "reference_gc_subtypes"
 sigma_arg_name = "reference_sigma_multiplier"
 pass_status = "WARN"
 property_metric_map = { "Rheobase Current" = "rheobase_pA", "First Spike Latency" = "first_spike_latency_ms", "FI Curve Slope" = "fi_slope_Hz_per_nA", "Peak Instantaneous Rate" = "peak_instantaneous_rate_Hz" }
+property_lower_bounds = { "Rheobase Current" = 0.0, "First Spike Latency" = 0.0, "FI Curve Slope" = 0.0, "Peak Instantaneous Rate" = 0.0 }
 title = "Uploaded generic granule-cell firing-rate summary bands"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped generic granule-cell firing-rate summary row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped generic granule-cell firing-rate summary row."
@@ -176,6 +178,7 @@ filter_field = "gc_subtype"
 filter_values_arg = "reference_gc_subtypes"
 sigma_arg_name = "reference_sigma_multiplier"
 property_metric_map = { "Input Resistance" = "input_resistance_MOhm", "Membrane Time Constant" = "membrane_time_constant_ms", "Capacitance" = "cell_capacitance_pF", "AP Amplitude" = "Amplitude_mV", "AP Half-Width" = "FWHM_ms", "AP Rising Slope" = "Rise_slope_mV_per_ms" }
+property_lower_bounds = { "Input Resistance" = 0.0, "Membrane Time Constant" = 0.0, "Capacitance" = 0.0, "AP Amplitude" = 0.0, "AP Half-Width" = 0.0, "AP Rising Slope" = 0.0 }
 title = "Uploaded subtype granule-cell intrinsic reference bands"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped superficial-granule-cell and deep-granule-cell reference row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped superficial-granule-cell and deep-granule-cell reference row."
@@ -193,6 +196,7 @@ filter_values_arg = "reference_gc_subtypes"
 sigma_arg_name = "reference_sigma_multiplier"
 pass_status = "WARN"
 property_metric_map = { "Rheobase Current" = "rheobase_pA", "First Spike Latency" = "first_spike_latency_ms", "FI Curve Slope" = "fi_slope_Hz_per_nA", "Peak Instantaneous Rate" = "peak_instantaneous_rate_Hz" }
+property_lower_bounds = { "Rheobase Current" = 0.0, "First Spike Latency" = 0.0, "FI Curve Slope" = 0.0, "Peak Instantaneous Rate" = 0.0 }
 title = "Uploaded subtype granule-cell firing-rate summary bands"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped superficial-granule-cell and deep-granule-cell firing-rate summary row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped superficial-granule-cell and deep-granule-cell firing-rate summary row."
@@ -210,6 +214,7 @@ filter_values_arg = "reference_gc_subtypes"
 sigma_arg_name = "reference_sigma_multiplier"
 pass_status = "WARN"
 property_metric_map = { "Sag Amplitude" = "sag_amplitude_mV" }
+property_lower_bounds = { "Sag Amplitude" = 0.0 }
 title = "Uploaded adult-born granule-cell sag reference bands"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped adult-born granule-cell reference row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped adult-born granule-cell reference row."

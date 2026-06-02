@@ -50,6 +50,18 @@ class ValidationRuleContext:
     protocol_result: Any | None = None
 
 
+@dataclass(frozen=True)
+class ReferenceAcceptanceBand:
+    low: float
+    high: float
+    mode: str
+    raw_low: float
+    raw_high: float
+    lower_bound: float | None
+    upper_bound: float | None
+    description: str
+
+
 RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
 
 
@@ -186,6 +198,85 @@ def _sigma_phrase(sigma_multiplier: float) -> str:
     return f"{rounded(float(sigma_multiplier), 3)} standard deviations"
 
 
+def _optional_float(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if math.isfinite(number) else None
+
+
+def compute_reference_acceptance_band(
+    *,
+    reference_mean: float,
+    reference_sd: float,
+    sigma_multiplier: float,
+    band_mode: str = "symmetric_sd",
+    lower_bound: float | None = None,
+    upper_bound: float | None = None,
+) -> ReferenceAcceptanceBand:
+    mode = str(band_mode or "symmetric_sd").strip()
+    sigma_phrase = _sigma_phrase(sigma_multiplier)
+    if mode == "symmetric_sd":
+        raw_low = float(reference_mean - reference_sd * sigma_multiplier)
+        raw_high = float(reference_mean + reference_sd * sigma_multiplier)
+        description = (
+            f"the uploaded arithmetic mean plus or minus {sigma_phrase}"
+        )
+    elif mode == "lognormal_sd":
+        if reference_mean <= 0.0:
+            raise ValueError(
+                "lognormal_sd acceptance bands require a strictly positive reference mean"
+            )
+        if reference_sd < 0.0:
+            raise ValueError(
+                "lognormal_sd acceptance bands require a non-negative reference standard deviation"
+            )
+        variance_ratio = (float(reference_sd) / float(reference_mean)) ** 2
+        sigma_log = math.sqrt(math.log1p(variance_ratio))
+        mu_log = math.log(float(reference_mean)) - 0.5 * sigma_log**2
+        raw_low = float(math.exp(mu_log - float(sigma_multiplier) * sigma_log))
+        raw_high = float(math.exp(mu_log + float(sigma_multiplier) * sigma_log))
+        description = (
+            f"a log-space band reconstructed from the uploaded arithmetic mean and standard deviation "
+            f"assuming a lognormal distribution, then exponentiated back to the original units over {sigma_phrase}"
+        )
+    else:
+        raise ValueError(
+            f"Unknown reference-band mode {mode!r}. Supported modes: 'symmetric_sd', 'lognormal_sd'."
+        )
+
+    low = raw_low
+    high = raw_high
+    bound_notes: list[str] = []
+    if lower_bound is not None:
+        if low < float(lower_bound):
+            low = float(lower_bound)
+            bound_notes.append(f"lower-bounded at {rounded(float(lower_bound))}")
+    if upper_bound is not None:
+        if high > float(upper_bound):
+            high = float(upper_bound)
+            bound_notes.append(f"upper-bounded at {rounded(float(upper_bound))}")
+    if high < low:
+        raise ValueError(
+            f"Reference acceptance band bounds are inconsistent after clipping: low={low}, high={high}"
+        )
+    if bound_notes:
+        description = f"{description}, then {' and '.join(bound_notes)}"
+    return ReferenceAcceptanceBand(
+        low=float(low),
+        high=float(high),
+        mode=mode,
+        raw_low=float(raw_low),
+        raw_high=float(raw_high),
+        lower_bound=lower_bound,
+        upper_bound=upper_bound,
+        description=description,
+    )
+
+
 def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in payload.items():
@@ -271,6 +362,18 @@ def _filter_rows(rows: list[dict[str, Any]], spec: dict[str, Any], *, args: Any 
                 continue
             filtered = [row for row in filtered if str(row.get(field, "")).strip() in allowed]
     return filtered
+
+
+def _property_override(
+    rule: dict[str, Any],
+    field_name: str,
+    property_name: str,
+    default: Any = None,
+) -> Any:
+    overrides = rule.get(field_name, {})
+    if not isinstance(overrides, dict):
+        return default
+    return overrides.get(property_name, default)
 
 
 def _group_mean(summary: dict[str, dict[str, float]], group: str, metric_key: str) -> float:
@@ -523,6 +626,9 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
     sigma_arg_name = str(rule.get("sigma_arg_name", "reference_sigma_multiplier"))
     sigma_multiplier = float(getattr(context.args, sigma_arg_name, rule.get("sigma_multiplier", 2.0)))
     sigma_phrase = _sigma_phrase(sigma_multiplier)
+    default_band_mode = str(rule.get("default_band_mode", "symmetric_sd") or "symmetric_sd").strip()
+    default_lower_bound = _optional_float(rule.get("default_lower_bound"))
+    default_upper_bound = _optional_float(rule.get("default_upper_bound"))
     rows = _filter_rows(_load_rows(loader), rule, args=context.args)
     items: list[AuditItem] = []
     for row in rows:
@@ -540,20 +646,49 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
             continue
         reference_mean = float(row["mean"])
         reference_sd = float(row["sd"])
-        accepted_low = reference_mean - reference_sd * sigma_multiplier
-        accepted_high = reference_mean + reference_sd * sigma_multiplier
+        band_mode = str(
+            _property_override(rule, "property_band_modes", property_name, default_band_mode) or default_band_mode
+        ).strip()
+        lower_bound = _optional_float(
+            _property_override(rule, "property_lower_bounds", property_name, default_lower_bound)
+        )
+        upper_bound = _optional_float(
+            _property_override(rule, "property_upper_bounds", property_name, default_upper_bound)
+        )
+        band = compute_reference_acceptance_band(
+            reference_mean=reference_mean,
+            reference_sd=reference_sd,
+            sigma_multiplier=sigma_multiplier,
+            band_mode=band_mode,
+            lower_bound=lower_bound,
+            upper_bound=upper_bound,
+        )
+        accepted_low = band.low
+        accepted_high = band.high
         passed = _is_finite_number(observed_value) and accepted_low <= observed_value <= accepted_high
         item_id = f"{group.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_")
         evidence_key = f"{group}_mean"
-        evidence = _rounded_dict(
-            {
-                evidence_key: observed_value,
-                "accepted_low": accepted_low,
-                "accepted_high": accepted_high,
-                "accepted_sigma_multiplier": sigma_multiplier,
-                "__reference_annotations__": {evidence_key: _reference_annotation(row)},
-            }
-        )
+        evidence_payload: dict[str, Any] = {
+            evidence_key: observed_value,
+            "accepted_low": accepted_low,
+            "accepted_high": accepted_high,
+            "accepted_sigma_multiplier": sigma_multiplier,
+            "accepted_interval_mode": band.mode,
+            "__reference_annotations__": {evidence_key: _reference_annotation(row)},
+        }
+        if lower_bound is not None:
+            evidence_payload["accepted_lower_bound"] = lower_bound
+        if upper_bound is not None:
+            evidence_payload["accepted_upper_bound"] = upper_bound
+        if not np.isclose(band.raw_low, band.low):
+            evidence_payload["unbounded_low"] = band.raw_low
+        if not np.isclose(band.raw_high, band.high):
+            evidence_payload["unbounded_high"] = band.raw_high
+        evidence = _rounded_dict(evidence_payload)
+        unit_text = str(row.get("unit", "")).strip()
+        range_text = f"between {rounded(accepted_low)} and {rounded(accepted_high)}"
+        if unit_text:
+            range_text = f"{range_text} {unit_text}"
         items.append(
             _rule_item(
                 rule,
@@ -569,14 +704,13 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                     f"{property_name} rather than from a cross-group ordering heuristic."
                 ),
                 acceptable=(
-                    f"The observed {group} mean must lie between {rounded(accepted_low)} and {rounded(accepted_high)} "
-                    f"{str(row.get('unit', '')).strip()}, which corresponds to mean plus or minus "
-                    f"{sigma_phrase}."
+                    f"The observed {group} mean must lie {range_text}, using the configured "
+                    f"{band.mode.replace('_', ' ')} acceptance band."
                 ),
                 acceptable_basis=(
-                    f"The accepted interval is computed from the uploaded literature row for {property_name} "
-                    f"as mean plus or minus {sigma_phrase}. The sigma multiplier comes from the configurable "
-                    f"'{sigma_arg_name}' setting."
+                    f"The accepted interval is computed from the uploaded literature row for {property_name} as "
+                    f"{band.description}. The sigma multiplier comes from the configurable '{sigma_arg_name}' setting. "
+                    f"This is a dispersion band, not a formal confidence interval."
                 ),
                 evidence=evidence,
             )
@@ -681,8 +815,10 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
 __all__ = [
     "REFERENCE_ROW_LOADERS",
     "RULE_HANDLERS",
+    "ReferenceAcceptanceBand",
     "ValidationRuleContext",
     "build_rule_items",
+    "compute_reference_acceptance_band",
     "register_validation_rule",
     "summarize_numeric_metrics",
 ]

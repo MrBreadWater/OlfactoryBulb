@@ -33,6 +33,7 @@ from olfactorybulb.audit.reference_validation_protocols import (
     BurtonUrbanProtocol as RegisteredBurtonUrbanProtocol,
     ProtocolRunResult,
 )
+from olfactorybulb.audit.reference_validation_rules import compute_reference_acceptance_band
 from olfactorybulb.slice_connectivity_optimizer import load_slice_geometry, observed_metrics_for_synapse_set, resolve_slice_dir
 from prev_ob_models.cell_registry import get_cell_model_spec
 
@@ -174,6 +175,27 @@ BURTON_PROPERTY_LABELS = {
     "sag_amplitude_mV": "sag amplitude",
     "spike_accommodation_hz": "spiking-rate accommodation",
     "spike_accommodation_time_constant_ms": "spiking-rate accommodation time constant",
+}
+BURTON_REFERENCE_BAND_MODES = {
+    "cv_isi": "lognormal_sd",
+}
+BURTON_REFERENCE_LOWER_BOUNDS = {
+    "AHP_amplitude_mV": 0.0,
+    "T_AHP50_ms": 0.0,
+    "Amplitude_mV": 0.0,
+    "FWHM_ms": 0.0,
+    "cell_capacitance_pF": 0.0,
+    "fi_gain_Hz_per_50pA": 0.0,
+    "cv_isi": 0.0,
+    "input_resistance_MOhm": 0.0,
+    "membrane_time_constant_ms": 0.0,
+    "rebound_potential_presence": 0.0,
+    "rheobase_pA": 0.0,
+    "sag_amplitude_mV": 0.0,
+    "spike_accommodation_time_constant_ms": 0.0,
+}
+BURTON_REFERENCE_UPPER_BOUNDS = {
+    "rebound_potential_presence": 1.0,
 }
 
 
@@ -846,10 +868,19 @@ def _build_burton_reference_fit_items(
     for cell_type in ("MC", "TC"):
         for metric_key, reference in BURTON_CSV_REFERENCES.get(cell_type, {}).items():
             observed_value = float(summary.get(cell_type, {}).get(metric_key, float("nan")))
-            accepted_low = reference.low(reference_sigma_multiplier)
-            accepted_high = reference.high(reference_sigma_multiplier)
+            band = compute_reference_acceptance_band(
+                reference_mean=reference.mean,
+                reference_sd=reference.std,
+                sigma_multiplier=reference_sigma_multiplier,
+                band_mode=BURTON_REFERENCE_BAND_MODES.get(metric_key, "symmetric_sd"),
+                lower_bound=BURTON_REFERENCE_LOWER_BOUNDS.get(metric_key),
+                upper_bound=BURTON_REFERENCE_UPPER_BOUNDS.get(metric_key),
+            )
+            accepted_low = band.low
+            accepted_high = band.high
             in_range = np.isfinite(observed_value) and accepted_low <= observed_value <= accepted_high
             metric_label = BURTON_PROPERTY_LABELS.get(metric_key, metric_key)
+            units_suffix = f" {reference.units}" if reference.units else ""
             items.append(
                 AuditItem(
                     check_id=f"{cell_type.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
@@ -865,11 +896,12 @@ def _build_burton_reference_fit_items(
                     ),
                     acceptable=(
                         f"The observed {_cell_label(cell_type)} mean must lie between {rounded(accepted_low)} and "
-                        f"{rounded(accepted_high)} {reference.units}, which corresponds to mean plus or minus {sigma_phrase}."
+                        f"{rounded(accepted_high)}{units_suffix}, using the configured {band.mode.replace('_', ' ')} acceptance band."
                     ),
                     acceptable_basis=(
-                        f"The accepted interval is the uploaded Burton and Urban 2014 mean plus or minus {sigma_phrase} "
-                        f"for {_cell_label(cell_type)} {metric_label}. The sigma multiplier is configurable, and the default is 2.0 to approximate a ninety-five-percent-style interval rather than a one-standard-deviation band."
+                        f"The accepted interval is computed from the uploaded Burton and Urban 2014 row for "
+                        f"{_cell_label(cell_type)} {metric_label} as {band.description}. The sigma multiplier is "
+                        f"configurable, and the default is 2.0. This is a dispersion band, not a formal confidence interval."
                     ),
                     evidence=_single_cell_type_reference_evidence(
                         observed_value=observed_value,

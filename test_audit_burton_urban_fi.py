@@ -92,6 +92,8 @@ assert item_by_id["rheobase_in_paper_regime"].status == "PASS"
 assert item_by_id["tc_cv_isi_higher"].status == "PASS"
 assert item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].status == "PASS"
 assert "two standard deviations" in item_by_id["mc_membrane_time_constant_ms_within_uploaded_reference_band"].acceptable_basis
+assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_low"] > 0.0
+assert "not a formal confidence interval" in item_by_id["mc_cv_isi_within_uploaded_reference_band"].acceptable_basis
 assert "N_FI_PROTOCOL_DIFFERENCE" in item_by_id["fi_protocol_caveats"].evidence["note_ids"]
 assert callable(find_spike_times_milliseconds)
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1

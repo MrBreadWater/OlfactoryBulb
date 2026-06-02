@@ -205,6 +205,9 @@ reference_source = "Burton & Urban (2014)"
 group_field = "cell_type"
 sigma_arg_name = "reference_sigma_multiplier"
 property_metric_map = { "AHP Amplitude" = "AHP_amplitude_mV", "AHP Duration" = "T_AHP50_ms", "AP Amplitude" = "Amplitude_mV", "AP Threshold" = "AP_onset_mV", "AP Width at Half-height" = "FWHM_ms", "AP Half-Width" = "FWHM_ms", "Capacitance" = "cell_capacitance_pF", "FI Curve Slope" = "fi_gain_Hz_per_50pA", "ISI Coefficient of Variation" = "cv_isi", "Input Resistance" = "input_resistance_MOhm", "Membrane Resting Voltage" = "resting_potential_mV", "Membrane Time Constant" = "membrane_time_constant_ms", "Rebound Potential Presence" = "rebound_potential_presence", "Rheobase Current" = "rheobase_pA", "Sag Amplitude" = "sag_amplitude_mV", "Spiking Rate Accommodation" = "spike_accommodation_hz", "Spiking Rate Accom. Time Constant" = "spike_accommodation_time_constant_ms" }
+property_band_modes = { "ISI Coefficient of Variation" = "lognormal_sd" }
+property_lower_bounds = { "AHP Amplitude" = 0.0, "AHP Duration" = 0.0, "AP Amplitude" = 0.0, "AP Width at Half-height" = 0.0, "AP Half-Width" = 0.0, "Capacitance" = 0.0, "FI Curve Slope" = 0.0, "ISI Coefficient of Variation" = 0.0, "Input Resistance" = 0.0, "Membrane Time Constant" = 0.0, "Rebound Potential Presence" = 0.0, "Rheobase Current" = 0.0, "Sag Amplitude" = 0.0, "Spiking Rate Accom. Time Constant" = 0.0 }
+property_upper_bounds = { "Rebound Potential Presence" = 1.0 }
 title = "Uploaded reference bands"
 criterion = "Unused placeholder text; this rule auto-generates one item per mapped Burton and Urban reference row."
 description = "Unused placeholder text; this rule auto-generates one item per mapped Burton and Urban reference row."
