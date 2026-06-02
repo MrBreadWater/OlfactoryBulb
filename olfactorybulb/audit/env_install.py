@@ -114,6 +114,18 @@ def _print_needed(shared_object: Path) -> tuple[str, list[str]]:
     return ("PASS", needed)
 
 
+def _decode_leading_json(text: str) -> dict[str, object] | None:
+    payload = text.strip()
+    if not payload:
+        return None
+    decoder = json.JSONDecoder()
+    try:
+        parsed, _index = decoder.raw_decode(payload)
+    except json.JSONDecodeError:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def audit_repo_layout() -> list[AuditItem]:
     missing = [relative for relative in REQUIRED_REPO_FILES if not (REPO_ROOT / relative).exists()]
     cwd_matches = Path.cwd().resolve() == REPO_ROOT.resolve()
@@ -401,12 +413,7 @@ def audit_python_imports(*, skip_imports: bool = False, timeout_seconds: float =
             )
         ]
 
-    payload = None
-    if result.stdout.strip():
-        try:
-            payload = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            payload = None
+    payload = _decode_leading_json(result.stdout)
 
     failures = payload.get("failures", []) if isinstance(payload, dict) else []
     ok = result.returncode == 0 and isinstance(payload, dict) and payload.get("ok") is True

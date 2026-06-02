@@ -6,6 +6,10 @@ If you want the shortest explanation first, start with:
 If you need to fill unresolved literature gaps by hand, use:
 [manual_reference_templates/README.md](/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md)
 
+If you need the boundary between raw sources, configs, manual intake, and
+generated canonical outputs, see:
+[research_context/README.md](/home/michael/OlfactoryBulb/research_context/README.md)
+
 This guide explains how to add and maintain a declarative reference-data
 dataset in this repository.
 

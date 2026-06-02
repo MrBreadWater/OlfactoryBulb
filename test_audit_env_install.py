@@ -11,6 +11,7 @@ import subprocess
 import sys
 
 from olfactorybulb.audit.env_install import (
+    _decode_leading_json,
     audit_mechanism_outputs,
     audit_nvhpc_transient_dependencies,
     audit_repo_layout,
@@ -25,6 +26,8 @@ assert "mechanism_build_outputs" in mechanism_items
 
 nvhpc_items = {item.check_id: item for item in audit_nvhpc_transient_dependencies()}
 assert "nvhpc_transient_dependencies" in nvhpc_items
+
+assert _decode_leading_json('{"ok": true}\nnumprocs=1\n') == {"ok": True}
 
 
 def _assert_exit_matches_summary(run: subprocess.CompletedProcess[str]) -> dict:

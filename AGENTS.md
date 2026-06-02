@@ -51,6 +51,12 @@ contract for future sessions.
     - HOWTO/reference docs
   - Then use `AGENTS.md` to point future agents to that source of truth.
 
+- When a rule is primarily about documentation ownership or where future agents
+  should look first, keep that map in:
+  - `notes/DOCS_OWNERSHIP_MAP.md`
+  - Use `AGENTS.md` for contract-level rules and anti-rot expectations, not as
+    the only index of repo docs.
+
 ## 1. Core defaults
 
 - Always use the `OBGPU` environment for repo-local Python work.
@@ -84,22 +90,16 @@ contract for future sessions.
 ## 1a. Active maintained surface and archival boundaries
 
 - Prefer the actively maintained OBGPU workflow over historical entrypoints.
-  - High-priority maintained surfaces include:
-    - `tools/setup/setup_ob_modern.sh`
-    - `tools/setup/activate_obgpu.sh`
-    - `tools/setup/activate_sol_obgpu.sh`
-    - `tools/setup/verify_obgpu_python_imports.py`
-    - `tools/remote/`
-    - `tools/benchmarks/benchmark_ob.py`
-    - `obgpu_experiment_helpers.py`
-    - `olfactorybulb/model.py`
-    - `olfactorybulb/paramsets/`
-    - `single_cell_utils.py`
-    - `fi_curve_utils.py`
-    - `notebooks/obgpu-working-experiment.ipynb`
-    - `notebooks/fi_curve_analysis.ipynb`
-  - For the longer active-vs-archival reasoning, also check:
+  - For source-of-truth boundaries, check:
     - `notes/CODEBASE_CLEANUP_AUDIT.md`
+    - `notes/DOCS_OWNERSHIP_MAP.md`
+  - The maintained surface is organized by category, not by every file name:
+    - setup/activation: `tools/setup/`
+    - benchmark/smoke entrypoints: `tools/benchmarks/`
+    - notebook/local/remote orchestration facade: `obgpu_experiment_helpers.py`
+    - extracted reusable infrastructure: `neuroinfra/`
+    - core runtime/model/config surface: `olfactorybulb/`, `single_cell_utils.py`, `fi_curve_utils.py`
+    - active notebooks: `notebooks/obgpu-working-experiment.ipynb`, `notebooks/fi_curve_analysis.ipynb`
 
 - Treat compatibility and archival paths cautiously.
   - `initslice.py` and `runbatch.py` are compatibility entrypoints, not the
@@ -251,10 +251,7 @@ contract for future sessions.
   - local analysis on synced results
 
 - The remote cluster should stay headless in the maintained workflow.
-  - Do not move the supported path toward “run Jupyter on the cluster”.
-
-- Do not redesign the maintained remote workflow around running Jupyter on the
-  cluster. That is not the supported model.
+  - Do not redesign the supported path toward “run Jupyter on the cluster”.
 
 - The maintained remote notebook/backend path is Paramiko-only.
   - Do not reintroduce or fork behavior around:
@@ -675,6 +672,9 @@ contract for future sessions.
 
 - List audits:
   - `python tools/run_audit.py --list`
+
+- Run maintained repo-health checks:
+  - `python tools/run_audit.py repo_health --profile maintained`
 
 - Run all audits:
   - `python tools/run_audit.py`

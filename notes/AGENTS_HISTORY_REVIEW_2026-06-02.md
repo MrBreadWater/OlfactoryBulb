@@ -113,3 +113,7 @@ Status:
   - parameter-surface sprawl should be resisted by keeping user-facing knobs
     centralized in real config/contract paths, with catalog docs following the
     runtime source of truth rather than replacing it
+  - a curated maintained-surface health pass belongs in the official audit
+    system, not as a separate ad hoc top-level script surface
+  - `research_context/` needs an explicit boundary doc because raw sources,
+    manual intake, configs, and generated outputs live side by side

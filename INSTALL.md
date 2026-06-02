@@ -111,6 +111,14 @@ $OB_MPIEXEC -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label slu
 
 The setup script already runs an import verification step at the end via `tools/setup/verify_obgpu_python_imports.py`.
 
+For a broader maintained-surface health pass after setup or after touching
+infrastructure code:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py repo_health --profile maintained
+```
+
 ## Notebook Workflow
 
 Once the env is active:

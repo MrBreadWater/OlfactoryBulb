@@ -1,8 +1,15 @@
-"""Notebook-facing helpers for running, loading, and analyzing OBGPU simulations.
+"""Notebook-facing facade for running, loading, and analyzing OBGPU simulations.
 
 This module is the maintained convenience layer for the interactive notebooks in
 ``notebooks/``. It keeps heavy NEURON work in subprocesses when possible so
 notebook reruns do not corrupt the live HOC state.
+
+Ownership boundary:
+
+- Keep this module notebook-facing and orchestration-oriented.
+- New generic remote/runtime/analysis/dashboard infrastructure should usually
+  live in ``neuroinfra`` or the narrower ``olfactorybulb.*`` modules first.
+- Prefer delegation from here over regrowing monolithic helper ownership.
 """
 
 from __future__ import annotations

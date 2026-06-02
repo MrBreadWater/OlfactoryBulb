@@ -7,6 +7,10 @@ If you are trying to contribute missing literature values by hand rather than
 add new validation logic, use:
 [manual_reference_templates/README.md](/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md)
 
+If you need the boundary between raw sources, configs, manual intake, and
+generated canonical outputs, see:
+[research_context/README.md](/home/michael/OlfactoryBulb/research_context/README.md)
+
 This guide explains how to add a simulation-backed, literature-driven
 validation audit using the declarative validation layer.
 

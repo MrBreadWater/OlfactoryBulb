@@ -33,6 +33,13 @@ The active notebook is:
 See [INSTALL.md](INSTALL.md) for host prerequisites, GPU/CUDA notes, smoke
 tests, and Slurm/Phoenix/Sol setup details.
 
+For a curated maintained-surface health pass after setup or refactors, run:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py repo_health --profile maintained
+```
+
 ## Maintained Runtime
 
 The modern workflow is:

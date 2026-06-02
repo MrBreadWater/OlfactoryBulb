@@ -31,3 +31,8 @@ transport branch has been removed.
 For interactive Sol shells, use:
 
 - [activate_sol_obgpu.sh](/home/alek/OlfactoryBulb/tools/setup/activate_sol_obgpu.sh)
+
+For one maintained-surface health command that stays inside the official audit
+system, use:
+
+- `python tools/run_audit.py repo_health --profile maintained`

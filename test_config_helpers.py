@@ -62,6 +62,10 @@ from obgpu_experiment_helpers import (
     save_figure,
 )
 
+assert "notebook-facing facade" in (hlp.__doc__ or "").lower()
+assert "neuroinfra" in (hlp.__doc__ or "").lower()
+print("notebook facade ownership contract: OK")
+
 with tempfile.TemporaryDirectory() as tmp:
     tmp = Path(tmp)
 

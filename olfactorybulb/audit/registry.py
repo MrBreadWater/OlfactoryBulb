@@ -31,6 +31,15 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
             ),
         ),
         (
+            "repo_health",
+            AuditSpec(
+                audit_id="repo_health",
+                title="Repo health audit",
+                description="Run the curated maintained-surface environment, wrapper, contract, and reference-data health checks.",
+                module_path="olfactorybulb.audit.repo_health",
+            ),
+        ),
+        (
             "burton_urban_fi",
             AuditSpec(
                 audit_id="burton_urban_fi",
