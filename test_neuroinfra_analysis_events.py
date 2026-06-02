@@ -11,12 +11,15 @@ import numpy as np
 
 from neuroinfra.analysis.events import (
     EventRateTrace,
+    EventRateNormalizationRule,
     FrequencySampleCollection,
     binned_event_rate,
     build_event_overview_layout,
     calculate_event_frequency,
+    compute_event_rate_from_rows,
     collect_frequency_samples_from_rows,
     ensure_raster_axis,
+    filter_rows_by_label_prefix,
     fit_raster_labels,
     overview_left_margin,
     plot_event_overview,
@@ -52,6 +55,45 @@ def main() -> None:
     assert len(freq_samples.rows) == 2
     assert np.allclose(freq_samples.times_ms, [25.0, 15.0, 25.0, 55.0])
     assert np.allclose(freq_samples.freqs_hz, [20.0, 20.0, 33.3333333333, 33.3333333333])
+
+    filtered_rows = filter_rows_by_label_prefix(
+        [("MC0", [0.0]), ("TC0", [1.0]), ("MC1", [2.0])],
+        label_fn=lambda row: row[0],
+        include_prefixes=("MC",),
+        normalize_label_fn=str,
+    )
+    assert [row[0] for row in filtered_rows] == ["MC0", "MC1"]
+
+    centers, rate_hz, metadata = compute_event_rate_from_rows(
+        [("MC0", [10.0, 20.0, 30.0]), ("MC1", [15.0, 25.0])],
+        times_fn=lambda row: row[1],
+        t_stop=40.0,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_cell",
+        default_normalization="per_target_cell",
+        normalization_rules={
+            "total": EventRateNormalizationRule(
+                unit="events/s",
+                aliases=(),
+                denominator_fn=lambda rows: 1.0,
+                metadata_fn=lambda rows: {"n_rows": len(rows)},
+            ),
+            "per_target_cell": EventRateNormalizationRule(
+                unit="events/s per cell",
+                aliases=("per_cell",),
+                denominator_fn=lambda rows: float(len(rows)),
+                metadata_fn=lambda rows: {"n_rows": len(rows)},
+            ),
+        },
+        return_metadata=True,
+    )
+    assert np.allclose(centers, [5.0, 15.0, 25.0, 35.0])
+    assert np.allclose(rate_hz, [0.0, 100.0, 100.0, 50.0])
+    assert metadata["normalization"] == "per_target_cell"
+    assert metadata["unit"] == "events/s per cell"
+    assert metadata["denominator"] == 2.0
+    assert metadata["n_rows"] == 2
 
     raw_rate = np.array([0.0, 0.0, 10.0, 0.0, 0.0], dtype=float)
     smoothed = smooth_rate_series(raw_rate, bin_ms=5.0, smooth_sigma_ms=10.0)

@@ -231,6 +231,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "frequency KDE and time-binned plotting from precomputed sample arrays",
             "instantaneous frequency sample collection from labeled event rows",
             "event-frequency conversion, binned event-rate analysis, rate-plot helpers, and raster-plot primitives",
+            "row filtering by label-prefix families",
+            "normalization-driven event-rate computation from arbitrary event rows",
             "shared raster-plus-rate overview layout",
             "sweep plot specification and placeholder rendering",
             "sweep metadata persistence and reload",
@@ -249,7 +251,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, labeled-row frequency sample collectors, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, sweep persistence and animation pipeline, and the named-signal provider registry and provider-factory layer now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, labeled-row frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, sweep persistence and animation pipeline, and the named-signal provider registry and provider-factory layer now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",

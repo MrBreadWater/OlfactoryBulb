@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Mapping, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -43,6 +43,16 @@ class FrequencySampleCollection:
     freqs_hz: np.ndarray
     labels: tuple[str, ...]
     rows: tuple[Any, ...]
+
+
+@dataclass(frozen=True)
+class EventRateNormalizationRule:
+    """One supported normalization mode for event-rate computation."""
+
+    unit: str
+    aliases: tuple[str, ...]
+    denominator_fn: Callable[[Sequence[Any]], float]
+    metadata_fn: Callable[[Sequence[Any]], dict[str, Any]] = lambda _rows: {}
 
 
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
@@ -110,6 +120,80 @@ def collect_frequency_samples_from_rows(
         labels=tuple(labels),
         rows=tuple(selected_rows),
     )
+
+
+def filter_rows_by_label_prefix(
+    rows: Sequence[Any],
+    *,
+    label_fn: Callable[[Any], str],
+    include_prefixes: Sequence[str] | None = None,
+    normalize_label_fn: Callable[[str], str] | None = None,
+) -> list[Any]:
+    """Filter rows whose normalized labels start with one of the requested prefixes."""
+    if not include_prefixes:
+        return list(rows)
+
+    prefixes = tuple(str(name) for name in include_prefixes)
+    normalizer = normalize_label_fn or (lambda label: label)
+    filtered = []
+    for row in rows:
+        label = normalizer(str(label_fn(row)))
+        if any(label.startswith(prefix) for prefix in prefixes):
+            filtered.append(row)
+    return filtered
+
+
+def _canonical_event_rate_normalization(
+    normalization: str | None,
+    *,
+    default: str,
+    rules: Mapping[str, EventRateNormalizationRule],
+) -> tuple[str, EventRateNormalizationRule]:
+    requested = str(normalization or default)
+    for canonical_name, rule in rules.items():
+        if requested == canonical_name or requested in rule.aliases:
+            return canonical_name, rule
+    raise ValueError(f"Unsupported event normalization mode {requested!r}")
+
+
+def compute_event_rate_from_rows(
+    rows: Sequence[Any],
+    *,
+    times_fn: Callable[[Any], np.ndarray | list[float]],
+    t_stop: float,
+    bin_ms: float,
+    smooth_sigma_ms: float,
+    normalization: str | None,
+    default_normalization: str,
+    normalization_rules: Mapping[str, EventRateNormalizationRule],
+    return_metadata: bool = False,
+) -> Any:
+    """Compute a normalized event-rate trace from arbitrary event rows."""
+    canonical_name, normalization_rule = _canonical_event_rate_normalization(
+        normalization,
+        default=default_normalization,
+        rules=normalization_rules,
+    )
+    event_series = [np.asarray(times_fn(row), dtype=float) for row in rows]
+    denominator = normalization_rule.denominator_fn(rows)
+    centers, rate_hz = binned_event_rate(
+        event_series,
+        t_stop=t_stop,
+        bin_ms=bin_ms,
+        smooth_sigma_ms=smooth_sigma_ms,
+        denominator=denominator,
+    )
+    if not return_metadata:
+        return centers, rate_hz
+    metadata = dict(normalization_rule.metadata_fn(rows))
+    metadata.update(
+        {
+            "normalization": canonical_name,
+            "unit": normalization_rule.unit,
+            "denominator": max(float(denominator), 1.0),
+        }
+    )
+    return centers, rate_hz, metadata
 
 
 def smooth_rate_series(

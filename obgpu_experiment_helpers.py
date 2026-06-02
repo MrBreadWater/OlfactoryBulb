@@ -261,12 +261,15 @@ from neuroinfra.analysis.overview import (
 )
 from neuroinfra.analysis.events import (
     EventRateTrace as _NeuroinfraEventRateTrace,
+    EventRateNormalizationRule as _NeuroinfraEventRateNormalizationRule,
     binned_event_rate as _neuroinfra_binned_event_rate,
     build_event_overview_layout as _neuroinfra_build_event_overview_layout,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
+    compute_event_rate_from_rows as _neuroinfra_compute_event_rate_from_rows,
     collect_frequency_samples_from_rows as _neuroinfra_collect_frequency_samples_from_rows,
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
+    filter_rows_by_label_prefix as _neuroinfra_filter_rows_by_label_prefix,
     plot_event_overview as _neuroinfra_plot_event_overview,
     plot_event_rate_traces as _neuroinfra_plot_event_rate_traces,
     plot_event_raster_rows as _neuroinfra_plot_event_raster_rows,
@@ -6604,16 +6607,12 @@ def filter_gc_output_events(
 ) -> list[dict[str, Any]]:
     """Filter saved GC inhibitory-output events by destination cell family."""
     events = list(result.get("gc_output_events", []))
-    if not target_types:
-        return events
-
-    target_types = {str(name) for name in target_types}
-    filtered = []
-    for entry in events:
-        dest_cell = normalize_cell_name(entry.get("dest_section", ""))
-        if any(dest_cell.startswith(cell_type) for cell_type in target_types):
-            filtered.append(entry)
-    return filtered
+    return _neuroinfra_filter_rows_by_label_prefix(
+        events,
+        label_fn=lambda entry: entry.get("dest_section", ""),
+        include_prefixes=target_types,
+        normalize_label_fn=normalize_cell_name,
+    )
 
 
 def collect_gc_output_frequency_samples(
@@ -6861,18 +6860,61 @@ def _event_rate_from_series(
 
 def _gc_rate_normalizer(events: list[dict[str, Any]], normalization: str) -> tuple[float, str]:
     """Return the denominator and ylabel for GC-output rate normalization."""
-    normalization = str(normalization or "per_target_cell")
-    if normalization == "total":
-        return 1.0, "events/s"
-    if normalization == "per_connection":
-        return float(len(events)), "events/s per connection"
-    if normalization == "per_source_cell":
-        source_cells = {normalize_cell_name(entry.get("source_section", "")) for entry in events}
-        return float(len(source_cells)), "events/s per source GC"
-    if normalization == "per_target_cell":
-        target_cells = {normalize_cell_name(entry.get("dest_section", "")) for entry in events}
-        return float(len(target_cells)), "events/s per target cell"
-    raise ValueError(f"Unsupported GC normalization mode {normalization!r}")
+    requested = str(normalization or "per_target_cell")
+    for canonical_name, rule in _gc_output_rate_normalization_rules().items():
+        if requested == canonical_name or requested in rule.aliases:
+            return float(rule.denominator_fn(events)), str(rule.unit)
+    raise ValueError(f"Unsupported GC normalization mode {requested!r}")
+
+
+def _gc_output_rate_normalization_rules() -> dict[str, _NeuroinfraEventRateNormalizationRule]:
+    """Return reusable normalization rules for GC-output event rates."""
+    return {
+        "total": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s",
+            aliases=(),
+            denominator_fn=lambda events: 1.0,
+            metadata_fn=lambda events: {
+                "n_connections": len(events),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
+            },
+        ),
+        "per_connection": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s per connection",
+            aliases=(),
+            denominator_fn=lambda events: float(len(events)),
+            metadata_fn=lambda events: {
+                "n_connections": len(events),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
+            },
+        ),
+        "per_source_cell": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s per source GC",
+            aliases=(),
+            denominator_fn=lambda events: float(
+                len({normalize_cell_name(entry.get("source_section", "")) for entry in events})
+            ),
+            metadata_fn=lambda events: {
+                "n_connections": len(events),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
+            },
+        ),
+        "per_target_cell": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s per target cell",
+            aliases=(),
+            denominator_fn=lambda events: float(
+                len({normalize_cell_name(entry.get("dest_section", "")) for entry in events})
+            ),
+            metadata_fn=lambda events: {
+                "n_connections": len(events),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
+            },
+        ),
+    }
 
 
 def compute_gc_output_rate(
@@ -6887,24 +6929,18 @@ def compute_gc_output_rate(
     events = filter_gc_output_events(result, target_types=target_types)
     event_series = [np.asarray(entry.get("times", []), dtype=float) for entry in events]
     t_stop = _resolve_event_tstop(result, event_series)
-    denominator, unit = _gc_rate_normalizer(events, normalization)
-    centers, rate_hz = _event_rate_from_series(
-        event_series,
+    computed = _neuroinfra_compute_event_rate_from_rows(
+        events,
+        times_fn=lambda entry: entry.get("times", []),
         t_stop=t_stop,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
-        denominator=denominator,
+        normalization=normalization,
+        default_normalization="per_target_cell",
+        normalization_rules=_gc_output_rate_normalization_rules(),
+        return_metadata=return_metadata,
     )
-    if return_metadata:
-        return centers, rate_hz, {
-            "normalization": normalization,
-            "unit": unit,
-            "denominator": max(float(denominator), 1.0),
-            "n_connections": len(events),
-            "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
-            "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
-        }
-    return centers, rate_hz
+    return computed
 
 
 def filter_input_events(
@@ -6913,29 +6949,56 @@ def filter_input_events(
 ) -> list[tuple[str, Any]]:
     """Filter odor-input event rows by destination cell family."""
     rows = list(result.get("input_times", []))
-    if not target_types:
-        return rows
-
-    target_types = {str(name) for name in target_types}
-    filtered = []
-    for section_name, times in rows:
-        cell_name = normalize_cell_name(section_name)
-        if any(cell_name.startswith(cell_type) for cell_type in target_types):
-            filtered.append((section_name, times))
-    return filtered
+    return _neuroinfra_filter_rows_by_label_prefix(
+        rows,
+        label_fn=lambda row: row[0],
+        include_prefixes=target_types,
+        normalize_label_fn=normalize_cell_name,
+    )
 
 
 def _input_rate_normalizer(rows: list[tuple[str, Any]], normalization: str) -> tuple[float, str]:
     """Return the denominator and ylabel for odor-input rate normalization."""
-    normalization = str(normalization or "per_target_cell")
-    if normalization == "total":
-        return 1.0, "events/s"
-    if normalization in {"per_segment", "per_input_segment"}:
-        return float(len(rows)), "events/s per input segment"
-    if normalization in {"per_cell", "per_target_cell"}:
-        target_cells = {normalize_cell_name(section_name) for section_name, _times in rows}
-        return float(len(target_cells)), "events/s per target cell"
-    raise ValueError(f"Unsupported input normalization mode {normalization!r}")
+    requested = str(normalization or "per_target_cell")
+    for canonical_name, rule in _input_rate_normalization_rules().items():
+        if requested == canonical_name or requested in rule.aliases:
+            return float(rule.denominator_fn(rows)), str(rule.unit)
+    raise ValueError(f"Unsupported input normalization mode {requested!r}")
+
+
+def _input_rate_normalization_rules() -> dict[str, _NeuroinfraEventRateNormalizationRule]:
+    """Return reusable normalization rules for odor-input event rates."""
+    return {
+        "total": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s",
+            aliases=(),
+            denominator_fn=lambda rows: 1.0,
+            metadata_fn=lambda rows: {
+                "n_segments": len(rows),
+                "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
+            },
+        ),
+        "per_segment": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s per input segment",
+            aliases=("per_input_segment",),
+            denominator_fn=lambda rows: float(len(rows)),
+            metadata_fn=lambda rows: {
+                "n_segments": len(rows),
+                "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
+            },
+        ),
+        "per_target_cell": _NeuroinfraEventRateNormalizationRule(
+            unit="events/s per target cell",
+            aliases=("per_cell",),
+            denominator_fn=lambda rows: float(
+                len({normalize_cell_name(section_name) for section_name, _times in rows})
+            ),
+            metadata_fn=lambda rows: {
+                "n_segments": len(rows),
+                "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
+            },
+        ),
+    }
 
 
 def compute_input_rate(
@@ -6950,23 +7013,18 @@ def compute_input_rate(
     rows = filter_input_events(result, target_types=target_types)
     event_series = [np.asarray(times, dtype=float) for _section_name, times in rows]
     t_stop = _resolve_event_tstop(result, event_series)
-    denominator, unit = _input_rate_normalizer(rows, normalization)
-    centers, rate_hz = _event_rate_from_series(
-        event_series,
+    computed = _neuroinfra_compute_event_rate_from_rows(
+        rows,
+        times_fn=lambda row: row[1],
         t_stop=t_stop,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
-        denominator=denominator,
+        normalization=normalization,
+        default_normalization="per_target_cell",
+        normalization_rules=_input_rate_normalization_rules(),
+        return_metadata=return_metadata,
     )
-    if return_metadata:
-        return centers, rate_hz, {
-            "normalization": normalization,
-            "unit": unit,
-            "denominator": max(float(denominator), 1.0),
-            "n_segments": len(rows),
-            "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
-        }
-    return centers, rate_hz
+    return computed
 
 
 def _rate_series_label(base_label: str, metadata: dict[str, Any]) -> str:

@@ -452,6 +452,40 @@ with tempfile.TemporaryDirectory() as tmp:
     np.testing.assert_allclose(gc_freq_samples["freqs"], [50.0, 33.3333333333])
     print("GC output frequency wrapper: OK")
 
+    input_rate_result = {
+        "input_times": [
+            ("h.MC0[0].tuft", np.array([10.0, 20.0, 30.0], dtype=float)),
+            ("h.TC0[0].tuft", np.array([15.0, 25.0], dtype=float)),
+        ],
+        "lfp_t": np.array([0.0, 10.0, 20.0, 30.0, 40.0], dtype=float),
+    }
+    filtered_inputs = hlp.filter_input_events(input_rate_result, target_types=("MC",))
+    assert len(filtered_inputs) == 1
+    input_t, input_rate_hz, input_meta = hlp.compute_input_rate(
+        input_rate_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_cell",
+        return_metadata=True,
+    )
+    assert input_meta["normalization"] == "per_target_cell"
+    assert input_meta["n_target_cells"] == 2
+    np.testing.assert_allclose(input_t, [5.0, 15.0, 25.0, 35.0])
+    np.testing.assert_allclose(input_rate_hz, [0.0, 100.0, 100.0, 50.0])
+
+    gc_rate_t, gc_rate_hz, gc_rate_meta = hlp.compute_gc_output_rate(
+        gc_freq_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_target_cell",
+        return_metadata=True,
+    )
+    assert gc_rate_meta["n_connections"] == 2
+    assert gc_rate_meta["n_target_cells"] == 2
+    np.testing.assert_allclose(gc_rate_t, [5.0, 15.0, 25.0, 35.0, 45.0])
+    np.testing.assert_allclose(gc_rate_hz, [50.0, 50.0, 50.0, 0.0, 50.0])
+    print("Input / GC rate wrappers: OK")
+
     # --- Optional int16 soma traces should round-trip with bounded quantization error ---
     quantized_dir = tmp / "quantized_soma"
     quantized_dir.mkdir()

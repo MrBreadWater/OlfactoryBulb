@@ -144,6 +144,8 @@ What is already generic:
 - phase-locking summaries from resolved signals and labeled spike-time rows
 - frequency KDE and time-binned plotting from precomputed sample arrays
 - instantaneous frequency sample collection from labeled event rows
+- row filtering by label-prefix families
+- normalization-driven event-rate computation from arbitrary event rows
 - event-frequency conversion, event-rate binning, shared rate-plot helpers, and reusable raster-plot primitives
 - shared raster-plus-rate overview layout for notebook summaries
 - sweep plot specification, placeholder rendering, per-frame rendering, and GIF assembly
