@@ -142,6 +142,30 @@ with tempfile.TemporaryDirectory() as tmp:
     assert grid_plan["items"][2]["value"] == {"gaba_tau2_ms": 50.0, "gap_mc": 16.0}
     print("sweep planning wrappers: OK")
 
+    # --- local run wrapper delegates through neuroinfra local runner ---
+    original_local_run = hlp._neuroinfra_execute_local_run
+    local_run_calls = []
+    try:
+        def _fake_local_run(**kwargs):
+            local_run_calls.append(kwargs)
+            return "LOCAL-RUN-SENTINEL"
+
+        hlp._neuroinfra_execute_local_run = _fake_local_run
+        delegated = hlp.run_simulation(
+            build_run_config(
+                paramset="GammaSignature",
+                results_base=str(tmp / "local_runs"),
+            ),
+            label="local_runner_delegate",
+        )
+        assert delegated == "LOCAL-RUN-SENTINEL"
+        assert local_run_calls and local_run_calls[0]["runner_name"] == "obgpu_experiment_helpers.run_simulation"
+        assert local_run_calls[0]["command"]
+        assert Path(local_run_calls[0]["result_dir"]).name == "local_runner_delegate"
+    finally:
+        hlp._neuroinfra_execute_local_run = original_local_run
+    print("local run wrapper delegation: OK")
+
     # --- save_figure wrapper ---
     class _FakeFigure:
         def __init__(self) -> None:

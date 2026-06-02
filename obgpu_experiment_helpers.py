@@ -125,6 +125,10 @@ from olfactorybulb.hfo_features import (
     hfo_run_config_defaults,
 )
 from neuroinfra.notebooks.config_store import json_ready as _neuroinfra_json_ready
+from neuroinfra.notebooks.local_runs import (
+    LocalRunHooks as _NeuroinfraLocalRunHooks,
+    execute_local_run as _neuroinfra_execute_local_run,
+)
 from neuroinfra.notebooks.reporting import (
     diff_values as _neuroinfra_diff_values,
     flatten_for_diff as _neuroinfra_flatten_for_diff,
@@ -4396,6 +4400,7 @@ def _write_notebook_run_info(
     command,
     env,
     completed,
+    runner: str = "obgpu_experiment_helpers.run_simulation",
     summary=None,
     extra_payload: dict[str, Any] | None = None,
 ):
@@ -4415,7 +4420,7 @@ def _write_notebook_run_info(
             "label": label,
             "requested_label": label,
             "timestamp": timestamp,
-            "runner": "obgpu_experiment_helpers.run_simulation",
+            "runner": str(runner),
             "config": _json_ready(config),
             "overrides": _json_ready(build_param_overrides(config)),
             "command": list(command),
@@ -4475,7 +4480,6 @@ def run_simulation(
     env["OB_RESULTS_BASE"] = str(config.get("results_base", DEFAULT_RESULTS_BASE))
     env["OB_CORENRN_CELL_PERMUTE"] = str(int(config.get("cell_permute", 2)))
 
-    result_dir.mkdir(parents=True, exist_ok=True)
     param_overrides, input_spec_file = _benchmark_param_overrides_payload(config)
     overrides_path = result_dir.parent / ".obgpu-wrapper" / label / "overrides.json"
     _write_benchmark_overrides_file(overrides_path, param_overrides)
@@ -4486,68 +4490,37 @@ def run_simulation(
         param_overrides=param_overrides,
         input_spec_file=input_spec_file,
     )
-    completed = subprocess.run(
-        command,
-        cwd=result_dir,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    (result_dir / "command.txt").write_text(" ".join(command) + "\n")
-    (result_dir / "stdout.txt").write_text(completed.stdout or "")
-    (result_dir / "stderr.txt").write_text(completed.stderr or "")
-
-    if completed.returncode != 0:
-        _write_notebook_run_info(
-            result_dir,
-            config=config,
-            label=label,
-            timestamp=timestamp,
-            command=command,
-            env=env,
-            completed=completed,
-        )
-        stderr_tail = (completed.stderr or "").strip()[-4000:]
-        stdout_tail = (completed.stdout or "").strip()[-2000:]
-        raise RuntimeError(
-            "Simulation failed.\n"
-            f"Result dir: {result_dir}\n"
-            f"Command: {' '.join(command)}\n"
-            f"Stdout tail:\n{stdout_tail}\n\n"
-            f"Stderr tail:\n{stderr_tail}"
-        )
-
-    summary_path = result_dir / "summary.json"
-    if not summary_path.exists():
-        raise FileNotFoundError(f"Expected benchmark summary at {summary_path}")
-
-    with open(summary_path) as f:
-        summary = json.load(f)
-
-    _write_notebook_run_info(
-        result_dir,
+    return _neuroinfra_execute_local_run(
         config=config,
-        label=label,
-        timestamp=timestamp,
-        command=command,
-        env=env,
-        completed=completed,
-        summary=summary,
-        extra_payload={"remote": None},
-    )
-
-    return RunRecord(
         label=label,
         timestamp=timestamp,
         result_dir=result_dir,
-        summary=summary,
-        config=config,
-        overrides=build_param_overrides(config),
+        env=env,
         command=command,
-        stdout=completed.stdout,
-        stderr=completed.stderr,
+        runner_name="obgpu_experiment_helpers.run_simulation",
+        hooks=_NeuroinfraLocalRunHooks(
+            read_summary_fn=lambda path: json.loads(Path(path).read_text()),
+            write_run_info_fn=_write_notebook_run_info,
+            build_return_value_fn=lambda *,
+            label,
+            timestamp,
+            result_dir,
+            summary,
+            config,
+            command,
+            completed: RunRecord(
+                label=label,
+                timestamp=timestamp,
+                result_dir=result_dir,
+                summary=summary,
+                config=config,
+                overrides=build_param_overrides(config),
+                command=command,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            ),
+        ),
+        success_extra_payload={"remote": None},
     )
 
 

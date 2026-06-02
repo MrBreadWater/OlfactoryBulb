@@ -36,6 +36,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.sweeps`
 - `neuroinfra.analysis.signals`
 - `neuroinfra.notebooks.config_store`
+- `neuroinfra.notebooks.local_runs`
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
 - `neuroinfra.notebooks.sweeps`
@@ -175,6 +176,13 @@ The generic nested config-path mutation and single-axis, joint, and grid sweep
 planning helpers now also live under `neuroinfra.notebooks.sweeps`, while the
 concrete run-config normalization, label policy, and local/remote sweep
 execution still remain in `obgpu_experiment_helpers.py`.
+
+The generic local notebook subprocess runner that executes one command,
+captures stdout/stderr, persists command/capture artifacts, enforces summary
+file presence, and delegates run-info persistence now also lives under
+`neuroinfra.notebooks.local_runs`, while the concrete OBGPU env setup,
+command construction, and remote dispatch still remain in
+`obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

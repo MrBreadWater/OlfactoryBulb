@@ -267,7 +267,46 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates nested path mutation and sweep
   plan expansion there while still owning concrete execution and persistence
 
-### 2f. Result analysis and signal registry
+### 2f. Notebook local subprocess execution
+
+Current files:
+
+- `neuroinfra/notebooks/local_runs.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- local subprocess execution with captured stdout/stderr
+- command and capture artifact persistence
+- required summary-file enforcement
+- standard failure-message rendering
+- hook-driven run metadata persistence and return-value construction
+
+What is domain-specific:
+
+- concrete run-config normalization
+- env construction
+- benchmark command construction
+- run-info payload semantics
+- remote dispatch
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic local notebook subprocess runner now lives under
+  `neuroinfra.notebooks.local_runs`
+- `obgpu_experiment_helpers.py` now delegates the local captured-command
+  execution path there while still owning env setup, command construction,
+  and remote dispatch
+
+### 2g. Result analysis and signal registry
 
 Current files:
 

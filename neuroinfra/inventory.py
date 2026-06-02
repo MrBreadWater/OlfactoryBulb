@@ -197,6 +197,31 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic sweep-planning layer now lives under neuroinfra.notebooks.sweeps, while the notebook helper still owns concrete run-config normalization, sweep execution, and persistence; next separate the remaining local/remote sweep runner orchestration from planning.",
     ),
     ExtractionCandidate(
+        key="notebook_local_run_execution",
+        title="Notebook local subprocess execution",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/local_runs.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "local subprocess execution with captured stdout and stderr",
+            "command and capture artifact persistence",
+            "required summary-file enforcement",
+            "standard failure-message rendering",
+            "hook-driven run metadata persistence and return-value construction",
+        ),
+        repo_specific_couplings=(
+            "command construction and environment preparation still come from the notebook helper",
+            "effective-param and run-info payload semantics still remain repo-specific",
+            "remote execution dispatch still remains outside this layer",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic local notebook subprocess runner now lives under neuroinfra.notebooks.local_runs, while the notebook helper still owns concrete env setup, command construction, remote dispatch, and run-info semantics; next separate the remaining sweep and remote execution orchestration from the helper.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",
