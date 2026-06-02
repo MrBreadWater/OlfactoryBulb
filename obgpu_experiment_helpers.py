@@ -132,6 +132,12 @@ from neuroinfra.notebooks.reporting import (
     print_diff_section as _neuroinfra_print_diff_section,
     save_figure as _neuroinfra_save_figure,
 )
+from neuroinfra.notebooks.sweeps import (
+    SweepPlanHooks as _NeuroinfraSweepPlanHooks,
+    prepare_sweep_plan as _neuroinfra_prepare_sweep_plan,
+    set_nested_value as _neuroinfra_set_nested_value,
+    split_path_parts as _neuroinfra_split_path_parts,
+)
 from neuroinfra.remote.helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -4590,35 +4596,12 @@ def load_run_record(
 
 def _path_parts(path: Any) -> list[str]:
     """Split a dotted or indexed override path into addressable components."""
-    if isinstance(path, (list, tuple)):
-        return list(path)
-    text = str(path).replace("[", ".").replace("]", "")
-    return [part for part in text.split(".") if part]
+    return _neuroinfra_split_path_parts(path)
 
 
 def set_path_value(obj: Any, path: Any, value: Any) -> None:
     """Assign ``value`` inside a nested dict/list structure addressed by ``path``."""
-    parts = _path_parts(path)
-    current = obj
-    for index, part in enumerate(parts[:-1]):
-        next_part = parts[index + 1]
-        if isinstance(current, list):
-            part = int(part)
-            while len(current) <= part:
-                current.append({} if not str(next_part).isdigit() else [])
-            current = current[part]
-            continue
-        if part not in current or current[part] is None:
-            current[part] = [] if str(next_part).isdigit() else {}
-        current = current[part]
-    final = parts[-1]
-    if isinstance(current, list):
-        final = int(final)
-        while len(current) <= final:
-            current.append(None)
-        current[final] = value
-    else:
-        current[final] = value
+    _neuroinfra_set_nested_value(obj, path, value)
 
 
 def _prepare_sweep_plan(
@@ -4629,71 +4612,27 @@ def _prepare_sweep_plan(
     grid: bool = False,
 ) -> dict[str, Any]:
     """Normalize one sweep request into explicit per-item configs and labels."""
-    from itertools import product as _product
-
-    base_config = build_run_config(**deepcopy(base_config))
-    timestamp = make_timestamp()
-    sweep_label = _make_sweep_label(base_config, sweep_path=sweep_path, timestamp=timestamp)
-
-    items: list[dict[str, Any]] = []
-    normalized_values: list[Any] = []
-
-    if grid:
-        if not isinstance(sweep_path, dict):
-            raise TypeError("Grid sweeps require a dict of {path: values}")
-        paths = list(sweep_path.keys())
-        value_lists = list(sweep_path.values())
-        iterable = [dict(zip(paths, combo)) for combo in _product(*value_lists)]
-    elif isinstance(sweep_path, dict):
-        paths = list(sweep_path.keys())
-        value_lists = list(sweep_path.values())
-        lengths = [len(v) for v in value_lists]
-        if len(set(lengths)) != 1:
-            raise ValueError(
-                f"All parameter lists must have the same length for a joint sweep; "
-                f"got lengths {dict(zip(paths, lengths))}"
-            )
-        iterable = [dict(zip(paths, combo)) for combo in zip(*value_lists)]
-    else:
-        if values is None:
-            raise ValueError("values must be provided for single-axis sweeps")
-        iterable = list(values)
-
-    for index, value in enumerate(iterable):
-        sweep_config = deepcopy(base_config)
-        if isinstance(value, dict):
-            for path, path_value in value.items():
-                set_path_value(sweep_config, path, path_value)
-            item_value = dict(value)
-        else:
-            set_path_value(sweep_config, sweep_path, value)
-            item_value = value
-        item_label = _make_sweep_item_label(
-            base_config,
-            sweep_path=sweep_path,
-            timestamp=timestamp,
-            index=index,
-        )
-        items.append(
-            {
-                "index": index,
-                "value": item_value,
-                "config": sweep_config,
-                "label": item_label,
-            }
-        )
-        normalized_values.append(item_value)
-
-    return {
-        "path": sweep_path,
-        "values": normalized_values,
-        "items": items,
-        "paramset": base_config.get("paramset"),
-        "timestamp": timestamp,
-        "sweep_label": sweep_label,
-        "base_config": base_config,
-        "grid": {p: list(v) for p, v in sweep_path.items()} if grid and isinstance(sweep_path, dict) else None,
-    }
+    return _neuroinfra_prepare_sweep_plan(
+        _NeuroinfraSweepPlanHooks(
+            normalize_base_config_fn=lambda cfg: build_run_config(**cfg),
+            make_timestamp_fn=make_timestamp,
+            make_sweep_label_fn=lambda cfg, path, timestamp: _make_sweep_label(
+                cfg,
+                sweep_path=path,
+                timestamp=timestamp,
+            ),
+            make_item_label_fn=lambda cfg, path, timestamp, index: _make_sweep_item_label(
+                cfg,
+                sweep_path=path,
+                timestamp=timestamp,
+                index=index,
+            ),
+        ),
+        base_config,
+        sweep_path,
+        values,
+        grid=grid,
+    )
 
 
 def _write_sweep_info(

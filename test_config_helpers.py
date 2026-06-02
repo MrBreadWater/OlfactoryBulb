@@ -117,6 +117,31 @@ with tempfile.TemporaryDirectory() as tmp:
     assert restored_cfg["gaba_tau2_ms"] == 36.0
     print("notebook run catalog wrappers: OK")
 
+    # --- sweep planning wrappers ---
+    sweep_plan = hlp._prepare_sweep_plan(
+        cfg,
+        "gaba_tau2_ms",
+        [36.0, 50.0],
+    )
+    assert [item["value"] for item in sweep_plan["items"]] == [36.0, 50.0]
+    assert sweep_plan["items"][1]["config"]["gaba_tau2_ms"] == 50.0
+
+    joint_plan = hlp._prepare_sweep_plan(
+        cfg,
+        {"gaba_tau2_ms": [36.0, 50.0], "gap_mc": [16.0, 32.0]},
+    )
+    assert joint_plan["items"][0]["config"]["gap_mc"] == 16.0
+    assert joint_plan["items"][1]["config"]["gaba_tau2_ms"] == 50.0
+
+    grid_plan = hlp._prepare_sweep_plan(
+        cfg,
+        {"gaba_tau2_ms": [36.0, 50.0], "gap_mc": [16.0, 32.0]},
+        grid=True,
+    )
+    assert len(grid_plan["items"]) == 4
+    assert grid_plan["items"][2]["value"] == {"gaba_tau2_ms": 50.0, "gap_mc": 16.0}
+    print("sweep planning wrappers: OK")
+
     # --- save_figure wrapper ---
     class _FakeFigure:
         def __init__(self) -> None:

@@ -171,6 +171,32 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic notebook diff/report/save helpers now live under neuroinfra.notebooks.reporting, while the olfactory-bulb-specific run-summary presentation lives in olfactorybulb.notebook_reports; next keep shrinking the notebook helper by separating the remaining simulation/result entrypoint glue.",
     ),
     ExtractionCandidate(
+        key="notebook_sweep_planning",
+        title="Notebook sweep planning",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/sweeps.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "nested config path splitting with indexed list support",
+            "nested config value assignment for dict and list payloads",
+            "single-axis sweep expansion",
+            "joint sweep expansion",
+            "grid sweep expansion",
+            "hook-driven sweep label and timestamp policy",
+        ),
+        repo_specific_couplings=(
+            "label and timestamp policy still come from the notebook helper",
+            "base config normalization still depends on the repo's run config defaults",
+            "actual local and remote sweep execution still remain in obgpu_experiment_helpers.py",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic sweep-planning layer now lives under neuroinfra.notebooks.sweeps, while the notebook helper still owns concrete run-config normalization, sweep execution, and persistence; next separate the remaining local/remote sweep runner orchestration from planning.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",

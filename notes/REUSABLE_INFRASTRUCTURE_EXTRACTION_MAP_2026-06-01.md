@@ -229,7 +229,45 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates that reporting layer instead of
   owning it inline
 
-### 2e. Result analysis and signal registry
+### 2e. Notebook sweep planning
+
+Current files:
+
+- `neuroinfra/notebooks/sweeps.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- nested config path splitting with indexed list support
+- nested config value assignment for dict/list payloads
+- single-axis sweep expansion
+- joint sweep expansion
+- grid sweep expansion
+- hook-driven timestamp and label policy
+
+What is domain-specific:
+
+- concrete run-config normalization
+- sweep label naming policy
+- local and remote sweep execution
+- sweep persistence and artifact loading
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic sweep-planning layer now lives under
+  `neuroinfra.notebooks.sweeps`
+- `obgpu_experiment_helpers.py` now delegates nested path mutation and sweep
+  plan expansion there while still owning concrete execution and persistence
+
+### 2f. Result analysis and signal registry
 
 Current files:
 

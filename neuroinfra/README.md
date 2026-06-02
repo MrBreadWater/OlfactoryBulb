@@ -38,6 +38,7 @@ The next standardized seam is also in place:
 - `neuroinfra.notebooks.config_store`
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
+- `neuroinfra.notebooks.sweeps`
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
@@ -169,6 +170,11 @@ The generic nested-diff, human-readable reporting, and figure-output helpers
 now also live under `neuroinfra.notebooks.reporting`, while the
 olfactory-bulb-specific run-summary presentation now lives in
 `olfactorybulb.notebook_reports`.
+
+The generic nested config-path mutation and single-axis, joint, and grid sweep
+planning helpers now also live under `neuroinfra.notebooks.sweeps`, while the
+concrete run-config normalization, label policy, and local/remote sweep
+execution still remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

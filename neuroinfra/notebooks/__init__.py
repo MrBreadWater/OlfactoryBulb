@@ -21,6 +21,12 @@ from .reporting import (
     print_diff_section,
     save_figure,
 )
+from .sweeps import (
+    SweepPlanHooks,
+    prepare_sweep_plan,
+    set_nested_value,
+    split_path_parts,
+)
 
 __all__ = [
     "diff_values",
@@ -38,4 +44,8 @@ __all__ = [
     "resolve_run_dir",
     "save_json_config",
     "save_figure",
+    "SweepPlanHooks",
+    "prepare_sweep_plan",
+    "set_nested_value",
+    "split_path_parts",
 ]
