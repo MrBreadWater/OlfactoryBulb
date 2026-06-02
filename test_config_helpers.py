@@ -6,11 +6,13 @@ Run with:
 
 import json
 import importlib.util
+import io
 import pickle
 import socket
 import subprocess
 import sys
 import tempfile
+from contextlib import redirect_stdout
 from copy import deepcopy
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -53,7 +55,9 @@ from obgpu_experiment_helpers import (
     list_saved_configs,
     load_run_record,
     load_config,
+    print_run_summary,
     save_config,
+    save_figure,
 )
 
 with tempfile.TemporaryDirectory() as tmp:
@@ -112,6 +116,46 @@ with tempfile.TemporaryDirectory() as tmp:
     assert restored_cfg["paramset"] == "GammaSignature"
     assert restored_cfg["gaba_tau2_ms"] == 36.0
     print("notebook run catalog wrappers: OK")
+
+    # --- save_figure wrapper ---
+    class _FakeFigure:
+        def __init__(self) -> None:
+            self.calls = []
+
+        def savefig(self, path, **kwargs) -> None:
+            self.calls.append((Path(path), kwargs))
+            Path(path).write_text("fake-figure")
+
+    figure = _FakeFigure()
+    saved_figure = save_figure("Notebook Summary", fig=figure, run_or_result=record)
+    assert saved_figure.parent == run_dir
+    assert saved_figure.name.endswith(".png")
+    assert saved_figure.exists()
+    assert figure.calls[0][1]["dpi"] == 200
+    print("save_figure wrapper: OK")
+
+    # --- print_run_summary wrapper ---
+    summary_result = {
+        "result_dir": str(run_dir),
+        "summary": {
+            "label": "demo-summary",
+            "paramset": "GammaSignature",
+            "params": {"tstop": 1000.0, "sim_dt": 0.1},
+        },
+        "run_info": {"config": cfg},
+        "input_times": [],
+        "gc_output_events": [],
+        "lfp": [],
+    }
+    summary_stdout = io.StringIO()
+    with redirect_stdout(summary_stdout):
+        print_run_summary(record, summary_result)
+    summary_text = summary_stdout.getvalue()
+    assert "Effective inputs:" in summary_text
+    assert "Runtime and analysis controls:" in summary_text
+    assert "Result directory:" in summary_text
+    assert "Command: python demo.py" in summary_text
+    print("print_run_summary wrapper: OK")
 
     # --- list_paramsets (builtin only) ---
     names = list_paramsets()

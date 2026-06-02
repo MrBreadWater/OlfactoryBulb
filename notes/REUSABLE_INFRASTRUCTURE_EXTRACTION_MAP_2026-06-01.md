@@ -191,7 +191,45 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates that config layer instead of
   owning it inline
 
-### 2d. Result analysis and signal registry
+### 2d. Notebook reporting and figure output
+
+Current files:
+
+- `neuroinfra/notebooks/reporting.py`
+- `olfactorybulb/notebook_reports.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- nested payload flattening for diff reports
+- stable nested value diff generation
+- human-readable diff section rendering
+- figure save helpers with run-aware and sweep-aware output directories
+
+What is domain-specific:
+
+- run-summary content and section ordering
+- effective-param and runtime-control summaries
+- default figure output roots from the notebook helper
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic notebook diff/report/save helpers now live under
+  `neuroinfra.notebooks.reporting`
+- the olfactory-bulb-specific run-summary presentation now lives in
+  `olfactorybulb/notebook_reports.py`
+- `obgpu_experiment_helpers.py` now delegates that reporting layer instead of
+  owning it inline
+
+### 2e. Result analysis and signal registry
 
 Current files:
 

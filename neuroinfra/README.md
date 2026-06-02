@@ -36,6 +36,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.sweeps`
 - `neuroinfra.analysis.signals`
 - `neuroinfra.notebooks.config_store`
+- `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
@@ -163,6 +164,11 @@ The generic JSON-ready conversion plus notebook-config save/load/list helpers
 now also live under `neuroinfra.notebooks.config_store`, while the
 olfactory-bulb-specific odor normalization, built-in paramset catalog, and
 effective-param diff logic now live in `olfactorybulb.notebook_configs`.
+
+The generic nested-diff, human-readable reporting, and figure-output helpers
+now also live under `neuroinfra.notebooks.reporting`, while the
+olfactory-bulb-specific run-summary presentation now lives in
+`olfactorybulb.notebook_reports`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

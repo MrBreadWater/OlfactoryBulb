@@ -119,7 +119,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="high",
         proposed_phase=2,
         current_status="internal_shim_extracted",
-        recommended_action="The generic run-directory catalog and metadata loader now live under neuroinfra.notebooks.runs; next separate the remaining config normalization, run summary presentation, and simulation/result wiring from the notebook helper.",
+        recommended_action="The generic run-directory catalog and metadata loader now live under neuroinfra.notebooks.runs; next separate the remaining config normalization and simulation/result wiring from the notebook helper.",
     ),
     ExtractionCandidate(
         key="notebook_config_store",
@@ -143,7 +143,32 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="high",
         proposed_phase=2,
         current_status="internal_shim_extracted",
-        recommended_action="The generic config persistence helpers now live under neuroinfra.notebooks.config_store, while the olfactory-bulb-specific normalization and paramset catalog live in olfactorybulb.notebook_configs; next separate the remaining run-summary presentation and simulation wiring from the notebook helper.",
+        recommended_action="The generic config persistence helpers now live under neuroinfra.notebooks.config_store, while the olfactory-bulb-specific normalization and paramset catalog live in olfactorybulb.notebook_configs; next separate the remaining simulation/result wiring from the notebook helper.",
+    ),
+    ExtractionCandidate(
+        key="notebook_reporting",
+        title="Notebook reporting and figure output",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/reporting.py",
+            "olfactorybulb/notebook_reports.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "nested payload flattening for diff reports",
+            "stable nested value diff generation",
+            "human-readable diff section rendering",
+            "figure save helpers with run and sweep aware output directories",
+        ),
+        repo_specific_couplings=(
+            "run-summary content and section ordering remain olfactory-bulb-specific",
+            "default figure output roots still come from the notebook helper",
+            "effective-param and runtime-control summaries still depend on repo-specific config semantics",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic notebook diff/report/save helpers now live under neuroinfra.notebooks.reporting, while the olfactory-bulb-specific run-summary presentation lives in olfactorybulb.notebook_reports; next keep shrinking the notebook helper by separating the remaining simulation/result entrypoint glue.",
     ),
     ExtractionCandidate(
         key="remote_slurm_execution",

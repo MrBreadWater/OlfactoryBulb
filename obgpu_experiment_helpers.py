@@ -115,12 +115,23 @@ from olfactorybulb.notebook_configs import (
     load_config as _ob_load_config,
     save_config as _ob_save_config,
 )
+from olfactorybulb.notebook_reports import (
+    NotebookReportHooks as _OlfactoryBulbNotebookReportHooks,
+    print_run_summary as _ob_print_run_summary,
+)
 from olfactorybulb.hfo_features import (
     apply_hfo_runtime_overrides,
     hfo_control_help,
     hfo_run_config_defaults,
 )
 from neuroinfra.notebooks.config_store import json_ready as _neuroinfra_json_ready
+from neuroinfra.notebooks.reporting import (
+    diff_values as _neuroinfra_diff_values,
+    flatten_for_diff as _neuroinfra_flatten_for_diff,
+    format_diff_value as _neuroinfra_format_diff_value,
+    print_diff_section as _neuroinfra_print_diff_section,
+    save_figure as _neuroinfra_save_figure,
+)
 from neuroinfra.remote.helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -5721,63 +5732,32 @@ def resolve_effective_params(config: dict[str, Any] | None) -> dict[str, Any]:
 
 def flatten_for_diff(value: Any, prefix: str = "") -> dict[str, Any]:
     """Flatten nested dicts into ``path -> value`` pairs for diff reporting."""
-    items = {}
-    if isinstance(value, dict):
-        for key in sorted(value.keys(), key=lambda item: str(item)):
-            next_prefix = f"{prefix}.{key}" if prefix else str(key)
-            items.update(flatten_for_diff(value[key], next_prefix))
-        return items
-    items[prefix or "$"] = value
-    return items
+    return _neuroinfra_flatten_for_diff(value, prefix=prefix)
 
 
 def diff_values(before: Any, after: Any) -> list[dict[str, Any]]:
     """Return value changes between two nested JSON-like structures."""
-    before_flat = flatten_for_diff(before)
-    after_flat = flatten_for_diff(after)
-    keys = sorted(set(before_flat) | set(after_flat))
-    changes = []
-    for key in keys:
-        before_value = before_flat.get(key)
-        after_value = after_flat.get(key)
-        if before_value != after_value:
-            changes.append(
-                {
-                    "path": key,
-                    "before": before_value,
-                    "after": after_value,
-                }
-            )
-    return changes
+    return _neuroinfra_diff_values(before, after)
 
 
 def _format_diff_value(value: Any, max_len: int = 160) -> str:
     """Render a compact JSON string for a diff value."""
-    text = json.dumps(_json_ready(value), sort_keys=True)
-    if len(text) > max_len:
-        return text[: max_len - 3] + "..."
-    return text
+    return _neuroinfra_format_diff_value(
+        value,
+        json_ready_fn=_json_ready,
+        max_len=max_len,
+    )
 
 
 def print_diff_section(title: str, changes: list[dict[str, Any]], max_items: int | None = None) -> None:
     """Print a human-readable diff section for notebook summaries."""
-    print(f"\n{title}:")
-    if not changes:
-        print("  (no differences)")
-        return
-
-    if max_items is None:
-        max_items = len(changes)
-
-    for change in changes[:max_items]:
-        print(
-            f"- {change['path']}: "
-            f"{_format_diff_value(change['before'])} -> {_format_diff_value(change['after'])}"
-        )
-
-    remaining = len(changes) - max_items
-    if remaining > 0:
-        print(f"- ... {remaining} more differences")
+    _neuroinfra_print_diff_section(
+        title,
+        changes,
+        max_items=max_items,
+        json_ready_fn=_json_ready,
+        write_fn=print,
+    )
 
 
 def extract_runtime_control_snapshot(config: dict[str, Any]) -> dict[str, Any]:
@@ -7599,26 +7579,18 @@ def save_figure(
     When ``sweep`` is provided and has a ``sweep_dir``, the figure is saved to
     ``sweep_dir/figures/`` automatically (other location hints are ignored).
     """
-    fig = fig or plt.gcf()
-
-    if output_dir is None and sweep is not None and "sweep_dir" in sweep:
-        output_dir = Path(sweep["sweep_dir"]) / "figures"
-    elif output_dir is None and run_or_result is not None:
-        if isinstance(run_or_result, RunRecord):
-            output_dir = Path(run_or_result.result_dir)
-        elif isinstance(run_or_result, dict) and "result_dir" in run_or_result:
-            output_dir = Path(run_or_result["result_dir"])
-
-    output_dir = Path(output_dir or (DEFAULT_RESULTS_BASE / "figures" / make_timestamp()))
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    png_path = output_dir / f"{_safe_name(name)}.png"
-    fig.savefig(png_path, dpi=int(dpi), bbox_inches="tight")
-
-    if close:
-        plt.close(fig)
-
-    return png_path
+    return _neuroinfra_save_figure(
+        name,
+        fig=fig or plt.gcf(),
+        safe_name_fn=_safe_name,
+        default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "figures" / make_timestamp(),
+        close_figure_fn=plt.close,
+        run_or_result=run_or_result,
+        output_dir=output_dir,
+        sweep=sweep,
+        dpi=dpi,
+        close=close,
+    )
 
 
 def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = None) -> None:
@@ -7646,39 +7618,21 @@ def print_run_summary(
     config: dict[str, Any] | None = None,
 ) -> None:
     """Print a concise run summary plus param/runtime diffs for notebook use."""
-    info = result_overview(result)
-    print(json.dumps(info, indent=2, sort_keys=True))
-    config = config or run.config or (result.get("run_info") or {}).get("config") or {}
-    remote_info = (result.get("run_info") or {}).get("remote")
-    if config:
-        normalized_config = build_run_config(**config)
-        effective = (result.get("run_info") or {}).get("effective_params") or {}
-        if "full_param_snapshot" not in effective:
-            effective = resolve_effective_params(normalized_config)
-        print("\nEffective inputs:")
-        print(json.dumps({
-            "input_odors_source": effective["input_odors_source"],
-            "n_odor_presentations": effective["n_odor_presentations"],
-            "odor_names": effective["odor_names"],
-            "input_odors": effective["input_odors"],
-            "max_firing_rate_hz": effective["max_firing_rate_hz"],
-            "inhale_duration_ms": effective["inhale_duration_ms"],
-            "mc_input_weight": effective["mc_input_weight"],
-            "tc_input_weight": effective["tc_input_weight"],
-        }, indent=2, sort_keys=True))
-
-        base_snapshot = resolve_paramset_defaults(normalized_config["paramset"])
-        full_snapshot = effective.get("full_param_snapshot", {})
-        param_changes = diff_values(base_snapshot, full_snapshot)
-        print_diff_section("Requested/effective param changes vs clean paramset", param_changes)
-
-        print("\nRuntime and analysis controls:")
-        print(json.dumps(extract_runtime_control_snapshot(normalized_config), indent=2, sort_keys=True))
-        if remote_info:
-            print("\nRemote execution metadata:")
-            print(json.dumps(remote_info, indent=2, sort_keys=True))
-    print(f"\nResult directory: {run.result_dir}")
-    print(f"Command: {' '.join(run.command)}")
+    _ob_print_run_summary(
+        _OlfactoryBulbNotebookReportHooks(
+            result_overview_fn=result_overview,
+            build_run_config_fn=build_run_config,
+            resolve_effective_params_fn=resolve_effective_params,
+            resolve_paramset_defaults_fn=resolve_paramset_defaults,
+            diff_values_fn=diff_values,
+            extract_runtime_control_snapshot_fn=extract_runtime_control_snapshot,
+            print_diff_section_fn=print_diff_section,
+            write_fn=print,
+        ),
+        run,
+        result,
+        config=config,
+    )
 
 
 # ---------------------------------------------------------------------------
