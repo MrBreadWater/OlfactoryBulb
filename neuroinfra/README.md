@@ -38,6 +38,7 @@ The next standardized seam is also in place:
 - `neuroinfra.notebooks.config_store`
 - `neuroinfra.notebooks.local_runs`
 - `neuroinfra.notebooks.remote_jobs`
+- `neuroinfra.notebooks.remote_runs`
 - `neuroinfra.notebooks.run_info`
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
@@ -203,6 +204,13 @@ captures one JSON submit response now also lives under
 `neuroinfra.notebooks.remote_jobs`, while the helper still owns concrete
 remote payload construction, failure reporting, live monitoring, finalization,
 and result loading.
+
+The generic notebook remote single-run workflow that ties together preflight
+failure handling, runtime sidecar upload, JSON submission, live monitoring,
+final artifact collection, and run-info persistence now also lives under
+`neuroinfra.notebooks.remote_runs`, while the helper still owns concrete
+payload construction, monitor/artifact hook wiring, and the OBGPU run-record
+shape.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

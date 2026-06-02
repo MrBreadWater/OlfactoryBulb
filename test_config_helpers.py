@@ -240,6 +240,60 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._write_notebook_run_info = original_write_run_info
     print("remote run workflow delegation: OK")
 
+    # --- remote single-run wrapper delegates through neuroinfra remote run workflow ---
+    original_remote_run_workflow = hlp._neuroinfra_execute_remote_run_workflow
+    remote_run_workflow_calls = []
+    try:
+        def _fake_remote_run_workflow(
+            config,
+            *,
+            record_config,
+            label,
+            timestamp,
+            local_result_dir,
+            remote_repo_root,
+            remote_git_ref,
+            remote_command,
+            remote_metadata,
+            submit_shell,
+            hooks,
+        ):
+            remote_run_workflow_calls.append(
+                {
+                    "config": dict(config),
+                    "record_config": dict(record_config),
+                    "label": label,
+                    "timestamp": timestamp,
+                    "local_result_dir": Path(local_result_dir),
+                    "remote_repo_root": remote_repo_root,
+                    "remote_git_ref": remote_git_ref,
+                    "remote_command": list(remote_command),
+                    "remote_metadata": dict(remote_metadata),
+                    "submit_shell": submit_shell,
+                }
+            )
+            return "REMOTE-RUN-WORKFLOW-SENTINEL"
+
+        hlp._neuroinfra_execute_remote_run_workflow = _fake_remote_run_workflow
+        delegated = hlp.run_simulation(
+            build_run_config(
+                paramset="GammaSignature",
+                runner_backend="slurm_remote",
+                remote_host="user@host",
+                remote_repo_root="/remote/OlfactoryBulb",
+                remote_results_root="/remote/OlfactoryBulb/results/notebook_runs",
+                results_base=str(tmp / "remote_runs_workflow"),
+            ),
+            label="remote_workflow_delegate",
+        )
+        assert delegated == "REMOTE-RUN-WORKFLOW-SENTINEL"
+        assert remote_run_workflow_calls
+        assert remote_run_workflow_calls[0]["label"] == "remote_workflow_delegate"
+        assert remote_run_workflow_calls[0]["remote_repo_root"] == PurePosixPath("/remote/OlfactoryBulb")
+    finally:
+        hlp._neuroinfra_execute_remote_run_workflow = original_remote_run_workflow
+    print("remote single-run workflow delegation: OK")
+
     # --- run_and_load wrapper delegates through neuroinfra workflow ---
     original_run_and_load_workflow = hlp._neuroinfra_run_and_load_workflow
     run_and_load_calls = []

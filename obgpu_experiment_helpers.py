@@ -140,6 +140,10 @@ from neuroinfra.notebooks.remote_jobs import (
     prepare_remote_job_session as _neuroinfra_prepare_remote_job_session,
     submit_remote_json_job as _neuroinfra_submit_remote_json_job,
 )
+from neuroinfra.notebooks.remote_runs import (
+    RemoteRunWorkflowHooks as _NeuroinfraRemoteRunWorkflowHooks,
+    execute_remote_run_workflow as _neuroinfra_execute_remote_run_workflow,
+)
 from neuroinfra.notebooks.reporting import (
     diff_values as _neuroinfra_diff_values,
     flatten_for_diff as _neuroinfra_flatten_for_diff,
@@ -2514,6 +2518,202 @@ def _remote_job_submit_hooks(
     )
 
 
+def _remote_run_workflow_hooks(
+    *,
+    label: str,
+    timestamp: str,
+    remote_overrides_path: PurePosixPath,
+    param_overrides: dict[str, Any],
+    input_spec_file: str | None,
+) -> _NeuroinfraRemoteRunWorkflowHooks:
+    """Build reusable hooks for notebook-facing remote single-run orchestration."""
+    workflow_state: dict[str, dict[str, float] | None] = {"notebook_timings": None}
+
+    def prepare_remote_session(
+        config: dict[str, Any],
+        *,
+        remote_repo_root: PurePosixPath,
+        remote_git_ref: str | None,
+        remote_metadata: dict[str, Any],
+    ) -> Any:
+        notebook_timings: dict[str, float] = {}
+        workflow_state["notebook_timings"] = notebook_timings
+        return _neuroinfra_prepare_remote_job_session(
+            config,
+            remote_repo_root=remote_repo_root,
+            remote_git_ref=remote_git_ref,
+            remote_metadata=remote_metadata,
+            preflight_message="[Sol remote] Running remote preflight checks...",
+            hooks=_remote_job_session_hooks(notebook_timings),
+            notebook_timings=notebook_timings,
+        )
+
+    def refresh_submission_payload(
+        config: dict[str, Any],
+        *,
+        remote_helper_dir: PurePosixPath | None,
+    ) -> tuple[list[str], dict[str, Any], str]:
+        (
+            _remote_repo_root_value,
+            _remote_results_root_value,
+            remote_benchmark_command,
+            remote_metadata,
+            submit_shell,
+        ) = _remote_submission_payload(
+            config,
+            label=label,
+            remote_helper_dir=remote_helper_dir,
+            overrides_file=remote_overrides_path,
+            param_overrides=param_overrides,
+            input_spec_file=input_spec_file,
+        )
+        return remote_benchmark_command, remote_metadata, submit_shell
+
+    def upload_runtime_payload(config: dict[str, Any]) -> dict[str, Any]:
+        _progress_write("[Sol remote] Uploading benchmark overrides file...")
+        notebook_timings = workflow_state["notebook_timings"]
+        if notebook_timings is None:
+            raise RuntimeError("remote run workflow timings were not initialized before runtime upload")
+        started = time.perf_counter()
+        _upload_remote_text_file(
+            config,
+            remote_path=remote_overrides_path,
+            text=json.dumps(_json_ready(param_overrides), indent=2, sort_keys=True),
+        )
+        _record_timing(notebook_timings, "overrides_upload_s", started)
+        return {"benchmark_overrides_file": remote_overrides_path.as_posix()}
+
+    def submit_remote_job(
+        config: dict[str, Any],
+        *,
+        submit_shell: str,
+        local_output_dir: str | Path,
+    ) -> Any:
+        notebook_timings = workflow_state["notebook_timings"]
+        if notebook_timings is None:
+            raise RuntimeError("remote run workflow timings were not initialized before submit")
+        return _neuroinfra_submit_remote_json_job(
+            config,
+            submit_shell=submit_shell,
+            local_output_dir=local_output_dir,
+            hooks=_remote_job_submit_hooks(notebook_timings),
+        )
+
+    def monitor_remote_job(
+        *,
+        effective_config: dict[str, Any],
+        submission: dict[str, Any],
+        remote_job_heartbeat_path: str | None,
+        allocation_heartbeat_path: str | None,
+        remote_repo_root: PurePosixPath,
+        remote_result_dir: PurePosixPath,
+        remote_helper_dir: PurePosixPath | None,
+        notebook_timings: dict[str, float],
+        local_result_dir: Path,
+    ) -> Any:
+        poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
+        log_poll_interval_s = max(
+            float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
+            poll_interval_s,
+        )
+        live_status = bool(effective_config.get("remote_live_status", True))
+        live_logs = bool(effective_config.get("remote_live_logs", True))
+        return _neuroinfra_monitor_remote_run(
+            job_id=str(submission["job_id"]),
+            poll_interval_s=poll_interval_s,
+            log_poll_interval_s=log_poll_interval_s,
+            live_status=live_status,
+            live_logs=live_logs,
+            missing_artifact_retry_limit=3,
+            hooks=_remote_run_monitor_hooks(
+                effective_config=effective_config,
+                remote_job_heartbeat_path=remote_job_heartbeat_path,
+                allocation_heartbeat_path=allocation_heartbeat_path,
+                remote_repo_root=remote_repo_root,
+                remote_result_dir=remote_result_dir,
+                remote_helper_dir=remote_helper_dir,
+                notebook_timings=notebook_timings,
+                submission=submission,
+                local_result_dir=local_result_dir,
+            ),
+        )
+
+    def build_final_sync_plan(
+        effective_config: dict[str, Any],
+        final_status: dict[str, Any] | None,
+    ) -> tuple[tuple[str, ...] | None, tuple[str, ...]]:
+        include_files: tuple[str, ...] | None = None
+        deferred_remote_artifacts: list[str] = []
+        if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", False)):
+            include_files = _remote_fast_sync_files(effective_config)
+            deferred_remote_artifacts.append(preferred_soma_trace_artifact_name())
+        return include_files, tuple(deferred_remote_artifacts)
+
+    def finalize_remote_artifacts(
+        effective_config: dict[str, Any],
+        *,
+        final_status: dict[str, Any] | None,
+        local_result_dir: Path,
+        remote_result_dir: PurePosixPath,
+        wrapper_dir: str | PurePosixPath | None,
+        label: str,
+        timestamp: str,
+        notebook_timings: dict[str, float],
+        poll_transcript: list[dict[str, Any]],
+        include_files: tuple[str, ...] | None,
+        deferred_remote_artifacts: tuple[str, ...],
+    ) -> Any:
+        return _neuroinfra_finalize_remote_run_artifacts(
+            effective_config,
+            final_status=final_status,
+            local_result_dir=local_result_dir,
+            remote_result_dir=remote_result_dir,
+            wrapper_dir=wrapper_dir,
+            label=label,
+            timestamp=timestamp,
+            notebook_timings=notebook_timings,
+            poll_transcript=poll_transcript,
+            include_files=include_files,
+            deferred_remote_artifacts=deferred_remote_artifacts,
+            hooks=_remote_run_artifact_hooks(notebook_timings),
+        )
+
+    return _NeuroinfraRemoteRunWorkflowHooks(
+        prepare_remote_session_fn=prepare_remote_session,
+        refresh_submission_payload_fn=refresh_submission_payload,
+        upload_runtime_payload_fn=upload_runtime_payload,
+        submit_remote_job_fn=submit_remote_job,
+        monitor_remote_job_fn=monitor_remote_job,
+        build_final_sync_plan_fn=build_final_sync_plan,
+        finalize_remote_artifacts_fn=finalize_remote_artifacts,
+        write_run_info_fn=_write_notebook_run_info,
+        summarize_submit_response_fn=_summarize_remote_submit_response,
+        summarize_status_fn=_summarize_remote_status,
+        timing_summary_text_fn=_timing_summary_text,
+        build_return_value_fn=lambda *,
+        label,
+        timestamp,
+        result_dir,
+        summary,
+        config,
+        effective_config,
+        command,
+        completed: RunRecord(
+            label=label,
+            timestamp=timestamp,
+            result_dir=result_dir,
+            summary=summary,
+            config=config,
+            overrides=build_param_overrides(config),
+            command=command,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        ),
+        shell_join_fn=_shell_join,
+        progress_write=_progress_write,
+    )
+
+
 def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
@@ -4148,242 +4348,24 @@ def _run_remote_simulation(
         param_overrides=param_overrides,
         input_spec_file=input_spec_file,
     )
-    session = _neuroinfra_prepare_remote_job_session(
+    return _neuroinfra_execute_remote_run_workflow(
         effective_config,
+        record_config=config,
+        label=label,
+        timestamp=timestamp,
+        local_result_dir=local_result_dir,
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_git_ref,
+        remote_command=remote_benchmark_command,
         remote_metadata=remote_metadata,
-        preflight_message="[Sol remote] Running remote preflight checks...",
-        hooks=_remote_job_session_hooks({}),
-    )
-    effective_config = session.effective_config
-    remote_metadata = session.remote_metadata
-    notebook_timings = session.notebook_timings
-    preflight_completed = session.preflight_completed
-    remote_helper_dir = session.remote_helper_dir
-    allocation_heartbeat_path = session.allocation_heartbeat_path
-    if preflight_completed.returncode != 0:
-        local_result_dir.mkdir(parents=True, exist_ok=True)
-        completed = SimpleNamespace(
-            returncode=preflight_completed.returncode,
-            stdout=preflight_completed.stdout or "",
-            stderr=preflight_completed.stderr or "",
-        )
-        _write_notebook_run_info(
-            local_result_dir,
-            config=config,
+        submit_shell=submit_shell,
+        hooks=_remote_run_workflow_hooks(
             label=label,
             timestamp=timestamp,
-            command=remote_benchmark_command,
-            env={},
-            completed=completed,
-            extra_payload={"remote": remote_metadata},
-        )
-        raise RuntimeError(
-            "Remote Sol preflight failed.\n"
-            f"Result dir: {local_result_dir}\n"
-            f"Stdout:\n{preflight_completed.stdout}\n\n"
-            f"Stderr:\n{preflight_completed.stderr}"
-        )
-    if remote_helper_dir is not None or effective_config.get("slurm_allocation_job_id"):
-        (
-            _remote_repo_root_value,
-            _remote_results_root_value,
-            remote_benchmark_command,
-            refreshed_remote_metadata,
-            submit_shell,
-        ) = _remote_submission_payload(
-            effective_config,
-            label=label,
-            remote_helper_dir=remote_helper_dir,
-            overrides_file=remote_overrides_path,
+            remote_overrides_path=remote_overrides_path,
             param_overrides=param_overrides,
             input_spec_file=input_spec_file,
-        )
-        refreshed_remote_metadata.update(remote_metadata)
-        remote_metadata = refreshed_remote_metadata
-
-    _progress_write("[Sol remote] Uploading benchmark overrides file...")
-    started = time.perf_counter()
-    _upload_remote_text_file(
-        effective_config,
-        remote_path=remote_overrides_path,
-        text=json.dumps(_json_ready(param_overrides), indent=2, sort_keys=True),
-    )
-    _record_timing(notebook_timings, "overrides_upload_s", started)
-    remote_metadata["benchmark_overrides_file"] = remote_overrides_path.as_posix()
-
-    _progress_write("[Sol remote] Submitting Slurm job...")
-    submit_result = _neuroinfra_submit_remote_json_job(
-        effective_config,
-        submit_shell=submit_shell,
-        local_output_dir=local_result_dir,
-        hooks=_remote_job_submit_hooks(notebook_timings),
-    )
-    submit_completed = submit_result.completed
-
-    if submit_completed.returncode != 0:
-        completed = SimpleNamespace(
-            returncode=submit_completed.returncode,
-            stdout=submit_completed.stdout or "",
-            stderr=submit_completed.stderr or "",
-        )
-        _write_notebook_run_info(
-            local_result_dir,
-            config=effective_config,
-            label=label,
-            timestamp=timestamp,
-            command=remote_benchmark_command,
-            env={},
-            completed=completed,
-            extra_payload={"remote": remote_metadata},
-        )
-        raise RuntimeError(
-            "Remote Sol submission failed.\n"
-            f"Result dir: {local_result_dir}\n"
-            f"Submit stderr:\n{submit_completed.stderr}"
-        )
-
-    if submit_result.submission is None:
-        raise RuntimeError(
-            "Remote Sol submission did not return valid JSON.\n"
-            f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-        ) from submit_result.json_error
-    submission = submit_result.submission
-
-    remote_result_dir = PurePosixPath(submission["result_dir"])
-    remote_job_heartbeat_path = submit_result.job_heartbeat_path
-    remote_metadata["job_heartbeat_path"] = remote_job_heartbeat_path
-    remote_metadata["heartbeat_timeout_s"] = submit_result.heartbeat_timeout_s
-    _progress_write(f"[Sol remote] Submitted job {submission['job_id']}.")
-    poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
-    log_poll_interval_s = max(
-        float(effective_config.get("remote_log_poll_interval_s", max(poll_interval_s, 5.0))),
-        poll_interval_s,
-    )
-    live_status = bool(effective_config.get("remote_live_status", True))
-    live_logs = bool(effective_config.get("remote_live_logs", True))
-    monitor_result = _neuroinfra_monitor_remote_run(
-        job_id=str(submission["job_id"]),
-        poll_interval_s=poll_interval_s,
-        log_poll_interval_s=log_poll_interval_s,
-        live_status=live_status,
-        live_logs=live_logs,
-        missing_artifact_retry_limit=3,
-        hooks=_remote_run_monitor_hooks(
-            effective_config=effective_config,
-            remote_job_heartbeat_path=remote_job_heartbeat_path,
-            allocation_heartbeat_path=allocation_heartbeat_path,
-            remote_repo_root=remote_repo_root,
-            remote_result_dir=remote_result_dir,
-            remote_helper_dir=remote_helper_dir,
-            notebook_timings=notebook_timings,
-            submission=submission,
-            local_result_dir=local_result_dir,
         ),
-    )
-    final_status = monitor_result.final_status
-    poll_transcript = monitor_result.poll_transcript
-
-    deferred_remote_artifacts: list[str] = []
-    final_sync_include_files: tuple[str, ...] | None = None
-    if final_status and final_status.get("ok") and bool(effective_config.get("remote_defer_soma_vs_sync", False)):
-        final_sync_include_files = _remote_fast_sync_files(effective_config)
-        deferred_remote_artifacts.append(preferred_soma_trace_artifact_name())
-    artifact_result = _neuroinfra_finalize_remote_run_artifacts(
-        effective_config,
-        final_status=final_status,
-        local_result_dir=local_result_dir,
-        remote_result_dir=remote_result_dir,
-        wrapper_dir=submission.get("wrapper_dir"),
-        label=label,
-        timestamp=timestamp,
-        notebook_timings=notebook_timings,
-        poll_transcript=poll_transcript,
-        include_files=final_sync_include_files,
-        deferred_remote_artifacts=deferred_remote_artifacts,
-        hooks=_remote_run_artifact_hooks(notebook_timings),
-    )
-    final_status = artifact_result.final_status
-    sync_warning = artifact_result.sync_warning
-    stdout_text = artifact_result.stdout_text
-    stderr_text = artifact_result.stderr_text
-    bootstrap_text = artifact_result.bootstrap_text
-    slurm_text = artifact_result.slurm_text
-    remote_listing_text = artifact_result.remote_listing_text
-    remote_git_commit = artifact_result.remote_git_commit
-    remote_git_ref = artifact_result.remote_git_ref or remote_metadata.get("remote_git_ref")
-    returncode = artifact_result.returncode
-    completed = SimpleNamespace(returncode=returncode, stdout=stdout_text, stderr=stderr_text)
-    summary = artifact_result.summary
-    compact_poll_events = artifact_result.compact_poll_events
-    poll_events_path = artifact_result.poll_events_path
-    artifact_sizes = artifact_result.artifact_sizes
-    remote_metadata["deferred_remote_artifacts"] = list(artifact_result.deferred_remote_artifacts)
-    remote_metadata["artifact_sizes"] = artifact_sizes
-    remote_metadata["notebook_timing_seconds"] = notebook_timings
-
-    _write_notebook_run_info(
-        local_result_dir,
-        config=effective_config,
-        label=label,
-        timestamp=timestamp,
-        command=remote_benchmark_command,
-        env={},
-        completed=completed,
-        summary=summary,
-        extra_payload={
-            "remote": {
-                **remote_metadata,
-                "job_id": submission.get("job_id"),
-                "remote_result_dir": str(remote_result_dir),
-                "submit_response": _summarize_remote_submit_response(submission),
-                "final_status": _summarize_remote_status(final_status),
-                "sync_warning": sync_warning,
-                "poll_sample_count": len(poll_transcript),
-                "poll_event_count": len(compact_poll_events),
-                "poll_events_file": poll_events_path.name if poll_events_path is not None else None,
-                "resolved_git_ref": remote_git_ref,
-                "resolved_git_commit": remote_git_commit,
-                "artifact_sizes": artifact_sizes,
-                "notebook_timing_seconds": notebook_timings,
-            }
-        },
-    )
-    timing_summary = _timing_summary_text(notebook_timings)
-    if timing_summary:
-        _progress_write(f"[OBGPU load] Notebook pipeline timings: {timing_summary}")
-
-    if returncode != 0:
-        stderr_tail = stderr_text.strip()[-4000:]
-        stdout_tail = stdout_text.strip()[-2000:]
-        bootstrap_tail = bootstrap_text.strip()[-4000:]
-        slurm_tail = slurm_text.strip()[-4000:]
-        remote_listing_tail = remote_listing_text.strip()[-4000:]
-        raise RuntimeError(
-            "Remote Sol simulation failed.\n"
-            f"Result dir: {local_result_dir}\n"
-            f"Command: {_shell_join(remote_benchmark_command)}\n"
-            f"Stdout tail:\n{stdout_tail}\n\n"
-            f"Stderr tail:\n{stderr_tail}\n\n"
-            f"Bootstrap tail:\n{bootstrap_tail}\n\n"
-            f"Slurm tail:\n{slurm_tail}\n\n"
-            f"Remote files:\n{remote_listing_tail}"
-        )
-
-    if summary is None:
-        raise FileNotFoundError(f"Expected synced benchmark summary at {local_result_dir / 'summary.json'}")
-
-    return RunRecord(
-        label=label,
-        timestamp=timestamp,
-        result_dir=local_result_dir,
-        summary=summary,
-        config=config,
-        overrides=build_param_overrides(config),
-        command=remote_benchmark_command,
-        stdout=stdout_text,
-        stderr=stderr_text,
     )
 
 

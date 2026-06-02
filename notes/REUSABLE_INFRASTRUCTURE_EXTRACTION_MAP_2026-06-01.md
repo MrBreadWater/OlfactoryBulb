@@ -351,6 +351,7 @@ Current progress:
 Current files:
 
 - `neuroinfra/notebooks/remote_jobs.py`
+- `neuroinfra/notebooks/remote_runs.py`
 - `neuroinfra/notebooks/workflows.py`
 - `obgpu_experiment_helpers.py`
 
@@ -359,6 +360,8 @@ What is already generic:
 - remote git publication and preflight session lifecycle
 - helper-cache and reusable-allocation preparation
 - submit stdout/stderr persistence with JSON response parsing
+- remote single-run preflight failure persistence and error reporting
+- remote single-run submit, monitor, and final-artifact workflow composition
 - `run_and_load` workflow composition
 - saved run-pair loading
 - local sweep-plan execution loops
@@ -387,6 +390,11 @@ Current progress:
 - `obgpu_experiment_helpers.py` now delegates the shared git/preflight/helper-
   cache/allocation preparation plus submit stdout/stderr capture and JSON
   parsing there
+- the generic notebook remote single-run workflow now also lives under
+  `neuroinfra.notebooks.remote_runs`
+- `obgpu_experiment_helpers.py` now delegates `_run_remote_simulation(...)`
+  there while still owning concrete remote payload construction, hook wiring,
+  and the OBGPU run-record shape
 - the generic notebook workflow layer now lives under
   `neuroinfra.notebooks.workflows`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
