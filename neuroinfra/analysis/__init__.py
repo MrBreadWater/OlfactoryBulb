@@ -22,6 +22,13 @@ from .spectral import (
     trapezoid_integral,
     uniform_trace,
 )
+from .plotting import (
+    plot_band_power_summary,
+    plot_named_time_series,
+    plot_time_frequency_map,
+    plot_time_series,
+    time_axis_label,
+)
 from .catalog import (
     CategoryCatalogHooks,
     group_rows_by_category,
@@ -49,6 +56,10 @@ __all__ = [
     "fold_time_series_by_modulus",
     "first_result_file_metadata",
     "normalize_time_modulus",
+    "plot_band_power_summary",
+    "plot_named_time_series",
+    "plot_time_frequency_map",
+    "plot_time_series",
     "ResultSignalProvider",
     "group_rows_by_category",
     "list_available_categories",
@@ -58,6 +69,7 @@ __all__ = [
     "result_file_metadata",
     "result_value_length",
     "resolve_result_signal",
+    "time_axis_label",
     "trapezoid_integral",
     "uniform_trace",
 ]

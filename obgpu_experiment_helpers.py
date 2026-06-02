@@ -260,6 +260,12 @@ from neuroinfra.analysis.overview import (
     first_result_file_metadata as _neuroinfra_first_result_file_metadata,
     metadata_value_or_result_length as _neuroinfra_metadata_value_or_result_length,
 )
+from neuroinfra.analysis.plotting import (
+    plot_band_power_summary as _neuroinfra_plot_band_power_summary,
+    plot_named_time_series as _neuroinfra_plot_named_time_series,
+    plot_time_frequency_map as _neuroinfra_plot_time_frequency_map,
+    plot_time_series as _neuroinfra_plot_time_series,
+)
 from neuroinfra.analysis.spectral import (
     DEFAULT_HFO_BANDS,
     butter_bandpass_filter,
@@ -267,8 +273,6 @@ from neuroinfra.analysis.spectral import (
     compute_spectrogram,
     compute_wavelet_band_power,
     compute_wavelet_map,
-    fold_time_matrix_by_modulus as _fold_time_matrix_by_modulus,
-    fold_time_series_by_modulus as _fold_time_series_by_modulus,
     normalize_time_modulus as _normalize_time_modulus,
     uniform_trace,
 )
@@ -7936,21 +7940,7 @@ def plot_hfo_power_summary(
         dt_ms=dt_ms,
         relative_band=relative_band,
     )
-    names = list(summary["band_power"].keys())
-    absolute = [summary["band_power"][name] for name in names]
-    relative = [summary["relative_band_power"][name] for name in names]
-
-    fig, axes = plt.subplots(1, 2, figsize=(12, 4), sharex=False)
-    axes[0].bar(names, absolute, color="tab:blue")
-    axes[0].set_title(f"{signal} HFO Band Power")
-    axes[0].set_ylabel("Integrated PSD")
-    axes[0].tick_params(axis="x", rotation=30)
-
-    axes[1].bar(names, relative, color="tab:green")
-    axes[1].set_title("Relative Band Power")
-    axes[1].set_ylabel("Fraction")
-    axes[1].tick_params(axis="x", rotation=30)
-    fig.tight_layout()
+    fig, axes = _neuroinfra_plot_band_power_summary(summary, signal_label=signal)
     return fig, axes, summary
 
 
@@ -7962,17 +7952,23 @@ def plot_named_signal(
     modulus: float | None = None,
 ) -> Any:
     """Plot one named analysis signal as a time trace."""
-    ax = ax or plt.subplots(figsize=(14, 4))[1]
     t, y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    t, y = _fold_time_series_by_modulus(t, y, modulus, dt_ms=dt_ms)
-    ax.plot(t, y, linewidth=1.0)
-    if _normalize_time_modulus(modulus) is not None:
-        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
-    else:
-        ax.set_xlabel("Time (ms)")
-    ax.set_ylabel(signal)
-    ax.set_title(f"{signal} Trace")
-    return ax
+    return _neuroinfra_plot_time_series(
+        t,
+        y,
+        ax=ax,
+        modulus=modulus,
+        dt_ms=dt_ms,
+        title=f"{signal} Trace",
+        ylabel=signal,
+    )
+
+
+def _spectrogram_display_power(power: np.ndarray) -> np.ndarray:
+    """Normalize spectrogram power into a stable display range."""
+    values = np.log(np.asarray(power, dtype=float) + 1e-8)
+    values -= values.min()
+    return values
 
 
 def plot_spectrogram(
@@ -7987,7 +7983,6 @@ def plot_spectrogram(
 ) -> Any:
     """Plot a spectrogram for a named analysis signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    ax = ax or plt.subplots(figsize=(14, 5))[1]
     times_ms, freqs, power = compute_spectrogram(
         signal_t,
         signal_y,
@@ -7996,20 +7991,16 @@ def plot_spectrogram(
         nperseg=nperseg,
         noverlap=noverlap,
     )
-    times_ms, power = _fold_time_matrix_by_modulus(times_ms, power, modulus)
-    #power = np.clip(power, power.mean()-power.std()*200, power.mean()+power.std()*50)
-    powerval = np.log(power+1e-8)
-    powerval -= powerval.min()
-    #powerval **= 2
-    mesh = ax.pcolormesh(times_ms, freqs, powerval, shading="auto")
-    if _normalize_time_modulus(modulus) is not None:
-        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
-    else:
-        ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Frequency (Hz)")
-    ax.set_title(f"{signal.upper()} Spectrogram")
-    plt.colorbar(mesh, ax=ax, label="Power (dB)")
-    return ax
+    return _neuroinfra_plot_time_frequency_map(
+        times_ms,
+        freqs,
+        power,
+        ax=ax,
+        modulus=modulus,
+        title=f"{signal.upper()} Spectrogram",
+        colorbar_label="Power (dB)",
+        power_transform=_spectrogram_display_power,
+    )
 
 
 def plot_wavelet(
@@ -8021,18 +8012,16 @@ def plot_wavelet(
 ) -> Any:
     """Plot the continuous wavelet power map for a named signal."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    ax = ax or plt.subplots(figsize=(14, 5))[1]
     t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
-    t, power = _fold_time_matrix_by_modulus(t, power, modulus)
-    mesh = ax.pcolormesh(t, freqs, power, shading="auto")
-    if _normalize_time_modulus(modulus) is not None:
-        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
-    else:
-        ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Frequency (Hz)")
-    ax.set_title(f"{signal.upper()} Wavelet Power")
-    plt.colorbar(mesh, ax=ax, label="log(1 + |cwt|)")
-    return ax
+    return _neuroinfra_plot_time_frequency_map(
+        t,
+        freqs,
+        power,
+        ax=ax,
+        modulus=modulus,
+        title=f"{signal.upper()} Wavelet Power",
+        colorbar_label="log(1 + |cwt|)",
+    )
 
 
 def plot_wavelet_band_power(
@@ -8045,19 +8034,16 @@ def plot_wavelet_band_power(
 ) -> Any:
     """Plot band-collapsed wavelet power traces over time."""
     signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    ax = ax or plt.subplots(figsize=(14, 4))[1]
     t, _freqs, _power, traces = compute_wavelet_band_power(signal_t, signal_y, bands=bands, dt_ms=dt_ms)
-    for name, values in traces.items():
-        plot_t, plot_values = _fold_time_series_by_modulus(t, values, modulus, dt_ms=dt_ms)
-        ax.plot(plot_t, plot_values, linewidth=1.2, label=name)
-    if _normalize_time_modulus(modulus) is not None:
-        ax.set_xlabel(f"Time modulo {float(modulus):g} ms")
-    else:
-        ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Mean Wavelet Power")
-    ax.set_title("Band Power Over Time")
-    ax.legend(loc="upper right")
-    return ax
+    return _neuroinfra_plot_named_time_series(
+        t,
+        traces,
+        ax=ax,
+        modulus=modulus,
+        dt_ms=dt_ms,
+        title="Band Power Over Time",
+        ylabel="Mean Wavelet Power",
+    )
 
 
 def _extract_figure_from_plot_result(plot_result: Any) -> Any:

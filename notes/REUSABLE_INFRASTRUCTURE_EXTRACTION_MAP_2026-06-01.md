@@ -123,6 +123,7 @@ Current files:
 
 - `neuroinfra/analysis/catalog.py`
 - `neuroinfra/analysis/overview.py`
+- `neuroinfra/analysis/plotting.py`
 - `neuroinfra/analysis/spectral.py`
 - `neuroinfra/analysis/signals.py`
 - `obgpu_experiment_helpers.py`
@@ -131,6 +132,7 @@ What is already generic:
 
 - stable category and label cataloging
 - result-overview context and summary builders
+- shared plotting primitives for traces, time-frequency maps, and band-power summaries
 - uniform-trace interpolation and time-modulus folding
 - spectrogram, wavelet, and band-power analysis on plain time/value arrays
 - ordered named-signal providers
@@ -142,7 +144,7 @@ What is domain-specific:
 
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- notebook-specific signal-presentation and plotting conventions
+- notebook-specific signal-presentation and higher-level plot composition
 
 Extraction confidence:
 

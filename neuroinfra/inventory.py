@@ -210,6 +210,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         source_paths=(
             "neuroinfra/analysis/catalog.py",
             "neuroinfra/analysis/overview.py",
+            "neuroinfra/analysis/plotting.py",
             "neuroinfra/analysis/spectral.py",
             "neuroinfra/analysis/signals.py",
             "obgpu_experiment_helpers.py",
@@ -217,6 +218,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         generic_capabilities=(
             "stable category and label cataloging",
             "result-overview context and summary builders",
+            "shared plotting primitives for traces, time-frequency maps, and band-power summaries",
             "uniform-trace interpolation and modulus folding",
             "shared spectrogram, wavelet, and band-power analysis",
             "ordered named-signal providers",
@@ -231,7 +233,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, result-overview builders, spectral analysis core, and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and plotting rules out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, spectral analysis core, and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",
