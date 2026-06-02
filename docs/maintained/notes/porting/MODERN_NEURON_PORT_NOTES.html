@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modern NEURON / OBGPU Notes</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../../index.html">Docs portal</a>
+        ·
+        <a href="../../../notes/porting/MODERN_NEURON_PORT_NOTES.md" data-served-href="/repo/notes/porting/MODERN_NEURON_PORT_NOTES.md">View source markdown</a>
+        ·
+        <code>notes/porting/MODERN_NEURON_PORT_NOTES.md</code>
+      </p>
+      <h1 id="modern-neuron-obgpu-notes">Modern NEURON / OBGPU Notes</h1>
+<h2 id="supported-model">Supported Model</h2>
+<ul>
+<li>Env name: <code>OBGPU</code></li>
+<li>Python: <code>3.11</code></li>
+<li>NEURON/CoreNEURON: source-built from a pinned upstream <code>nrn</code> ref plus a repo-managed patch stack</li>
+<li>GPU support: enabled through NVHPC + CUDA when <code>ENABLE_GPU=1</code></li>
+</ul>
+<p>The maintained source of truth is now:</p>
+<ul>
+<li>pinned upstream ref: <a href="../../../../third_party_patches/nrn/manifest.json" data-served-href="/repo/third_party_patches/nrn/manifest.json">third_party_patches/nrn/manifest.json</a></li>
+<li>patch files: <a href="../../../../third_party_patches/nrn" data-served-href="/repo/third_party_patches/nrn">third_party_patches/nrn</a></li>
+</ul>
+<p><code>external/nrn-9.0.1</code> is treated as a resettable checkout cache, not the long-term home of local edits.</p>
+<h2 id="build-flow">Build Flow</h2>
+<p>Create or refresh <code>OBGPU</code> with:</p>
+<pre><code class="language-bash">ENABLE_GPU=1 ENV_NAME=OBGPU ./tools/setup/setup_ob_modern.sh
+</code></pre>
+<p>What the setup script now does:</p>
+<ol>
+<li>creates or updates the conda env from <a href="../../../../environments/environment-modern.yml" data-served-href="/repo/environments/environment-modern.yml">environment-modern.yml</a></li>
+<li>resets the NEURON source tree to the pinned upstream ref from the manifest</li>
+<li>reapplies the repo patch stack</li>
+<li>builds and installs NEURON/CoreNEURON</li>
+<li>compiles the Birgiolas mechanisms with <code>nrnivmodl -coreneuron</code></li>
+<li>repairs the generated <code>libnrnmech.so</code> if the NVHPC fatbin temp-object issue is present</li>
+</ol>
+<p>Important portability details:</p>
+<ul>
+<li>the setup path no longer hardcodes <code>aarch64/libnrnmech.so</code></li>
+<li>the setup path no longer assumes <code>/opt/miniconda3</code></li>
+<li>the setup path derives the active env's <code>site-packages</code> path and <code>libpython</code> path dynamically instead of assuming Python <code>3.11</code></li>
+<li>the setup path derives <code>CUDAToolkit_ROOT</code> and <code>libcudart</code> from module-provided CUDA installs when they are not under <code>/usr/local/cuda</code></li>
+<li>the main build path is intended for generic Linux GPU hosts, not just the Jetson</li>
+<li><a href="../../../../tools/setup/setup_nvhpc_jetson.sh" data-served-href="/repo/tools/setup/setup_nvhpc_jetson.sh">setup_nvhpc_jetson.sh</a> remains a Jetson-specific helper, not the primary OBGPU build workflow</li>
+<li>any NEURON/CoreNEURON portability fix must land in <a href="../../../../third_party_patches/nrn" data-served-href="/repo/third_party_patches/nrn">third_party_patches/nrn</a>, not as an ad hoc edit inside <code>external/nrn-9.0.1</code></li>
+</ul>
+<h2 id="runtime-defaults">Runtime Defaults</h2>
+<p>The notebook config distinguishes local execution settings from remote Slurm
+resource requests. Local runs still use <code>use_corenrn</code> and <code>use_gpu</code>; remote
+runs infer execution mode from the Slurm request unless explicitly overridden.</p>
+<p>The current fast local default is:</p>
+<ul>
+<li>rank <code>1</code></li>
+<li>GPU on</li>
+<li><code>cell_permute=2</code></li>
+<li><code>warp_balance=128</code></li>
+</ul>
+<p>The parity-oriented mode is still available by running with <code>2</code> MPI ranks.</p>
+<p>The notebook helper surface continues to expose both modes through <code>build_run_config(...)</code>.</p>
+<p>Remote sync now uses streamed compressed tar over Paramiko. The old
+OpenSSH/rsync path is no longer maintained.</p>
+<h2 id="activation-helpers">Activation Helpers</h2>
+<p>For generic Linux hosts and clusters, use:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh
+</code></pre>
+<p>That helper:</p>
+<ul>
+<li>bootstraps <code>conda</code> from common installs or modules when possible</li>
+<li>activates <code>OBGPU</code></li>
+<li>exports the shared repo/mechanism paths for runtime use</li>
+<li>sets <code>OB_MPIEXEC</code> to <code>srun</code> inside Slurm allocations or <code>mpiexec</code> otherwise</li>
+</ul>
+<h2 id="sol-workflow">Sol Workflow</h2>
+<p>The intended Sol workflow is headless:</p>
+<ul>
+<li>notebook stays local</li>
+<li>notebook submits jobs to Sol through Slurm</li>
+<li>notebook can pin each remote run to an explicit git ref</li>
+<li>results sync back to local <code>results/notebook_runs/...</code></li>
+<li>analysis still runs locally on the synced results</li>
+</ul>
+<p>See:</p>
+<ul>
+<li><a href="SOL_REMOTE_WORKFLOW.html">SOL_REMOTE_WORKFLOW.md</a></li>
+<li><a href="../../../../obgpu_experiment_helpers.py" data-served-href="/repo/obgpu_experiment_helpers.py">obgpu_experiment_helpers.py</a></li>
+<li><a href="../../../../tools/remote" data-served-href="/repo/tools/remote">tools/remote</a></li>
+</ul>
+<p>For interactive Sol shells, the supported activation helper is:</p>
+<pre><code class="language-bash">source tools/setup/activate_sol_obgpu.sh
+</code></pre>
+<p>That helper:</p>
+<ul>
+<li>prefers already loaded Sol modules</li>
+<li>otherwise auto-detects the best available <code>mamba</code>, <code>nvhpc</code>, and <code>cuda</code> modules from <code>module avail</code></li>
+<li>initializes conda in the current shell</li>
+<li>activates <code>OBGPU</code></li>
+<li>exports <code>OB_MPIEXEC</code> to a working <code>srun</code> launcher inside Slurm allocations</li>
+</ul>
+<p>If your <code>salloc</code> keeps you in the same shell, already-loaded modules persist. If
+you start a fresh shell on the compute node, run the helper again.</p>
+<p>Optional opt-in convenience:</p>
+<pre><code class="language-bash">export OBGPU_AUTOLOAD_SOL_MODULES=1
+conda activate OBGPU
+</code></pre>
+<p>When enabled, the <code>OBGPU</code> activate hook will try to load the same Sol modules if
+they are not already present. This is intentionally opt-in so generic Linux
+hosts do not get surprise cluster-module behavior on activation.</p>
+<p>You can still override module selection explicitly with:</p>
+<pre><code class="language-bash">export SOL_MAMBA_MODULE=&lt;module&gt;
+export SOL_NVHPC_MODULE=&lt;module&gt;
+export SOL_CUDA_MODULE=&lt;module&gt;
+</code></pre>
+<h2 id="upgrade-policy">Upgrade Policy</h2>
+<p>Upstream NEURON updates are deliberate, not automatic.</p>
+<p>Use:</p>
+<pre><code class="language-bash">python tools/setup/check_nrn_upgrade.py --candidate-ref &lt;tag-or-commit&gt; --skip-build
+</code></pre>
+<p>or, for a real gate with build + smoke checks:</p>
+<pre><code class="language-bash">python tools/setup/check_nrn_upgrade.py --candidate-ref &lt;tag-or-commit&gt; --enable-gpu
+</code></pre>
+<p>The supported upstream ref changes only after:</p>
+<ol>
+<li>the candidate ref is checked out cleanly</li>
+<li>the patch stack applies cleanly</li>
+<li>OBGPU rebuilds successfully</li>
+<li>the smoke/parity checks pass</li>
+</ol>
+<p>See:</p>
+<ul>
+<li><a href="NEURON_UPGRADE_WORKFLOW.html">NEURON_UPGRADE_WORKFLOW.md</a></li>
+<li><a href="../../../../tools/setup/check_nrn_upgrade.py" data-served-href="/repo/tools/setup/check_nrn_upgrade.py">check_nrn_upgrade.py</a></li>
+</ul>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#modern-neuron-obgpu-notes">Modern NEURON / OBGPU Notes</a><ul>
+<li><a href="#supported-model">Supported Model</a></li>
+<li><a href="#build-flow">Build Flow</a></li>
+<li><a href="#runtime-defaults">Runtime Defaults</a></li>
+<li><a href="#activation-helpers">Activation Helpers</a></li>
+<li><a href="#sol-workflow">Sol Workflow</a></li>
+<li><a href="#upgrade-policy">Upgrade Policy</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

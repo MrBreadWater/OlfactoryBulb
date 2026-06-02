@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from olfactorybulb.audit.core import AuditItem, AuditReport
@@ -25,6 +26,7 @@ MAINTAINED_DOCS = (
 DOCS_PORTAL_HTML = REPO_ROOT / "docs/index.html"
 DOCS_PORTAL_SOURCE = REPO_ROOT / "docs-source/index.rst"
 DOCS_PORTAL_SOURCE_TRACKED = REPO_ROOT / "docs/_sources/index.rst.txt"
+DOCS_MAINTAINED_MANIFEST = REPO_ROOT / "docs/maintained/manifest.json"
 BANNED_DOC_REFERENCES = (
     "initslice.py",
     "runbatch.py",
@@ -41,14 +43,14 @@ BANNED_DOC_REFERENCES = (
     "tools/audit_epl_fsi_intrinsic_validation.py",
 )
 REQUIRED_PORTAL_LINKS = (
-    "../readme.md",
-    "../INSTALL.md",
-    "../tools/README.md",
-    "../tests/README.md",
-    "../notes/DASHBOARD_SHELL_HOWTO.md",
-    "../notes/REFERENCE_DATASET_HOWTO.md",
-    "../notes/REFERENCE_VALIDATION_HOWTO.md",
-    "../research_context/README.md",
+    "maintained/readme.html",
+    "maintained/INSTALL.html",
+    "maintained/tools/README.html",
+    "maintained/tests/README.html",
+    "maintained/notes/DASHBOARD_SHELL_HOWTO.html",
+    "maintained/notes/REFERENCE_DATASET_HOWTO.html",
+    "maintained/notes/REFERENCE_VALIDATION_HOWTO.html",
+    "maintained/research_context/README.html",
 )
 
 
@@ -96,6 +98,13 @@ def run(args: argparse.Namespace) -> AuditReport:
     portal_source_text = _text(DOCS_PORTAL_SOURCE)
     portal_source_tracked_text = _text(DOCS_PORTAL_SOURCE_TRACKED)
     ownership_map_text = _text(REPO_ROOT / "notes/DOCS_OWNERSHIP_MAP.md")
+    rendered_manifest = json.loads(_text(DOCS_MAINTAINED_MANIFEST)) if DOCS_MAINTAINED_MANIFEST.exists() else {}
+    rendered_doc_records = list(rendered_manifest.get("documents") or [])
+    missing_rendered_docs = [
+        str(record.get("output_rel"))
+        for record in rendered_doc_records
+        if not (REPO_ROOT / "docs" / str(record.get("output_rel") or "")).exists()
+    ]
 
     items = [
         _item(
@@ -110,29 +119,43 @@ def run(args: argparse.Namespace) -> AuditReport:
         ),
         _item(
             check_id="docs_portal_exists",
-            status="PASS" if DOCS_PORTAL_HTML.exists() and DOCS_PORTAL_SOURCE.exists() and DOCS_PORTAL_SOURCE_TRACKED.exists() else "FAIL",
+            status="PASS" if DOCS_PORTAL_HTML.exists() and DOCS_PORTAL_SOURCE.exists() and DOCS_PORTAL_SOURCE_TRACKED.exists() and DOCS_MAINTAINED_MANIFEST.exists() else "FAIL",
             title="Docs portal artifacts exist",
             criterion="The repurposed docs surface should keep one maintained landing page in both the tracked HTML portal and its source files.",
             description="This ensures local file-based access remains available even though the old docs surface is no longer the source of truth for maintained procedures.",
-            acceptable="The maintained docs portal HTML and its paired source files all exist.",
-            acceptable_basis="The repository keeps a tracked docs portal for linkable local navigation to current maintained markdown docs.",
+            acceptable="The maintained docs portal HTML, rendered-doc manifest, and paired source files all exist.",
+            acceptable_basis="The repository keeps a tracked docs portal plus rendered maintained-doc HTML pages for linkable local navigation.",
             evidence={
                 "docs_index_html": DOCS_PORTAL_HTML.exists(),
                 "docs_source_index": DOCS_PORTAL_SOURCE.exists(),
                 "docs_sources_index_txt": DOCS_PORTAL_SOURCE_TRACKED.exists(),
+                "docs_maintained_manifest": DOCS_MAINTAINED_MANIFEST.exists(),
             },
         ),
         _item(
             check_id="docs_portal_exposes_maintained_markdown",
             status="PASS" if all(link in portal_text for link in REQUIRED_PORTAL_LINKS) else "FAIL",
-            title="Docs portal links to maintained markdown docs",
-            criterion="The docs landing page should expose the current maintained markdown docs rather than sending users into historical pages first.",
-            description="This repurposes the historical docs site into a small maintained navigation surface while keeping old generated pages available only as secondary reference.",
-            acceptable="The docs portal links to the maintained README, install guide, tooling map, and reference-data docs.",
-            acceptable_basis="The maintained docs now live primarily in markdown files under the repository root and notes directories.",
+            title="Docs portal links to rendered maintained docs",
+            criterion="The docs landing page should expose rendered maintained docs rather than raw markdown files or historical pages first.",
+            description="This keeps the local docs portal and the served docs iframe on the same stable HTML surface while the markdown files remain the authoring source.",
+            acceptable="The docs portal links to rendered maintained HTML pages for the README, install guide, tooling map, and reference-data docs.",
+            acceptable_basis="The maintained docs are authored in markdown but served through a generated HTML layer under docs/maintained.",
             evidence={
                 "required_links": list(REQUIRED_PORTAL_LINKS),
                 "missing_links": [link for link in REQUIRED_PORTAL_LINKS if link not in portal_text],
+            },
+        ),
+        _item(
+            check_id="rendered_maintained_docs_exist",
+            status="PASS" if rendered_doc_records and not missing_rendered_docs else "FAIL",
+            title="Rendered maintained docs exist for the portal pages",
+            criterion="The portal should point at generated HTML pages that actually exist under docs/maintained.",
+            description="The maintained docs surface is now a rendered HTML layer over markdown sources, so missing generated pages would break both the local portal and the served docs iframe.",
+            acceptable="The rendered-doc manifest exists and every listed output HTML file is present.",
+            acceptable_basis="Rendered maintained docs are part of the reproducible docs surface, not an ad hoc browser convenience.",
+            evidence={
+                "rendered_doc_count": len(rendered_doc_records),
+                "missing_rendered_docs": missing_rendered_docs,
             },
         ),
         _item(

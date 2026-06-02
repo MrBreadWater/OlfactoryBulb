@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference Validation How-To</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../notes/REFERENCE_VALIDATION_HOWTO.md" data-served-href="/repo/notes/REFERENCE_VALIDATION_HOWTO.md">View source markdown</a>
+        ·
+        <code>notes/REFERENCE_VALIDATION_HOWTO.md</code>
+      </p>
+      <h1 id="reference-validation-how-to">Reference Validation How-To</h1>
+<p>If you want the shortest explanation first, start with:
+<a href="REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html">REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</a></p>
+<p>If you are trying to contribute missing literature values by hand rather than
+add new validation logic, use:
+<a href="../research_context/manual_reference_templates/README.html">manual_reference_templates/README.md</a></p>
+<p>If you need the boundary between raw sources, configs, manual intake, and
+generated canonical outputs, see:
+<a href="../research_context/README.html">research_context/README.md</a></p>
+<p>This guide explains how to add a simulation-backed, literature-driven
+validation audit using the declarative validation layer.</p>
+<p>Use this system when you already have normalized reference rows and want to:</p>
+<ul>
+<li>run a specific stimulus protocol against one or more model cells,</li>
+<li>extract model-side measurements from the resulting traces,</li>
+<li>compare those measurements against literature rows, and</li>
+<li>keep protocol caveats visible in the output.</li>
+</ul>
+<p>This is the validation-side companion to
+<a href="REFERENCE_DATASET_HOWTO.html">REFERENCE_DATASET_HOWTO.md</a>.</p>
+<h2 id="what-is-modular-now">What is modular now</h2>
+<p>The validation system is split into four parts:</p>
+<ol>
+<li>
+<p><strong>Reference dataset config</strong>
+   - declares and extracts literature rows
+   - lives under <code>research_context/reference_datasets/</code></p>
+</li>
+<li>
+<p><strong>Reference validation config</strong>
+   - declares which protocol runner to use
+   - declares which rule checks to run
+   - lives under <code>research_context/reference_validations/</code></p>
+</li>
+<li>
+<p><strong>Protocol runners</strong>
+   - run the model-side experiment
+   - emit metrics and protocol evidence</p>
+</li>
+<li>
+<p><strong>Rule handlers</strong>
+   - consume emitted metrics and normalized reference rows
+   - turn comparisons into audit items</p>
+</li>
+</ol>
+<p>The important design point is that <code>burton_urban_fi</code> is now just one configured
+validation that uses one registered protocol runner:</p>
+<ul>
+<li>validation config:
+  <a href="../../../research_context/reference_validations/burton_urban_fi.validation.toml" data-served-href="/repo/research_context/reference_validations/burton_urban_fi.validation.toml">burton_urban_fi.validation.toml</a></li>
+<li>protocol runner:
+  <code>burton_urban_mctc_current_clamp</code></li>
+</ul>
+<p>The same framework now also drives:</p>
+<ul>
+<li><a href="../../../research_context/reference_validations/gc_intrinsic_validation.validation.toml" data-served-href="/repo/research_context/reference_validations/gc_intrinsic_validation.validation.toml">gc_intrinsic_validation.validation.toml</a></li>
+<li><a href="../../../research_context/reference_validations/epl_fsi_intrinsic_validation.validation.toml" data-served-href="/repo/research_context/reference_validations/epl_fsi_intrinsic_validation.validation.toml">epl_fsi_intrinsic_validation.validation.toml</a></li>
+<li><a href="../../../research_context/reference_validations/epli_correctness.validation.toml" data-served-href="/repo/research_context/reference_validations/epli_correctness.validation.toml">epli_correctness.validation.toml</a></li>
+</ul>
+<h2 id="where-the-pieces-live">Where the pieces live</h2>
+<ul>
+<li>Validation config template:
+  <a href="../../../research_context/reference_validations/TEMPLATE.validation.toml" data-served-href="/repo/research_context/reference_validations/TEMPLATE.validation.toml">research_context/reference_validations/TEMPLATE.validation.toml</a></li>
+<li>Current built-in validation config:
+  <a href="../../../research_context/reference_validations/burton_urban_fi.validation.toml" data-served-href="/repo/research_context/reference_validations/burton_urban_fi.validation.toml">research_context/reference_validations/burton_urban_fi.validation.toml</a></li>
+<li>Additional built-in validation configs:</li>
+<li><a href="../../../research_context/reference_validations/gc_intrinsic_validation.validation.toml" data-served-href="/repo/research_context/reference_validations/gc_intrinsic_validation.validation.toml">gc_intrinsic_validation.validation.toml</a></li>
+<li><a href="../../../research_context/reference_validations/epl_fsi_intrinsic_validation.validation.toml" data-served-href="/repo/research_context/reference_validations/epl_fsi_intrinsic_validation.validation.toml">epl_fsi_intrinsic_validation.validation.toml</a></li>
+<li><a href="../../../research_context/reference_validations/epli_correctness.validation.toml" data-served-href="/repo/research_context/reference_validations/epli_correctness.validation.toml">epli_correctness.validation.toml</a></li>
+<li>Validation config loader:
+  <a href="../../../olfactorybulb/audit/reference_validation_config.py" data-served-href="/repo/olfactorybulb/audit/reference_validation_config.py">olfactorybulb/audit/reference_validation_config.py</a></li>
+<li>Validation engine:
+  <a href="../../../olfactorybulb/audit/reference_validation_engine.py" data-served-href="/repo/olfactorybulb/audit/reference_validation_engine.py">olfactorybulb/audit/reference_validation_engine.py</a></li>
+<li>Built-in protocol registry:
+  <a href="../../../olfactorybulb/audit/reference_validation_protocols.py" data-served-href="/repo/olfactorybulb/audit/reference_validation_protocols.py">olfactorybulb/audit/reference_validation_protocols.py</a></li>
+<li>Built-in rule registry:
+  <a href="../../../olfactorybulb/audit/reference_validation_rules.py" data-served-href="/repo/olfactorybulb/audit/reference_validation_rules.py">olfactorybulb/audit/reference_validation_rules.py</a></li>
+<li>Generic CLI:
+  <a href="../../../tools/run_reference_validation.py" data-served-href="/repo/tools/run_reference_validation.py">tools/run_reference_validation.py</a></li>
+<li>Audit HTML dashboard renderer:
+  <a href="../../../olfactorybulb/audit/dashboard.py" data-served-href="/repo/olfactorybulb/audit/dashboard.py">olfactorybulb/audit/dashboard.py</a></li>
+<li>Unified dashboard shell HOWTO:
+  <a href="DASHBOARD_SHELL_HOWTO.html">DASHBOARD_SHELL_HOWTO.md</a></li>
+</ul>
+<h2 id="quick-start">Quick start</h2>
+<h3 id="list-available-validations">List available validations</h3>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --list-validations
+</code></pre>
+<h3 id="list-registered-protocols">List registered protocols</h3>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --list-protocols
+</code></pre>
+<h3 id="run-the-built-in-burton-validation">Run the built-in Burton validation</h3>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id burton_urban_fi
+</code></pre>
+<h3 id="smoke-test-a-validation-without-running-neuron">Smoke-test a validation without running NEURON</h3>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id burton_urban_fi --skip-neuron
+</code></pre>
+<h3 id="run-the-richer-audit-wrapper">Run the richer audit wrapper</h3>
+<p>Use the audit wrapper when you also want Burton-specific slice-context and
+registry checks:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py burton_urban_fi
+</code></pre>
+<h3 id="render-audit-results-as-maintained-html">Render audit results as maintained HTML</h3>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron
+</code></pre>
+<h2 id="minimal-validation-config">Minimal validation config</h2>
+<p>Copy the template:</p>
+<pre><code class="language-bash">cp \
+  research_context/reference_validations/TEMPLATE.validation.toml \
+  research_context/reference_validations/my_validation.validation.toml
+</code></pre>
+<p>At minimum, fill in:</p>
+<ul>
+<li><code>validation_id</code></li>
+<li><code>title</code></li>
+<li><code>description</code></li>
+<li><code>protocol_runner</code></li>
+<li>at least one <code>[[checks]]</code></li>
+</ul>
+<p>Optional but useful:</p>
+<ul>
+<li><code>extensions</code></li>
+<li><code>[defaults]</code></li>
+<li><code>[protocol]</code></li>
+<li><code>[skip_item]</code></li>
+<li><code>[human_review]</code></li>
+<li><code>notes_path</code></li>
+<li><code>skip_neuron_mode</code></li>
+</ul>
+<h2 id="how-a-validation-is-evaluated">How a validation is evaluated</h2>
+<p>The flow is:</p>
+<ol>
+<li>load the validation config</li>
+<li>load any extension modules named in <code>extensions</code></li>
+<li>resolve the configured <code>protocol_runner</code></li>
+<li>add the protocol-specific CLI arguments</li>
+<li>run the protocol runner</li>
+<li>collect model-side metrics</li>
+<li>evaluate the configured rule checks</li>
+<li>render a styled audit report</li>
+</ol>
+<p>The protocol runner is responsible for <strong>measurements</strong>.
+The rules are responsible for <strong>judgment</strong>.</p>
+<p>That boundary matters.</p>
+<p>If you need a new measured quantity, add it to the protocol runner output.
+If you need a new decision rule, add a new rule kind.</p>
+<p>One consequence of that split is that <strong>reference-band assumptions belong in
+config</strong>, not hidden in Python defaults. A metric such as membrane resting
+voltage can often tolerate a symmetric arithmetic band, while a metric such as
+the interspike-interval coefficient of variation is positive-only and usually
+needs a different shape.</p>
+<p>The framework now supports two skip behaviors:</p>
+<ul>
+<li><code>short_circuit</code></li>
+<li><code>--skip-neuron</code> returns only the configured <code>[skip_item]</code></li>
+<li>best for purely simulation-backed validations such as current-clamp sweeps</li>
+<li><code>protocol_handles_skip</code></li>
+<li>the protocol runner still executes cheap checks and emits warning-state
+    metrics for the expensive skipped parts</li>
+<li>best for mixed audits such as <code>epli_correctness</code>, where source-code and
+    slice-export checks should still run when NEURON-backed morphology or
+    behavior checks are skipped</li>
+</ul>
+<h2 id="human-review-status-is-mandatory">Human review status is mandatory</h2>
+<p>Every declarative validation item should resolve to a human-review state.</p>
+<p>Use the shared vocabulary:</p>
+<ul>
+<li><code>accepted</code></li>
+<li><code>provisional</code></li>
+<li><code>pending_review</code></li>
+<li><code>not_applicable</code></li>
+</ul>
+<p>At minimum, set:</p>
+<pre><code class="language-toml">[human_review]
+default_status = &quot;pending_review&quot;
+</code></pre>
+<p>Then override where needed:</p>
+<ul>
+<li><code>human_review_status</code> on a single check</li>
+<li><code>human_review_reviewer</code> and <code>human_review_note</code> on a single check</li>
+<li><code>property_human_review_statuses</code> for <code>reference_band_rows</code></li>
+<li><code>property_human_review_notes</code> for per-property caveats</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[human_review]
+default_status = &quot;pending_review&quot;
+
+[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+human_review_reviewer = &quot;human&quot;
+property_human_review_statuses = {
+  &quot;ISI Coefficient of Variation&quot; = &quot;accepted&quot;,
+  &quot;AHP Duration&quot; = &quot;provisional&quot;,
+}
+property_human_review_notes = {
+  &quot;AHP Duration&quot; = &quot;Temporary stopgap until source-backed quantiles are available.&quot;,
+}
+</code></pre>
+<p>Run the dedicated coverage audit to check this metadata:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py human_review_status
+</code></pre>
+<p>That audit:</p>
+<ul>
+<li>fails if any declarative item resolves to no review status</li>
+<li>fails if a config uses an unknown status string</li>
+<li>warns on <code>pending_review</code></li>
+<li>warns on <code>provisional</code></li>
+</ul>
+<h2 id="built-in-rule-kinds">Built-in rule kinds</h2>
+<p>The built-in rule layer already covers common cases:</p>
+<ul>
+<li><code>protocol_executed</code></li>
+<li><code>all_finite_metric</code></li>
+<li><code>all_exact_metric</code></li>
+<li><code>group_ordering</code></li>
+<li><code>group_abs_diff_max</code></li>
+<li><code>group_positive</code></li>
+<li><code>summary_metric_min</code></li>
+<li><code>summary_metric_max</code></li>
+<li><code>summary_metric_range</code></li>
+<li><code>summary_metric_status_map</code></li>
+<li><code>reference_band_rows</code></li>
+<li><code>reference_curve_match</code></li>
+<li><code>note_presence</code></li>
+</ul>
+<p>Use config alone whenever one of these can express the paper cleanly.</p>
+<h2 id="choosing-acceptable-bands-for-literature-rows">Choosing acceptable bands for literature rows</h2>
+<p><code>reference_band_rows</code> no longer assumes that every metric should use the same
+arithmetic <code>mean +/- sigma * sd</code> interval.</p>
+<p>It also no longer permits a silent fallback. Every property listed in
+<code>property_metric_map</code> must appear in <code>property_band_modes</code>. If one is missing,
+the validation fails immediately instead of quietly defaulting to a symmetric
+band.</p>
+<p>Use these config knobs deliberately:</p>
+<ul>
+<li><code>property_band_modes</code></li>
+<li>per-property band shape</li>
+<li>built-ins:<ul>
+<li><code>symmetric_sd</code></li>
+<li><code>lognormal_sd</code></li>
+<li><code>beta_sd</code></li>
+<li><code>binary_indicator</code></li>
+</ul>
+</li>
+<li>this choice is required for every property; there is no fallback mode<ul>
+<li><code>quantile_interval</code></li>
+</ul>
+</li>
+<li><code>property_lower_bounds</code></li>
+<li>clip naturally non-negative metrics at zero</li>
+<li><code>property_upper_bounds</code></li>
+<li>clip bounded metrics such as probabilities at one</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+loader = &quot;csv:research_context/EXAMPLE_ephys.csv&quot;
+reference_source = &quot;Example et al. (2026)&quot;
+group_field = &quot;cell_type&quot;
+sigma_arg_name = &quot;reference_sigma_multiplier&quot;
+property_metric_map = {
+  &quot;Membrane Resting Voltage&quot; = &quot;resting_potential_mV&quot;,
+  &quot;ISI Coefficient of Variation&quot; = &quot;cv_isi&quot;,
+  &quot;Firing Probability&quot; = &quot;firing_probability&quot;,
+  &quot;Rebound Potential Presence&quot; = &quot;rebound_potential_presence&quot;,
+  &quot;Skewed Latency&quot; = &quot;skewed_latency_ms&quot;,
+}
+property_band_modes = {
+  &quot;Membrane Resting Voltage&quot; = &quot;symmetric_sd&quot;,
+  &quot;ISI Coefficient of Variation&quot; = &quot;lognormal_sd&quot;,
+  &quot;Firing Probability&quot; = &quot;beta_sd&quot;,
+  &quot;Rebound Potential Presence&quot; = &quot;binary_indicator&quot;,
+  &quot;Skewed Latency&quot; = &quot;quantile_interval&quot;,
+}
+property_lower_bounds = {
+  &quot;ISI Coefficient of Variation&quot; = 0.0,
+  &quot;Firing Probability&quot; = 0.0,
+}
+property_upper_bounds = { &quot;Firing Probability&quot; = 1.0 }
+default_quantile_low_field = &quot;q_low&quot;
+default_quantile_high_field = &quot;q_high&quot;
+default_quantile_low_label_field = &quot;q_low_label&quot;
+default_quantile_high_label_field = &quot;q_high_label&quot;
+title = &quot;Reference band placeholder&quot;
+criterion = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+description = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable_basis = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+</code></pre>
+<p>Use this decision tree explicitly, one property at a time:</p>
+<ol>
+<li>If the source row encodes an exact binary class label such as present vs not
+   present, use <code>binary_indicator</code>.</li>
+<li>Else if the source or extracted row already provides an explicit empirical
+   interval such as 5th-to-95th percentile or Q1-to-Q3, use
+   <code>quantile_interval</code>.</li>
+<li>Else if the metric is a true probability or fraction on <code>[0, 1]</code>, use
+   <code>beta_sd</code>.</li>
+<li>Else if the metric can meaningfully cross zero or is naturally signed, use
+   <code>symmetric_sd</code>.</li>
+<li>Else if the metric is positive-only continuous and only mean plus standard
+   deviation are available, use <code>lognormal_sd</code>.</li>
+</ol>
+<p>That is the default manual policy in this repo. If a paper clearly requires a
+different assumption, encode it explicitly in config and explain why in the row
+notes or validation notes.</p>
+<p>Use <code>lognormal_sd</code> when all of the following are true:</p>
+<ul>
+<li>the metric is strictly positive,</li>
+<li>the literature value is better treated as right-skewed than symmetric, and</li>
+<li>the source gives only arithmetic mean and standard deviation.</li>
+</ul>
+<p>Use <code>beta_sd</code> when all of the following are true:</p>
+<ul>
+<li>the metric is a probability, fraction, or other quantity naturally bounded to
+  <code>[0, 1]</code>,</li>
+<li>the source gives an arithmetic mean and standard deviation,</li>
+<li>and you want a bounded interval that is more defensible than simply clipping a
+  symmetric Gaussian-style band.</li>
+</ul>
+<p>Use <code>quantile_interval</code> when the paper already reports an interval directly,
+such as:</p>
+<ul>
+<li>25th to 75th percentile,</li>
+<li>5th to 95th percentile,</li>
+<li>lower to upper quartile,</li>
+<li>any other explicit low/high quantile pair.</li>
+</ul>
+<p>In that case, add row fields such as:</p>
+<ul>
+<li><code>q_low</code></li>
+<li><code>q_high</code></li>
+<li><code>q_low_label</code></li>
+<li>
+<p><code>q_high_label</code></p>
+</li>
+<li>
+<p><code>binary_indicator</code> is for categorical rows such as a presence/absence class
+  that were historically squeezed into a mean-plus-or-minus-spread column.
+  These are not treated as continuous dispersion rows at all. The accepted
+  interval becomes the exact binary target.</p>
+</li>
+</ul>
+<p>Use <code>property_lower_bounds</code> / <code>property_upper_bounds</code> when the metric has a
+hard physical or definitional bound even if you still want a symmetric band in
+the interior.</p>
+<p>Do not describe these bands as formal confidence intervals unless the source
+actually reports a confidence interval and you model it that way. In this
+framework, the default <code>reference_sigma_multiplier</code> is a configurable
+<strong>dispersion-band width</strong>, not a statistical confidence level.</p>
+<p>Rendered reports now expose the assumption explicitly through:</p>
+<ul>
+<li><code>accepted_interval_mode</code></li>
+<li><code>accepted_interval_standard</code></li>
+</ul>
+<p>Do not hide those fields. If the standard is questionable for a given metric,
+change the config rather than quietly accepting the default.</p>
+<p>If the paper needs a genuinely different comparison rule, register a new rule
+kind in an extension module.</p>
+<h2 id="registering-a-new-protocol-runner">Registering a new protocol runner</h2>
+<p>If a paper has a stimulus protocol that is not already represented, create an
+extension module and point the validation config at it through <code>extensions</code>.</p>
+<p>For example, add:</p>
+<pre><code class="language-toml">validation_id = &quot;smith2026_intrinsic_validation&quot;
+title = &quot;Smith 2026 intrinsic validation&quot;
+description = &quot;Validate Example Cells against Smith 2026.&quot;
+protocol_runner = &quot;smith2026_current_clamp&quot;
+extensions = [&quot;olfactorybulb.audit.smith2026_validation_extensions:register&quot;]
+metric_group_field = &quot;cell_type&quot;
+</code></pre>
+<p>Then create an extension module that registers the protocol:</p>
+<pre><code class="language-python">from __future__ import annotations
+
+import argparse
+
+from olfactorybulb.audit.reference_validation_protocols import (
+    ProtocolRunResult,
+    ValidationProtocolSpec,
+    register_validation_protocol,
+)
+
+
+def _add_cli_args(parser: argparse.ArgumentParser) -&gt; None:
+    parser.add_argument(&quot;--cell-count&quot;, type=int, default=4)
+    parser.add_argument(&quot;--dt-ms&quot;, type=float, default=0.1)
+
+
+def _run_protocol(args: argparse.Namespace, protocol_config: dict[str, object]) -&gt; ProtocolRunResult:
+    metrics = [
+        {
+            &quot;cell_name&quot;: &quot;Example1&quot;,
+            &quot;cell_type&quot;: &quot;Example Cell&quot;,
+            &quot;input_resistance_MOhm&quot;: 123.4,
+            &quot;fi_gain_Hz_per_50pA&quot;: 9.8,
+        }
+    ]
+    protocol_evidence = {
+        &quot;step_duration_ms&quot;: protocol_config.get(&quot;step_duration_ms&quot;, 1000.0),
+        &quot;current_start_pA&quot;: protocol_config.get(&quot;current_start_pA&quot;, 0.0),
+        &quot;current_stop_pA&quot;: protocol_config.get(&quot;current_stop_pA&quot;, 400.0),
+        &quot;current_step_pA&quot;: protocol_config.get(&quot;current_step_pA&quot;, 50.0),
+    }
+    return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field=&quot;cell_type&quot;)
+
+
+def register() -&gt; None:
+    register_validation_protocol(
+        ValidationProtocolSpec(
+            protocol_id=&quot;smith2026_current_clamp&quot;,
+            title=&quot;Smith 2026 example current clamp&quot;,
+            description=&quot;Example protocol registration for a literature-backed validation.&quot;,
+            add_cli_args=_add_cli_args,
+            run=_run_protocol,
+        )
+    )
+</code></pre>
+<p>Key point:</p>
+<ul>
+<li>the protocol runner can emit any measurement keys you want</li>
+<li>those keys become available to rule checks</li>
+<li>protocol runners are not limited to current clamp</li>
+</ul>
+<p>They can just as easily emit:</p>
+<ul>
+<li>slice export counts</li>
+<li>source-code default status codes</li>
+<li>morphology measurements</li>
+<li>network-readiness booleans</li>
+<li>protocol-backed trace measurements</li>
+</ul>
+<h2 id="adding-custom-measurements">Adding custom measurements</h2>
+<p>Suppose the paper cares about <code>first_spike_latency_ms</code>, but none of the current
+protocol runners emit it yet.</p>
+<p>The correct place to add it is the protocol runner:</p>
+<pre><code class="language-python">metrics = [
+    {
+        &quot;cell_name&quot;: &quot;Example1&quot;,
+        &quot;cell_type&quot;: &quot;Example Cell&quot;,
+        &quot;first_spike_latency_ms&quot;: 212.0,
+    }
+]
+</code></pre>
+<p>Once the metric exists, you have two options:</p>
+<ol>
+<li>express the judgment using a built-in rule, if possible</li>
+<li>register a new rule kind if the logic is new</li>
+</ol>
+<p>When a paper needs a brand-new <strong>protocol family</strong>, write a new registered
+protocol runner.</p>
+<p>When a paper only needs a brand-new <strong>measurement</strong> inside an already-matching
+protocol family, extend that runner’s emitted metrics instead of creating a
+second near-duplicate runner.</p>
+<h2 id="registering-a-new-rule-kind">Registering a new rule kind</h2>
+<p>If the built-in checks are not enough, register a new rule kind in the same
+extension module:</p>
+<pre><code class="language-python">from olfactorybulb.audit import AuditItem
+from olfactorybulb.audit.reference_validation_rules import register_validation_rule
+
+
+@register_validation_rule(&quot;minimum_metric&quot;)
+def _minimum_metric(rule, context):
+    metric_key = str(rule[&quot;metric_key&quot;])
+    minimum = float(rule[&quot;minimum&quot;])
+    observed = float(context.metrics[0][metric_key])
+    status = &quot;PASS&quot; if observed &gt;= minimum else &quot;FAIL&quot;
+    return [
+        AuditItem(
+            check_id=str(rule[&quot;check_id&quot;]),
+            status=status,
+            title=str(rule[&quot;title&quot;]),
+            criterion=str(rule[&quot;criterion&quot;]),
+            description=str(rule[&quot;description&quot;]),
+            acceptable=str(rule[&quot;acceptable&quot;]),
+            acceptable_basis=str(rule[&quot;acceptable_basis&quot;]),
+            evidence={&quot;observed&quot;: observed, &quot;minimum&quot;: minimum},
+        )
+    ]
+</code></pre>
+<p>Then use it in the validation config:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;minimum_metric&quot;
+check_id = &quot;example_first_spike_latency&quot;
+metric_key = &quot;first_spike_latency_ms&quot;
+minimum = 150.0
+title = &quot;First-spike latency exceeds the lower bound&quot;
+criterion = &quot;Explain the literature requirement here.&quot;
+description = &quot;Explain why this check matters.&quot;
+acceptable = &quot;The observed first-spike latency is at least 150 milliseconds.&quot;
+acceptable_basis = &quot;This threshold comes from the cited paper.&quot;
+</code></pre>
+<h2 id="when-to-add-a-new-protocol-runner-versus-a-new-rule">When to add a new protocol runner versus a new rule</h2>
+<p>Add a <strong>new protocol runner</strong> when the paper changes:</p>
+<ul>
+<li>stimulus family</li>
+<li>current-step schedule</li>
+<li>holding potential normalization</li>
+<li>temperature assumptions</li>
+<li>trace-processing pipeline</li>
+<li>measured quantities</li>
+</ul>
+<p>Also add a new protocol runner when the paper is not really a current-clamp
+paper at all, for example:</p>
+<ul>
+<li>structural or morphology audits</li>
+<li>slice-export readiness audits</li>
+<li>synaptic latency protocols</li>
+<li>modulation protocols</li>
+<li>mixed audits that combine cheap static checks with optional NEURON-backed
+  measurements</li>
+</ul>
+<p>Add a <strong>new rule kind</strong> when the paper changes:</p>
+<ul>
+<li>comparison logic</li>
+<li>pass/fail decision style</li>
+<li>grouping semantics</li>
+<li>reference-band construction</li>
+<li>protocol-caveat resolution logic</li>
+</ul>
+<p>Do not add a new protocol runner merely because the paper wants a different
+ordering check or tolerance band. That belongs in config or a rule.</p>
+<h2 id="skip-behavior">Skip behavior</h2>
+<p>Use <code>[skip_item]</code> in the validation config so <code>--skip-neuron</code> still produces a
+useful report when the validation is <code>short_circuit</code>.</p>
+<p>Use <code>skip_neuron_mode = "protocol_handles_skip"</code> when the validation should
+still execute cheap source-code, dataset, or slice checks while reporting the
+NEURON-backed parts as skipped warnings.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[skip_item]
+check_id = &quot;smith2026_validation_skipped&quot;
+status = &quot;WARN&quot;
+title = &quot;Smith 2026 validation was skipped&quot;
+criterion = &quot;The report should say when the expensive protocol was not run.&quot;
+description = &quot;This keeps the generic CLI informative during smoke tests.&quot;
+acceptable = &quot;The report explicitly says that no protocol-backed measurements were produced.&quot;
+acceptable_basis = &quot;This item is generated by command-line control flow.&quot;
+evidence_arg_keys = [&quot;reference_sigma_multiplier&quot;, &quot;cell_count&quot;]
+</code></pre>
+<h2 id="notes-and-protocol-caveats">Notes and protocol caveats</h2>
+<p>If the validation involves protocol-dependent comparisons, add a <code>note_presence</code>
+check so caveats remain visible.</p>
+<p>Important implementation details:</p>
+<ul>
+<li>set <code>notes_path</code> when the dataset uses a dataset-local notes table instead of
+  the shared default</li>
+<li>use <code>row_contexts</code> when the caveat should be resolved from real extracted rows</li>
+<li>use <code>synthetic_contexts</code> when the caveat is driven by config state or by an
+  intentionally empty extracted file</li>
+<li>use <code>filter_value_arg</code> or <code>filter_values_arg</code> when the relevant note context
+  comes from CLI-selected targets such as <code>--reference-gc-subtypes</code></li>
+</ul>
+<p>That is what keeps differences such as:</p>
+<ul>
+<li>MC/TC protocol versus EPL fast-spiking interneuron protocol</li>
+<li>baseline versus modulated condition</li>
+<li>superficial granule cell versus deep granule cell subtype</li>
+</ul>
+<p>from being buried in raw CSV text.</p>
+<h2 id="recommended-workflow-for-a-new-paper">Recommended workflow for a new paper</h2>
+<ol>
+<li>create or update the normalized reference dataset</li>
+<li>copy <code>TEMPLATE.validation.toml</code></li>
+<li>point <code>protocol_runner</code> at an existing runner if one already matches</li>
+<li>if no runner matches, write an extension module and register a new protocol</li>
+<li>add checks using built-in rule kinds first</li>
+<li>add a new rule kind only when config cannot express the comparison</li>
+<li>decide whether <code>--skip-neuron</code> should short-circuit or whether the protocol
+   should keep running cheap checks</li>
+<li>add a <code>[skip_item]</code> so smoke runs stay readable</li>
+<li>if the paper uses dataset-local caveats, set <code>notes_path</code> and add
+   <code>note_presence</code> checks</li>
+<li>when one config should cover multiple related targets, gate checks with
+   <code>enabled_when_arg_truthy</code>, <code>enabled_when_arg_falsey</code>, or
+   <code>enabled_when_arg_in</code></li>
+<li>run the generic validation CLI</li>
+<li>add a dedicated audit wrapper only if you also need repo-specific structural
+   or context checks beyond the literature comparison itself</li>
+</ol>
+<h2 id="practical-boundary">Practical boundary</h2>
+<p>The generic validation layer is intended to make new literature-backed tests
+cheap to add.</p>
+<p>It is not intended to eliminate scientific judgment.</p>
+<p>The paper-specific judgment should live in:</p>
+<ul>
+<li>the normalized reference rows,</li>
+<li>the selected protocol runner,</li>
+<li>the configured checks,</li>
+<li>and explicit notes/caveats.</li>
+</ul>
+<p>That is the level where new validations stay understandable to other people in
+the lab instead of turning back into one-off audit scripts.</p>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#reference-validation-how-to">Reference Validation How-To</a><ul>
+<li><a href="#what-is-modular-now">What is modular now</a></li>
+<li><a href="#where-the-pieces-live">Where the pieces live</a></li>
+<li><a href="#quick-start">Quick start</a><ul>
+<li><a href="#list-available-validations">List available validations</a></li>
+<li><a href="#list-registered-protocols">List registered protocols</a></li>
+<li><a href="#run-the-built-in-burton-validation">Run the built-in Burton validation</a></li>
+<li><a href="#smoke-test-a-validation-without-running-neuron">Smoke-test a validation without running NEURON</a></li>
+<li><a href="#run-the-richer-audit-wrapper">Run the richer audit wrapper</a></li>
+<li><a href="#render-audit-results-as-maintained-html">Render audit results as maintained HTML</a></li>
+</ul>
+</li>
+<li><a href="#minimal-validation-config">Minimal validation config</a></li>
+<li><a href="#how-a-validation-is-evaluated">How a validation is evaluated</a></li>
+<li><a href="#human-review-status-is-mandatory">Human review status is mandatory</a></li>
+<li><a href="#built-in-rule-kinds">Built-in rule kinds</a></li>
+<li><a href="#choosing-acceptable-bands-for-literature-rows">Choosing acceptable bands for literature rows</a></li>
+<li><a href="#registering-a-new-protocol-runner">Registering a new protocol runner</a></li>
+<li><a href="#adding-custom-measurements">Adding custom measurements</a></li>
+<li><a href="#registering-a-new-rule-kind">Registering a new rule kind</a></li>
+<li><a href="#when-to-add-a-new-protocol-runner-versus-a-new-rule">When to add a new protocol runner versus a new rule</a></li>
+<li><a href="#skip-behavior">Skip behavior</a></li>
+<li><a href="#notes-and-protocol-caveats">Notes and protocol caveats</a></li>
+<li><a href="#recommended-workflow-for-a-new-paper">Recommended workflow for a new paper</a></li>
+<li><a href="#practical-boundary">Practical boundary</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tools</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../tools/README.md" data-served-href="/repo/tools/README.md">View source markdown</a>
+        ·
+        <code>tools/README.md</code>
+      </p>
+      <h1 id="tools">Tools</h1>
+<p>Support scripts created during the NEURON/CoreNEURON port and performance work are grouped here:</p>
+<ul>
+<li><code>benchmarks/</code>
+  Benchmark runners and result-comparison helpers.</li>
+<li><code>debug/</code>
+  One-off diagnostics used to isolate parity and performance issues.</li>
+<li><code>remote/</code>
+  Headless Slurm helpers used by the notebook's <code>sol_slurm</code> and
+  <code>slurm_remote</code> backends for submit/poll/run orchestration.</li>
+<li><code>setup/</code>
+  Environment/bootstrap helpers, including the <code>OBGPU</code> NEURON/CoreNEURON setup, NVHPC <code>libnrnmech.so</code> repair, and upgrade-gate checks.</li>
+</ul>
+<p>The maintained OBGPU build path is now:</p>
+<ol>
+<li>read <a href="../../../third_party_patches/nrn/manifest.json" data-served-href="/repo/third_party_patches/nrn/manifest.json">third_party_patches/nrn/manifest.json</a></li>
+<li>reset the cached NEURON checkout to the pinned upstream ref</li>
+<li>apply the repo patch stack</li>
+<li>build/install via <a href="../../../tools/setup/setup_ob_modern.sh" data-served-href="/repo/tools/setup/setup_ob_modern.sh">setup_ob_modern.sh</a></li>
+</ol>
+<p>For the supported remote workflow, see:</p>
+<ul>
+<li><a href="../notes/porting/SOL_REMOTE_WORKFLOW.html">SOL_REMOTE_WORKFLOW.md</a></li>
+<li><a href="../../../tools/remote/submit_sol_run.py" data-served-href="/repo/tools/remote/submit_sol_run.py">submit_sol_run.py</a></li>
+<li><a href="../../../tools/remote/poll_sol_run.py" data-served-href="/repo/tools/remote/poll_sol_run.py">poll_sol_run.py</a></li>
+</ul>
+<p>The notebook remote path is Paramiko-only. The old OpenSSH multiplex and rsync
+transport branch has been removed.</p>
+<p>For interactive Sol shells, use:</p>
+<ul>
+<li><a href="../../../tools/setup/activate_sol_obgpu.sh" data-served-href="/repo/tools/setup/activate_sol_obgpu.sh">activate_sol_obgpu.sh</a></li>
+</ul>
+<p>For one maintained-surface health command that stays inside the official audit
+system, use:</p>
+<ul>
+<li><code>python tools/run_audit.py repo_health --profile maintained</code></li>
+</ul>
+<p>For grouped developer-facing Python tests presented through the same audit
+surface, use:</p>
+<ul>
+<li><code>python tools/run_audit.py test_suite_status --list-suites</code></li>
+<li><code>python tools/run_audit.py test_suite_status --suite maintained_core</code></li>
+</ul>
+<p>For the maintained unified web shell that combines:</p>
+<ul>
+<li>audit results</li>
+<li>HFO optimization review</li>
+<li>current docs</li>
+</ul>
+<p>use:</p>
+<ul>
+<li><code>python -m olfactorybulb.dashboard.control_center</code></li>
+</ul>
+<p>That maintained command auto-detects the active optimization campaign when it
+can, serves immediately at <code>http://127.0.0.1:6006/</code> by default, falls forward
+to the next available local port if <code>6006</code> is already occupied, and renders
+the default maintained audit into the page in the background. It does not
+regenerate missing optimization packets during default startup. Use
+<code>--open-browser</code> if you want it to launch a local browser automatically.</p>
+<p>For a local docs portal that points at the rendered maintained docs first and
+historical generated pages second, open:</p>
+<ul>
+<li><code>docs/index.html</code></li>
+</ul>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#tools">Tools</a></li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

@@ -1,7 +1,7 @@
 Maintained Repository Docs Portal
 =================================
 
-This landing page points at the current maintained markdown docs for the OBGPU
+This landing page points at the current rendered maintained docs for the OBGPU
 workflow. Treat these links as the first stop for current install, runtime,
 audit, and reference-data procedures.
 
@@ -11,18 +11,18 @@ only. They are no longer the source of truth for the maintained workflow.
 Maintained workflow docs
 ------------------------
 
-- `Repository README <../readme.md>`_
-- `Install and bootstrap guide <../INSTALL.md>`_
-- `Tooling map <../tools/README.md>`_
-- `Tests and suite-audit guide <../tests/README.md>`_
-- `Documentation ownership map <../notes/DOCS_OWNERSHIP_MAP.md>`_
-- `Dashboard shell HOWTO <../notes/DASHBOARD_SHELL_HOWTO.md>`_
-- `Reference dataset HOWTO <../notes/REFERENCE_DATASET_HOWTO.md>`_
-- `Reference validation HOWTO <../notes/REFERENCE_VALIDATION_HOWTO.md>`_
-- `Reference validation overview <../notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md>`_
-- `Research-context boundaries <../research_context/README.md>`_
-- `Remote Slurm workflow <../notes/porting/SOL_REMOTE_WORKFLOW.md>`_
-- `NEURON upgrade workflow <../notes/porting/NEURON_UPGRADE_WORKFLOW.md>`_
+- `Repository README <maintained/readme.html>`_
+- `Install and bootstrap guide <maintained/INSTALL.html>`_
+- `Tooling map <maintained/tools/README.html>`_
+- `Tests and suite-audit guide <maintained/tests/README.html>`_
+- `Documentation ownership map <maintained/notes/DOCS_OWNERSHIP_MAP.html>`_
+- `Dashboard shell HOWTO <maintained/notes/DASHBOARD_SHELL_HOWTO.html>`_
+- `Reference dataset HOWTO <maintained/notes/REFERENCE_DATASET_HOWTO.html>`_
+- `Reference validation HOWTO <maintained/notes/REFERENCE_VALIDATION_HOWTO.html>`_
+- `Reference validation overview <maintained/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html>`_
+- `Research-context boundaries <maintained/research_context/README.html>`_
+- `Remote Slurm workflow <maintained/notes/porting/SOL_REMOTE_WORKFLOW.html>`_
+- `NEURON upgrade workflow <maintained/notes/porting/NEURON_UPGRADE_WORKFLOW.html>`_
 
 Historical reference pages
 --------------------------
@@ -34,5 +34,5 @@ Historical reference pages
 - `Historical model API reference <olfactorybulb.html>`_
 
 Use the historical pages only when you need older background or archived API
-docs. If a historical page disagrees with the maintained markdown docs above,
-the maintained markdown docs win.
+docs. If a historical page disagrees with the rendered maintained docs above,
+the rendered maintained docs win.

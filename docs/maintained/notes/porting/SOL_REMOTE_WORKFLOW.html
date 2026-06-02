@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Remote Slurm Workflow</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../../index.html">Docs portal</a>
+        ·
+        <a href="../../../notes/porting/SOL_REMOTE_WORKFLOW.md" data-served-href="/repo/notes/porting/SOL_REMOTE_WORKFLOW.md">View source markdown</a>
+        ·
+        <code>notes/porting/SOL_REMOTE_WORKFLOW.md</code>
+      </p>
+      <h1 id="remote-slurm-workflow">Remote Slurm Workflow</h1>
+<h2 id="goal">Goal</h2>
+<p>Use the local notebook as the control surface while a remote Slurm cluster runs
+the simulations.</p>
+<p>The supported model is:</p>
+<ul>
+<li>local machine runs Jupyter and the notebook kernel</li>
+<li>remote cluster holds a clone of this repo plus an <code>OBGPU</code> env</li>
+<li>notebook authenticates once through Paramiko SSH</li>
+<li>notebook auto-publishes the current local <code>HEAD</code> commit to the remote repo
+  when the remote does not already have it</li>
+<li>notebook submits Slurm jobs or Slurm steps</li>
+<li>completed results stream back into local <code>results/notebook_runs/...</code></li>
+<li>local analysis cells work on synced results unchanged</li>
+</ul>
+<p>The old OpenSSH control-master and rsync transport is retired. Do not configure
+<code>ssh_multiplex</code>, <code>ssh_control_path</code>, <code>rsync_binary</code>, or <code>rsync_options</code>; those
+knobs are no longer part of the maintained notebook path.</p>
+<h2 id="required-remote-state">Required Remote State</h2>
+<p>The remote cluster needs:</p>
+<ul>
+<li>a clone of this repo</li>
+<li>a working <code>OBGPU</code> build created with <code>tools/setup/setup_ob_modern.sh</code></li>
+<li>Slurm access</li>
+<li>a normal SSH path from the notebook host</li>
+<li><code>sbatch</code>, <code>sacct</code>, <code>scontrol</code>, <code>srun</code>, <code>tar</code>, and at least one compressor
+  among <code>zstd</code>, <code>pigz</code>, <code>gzip</code>, or <code>xz</code></li>
+</ul>
+<p>You do not need to run Jupyter on the cluster.</p>
+<h2 id="configuration-builders">Configuration Builders</h2>
+<p>Use:</p>
+<ul>
+<li><code>build_slurm_remote_config(...)</code> for generic Slurm clusters such as Phoenix</li>
+<li><code>build_sol_remote_config(...)</code> for Sol-specific activation defaults</li>
+</ul>
+<p>Common controls:</p>
+<ul>
+<li><code>runner_backend</code></li>
+<li><code>remote_host</code></li>
+<li><code>remote_repo_root</code></li>
+<li><code>remote_results_root</code></li>
+<li><code>remote_conda_activate_cmd</code></li>
+<li><code>remote_runtime_profiles</code></li>
+<li><code>remote_git_ref</code></li>
+<li><code>remote_git_fetch</code></li>
+<li><code>remote_mpi_exec</code></li>
+<li><code>remote_poll_interval_s</code></li>
+<li><code>remote_log_poll_interval_s</code></li>
+<li><code>remote_live_status</code></li>
+<li><code>remote_live_logs</code></li>
+<li><code>remote_preserve_paramiko_session</code></li>
+<li><code>slurm_partition</code></li>
+<li><code>slurm_account</code></li>
+<li><code>slurm_time</code></li>
+<li><code>slurm_gpus</code></li>
+<li><code>slurm_cpus_per_task</code></li>
+<li><code>slurm_mem</code></li>
+<li><code>slurm_extra_args</code></li>
+<li><code>slurm_allocation_job_id</code></li>
+<li><code>slurm_reuse_allocation</code></li>
+<li><code>ssh_options</code></li>
+</ul>
+<p><code>ssh_transport</code> remains only as a compatibility guard. <code>auto</code> and <code>paramiko</code>
+are accepted; <code>openssh</code> is intentionally rejected.</p>
+<h2 id="minimal-example">Minimal Example</h2>
+<pre><code class="language-python">SOL_REMOTE_CONFIG = build_sol_remote_config(
+    remote_host=&quot;jmpaniag@localhost&quot;,
+    remote_repo_root=&quot;/scratch/jmpaniag/OlfactoryBulb&quot;,
+    remote_results_root=&quot;/scratch/jmpaniag/OlfactoryBulb/results/notebook_runs&quot;,
+    slurm_account=&quot;grp_scrook&quot;,
+    slurm_time=&quot;00:30:00&quot;,
+    slurm_gpus=1,
+    slurm_partition=&quot;arm&quot;,
+    ssh_options=[&quot;-p&quot;, &quot;2222&quot;],
+)
+
+RUN_CONFIG.update(SOL_REMOTE_CONFIG)
+run, result = run_and_load(RUN_CONFIG)
+</code></pre>
+<p>For Phoenix-style CPU runs, omit GPU-specific fields and choose a partition/QOS
+with <code>slurm_partition</code> and <code>slurm_extra_args</code> only when the cluster requires
+them.</p>
+<h2 id="reusable-allocations">Reusable Allocations</h2>
+<p>Two reuse modes are supported:</p>
+<ul>
+<li><code>slurm_allocation_job_id="&lt;jobid&gt;"</code> uses an existing allocation that you
+  created manually.</li>
+<li><code>slurm_reuse_allocation=True</code> lets the notebook create and cache a reusable
+  allocation, then launch runs as Slurm steps inside it.</li>
+</ul>
+<p>Notebook-managed reusable allocations write heartbeat files. The notebook tries
+to rediscover matching live allocations after a kernel restart and cancels stale
+notebook-managed allocations before creating new ones. Manual allocations are
+not cancelled by the notebook.</p>
+<h2 id="ssh-authentication">SSH Authentication</h2>
+<p>Paramiko keeps one authenticated SSH transport per notebook runtime and endpoint.
+With <code>remote_preserve_paramiko_session=True</code>, the helper fails closed instead of
+silently opening a new login prompt mid-run after a connection was already
+authenticated. Restart the kernel or explicitly reconnect if the remote SSH
+session dies.</p>
+<p>Common SSH tunnel example:</p>
+<pre><code class="language-bash">ssh -N -L 2222:sol-login02:22 jmpaniag@sol.asu.edu
+</code></pre>
+<p>Then configure the notebook with:</p>
+<pre><code class="language-python">remote_host=&quot;jmpaniag@localhost&quot;
+ssh_options=[&quot;-p&quot;, &quot;2222&quot;]
+</code></pre>
+<h2 id="interactive-sol-shells">Interactive Sol Shells</h2>
+<p>For interactive builds or smoke tests on Sol, do not run heavy work on the
+login node. Allocate a node first:</p>
+<pre><code class="language-bash">salloc -p arm -G 1 -c 8 -t 02:00:00
+source tools/setup/activate_sol_obgpu.sh
+</code></pre>
+<p>Inside a Slurm allocation, use <code>$OB_MPIEXEC</code> instead of guessing the launcher:</p>
+<pre><code class="language-bash">$OB_MPIEXEC -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label sol_smoke --paramset OneMsTest --coreneuron --coreneuron-gpu
+</code></pre>
+<p>The Sol activation helper:</p>
+<ul>
+<li>prefers already loaded Sol modules</li>
+<li>otherwise scans <code>module avail</code> for compatible <code>mamba</code>, <code>nvhpc</code>, and <code>cuda</code>
+  entries</li>
+<li>activates <code>OBGPU</code></li>
+<li>exports <code>OB_MPIEXEC</code> to a working Slurm launcher</li>
+</ul>
+<h2 id="code-update-workflow">Code Update Workflow</h2>
+<p>Use committed code, not dirty notebook-local state.</p>
+<p>Recommended flow:</p>
+<ol>
+<li>commit locally</li>
+<li>leave <code>remote_git_ref=None</code> so the notebook uses current local <code>HEAD</code>, or set
+   <code>remote_git_ref</code> explicitly</li>
+<li>let the notebook check whether the remote repo already has that commit</li>
+<li>let the notebook upload an incremental git bundle if needed</li>
+<li>run the Slurm job at the resolved commit</li>
+</ol>
+<p>The remote commit is recorded in <code>git_ref.txt</code>, <code>git_commit.txt</code>, and
+<code>run_info.json</code>.</p>
+<h2 id="result-contract">Result Contract</h2>
+<p>Remote runs sync into the same local layout as local notebook runs:</p>
+<ul>
+<li><code>summary.json</code></li>
+<li><code>run_info.json</code></li>
+<li><code>command.txt</code></li>
+<li><code>stdout.txt</code></li>
+<li><code>stderr.txt</code></li>
+<li><code>input_times.pkl</code></li>
+<li><code>lfp.pkl</code></li>
+<li>soma trace/spike artifacts when requested</li>
+</ul>
+<p>Remote orchestration also keeps diagnostics such as:</p>
+<ul>
+<li><code>bootstrap.log</code></li>
+<li><code>submit_stdout.txt</code></li>
+<li><code>submit_stderr.txt</code></li>
+<li><code>sync_stdout.txt</code></li>
+<li><code>sync_stderr.txt</code></li>
+<li><code>sim_progress.json</code></li>
+</ul>
+<p>Large result transfers use streamed tar compression over the existing Paramiko
+connection and extract locally while downloading.</p>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#remote-slurm-workflow">Remote Slurm Workflow</a><ul>
+<li><a href="#goal">Goal</a></li>
+<li><a href="#required-remote-state">Required Remote State</a></li>
+<li><a href="#configuration-builders">Configuration Builders</a></li>
+<li><a href="#minimal-example">Minimal Example</a></li>
+<li><a href="#reusable-allocations">Reusable Allocations</a></li>
+<li><a href="#ssh-authentication">SSH Authentication</a></li>
+<li><a href="#interactive-sol-shells">Interactive Sol Shells</a></li>
+<li><a href="#code-update-workflow">Code Update Workflow</a></li>
+<li><a href="#result-contract">Result Contract</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

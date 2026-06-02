@@ -1,0 +1,157 @@
+{
+  "documents": [
+    {
+      "output_rel": "maintained/readme.html",
+      "source_rel": "readme.md",
+      "title": "OlfactoryBulb"
+    },
+    {
+      "output_rel": "maintained/INSTALL.html",
+      "source_rel": "INSTALL.md",
+      "title": "Install"
+    },
+    {
+      "output_rel": "maintained/tools/README.html",
+      "source_rel": "tools/README.md",
+      "title": "Tools"
+    },
+    {
+      "output_rel": "maintained/tests/README.html",
+      "source_rel": "tests/README.md",
+      "title": "Tests"
+    },
+    {
+      "output_rel": "maintained/notes/DOCS_OWNERSHIP_MAP.html",
+      "source_rel": "notes/DOCS_OWNERSHIP_MAP.md",
+      "title": "Documentation Ownership Map"
+    },
+    {
+      "output_rel": "maintained/notes/DASHBOARD_SHELL_HOWTO.html",
+      "source_rel": "notes/DASHBOARD_SHELL_HOWTO.md",
+      "title": "Dashboard Shell HOWTO"
+    },
+    {
+      "output_rel": "maintained/notes/REFERENCE_DATASET_HOWTO.html",
+      "source_rel": "notes/REFERENCE_DATASET_HOWTO.md",
+      "title": "Reference Dataset How-To"
+    },
+    {
+      "output_rel": "maintained/notes/REFERENCE_VALIDATION_HOWTO.html",
+      "source_rel": "notes/REFERENCE_VALIDATION_HOWTO.md",
+      "title": "Reference Validation How-To"
+    },
+    {
+      "output_rel": "maintained/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html",
+      "source_rel": "notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md",
+      "title": "Reference Validation System Overview"
+    },
+    {
+      "output_rel": "maintained/research_context/README.html",
+      "source_rel": "research_context/README.md",
+      "title": "Research Context Layout"
+    },
+    {
+      "output_rel": "maintained/notes/porting/SOL_REMOTE_WORKFLOW.html",
+      "source_rel": "notes/porting/SOL_REMOTE_WORKFLOW.md",
+      "title": "Remote Slurm Workflow"
+    },
+    {
+      "output_rel": "maintained/notes/porting/NEURON_UPGRADE_WORKFLOW.html",
+      "source_rel": "notes/porting/NEURON_UPGRADE_WORKFLOW.md",
+      "title": "NEURON Upgrade Workflow"
+    },
+    {
+      "output_rel": "maintained/notes/porting/MODERN_NEURON_PORT_NOTES.html",
+      "source_rel": "notes/porting/MODERN_NEURON_PORT_NOTES.md",
+      "title": "Modern NEURON / OBGPU Notes"
+    },
+    {
+      "output_rel": "maintained/research_context/manual_reference_templates/README.html",
+      "source_rel": "research_context/manual_reference_templates/README.md",
+      "title": "Manual Reference Extraction Templates"
+    }
+  ],
+  "generated_at": "2026-06-02T15:02:42",
+  "sections": [
+    {
+      "pages": [
+        {
+          "output_rel": "maintained/readme.html",
+          "source_rel": "readme.md",
+          "title": "OlfactoryBulb"
+        },
+        {
+          "output_rel": "maintained/INSTALL.html",
+          "source_rel": "INSTALL.md",
+          "title": "Install"
+        },
+        {
+          "output_rel": "maintained/tools/README.html",
+          "source_rel": "tools/README.md",
+          "title": "Tools"
+        },
+        {
+          "output_rel": "maintained/tests/README.html",
+          "source_rel": "tests/README.md",
+          "title": "Tests"
+        },
+        {
+          "output_rel": "maintained/notes/DOCS_OWNERSHIP_MAP.html",
+          "source_rel": "notes/DOCS_OWNERSHIP_MAP.md",
+          "title": "Documentation Ownership Map"
+        },
+        {
+          "output_rel": "maintained/notes/DASHBOARD_SHELL_HOWTO.html",
+          "source_rel": "notes/DASHBOARD_SHELL_HOWTO.md",
+          "title": "Dashboard Shell HOWTO"
+        }
+      ],
+      "title": "Core workflow"
+    },
+    {
+      "pages": [
+        {
+          "output_rel": "maintained/notes/REFERENCE_DATASET_HOWTO.html",
+          "source_rel": "notes/REFERENCE_DATASET_HOWTO.md",
+          "title": "Reference Dataset How-To"
+        },
+        {
+          "output_rel": "maintained/notes/REFERENCE_VALIDATION_HOWTO.html",
+          "source_rel": "notes/REFERENCE_VALIDATION_HOWTO.md",
+          "title": "Reference Validation How-To"
+        },
+        {
+          "output_rel": "maintained/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html",
+          "source_rel": "notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md",
+          "title": "Reference Validation System Overview"
+        },
+        {
+          "output_rel": "maintained/research_context/README.html",
+          "source_rel": "research_context/README.md",
+          "title": "Research Context Layout"
+        }
+      ],
+      "title": "Reference data and validation"
+    },
+    {
+      "pages": [
+        {
+          "output_rel": "maintained/notes/porting/SOL_REMOTE_WORKFLOW.html",
+          "source_rel": "notes/porting/SOL_REMOTE_WORKFLOW.md",
+          "title": "Remote Slurm Workflow"
+        },
+        {
+          "output_rel": "maintained/notes/porting/NEURON_UPGRADE_WORKFLOW.html",
+          "source_rel": "notes/porting/NEURON_UPGRADE_WORKFLOW.md",
+          "title": "NEURON Upgrade Workflow"
+        },
+        {
+          "output_rel": "maintained/notes/porting/MODERN_NEURON_PORT_NOTES.html",
+          "source_rel": "notes/porting/MODERN_NEURON_PORT_NOTES.md",
+          "title": "Modern NEURON / OBGPU Notes"
+        }
+      ],
+      "title": "Remote and build operations"
+    }
+  ]
+}

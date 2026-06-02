@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OlfactoryBulb</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../index.html">Docs portal</a>
+        ·
+        <a href="../readme.md" data-served-href="/repo/readme.md">View source markdown</a>
+        ·
+        <code>readme.md</code>
+      </p>
+      <h1 id="olfactorybulb">OlfactoryBulb</h1>
+<p>This repository contains the olfactory bulb network model and the current
+OBGPU workflow for running it with NEURON/CoreNEURON locally or through remote
+Slurm jobs.</p>
+<p>The maintained path is no longer Docker. Use the conda-based OBGPU setup, a
+patched source build of NEURON/CoreNEURON, and the notebook helper layer in
+<code>obgpu_experiment_helpers.py</code>.</p>
+<h2 id="quick-start">Quick Start</h2>
+<p>GPU/CoreNEURON build:</p>
+<pre><code class="language-bash">ENABLE_GPU=1 ENV_NAME=OBGPU ./install-obgpu.sh
+source tools/setup/activate_obgpu.sh OBGPU
+jupyter lab
+</code></pre>
+<p>Portable CPU-only build:</p>
+<pre><code class="language-bash">ENV_NAME=OBGPU-portable ENABLE_GPU=0 OBGPU_CPU_TARGET=portable ./install-obgpu.sh
+source tools/setup/activate_obgpu.sh OBGPU-portable
+jupyter lab
+</code></pre>
+<p>The active notebook is:</p>
+<ul>
+<li><code>notebooks/obgpu-working-experiment.ipynb</code></li>
+</ul>
+<p>See <a href="INSTALL.html">INSTALL.md</a> for host prerequisites, GPU/CUDA notes, smoke
+tests, and Slurm/Phoenix/Sol setup details.</p>
+<p>For a linkable local docs landing page that points at the current rendered
+maintained docs, open:</p>
+<ul>
+<li><code>docs/index.html</code></li>
+</ul>
+<p>For a curated maintained-surface health pass after setup or refactors, run:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py repo_health --profile maintained
+</code></pre>
+<p>For the maintained web shell that combines audits, optimization, and docs:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center
+</code></pre>
+<p>That command now:</p>
+<ul>
+<li>auto-detects the active maintained optimization campaign when possible</li>
+<li>serves immediately at <code>http://127.0.0.1:6006/</code> by default</li>
+<li>runs the default maintained audit into the page in the background</li>
+<li>skips missing-packet regeneration during default startup so the shell comes
+  up reliably before heavier optimization work</li>
+<li>opens with the audit tab first</li>
+<li>prints startup progress in the terminal while the audit and optimization
+  views are being prepared</li>
+<li>falls forward to the next available local port if <code>6006</code> is already in use</li>
+</ul>
+<h2 id="maintained-runtime">Maintained Runtime</h2>
+<p>The modern workflow is:</p>
+<ol>
+<li><code>install-obgpu.sh</code> delegates to <code>tools/setup/setup_ob_modern.sh</code>.</li>
+<li>The setup script creates or updates the <code>OBGPU</code> conda environment from
+   <code>environments/environment-modern.yml</code>.</li>
+<li>It resets <code>external/nrn-9.0.1</code> to the pinned upstream ref in
+   <code>third_party_patches/nrn/manifest.json</code>.</li>
+<li>It applies the repo patch stack from <code>third_party_patches/nrn/</code>.</li>
+<li>It builds NEURON/CoreNEURON and compiles the Birgiolas mechanisms.</li>
+<li>Runs are launched by the notebook helper or by
+   <code>tools/benchmarks/benchmark_ob.py</code>.</li>
+</ol>
+<p>The important active files are:</p>
+<ul>
+<li><code>obgpu_experiment_helpers.py</code></li>
+<li><code>tools/benchmarks/benchmark_ob.py</code></li>
+<li><code>tools/remote/</code></li>
+<li><code>olfactorybulb/model.py</code></li>
+<li><code>olfactorybulb/paramsets/</code></li>
+<li><code>prev_ob_models/Birgiolas2020/Mechanisms/</code></li>
+<li><code>olfactorybulb/result_artifacts.py</code></li>
+</ul>
+<h2 id="remote-slurm-runs">Remote Slurm Runs</h2>
+<p>Remote notebook runs use Paramiko over SSH and Slurm on the remote host. The
+old OpenSSH multiplex/rsync path has been removed from the maintained notebook
+backend because it caused repeated authentication and stale control-socket
+failures during sweeps.</p>
+<p>Use:</p>
+<ul>
+<li><code>build_slurm_remote_config(...)</code> for generic clusters such as Phoenix</li>
+<li><code>build_sol_remote_config(...)</code> for Sol-specific activation defaults</li>
+</ul>
+<p>The notebook auto-publishes the current local <code>HEAD</code> commit to the remote repo
+when needed, submits through Slurm, streams live progress, and syncs results
+back into local <code>results/notebook_runs/...</code>.</p>
+<p>See <a href="notes/porting/SOL_REMOTE_WORKFLOW.html">notes/porting/SOL_REMOTE_WORKFLOW.md</a>
+for the current remote workflow.</p>
+<h2 id="results">Results</h2>
+<p>Modern runs write timestamped directories under <code>results/notebook_runs/</code>.
+Remote sweeps use <code>results/sweeps/</code>. Large soma trace payloads may be stored in
+compact NPZ form and loaded lazily by the notebook helper.</p>
+<p>Generated results, profiles, temporary archives, and compiled mechanism outputs
+should not be committed.</p>
+<h2 id="repository-layout">Repository Layout</h2>
+<ul>
+<li><code>olfactorybulb/</code>: core model, parameter sets, database access, and result
+  artifact helpers.</li>
+<li><code>prev_ob_models/</code>: historical published models and the active
+  Birgiolas2020 cell/mechanism source used by the network.</li>
+<li><code>tools/setup/</code>: OBGPU environment, NEURON/CoreNEURON build, and activation
+  helpers.</li>
+<li><code>tools/remote/</code>: Slurm submit/poll/batch helpers used by the notebook.</li>
+<li><code>tools/benchmarks/</code>: maintained command-line benchmark/smoke runner.</li>
+<li><code>notes/porting/</code>: current porting, setup, and remote workflow notes.</li>
+<li><code>blender-files/</code> and <code>media/</code>: archival construction/visualization assets;
+  not required for normal notebook runs.</li>
+</ul>
+<h2 id="citation">Citation</h2>
+<p>If you use this model or parts of it in your project, please cite:</p>
+<pre><code class="language-bibtex">@phdthesis{birgiolas2019towards,
+  title={Towards Brains in the Cloud: A Biophysically Realistic Computational Model of Olfactory Bulb},
+  author={Birgiolas, Justas},
+  year={2019},
+  school={Arizona State University}
+}
+</code></pre>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#olfactorybulb">OlfactoryBulb</a><ul>
+<li><a href="#quick-start">Quick Start</a></li>
+<li><a href="#maintained-runtime">Maintained Runtime</a></li>
+<li><a href="#remote-slurm-runs">Remote Slurm Runs</a></li>
+<li><a href="#results">Results</a></li>
+<li><a href="#repository-layout">Repository Layout</a></li>
+<li><a href="#citation">Citation</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

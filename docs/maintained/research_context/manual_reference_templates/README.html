@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manual Reference Extraction Templates</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../../index.html">Docs portal</a>
+        ·
+        <a href="../../../research_context/manual_reference_templates/README.md" data-served-href="/repo/research_context/manual_reference_templates/README.md">View source markdown</a>
+        ·
+        <code>research_context/manual_reference_templates/README.md</code>
+      </p>
+      <h1 id="manual-reference-extraction-templates">Manual Reference Extraction Templates</h1>
+<p>This directory contains <strong>raw intake templates</strong> for every currently unresolved
+manual-extraction item in the literature reference system.</p>
+<p>These files are meant to be filled in by a human when the paper does not expose
+clean machine-readable values for a target we still want.</p>
+<p>They are <strong>not</strong> the final canonical validation CSVs.</p>
+<p>The canonical files are generated later by the dataset pipeline.</p>
+<h2 id="fastest-way-to-use-these">Fastest Way To Use These</h2>
+<ol>
+<li>open the template file for the paper/task you care about</li>
+<li>fill in only the values you can support</li>
+<li>leave unknown fields blank</li>
+<li>do not guess</li>
+<li>keep <code>source_location</code> specific</li>
+<li>preserve the exact wording in <code>reported_text</code></li>
+</ol>
+<p>If you only have a figure-derived value, say so clearly in <code>notes</code>.</p>
+<h2 id="why-these-templates-exist">Why These Templates Exist</h2>
+<p>They solve three problems:</p>
+<ul>
+<li>they keep manual work separate from the canonical outputs</li>
+<li>they preserve provenance for hard-to-extract rows</li>
+<li>they let the pipeline stay reproducible instead of silently absorbing guesses</li>
+</ul>
+<h2 id="required-general-standards">Required General Standards</h2>
+<p>For any manual intake file:</p>
+<ul>
+<li>one row per metric for summary tables</li>
+<li>one row per current step for f-I point tables</li>
+<li>one row per protocol variant for protocol templates</li>
+<li>keep subtype and condition separated</li>
+<li>do not pool different cell classes or protocols in one row</li>
+</ul>
+<h2 id="files-in-this-directory">Files In This Directory</h2>
+<h3 id="epl-fsi">EPL-FSI</h3>
+<ul>
+<li><a href="../../../../research_context/manual_reference_templates/epl_fsi/huang2013_crh_epl_intrinsic_summary.template.csv" data-served-href="/repo/research_context/manual_reference_templates/epl_fsi/huang2013_crh_epl_intrinsic_summary.template.csv">epl_fsi/huang2013_crh_epl_intrinsic_summary.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/epl_fsi/huang2013_crh_epl_fi_points.template.csv" data-served-href="/repo/research_context/manual_reference_templates/epl_fsi/huang2013_crh_epl_fi_points.template.csv">epl_fsi/huang2013_crh_epl_fi_points.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/epl_fsi/kato2013_pv_epl_fi_points.template.csv" data-served-href="/repo/research_context/manual_reference_templates/epl_fsi/kato2013_pv_epl_fi_points.template.csv">epl_fsi/kato2013_pv_epl_fi_points.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/epl_fsi/liu2019_epl_network_constraints.template.csv" data-served-href="/repo/research_context/manual_reference_templates/epl_fsi/liu2019_epl_network_constraints.template.csv">epl_fsi/liu2019_epl_network_constraints.template.csv</a></li>
+</ul>
+<h3 id="granule-cells">Granule cells</h3>
+<ul>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/burton_urban_2015_gc_protocol_details.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/burton_urban_2015_gc_protocol_details.template.csv">granule_cells/burton_urban_2015_gc_protocol_details.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/burton_urban_2015_gc_fi_points.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/burton_urban_2015_gc_fi_points.template.csv">granule_cells/burton_urban_2015_gc_fi_points.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/geramita2016_sgc_dgc_fi_points.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/geramita2016_sgc_dgc_fi_points.template.csv">granule_cells/geramita2016_sgc_dgc_fi_points.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/geramita2016_subtype_spontaneous_synaptic_summary.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/geramita2016_subtype_spontaneous_synaptic_summary.template.csv">granule_cells/geramita2016_subtype_spontaneous_synaptic_summary.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/stroh2012_gc_trpc_nmda_summary.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/stroh2012_gc_trpc_nmda_summary.template.csv">granule_cells/stroh2012_gc_trpc_nmda_summary.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/balu2007_gc_excitation_mode_summary.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/balu2007_gc_excitation_mode_summary.template.csv">granule_cells/balu2007_gc_excitation_mode_summary.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/pressler2007_gc_muscarinic_summary.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/pressler2007_gc_muscarinic_summary.template.csv">granule_cells/pressler2007_gc_muscarinic_summary.template.csv</a></li>
+<li><a href="../../../../research_context/manual_reference_templates/granule_cells/dong_heinbockel_2007_gc_mglur_summary.template.csv" data-served-href="/repo/research_context/manual_reference_templates/granule_cells/dong_heinbockel_2007_gc_mglur_summary.template.csv">granule_cells/dong_heinbockel_2007_gc_mglur_summary.template.csv</a></li>
+</ul>
+<h2 id="template-specific-instructions">Template-Specific Instructions</h2>
+<h3 id="epl_fsihuang2013_crh_epl_intrinsic_summarytemplatecsv"><code>epl_fsi/huang2013_crh_epl_intrinsic_summary.template.csv</code></h3>
+<p>Purpose:
+- fill the missing CRH+ EPL-IN intrinsic summary values from Huang 2013 Figure 4A-D</p>
+<p>Target deliverable:
+- one row per metric
+- metrics of interest:
+  - Input Resistance
+  - Capacitance
+  - Membrane Resting Voltage
+  - AP Threshold</p>
+<h3 id="epl_fsihuang2013_crh_epl_fi_pointstemplatecsv"><code>epl_fsi/huang2013_crh_epl_fi_points.template.csv</code></h3>
+<p>Purpose:
+- fill real current-vs-rate points for Huang 2013 Figure 4F</p>
+<p>Target deliverable:
+- one row per current point
+- do not fill this from max-rate summary only</p>
+<h3 id="epl_fsikato2013_pv_epl_fi_pointstemplatecsv"><code>epl_fsi/kato2013_pv_epl_fi_points.template.csv</code></h3>
+<p>Purpose:
+- fill PV+ EPL-IN current-rate points and protocol details from Kato 2013 Figure 1D if recoverable</p>
+<p>Target deliverable:
+- one row per current point
+- if only step increment or max rate is recoverable, leave this unresolved</p>
+<h3 id="epl_fsiliu2019_epl_network_constraintstemplatecsv"><code>epl_fsi/liu2019_epl_network_constraints.template.csv</code></h3>
+<p>Purpose:
+- capture only numeric identity/network constraints from Liu 2019 if they are truly extractable</p>
+<p>Target deliverable:
+- one row per constraint
+- low priority unless the paper exposes useful quantitative rows</p>
+<h3 id="granule_cellsburton_urban_2015_gc_protocol_detailstemplatecsv"><code>granule_cells/burton_urban_2015_gc_protocol_details.template.csv</code></h3>
+<p>Purpose:
+- recover the exact generic GC current-clamp protocol details</p>
+<p>Target deliverable:
+- usually one row
+- highest-value fields:
+  - step duration
+  - current range
+  - increment
+  - rate definition</p>
+<h3 id="granule_cellsburton_urban_2015_gc_fi_pointstemplatecsv"><code>granule_cells/burton_urban_2015_gc_fi_points.template.csv</code></h3>
+<p>Purpose:
+- capture generic GC current-vs-rate points</p>
+<p>Target deliverable:
+- one row per current point
+- high priority</p>
+<h3 id="granule_cellsgeramita2016_sgc_dgc_fi_pointstemplatecsv"><code>granule_cells/geramita2016_sgc_dgc_fi_points.template.csv</code></h3>
+<p>Purpose:
+- capture sGC and dGC current-vs-rate points separately</p>
+<p>Target deliverable:
+- one row per current point
+- keep <code>sGC</code> and <code>dGC</code> separate
+- this is one of the highest-value missing deliverables</p>
+<h3 id="granule_cellsgeramita2016_subtype_spontaneous_synaptic_summarytemplatecsv"><code>granule_cells/geramita2016_subtype_spontaneous_synaptic_summary.template.csv</code></h3>
+<p>Purpose:
+- capture subtype-specific spontaneous EPSP/EPSC/IPSC summary rows</p>
+<p>Target deliverable:
+- one row per metric
+- keep subtype separated</p>
+<h3 id="granule_cellsstroh2012_gc_trpc_nmda_summarytemplatecsv"><code>granule_cells/stroh2012_gc_trpc_nmda_summary.template.csv</code></h3>
+<p>Purpose:
+- capture numeric slow depolarization / NMDA-TRPC effect sizes</p>
+<p>Target deliverable:
+- one row per quantitative effect</p>
+<h3 id="granule_cellsbalu2007_gc_excitation_mode_summarytemplatecsv"><code>granule_cells/balu2007_gc_excitation_mode_summary.template.csv</code></h3>
+<p>Purpose:
+- capture quantitative excitation-mode distributions if needed</p>
+<p>Target deliverable:
+- one row per mode/condition summary</p>
+<h3 id="granule_cellspressler2007_gc_muscarinic_summarytemplatecsv"><code>granule_cells/pressler2007_gc_muscarinic_summary.template.csv</code></h3>
+<p>Purpose:
+- capture muscarinic modulation effect sizes</p>
+<p>Target deliverable:
+- one row per metric and condition
+- keep control and modulated conditions separate</p>
+<h3 id="granule_cellsdong_heinbockel_2007_gc_mglur_summarytemplatecsv"><code>granule_cells/dong_heinbockel_2007_gc_mglur_summary.template.csv</code></h3>
+<p>Purpose:
+- capture group-I-mGluR modulation effect sizes</p>
+<p>Target deliverable:
+- one row per metric and condition
+- keep control and modulated conditions separate</p>
+<h2 id="notes-on-provenance">Notes On Provenance</h2>
+<p>Every row should make it easy to answer:</p>
+<ul>
+<li>which paper?</li>
+<li>which local file?</li>
+<li>which figure/table/sheet?</li>
+<li>what exact wording or numbers did the paper show?</li>
+</ul>
+<p>That is why every template has:</p>
+<ul>
+<li><code>source</code></li>
+<li><code>source_file</code></li>
+<li><code>source_url</code></li>
+<li><code>source_location</code></li>
+<li><code>reported_text</code></li>
+</ul>
+<h2 id="minimum-acceptable-fill-quality">Minimum Acceptable Fill Quality</h2>
+<p>If time is limited, a row is still useful when it includes:</p>
+<ul>
+<li>the value itself</li>
+<li>the metric name</li>
+<li>the figure/table location</li>
+<li>the unit</li>
+<li>the exact paper wording in <code>reported_text</code></li>
+</ul>
+<p>Anything beyond that is helpful, but those fields are the minimum needed for a
+clean second-pass normalization.</p>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#manual-reference-extraction-templates">Manual Reference Extraction Templates</a><ul>
+<li><a href="#fastest-way-to-use-these">Fastest Way To Use These</a></li>
+<li><a href="#why-these-templates-exist">Why These Templates Exist</a></li>
+<li><a href="#required-general-standards">Required General Standards</a></li>
+<li><a href="#files-in-this-directory">Files In This Directory</a><ul>
+<li><a href="#epl-fsi">EPL-FSI</a></li>
+<li><a href="#granule-cells">Granule cells</a></li>
+</ul>
+</li>
+<li><a href="#template-specific-instructions">Template-Specific Instructions</a><ul>
+<li><a href="#epl_fsihuang2013_crh_epl_intrinsic_summarytemplatecsv">epl_fsi/huang2013_crh_epl_intrinsic_summary.template.csv</a></li>
+<li><a href="#epl_fsihuang2013_crh_epl_fi_pointstemplatecsv">epl_fsi/huang2013_crh_epl_fi_points.template.csv</a></li>
+<li><a href="#epl_fsikato2013_pv_epl_fi_pointstemplatecsv">epl_fsi/kato2013_pv_epl_fi_points.template.csv</a></li>
+<li><a href="#epl_fsiliu2019_epl_network_constraintstemplatecsv">epl_fsi/liu2019_epl_network_constraints.template.csv</a></li>
+<li><a href="#granule_cellsburton_urban_2015_gc_protocol_detailstemplatecsv">granule_cells/burton_urban_2015_gc_protocol_details.template.csv</a></li>
+<li><a href="#granule_cellsburton_urban_2015_gc_fi_pointstemplatecsv">granule_cells/burton_urban_2015_gc_fi_points.template.csv</a></li>
+<li><a href="#granule_cellsgeramita2016_sgc_dgc_fi_pointstemplatecsv">granule_cells/geramita2016_sgc_dgc_fi_points.template.csv</a></li>
+<li><a href="#granule_cellsgeramita2016_subtype_spontaneous_synaptic_summarytemplatecsv">granule_cells/geramita2016_subtype_spontaneous_synaptic_summary.template.csv</a></li>
+<li><a href="#granule_cellsstroh2012_gc_trpc_nmda_summarytemplatecsv">granule_cells/stroh2012_gc_trpc_nmda_summary.template.csv</a></li>
+<li><a href="#granule_cellsbalu2007_gc_excitation_mode_summarytemplatecsv">granule_cells/balu2007_gc_excitation_mode_summary.template.csv</a></li>
+<li><a href="#granule_cellspressler2007_gc_muscarinic_summarytemplatecsv">granule_cells/pressler2007_gc_muscarinic_summary.template.csv</a></li>
+<li><a href="#granule_cellsdong_heinbockel_2007_gc_mglur_summarytemplatecsv">granule_cells/dong_heinbockel_2007_gc_mglur_summary.template.csv</a></li>
+</ul>
+</li>
+<li><a href="#notes-on-provenance">Notes On Provenance</a></li>
+<li><a href="#minimum-acceptable-fill-quality">Minimum Acceptable Fill Quality</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

@@ -159,8 +159,12 @@ with TemporaryDirectory() as tmp:
         base_url = f"http://127.0.0.1:{server.server_port}"
         root_html = urlopen(f"{base_url}/", timeout=2).read().decode("utf-8")
         audits_html = urlopen(f"{base_url}/audits/index.html", timeout=2).read().decode("utf-8")
+        docs_html = urlopen(f"{base_url}/docs/index.html", timeout=2).read().decode("utf-8")
+        rendered_doc_html = urlopen(f"{base_url}/docs/maintained/readme.html", timeout=2).read().decode("utf-8")
         assert "OlfactoryBulb Control Center" in root_html
         assert "Audit starting" in audits_html
+        assert "maintained/readme.html" in docs_html
+        assert "View source markdown" in rendered_doc_html
         server.shutdown()
         thread.join(timeout=5.0)
         assert not thread.is_alive()

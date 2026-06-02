@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Documentation Ownership Map</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../notes/DOCS_OWNERSHIP_MAP.md" data-served-href="/repo/notes/DOCS_OWNERSHIP_MAP.md">View source markdown</a>
+        ·
+        <code>notes/DOCS_OWNERSHIP_MAP.md</code>
+      </p>
+      <h1 id="documentation-ownership-map">Documentation Ownership Map</h1>
+<p>This file says which document is the source of truth for each major topic in
+the maintained OBGPU workflow. Use it to avoid duplicating the same guidance in
+multiple places and to decide where a doc change should land first.</p>
+<h2 id="rule-of-thumb">Rule of thumb</h2>
+<ul>
+<li>Update the narrowest source-of-truth document first.</li>
+<li>Let broader docs point to that document rather than restating all of it.</li>
+<li>If two docs disagree, fix the lower-level owner and then prune or redirect
+  the higher-level one.</li>
+</ul>
+<h2 id="ownership-table">Ownership table</h2>
+<h3 id="top-level-user-entrypoints">Top-level user entrypoints</h3>
+<ul>
+<li><code>readme.md</code></li>
+<li>Purpose: shortest maintained repo overview and quick-start path.</li>
+<li>Owns:<ul>
+<li>what this repo is</li>
+<li>the maintained install/run path at a high level</li>
+<li>where the active notebook/workflow starts</li>
+</ul>
+</li>
+<li>
+<p>Should not own:</p>
+<ul>
+<li>detailed remote workflow mechanics</li>
+<li>full install troubleshooting</li>
+<li>reference-data or validation framework internals</li>
+</ul>
+</li>
+<li>
+<p><code>INSTALL.md</code></p>
+</li>
+<li>Purpose: maintained host/install/bootstrap instructions.</li>
+<li>Owns:<ul>
+<li>prerequisites</li>
+<li>install commands</li>
+<li>activation</li>
+<li>first smoke tests</li>
+<li>install-specific cautions</li>
+</ul>
+</li>
+<li>Should not own:<ul>
+<li>notebook orchestration policy</li>
+<li>full remote architecture rationale</li>
+</ul>
+</li>
+</ul>
+<h3 id="tooling-and-environment-ownership">Tooling and environment ownership</h3>
+<ul>
+<li><code>tools/README.md</code></li>
+<li>Purpose: map of tool families and the important maintained entrypoints.</li>
+<li>Owns:<ul>
+<li>what lives under <code>tools/</code></li>
+<li>which tool families are maintained</li>
+<li>where to look for setup/remote helpers</li>
+<li>where the canonical repo-health command lives</li>
+</ul>
+</li>
+<li>
+<p>Should not own:</p>
+<ul>
+<li>deep procedural setup steps already covered by <code>INSTALL.md</code></li>
+</ul>
+</li>
+<li>
+<p><code>environments/README.md</code></p>
+</li>
+<li>Purpose: environment-spec ownership.</li>
+<li>Owns:<ul>
+<li>which environment files are maintained vs legacy</li>
+<li>which spec backs OBGPU</li>
+</ul>
+</li>
+<li>Should not own:<ul>
+<li>general install workflow beyond environment-file selection</li>
+</ul>
+</li>
+</ul>
+<h3 id="remote-and-build-workflow-ownership">Remote and build workflow ownership</h3>
+<ul>
+<li><code>notes/porting/SOL_REMOTE_WORKFLOW.md</code></li>
+<li>Purpose: maintained remote notebook/Slurm workflow.</li>
+<li>Owns:<ul>
+<li>supported remote architecture</li>
+<li>Sol/Phoenix remote execution expectations</li>
+<li>remote bootstrap / submit / poll / sync behavior</li>
+</ul>
+</li>
+<li>
+<p>Should not own:</p>
+<ul>
+<li>generic install instructions already covered elsewhere</li>
+</ul>
+</li>
+<li>
+<p><code>notes/porting/NEURON_UPGRADE_WORKFLOW.md</code></p>
+</li>
+<li>Purpose: upstream <code>nrn</code> bump / patch-stack workflow.</li>
+<li>
+<p>Owns:</p>
+<ul>
+<li>patch-stack replay expectations</li>
+<li>upgrade-gate checks</li>
+<li>how to change the pinned NEURON ref safely</li>
+</ul>
+</li>
+<li>
+<p><code>notes/porting/MODERN_NEURON_PORT_NOTES.md</code></p>
+</li>
+<li>Purpose: historical but still relevant port/build notes for the maintained
+    modern path.</li>
+<li>Owns:<ul>
+<li>important porting caveats that do not fit cleanly in <code>INSTALL.md</code></li>
+</ul>
+</li>
+</ul>
+<h3 id="maintained-vs-archival-boundaries">Maintained vs archival boundaries</h3>
+<ul>
+<li><code>notes/CODEBASE_CLEANUP_AUDIT.md</code></li>
+<li>Purpose: active-vs-archival boundary document.</li>
+<li>Owns:<ul>
+<li>what is currently maintained</li>
+<li>what is compatibility-only</li>
+<li>what is archival/reference-only</li>
+</ul>
+</li>
+<li>
+<p>Should not own:</p>
+<ul>
+<li>detailed install or remote execution procedures</li>
+</ul>
+</li>
+<li>
+<p><code>docs-source/</code> and tracked generated <code>docs/</code></p>
+</li>
+<li>Purpose: maintained landing portal plus historical documentation from older
+    repo eras.</li>
+<li>Owns:<ul>
+<li>the thin maintained docs landing portal at <code>docs/index.html</code></li>
+<li>rendered maintained-doc pages under <code>docs/maintained/</code></li>
+<li>historical examples and archived user docs</li>
+</ul>
+</li>
+<li>Should not own:<ul>
+<li>the current maintained OBGPU install/run path</li>
+<li>current audit or reference-data workflows</li>
+</ul>
+</li>
+<li>If these conflict with <code>readme.md</code>, <code>INSTALL.md</code>, or the maintained notes
+    under <code>notes/</code>, treat the maintained docs as authoritative.</li>
+<li>
+<p>Regeneration path:</p>
+<ul>
+<li><code>python tools/build_maintained_docs_portal.py</code></li>
+</ul>
+</li>
+<li>
+<p><code>AGENTS.md</code></p>
+</li>
+<li>Purpose: coding-agent operating contract.</li>
+<li>Owns:<ul>
+<li>durable workflow rules for future agent sessions</li>
+<li>anti-rot expectations</li>
+<li>verification standards</li>
+<li>source-of-truth pointers</li>
+</ul>
+</li>
+<li>Should not own:<ul>
+<li>long user HOWTO content already documented elsewhere</li>
+<li>dynamic inventories better discovered via CLI/config</li>
+</ul>
+</li>
+</ul>
+<h3 id="reference-data-and-validation-ownership">Reference-data and validation ownership</h3>
+<ul>
+<li><code>notes/REFERENCE_DATASET_HOWTO.md</code></li>
+<li>Purpose: how to add/maintain declarative reference datasets.</li>
+<li>
+<p>Owns:</p>
+<ul>
+<li>dataset config workflow</li>
+<li>downloader/extractor usage</li>
+<li>manual extraction boundaries</li>
+</ul>
+</li>
+<li>
+<p><code>notes/REFERENCE_VALIDATION_HOWTO.md</code></p>
+</li>
+<li>Purpose: how to add/maintain declarative simulation-backed literature
+    validations.</li>
+<li>
+<p>Owns:</p>
+<ul>
+<li>validation config workflow</li>
+<li>protocol-runner/rule extension workflow</li>
+<li>human-review and band-selection expectations</li>
+</ul>
+</li>
+<li>
+<p><code>notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</code></p>
+</li>
+<li>Purpose: short system map.</li>
+<li>
+<p>Owns:</p>
+<ul>
+<li>the concise conceptual overview only</li>
+</ul>
+</li>
+<li>
+<p><code>notes/DASHBOARD_SHELL_HOWTO.md</code></p>
+</li>
+<li>Purpose: maintained dashboard-shell architecture and entrypoints.</li>
+<li>
+<p>Owns:</p>
+<ul>
+<li>the unified docs/audits/optimization shell</li>
+<li>the boundary between generic <code>neuroinfra.dashboard</code> shell code and
+  repo-specific dashboard modules</li>
+<li>canonical control-center commands</li>
+</ul>
+</li>
+<li>
+<p><code>research_context/README.md</code></p>
+</li>
+<li>Purpose: boundaries inside <code>research_context/</code>.</li>
+<li>
+<p>Owns:</p>
+<ul>
+<li>what is raw source data</li>
+<li>what is manual intake</li>
+<li>what is generated canonical output</li>
+<li>what should and should not be hand-edited</li>
+</ul>
+</li>
+<li>
+<p><code>research_context/manual_reference_templates/README.md</code></p>
+</li>
+<li>Purpose: manual intake workflow for unresolved literature data.</li>
+<li>Owns:<ul>
+<li>raw human-curated intake expectations</li>
+<li>row-shape and provenance expectations for manual capture</li>
+</ul>
+</li>
+</ul>
+<h3 id="tests-and-grouped-developer-verification">Tests and grouped developer verification</h3>
+<ul>
+<li><code>tests/README.md</code></li>
+<li>Purpose: maintained test-tree ownership and execution rules.</li>
+<li>Owns:<ul>
+<li><code>tests/</code> layout expectations</li>
+<li>canonical direct test execution style</li>
+<li>the boundary between low-level tests and grouped suite audits</li>
+</ul>
+</li>
+<li>Should not own:<ul>
+<li>full audit-framework procedure already covered by audit docs</li>
+</ul>
+</li>
+</ul>
+<h2 id="common-cleanup-targets">Common cleanup targets</h2>
+<ul>
+<li>
+<p>If <code>readme.md</code>, <code>INSTALL.md</code>, and <code>tools/README.md</code> all say the same thing,
+  the detailed version should usually live in <code>INSTALL.md</code> or the specialized
+  tool doc, with <code>readme.md</code> shortened to a pointer.</p>
+</li>
+<li>
+<p>If <code>AGENTS.md</code> and a HOWTO both describe procedure, keep the procedure in the
+  HOWTO and leave only the contract-level reminder in <code>AGENTS.md</code>.</p>
+</li>
+<li>
+<p>If a generated reference CSV appears to need manual correction, update the
+  dataset config, raw source, or extraction engine first, then regenerate.</p>
+</li>
+</ul>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#documentation-ownership-map">Documentation Ownership Map</a><ul>
+<li><a href="#rule-of-thumb">Rule of thumb</a></li>
+<li><a href="#ownership-table">Ownership table</a><ul>
+<li><a href="#top-level-user-entrypoints">Top-level user entrypoints</a></li>
+<li><a href="#tooling-and-environment-ownership">Tooling and environment ownership</a></li>
+<li><a href="#remote-and-build-workflow-ownership">Remote and build workflow ownership</a></li>
+<li><a href="#maintained-vs-archival-boundaries">Maintained vs archival boundaries</a></li>
+<li><a href="#reference-data-and-validation-ownership">Reference-data and validation ownership</a></li>
+<li><a href="#tests-and-grouped-developer-verification">Tests and grouped developer verification</a></li>
+</ul>
+</li>
+<li><a href="#common-cleanup-targets">Common cleanup targets</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

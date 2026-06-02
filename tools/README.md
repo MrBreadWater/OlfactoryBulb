@@ -60,7 +60,7 @@ the default maintained audit into the page in the background. It does not
 regenerate missing optimization packets during default startup. Use
 `--open-browser` if you want it to launch a local browser automatically.
 
-For a local docs portal that points at the maintained markdown docs first and
+For a local docs portal that points at the rendered maintained docs first and
 historical generated pages second, open:
 
 - `docs/index.html`

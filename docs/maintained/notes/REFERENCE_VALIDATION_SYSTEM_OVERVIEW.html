@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference Validation System Overview</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md" data-served-href="/repo/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md">View source markdown</a>
+        ·
+        <code>notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</code>
+      </p>
+      <h1 id="reference-validation-system-overview">Reference Validation System Overview</h1>
+<p>Start here if you want the simplest explanation of what this system is and why
+it exists.</p>
+<p>If you later need the implementation details:</p>
+<ul>
+<li>dataset ingestion: <a href="REFERENCE_DATASET_HOWTO.html">REFERENCE_DATASET_HOWTO.md</a></li>
+<li>simulation-backed validation: <a href="REFERENCE_VALIDATION_HOWTO.html">REFERENCE_VALIDATION_HOWTO.md</a></li>
+<li>manual intake templates: <a href="../research_context/manual_reference_templates/README.html">manual_reference_templates/README.md</a></li>
+</ul>
+<h2 id="what-this-system-is">What This System Is</h2>
+<p>This repository has a structured reference-validation system for literature-backed
+model checks.</p>
+<p>It does three separate jobs:</p>
+<ol>
+<li>acquire and normalize reference data from papers and supplements</li>
+<li>preserve protocol caveats and source traceability</li>
+<li>run model-side validation against those normalized references</li>
+</ol>
+<p>The key idea is that the literature data are not just pasted into ad hoc CSVs
+or notebooks. They are converted into explicit, reusable validation targets.</p>
+<h2 id="why-we-needed-it">Why We Needed It</h2>
+<p>Without this system, the same recurring problems kept showing up:</p>
+<ul>
+<li>values from different papers were easy to mix without noticing</li>
+<li>cell types and subtypes could get silently pooled</li>
+<li>protocol differences were easy to forget</li>
+<li>it was hard to tell where a given number came from</li>
+<li>updating or extending a validation target required bespoke code</li>
+</ul>
+<p>That makes the validation layer fragile and difficult to trust.</p>
+<h2 id="why-it-is-worth-using">Why It Is Worth Using</h2>
+<p>The system is worth using because it makes the literature layer:</p>
+<ul>
+<li>explicit</li>
+<li>reproducible</li>
+<li>reviewable</li>
+<li>protocol-aware</li>
+<li>extensible</li>
+</ul>
+<p>In practice that means:</p>
+<ul>
+<li>every row can carry source identity and source location</li>
+<li>protocol caveats travel with the data</li>
+<li>different cell classes can stay separate by default</li>
+<li>validation rules can be upgraded without rewriting the whole pipeline</li>
+</ul>
+<h2 id="simplest-explanation-of-how-to-use-it">Simplest Explanation Of How To Use It</h2>
+<h3 id="fast-path">Fast path</h3>
+<p>If you already have a paper with usable tables or source data:</p>
+<ol>
+<li>make sure the source files are available locally or downloadable</li>
+<li>define or update the dataset config under <code>research_context/reference_datasets/</code></li>
+<li>run the dataset extractor</li>
+<li>run the validation config that consumes those normalized rows</li>
+</ol>
+<p>That is the whole idea.</p>
+<h3 id="optional-details">Optional details</h3>
+<p>If the paper is messy:</p>
+<ul>
+<li>use a manual intake table instead of guessing</li>
+<li>keep the raw extracted values and provenance separate from the canonical files</li>
+<li>add protocol notes if the paper is not directly comparable to an existing protocol</li>
+</ul>
+<h2 id="how-it-is-structured-internally">How It Is Structured Internally</h2>
+<p>At a high level there are five layers.</p>
+<h3 id="1-source-files">1. Source files</h3>
+<p>These are the raw inputs:</p>
+<ul>
+<li>PDFs</li>
+<li>supplemental XLS/XLSX/CSV</li>
+<li>local manually curated tables</li>
+</ul>
+<h3 id="2-dataset-configs">2. Dataset configs</h3>
+<p>These live under:</p>
+<ul>
+<li><code>research_context/reference_datasets/</code></li>
+</ul>
+<p>They declare:</p>
+<ul>
+<li>which sources belong to a dataset</li>
+<li>which outputs should be produced</li>
+<li>how summary tables and point tables are mapped</li>
+<li>which notes and manual-extraction gaps should exist</li>
+</ul>
+<h3 id="3-normalized-reference-outputs">3. Normalized reference outputs</h3>
+<p>These are the canonical CSVs used downstream, for example:</p>
+<ul>
+<li><code>*_ephys.csv</code></li>
+<li><code>*_fI_curve.csv</code></li>
+<li><code>*_protocols.csv</code></li>
+<li><code>*_identity.csv</code></li>
+<li><code>validation_notes.csv</code></li>
+<li><code>needs_manual_extraction.csv</code></li>
+</ul>
+<h3 id="4-validation-configs">4. Validation configs</h3>
+<p>These live under:</p>
+<ul>
+<li><code>research_context/reference_validations/</code></li>
+</ul>
+<p>They declare:</p>
+<ul>
+<li>which protocol runner to execute on the model side</li>
+<li>which normalized reference rows to compare against</li>
+<li>which rule checks should judge the result</li>
+</ul>
+<h3 id="5-validation-engine">5. Validation engine</h3>
+<p>This is the runtime layer that:</p>
+<ul>
+<li>runs the model-side protocol</li>
+<li>extracts measurements</li>
+<li>applies rule logic</li>
+<li>renders the final audit items</li>
+</ul>
+<h2 id="what-provenance-means-here">What “Provenance” Means Here</h2>
+<p>In this project, provenance means the traceable origin of a value.</p>
+<p>A good row answers:</p>
+<ul>
+<li>which paper?</li>
+<li>which file?</li>
+<li>which figure, table, sheet, or paragraph?</li>
+<li>how was the value obtained?</li>
+<li>what transformation, if any, was applied?</li>
+</ul>
+<p>That matters because otherwise the validation layer becomes a pile of numbers
+that cannot be audited later.</p>
+<h2 id="what-the-manual-templates-are-for">What The Manual Templates Are For</h2>
+<p>Some papers do not expose clean machine-readable tables for everything.</p>
+<p>When that happens, the system should not guess.</p>
+<p>Instead, we keep unresolved items in:</p>
+<ul>
+<li><code>needs_manual_extraction.csv</code></li>
+</ul>
+<p>and use the manual intake templates under:</p>
+<ul>
+<li><code>research_context/manual_reference_templates/</code></li>
+</ul>
+<p>Those templates are for raw human-curated intake. They are not the final
+canonical validation outputs.</p>
+<h2 id="when-to-use-the-optional-layers">When To Use The Optional Layers</h2>
+<p>Use the full detailed HOWTOs only if you need to:</p>
+<ul>
+<li>add a new dataset config</li>
+<li>add a new validation config</li>
+<li>register a new protocol runner</li>
+<li>register a new validation rule</li>
+</ul>
+<p>If you only want to contribute missing literature values, the manual templates
+are the shortest path.</p>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#reference-validation-system-overview">Reference Validation System Overview</a><ul>
+<li><a href="#what-this-system-is">What This System Is</a></li>
+<li><a href="#why-we-needed-it">Why We Needed It</a></li>
+<li><a href="#why-it-is-worth-using">Why It Is Worth Using</a></li>
+<li><a href="#simplest-explanation-of-how-to-use-it">Simplest Explanation Of How To Use It</a><ul>
+<li><a href="#fast-path">Fast path</a></li>
+<li><a href="#optional-details">Optional details</a></li>
+</ul>
+</li>
+<li><a href="#how-it-is-structured-internally">How It Is Structured Internally</a><ul>
+<li><a href="#1-source-files">1. Source files</a></li>
+<li><a href="#2-dataset-configs">2. Dataset configs</a></li>
+<li><a href="#3-normalized-reference-outputs">3. Normalized reference outputs</a></li>
+<li><a href="#4-validation-configs">4. Validation configs</a></li>
+<li><a href="#5-validation-engine">5. Validation engine</a></li>
+</ul>
+</li>
+<li><a href="#what-provenance-means-here">What “Provenance” Means Here</a></li>
+<li><a href="#what-the-manual-templates-are-for">What The Manual Templates Are For</a></li>
+<li><a href="#when-to-use-the-optional-layers">When To Use The Optional Layers</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

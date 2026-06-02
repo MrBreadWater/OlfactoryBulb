@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard Shell HOWTO</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../notes/DASHBOARD_SHELL_HOWTO.md" data-served-href="/repo/notes/DASHBOARD_SHELL_HOWTO.md">View source markdown</a>
+        ·
+        <code>notes/DASHBOARD_SHELL_HOWTO.md</code>
+      </p>
+      <h1 id="dashboard-shell-howto">Dashboard Shell HOWTO</h1>
+<p>This repo now has one maintained web shell for the user-facing dashboards:</p>
+<ul>
+<li>audits</li>
+<li>optimization</li>
+<li>docs</li>
+</ul>
+<p>The shell is implemented in two layers:</p>
+<ul>
+<li>shared neuroinfra shell renderer:</li>
+<li><code>neuroinfra/dashboard/shell.py</code></li>
+<li>repo-specific control center:</li>
+<li><code>olfactorybulb/dashboard/control_center.py</code></li>
+</ul>
+<h2 id="what-belongs-where">What belongs where</h2>
+<p><code>neuroinfra/dashboard/shell.py</code>
+- generic tabbed iframe shell
+- shared visual style for maintained dashboard surfaces
+- no OlfactoryBulb-specific assumptions</p>
+<p><code>olfactorybulb/dashboard/control_center.py</code>
+- mounts the current repo modules into one shell
+- exports:
+  - <code>/audits/</code>
+  - <code>/optimization/</code>
+  - <code>/docs/</code>
+- owns the repo-specific packet-generation and audit-refresh endpoints</p>
+<p><code>olfactorybulb/audit/dashboard.py</code>
+- renders maintained audit reports to:
+  - <code>index.html</code>
+  - <code>report.json</code>
+  - <code>manifest.json</code></p>
+<h2 id="canonical-commands">Canonical commands</h2>
+<p>Use the OBGPU environment.</p>
+<p>Fastest maintained launch:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center
+</code></pre>
+<p>That command:</p>
+<ul>
+<li>defaults to <code>serve</code></li>
+<li>auto-detects the active optimization campaign from the maintained status file
+  or optimization results tree</li>
+<li>runs the default maintained audit (<code>repo_health --profile maintained</code>)</li>
+<li>opens on the audit tab first</li>
+<li>serves immediately at <code>http://127.0.0.1:6006/</code> by default</li>
+<li>prints startup progress to the terminal while the audit and optimization
+  views are rendering in the background</li>
+<li>shows loading placeholders in the audit/optimization tabs until those views
+  are ready</li>
+<li>does not regenerate missing optimization packets during default startup; use
+  explicit controls/flags when you want packet generation work</li>
+<li>if <code>6006</code> is already in use, it automatically picks the next available local
+  port and prints the actual URL</li>
+</ul>
+<p>Open the page directly:</p>
+<pre><code class="language-text">http://127.0.0.1:6006/
+</code></pre>
+<p>Open it automatically in a local browser:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center --open-browser
+</code></pre>
+<p>Export the unified shell:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center export
+</code></pre>
+<p>Serve the unified shell locally:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve
+</code></pre>
+<p>Serve with a lighter audit target:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve \
+  --audit-id repo_health
+</code></pre>
+<p>Serve a specific campaign explicitly:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve \
+  results/notebook_runs/optimization/codex_big_hfo_logs
+</code></pre>
+<p>Render only the audit dashboard:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.audit.dashboard burton_urban_fi --output-dir /tmp/burton_audit
+python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron
+</code></pre>
+<h2 id="design-rules">Design rules</h2>
+<ul>
+<li>The audit framework is the maintained presentation layer for audit results.</li>
+<li>Low-level tests stay under <code>tests/</code>; they may be surfaced through grouped audits.</li>
+<li>The control center should mount maintained modules, not duplicate their logic.</li>
+<li>New dashboard modules should reuse the shared shell instead of creating another standalone visual style.</li>
+<li>If a module needs custom server behavior, keep the generic shell clean and put repo-specific routing in the repo-level control center.</li>
+</ul>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>The optimization tab reuses the existing HFO visual dashboard export path.</li>
+<li>The audit tab uses grouped audit JSON from <code>AuditReport.to_dict()</code>.</li>
+<li>The docs tab serves the maintained docs portal under <code>docs/</code>.</li>
+</ul>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#dashboard-shell-howto">Dashboard Shell HOWTO</a><ul>
+<li><a href="#what-belongs-where">What belongs where</a></li>
+<li><a href="#canonical-commands">Canonical commands</a></li>
+<li><a href="#design-rules">Design rules</a></li>
+<li><a href="#notes">Notes</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

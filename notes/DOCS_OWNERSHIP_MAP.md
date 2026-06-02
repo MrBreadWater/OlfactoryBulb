@@ -98,12 +98,15 @@ multiple places and to decide where a doc change should land first.
     repo eras.
   - Owns:
     - the thin maintained docs landing portal at `docs/index.html`
+    - rendered maintained-doc pages under `docs/maintained/`
     - historical examples and archived user docs
   - Should not own:
     - the current maintained OBGPU install/run path
     - current audit or reference-data workflows
   - If these conflict with `readme.md`, `INSTALL.md`, or the maintained notes
     under `notes/`, treat the maintained docs as authoritative.
+  - Regeneration path:
+    - `python tools/build_maintained_docs_portal.py`
 
 - `AGENTS.md`
   - Purpose: coding-agent operating contract.

@@ -142,7 +142,7 @@ def _module_tabs(*, audit_badge: str, optimization_badge: str) -> tuple[ShellTab
             key="docs",
             label="Docs",
             src="/docs/index.html",
-            description="Maintained markdown docs and current operational guidance.",
+            description="Rendered maintained docs and current operational guidance.",
         ),
     )
 
@@ -475,6 +475,9 @@ def serve_control_center(
             if parsed_path.startswith("/docs/"):
                 relative = parsed_path[len("/docs/") :]
                 return str(_safe_static_path(DOCS_ROOT, relative))
+            if parsed_path.startswith("/repo/"):
+                relative = parsed_path[len("/repo/") :]
+                return str(_safe_static_path(REPO_ROOT, relative))
             return str(_safe_static_path(REPO_ROOT, parsed_path.lstrip("/")))
 
         def do_POST(self) -> None:  # noqa: N802 - HTTP handler API

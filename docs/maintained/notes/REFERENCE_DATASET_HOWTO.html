@@ -1,0 +1,827 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference Dataset How-To</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../notes/REFERENCE_DATASET_HOWTO.md" data-served-href="/repo/notes/REFERENCE_DATASET_HOWTO.md">View source markdown</a>
+        ·
+        <code>notes/REFERENCE_DATASET_HOWTO.md</code>
+      </p>
+      <h1 id="reference-dataset-how-to">Reference Dataset How-To</h1>
+<p>If you want the shortest explanation first, start with:
+<a href="REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html">REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</a></p>
+<p>If you need to fill unresolved literature gaps by hand, use:
+<a href="../research_context/manual_reference_templates/README.html">manual_reference_templates/README.md</a></p>
+<p>If you need the boundary between raw sources, configs, manual intake, and
+generated canonical outputs, see:
+<a href="../research_context/README.html">research_context/README.md</a></p>
+<p>If you want the maintained web shell that combines docs, audits, and
+optimization surfaces, see:
+<a href="DASHBOARD_SHELL_HOWTO.html">DASHBOARD_SHELL_HOWTO.md</a></p>
+<p>This guide explains how to add and maintain a declarative reference-data
+dataset in this repository.</p>
+<p>If you also need to run model-side literature validation against those
+normalized rows, use the companion guide:
+<a href="REFERENCE_VALIDATION_HOWTO.html">REFERENCE_VALIDATION_HOWTO.md</a>.</p>
+<p>The system is meant for structured, protocol-aware validation targets such as:</p>
+<ul>
+<li>intrinsic electrophysiology summary tables</li>
+<li>current-versus-firing-rate point sets</li>
+<li>protocol metadata</li>
+<li>cell-identity and morphology constraints</li>
+<li>validation notes and protocol caveats</li>
+<li>explicit manual-extraction backlog items</li>
+</ul>
+<p>It is not a general PDF-mining system. It works best when your source data are
+already available as:</p>
+<ul>
+<li>supplemental <code>csv</code></li>
+<li>supplemental <code>xls</code> / <code>xlsx</code></li>
+<li>local manually curated tables</li>
+<li>local manually digitized CSVs</li>
+</ul>
+<p>It does <strong>not</strong> perform built-in figure digitization or screenshot ingestion.
+If a paper only exposes a plotted curve, keep that gap in
+<code>needs_manual_extraction.csv</code> until a human creates a provenance-preserving CSV.</p>
+<h2 id="where-the-pieces-live">Where the pieces live</h2>
+<ul>
+<li>Dataset config template:
+  <a href="../../../research_context/reference_datasets/TEMPLATE.dataset.toml" data-served-href="/repo/research_context/reference_datasets/TEMPLATE.dataset.toml">research_context/reference_datasets/TEMPLATE.dataset.toml</a></li>
+<li>Current example dataset:
+  <a href="../../../research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml" data-served-href="/repo/research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml">research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml</a></li>
+<li>Generic downloader:
+  <a href="../../../tools/download_reference_dataset_sources.py" data-served-href="/repo/tools/download_reference_dataset_sources.py">tools/download_reference_dataset_sources.py</a></li>
+<li>Generic extractor:
+  <a href="../../../tools/extract_reference_dataset.py" data-served-href="/repo/tools/extract_reference_dataset.py">tools/extract_reference_dataset.py</a></li>
+<li>Generic config loader:
+  <a href="../../../olfactorybulb/audit/reference_dataset_config.py" data-served-href="/repo/olfactorybulb/audit/reference_dataset_config.py">olfactorybulb/audit/reference_dataset_config.py</a></li>
+<li>Generic extraction engine:
+  <a href="../../../olfactorybulb/audit/reference_dataset_engine.py" data-served-href="/repo/olfactorybulb/audit/reference_dataset_engine.py">olfactorybulb/audit/reference_dataset_engine.py</a></li>
+<li>Generic source acquisition:
+  <a href="../../../olfactorybulb/audit/reference_sources.py" data-served-href="/repo/olfactorybulb/audit/reference_sources.py">olfactorybulb/audit/reference_sources.py</a></li>
+</ul>
+<h2 id="what-a-dataset-produces">What a dataset produces</h2>
+<p>Every dataset config declares output filenames for:</p>
+<ul>
+<li><code>ephys</code></li>
+<li><code>fi_curve</code></li>
+<li><code>protocols</code></li>
+<li><code>identity</code></li>
+<li><code>notes</code></li>
+<li><code>manual</code></li>
+<li><code>readme</code></li>
+</ul>
+<p>Datasets can also declare additional outputs when one project needs multiple
+files with the same row shape. The current granule-cell dataset uses:</p>
+<ul>
+<li><code>subtype_ephys</code></li>
+<li><code>subtype_fi_curve</code></li>
+<li><code>synaptic_latency</code></li>
+<li><code>modulation</code></li>
+</ul>
+<p>If an output key does not match a built-in schema name, add an
+<code>[output_schemas]</code> section that maps output keys to schema presets such as:</p>
+<ul>
+<li><code>ephys</code></li>
+<li><code>fi_curve</code></li>
+<li><code>protocols</code></li>
+<li><code>identity</code></li>
+<li><code>notes</code></li>
+<li><code>manual</code></li>
+<li>dataset-specific presets such as <code>gc_ephys</code>, <code>gc_fi_curve</code>, <code>gc_protocols</code>,
+  and <code>gc_identity</code></li>
+</ul>
+<p>For the current EPL-FSI dataset those become:</p>
+<ul>
+<li><code>PV_CRH_EPL_FSI_ephys.csv</code></li>
+<li><code>PV_CRH_EPL_FSI_fI_curve.csv</code></li>
+<li><code>PV_CRH_EPL_FSI_protocols.csv</code></li>
+<li><code>PV_CRH_EPL_FSI_identity.csv</code></li>
+<li><code>validation_notes.csv</code></li>
+<li><code>needs_manual_extraction.csv</code></li>
+<li><code>PV_CRH_EPL_FSI_extraction_README.md</code></li>
+</ul>
+<p>For the current GC dataset those become:</p>
+<ul>
+<li><code>GC_ephys.csv</code></li>
+<li><code>GC_fI_curve.csv</code></li>
+<li><code>GC_sGC_dGC_ephys.csv</code></li>
+<li><code>GC_sGC_dGC_fI_curve.csv</code></li>
+<li><code>GC_protocols.csv</code></li>
+<li><code>GC_identity_morphology.csv</code></li>
+<li><code>GC_synaptic_latency_references.csv</code></li>
+<li><code>GC_modulation_references.csv</code></li>
+<li><code>GC_validation_notes.csv</code></li>
+<li><code>GC_needs_manual_extraction.csv</code></li>
+<li><code>GC_extraction_README.md</code></li>
+</ul>
+<h2 id="quick-start">Quick start</h2>
+<h3 id="1-copy-the-template">1. Copy the template</h3>
+<p>Create a new dataset config under <code>research_context/reference_datasets/</code>.</p>
+<p>Example:</p>
+<pre><code class="language-bash">cp \
+  research_context/reference_datasets/TEMPLATE.dataset.toml \
+  research_context/reference_datasets/my_new_dataset.dataset.toml
+</code></pre>
+<h3 id="2-fill-in-the-required-sections">2. Fill in the required sections</h3>
+<p>The template already leaves required sections uncommented. At minimum you must
+set:</p>
+<ul>
+<li><code>dataset_id</code></li>
+<li><code>dataset_name</code></li>
+<li><code>source_data_subdir</code></li>
+<li><code>[outputs]</code></li>
+<li><code>[output_schemas]</code> if you use nonstandard output keys</li>
+<li><code>[readme]</code></li>
+<li>at least one <code>[[sources]]</code></li>
+<li>at least one <code>[[static_protocol_rows]]</code></li>
+<li>at least one <code>[[static_note_rows]]</code> if protocol caveats must survive into
+  downstream validation</li>
+<li>at least one extraction rule such as <code>[[summary_rules]]</code>,
+  <code>[[formatted_summary_rules]]</code>, or <code>[[point_rules]]</code></li>
+</ul>
+<h3 id="3-download-sources">3. Download sources</h3>
+<p>Always use the <code>OBGPU</code> environment in this repo.</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/download_reference_dataset_sources.py --dataset-id my_new_dataset
+</code></pre>
+<p>If you want to target a config file directly instead of a dataset id:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/download_reference_dataset_sources.py \
+  --config-path research_context/reference_datasets/my_new_dataset.dataset.toml
+</code></pre>
+<h3 id="4-extract-normalized-outputs">4. Extract normalized outputs</h3>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/extract_reference_dataset.py --dataset-id my_new_dataset
+</code></pre>
+<p>This will:</p>
+<ul>
+<li>load the dataset config</li>
+<li>ensure required downloadable sources exist locally</li>
+<li>apply the declared row rules</li>
+<li>write the normalized CSV outputs</li>
+<li>write the dataset README</li>
+</ul>
+<h3 id="5-verify-the-outputs">5. Verify the outputs</h3>
+<p>At minimum, check:</p>
+<ul>
+<li>all expected files were written</li>
+<li><code>fi_curve</code> is non-empty only when you truly have current-rate points</li>
+<li><code>protocol_id</code> is present on all f-I rows</li>
+<li><code>source_url</code> preserves the stable source URL, not a temporary redirect target</li>
+<li><code>needs_manual_extraction.csv</code> captures anything unresolved instead of guessing</li>
+</ul>
+<h2 id="minimal-working-dataset">Minimal working dataset</h2>
+<p>The smallest realistic dataset usually contains:</p>
+<ol>
+<li>one machine-readable source table</li>
+<li>one protocol row</li>
+<li>one protocol-caveat note</li>
+<li>one <code>summary_rules</code> entry</li>
+</ol>
+<p>For example:</p>
+<pre><code class="language-toml">dataset_id = &quot;example_dataset&quot;
+dataset_name = &quot;Example reference dataset&quot;
+source_data_subdir = &quot;example_dataset&quot;
+
+[outputs]
+ephys = &quot;EXAMPLE_ephys.csv&quot;
+fi_curve = &quot;EXAMPLE_fI_curve.csv&quot;
+protocols = &quot;EXAMPLE_protocols.csv&quot;
+identity = &quot;EXAMPLE_identity.csv&quot;
+notes = &quot;EXAMPLE_validation_notes.csv&quot;
+manual = &quot;EXAMPLE_needs_manual_extraction.csv&quot;
+readme = &quot;EXAMPLE_extraction_README.md&quot;
+
+[readme]
+title = &quot;Example reference-data extraction&quot;
+summary = &quot;One-line summary.&quot;
+source_summary = [&quot;Primary supplemental table.&quot;]
+suitable_now = [&quot;Intrinsic-property rows from the primary table.&quot;]
+caveats = [&quot;Protocol caveats must remain visible in downstream validation.&quot;]
+
+[[sources]]
+source_id = &quot;example_primary_table&quot;
+source = &quot;Example et al. (2026)&quot;
+label = &quot;Example supplemental table&quot;
+filename = &quot;example_table.csv&quot;
+source_url = &quot;https://example.org/example_table.csv&quot;
+downloadable = true
+required = true
+expected_extension = &quot;.csv&quot;
+
+# Optional: use download_url when the stable citation URL differs from the
+# direct download endpoint.
+# download_url = &quot;https://example.org/download/example_table.csv&quot;
+
+[[static_protocol_rows]]
+protocol_id = &quot;EXAMPLE_PROTOCOL&quot;
+source = &quot;Example et al. (2026)&quot;
+cell_type = &quot;Example Cell&quot;
+marker_profile = &quot;Example Marker&quot;
+stimulus_type = &quot;somatic depolarizing current step&quot;
+step_duration_ms = 1000.0
+current_start_pA = 0.0
+current_stop_pA = 400.0
+current_step_pA = 50.0
+current_values_pA = &quot;0;50;100;150;200;250;300;350;400&quot;
+rate_definition = &quot;Mean firing rate over the full current step.&quot;
+spike_detection_rule = &quot;Describe the rule if known.&quot;
+baseline_or_holding_vm_mV = -65.0
+synaptic_blockers = &quot;&quot;
+temperature_C = &quot;&quot;
+compatible_group = &quot;example_fI&quot;
+notes = &quot;Protocol metadata row.&quot;
+
+[[static_note_rows]]
+note_id = &quot;N_EXAMPLE_PROTOCOL_CAVEAT&quot;
+severity = &quot;warning&quot;
+scope = &quot;fI_validation&quot;
+target_type = &quot;protocol&quot;
+target = &quot;EXAMPLE_PROTOCOL&quot;
+message = &quot;Explain the protocol caveat here.&quot;
+display_order = 10
+source = &quot;Example et al. (2026)&quot;
+source_location = &quot;Protocol metadata rows&quot;
+
+[[summary_rules]]
+output = &quot;ephys&quot;
+source_id = &quot;example_primary_table&quot;
+sheet_name = &quot;Sheet1&quot;
+row_filter_column = &quot;cell_type&quot;
+row_filter_equals = &quot;Example Cell&quot;
+column = &quot;rest_mV&quot;
+property_name = &quot;Membrane Resting Voltage&quot;
+reported_definition = &quot;resting potential&quot;
+unit = &quot;mV&quot;
+data_kind = &quot;intrinsic_property&quot;
+notes = &quot;Computed directly from source rows.&quot;
+cell_type = &quot;Example Cell&quot;
+marker_profile = &quot;Example Marker&quot;
+</code></pre>
+<h2 id="supported-source-types">Supported source types</h2>
+<h3 id="downloadable-sources">Downloadable sources</h3>
+<p>Use <code>downloadable = true</code> when the engine should fetch the file.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[[sources]]
+source_id = &quot;paper_supplement&quot;
+filename = &quot;paper_supplement.xls&quot;
+source_url = &quot;https://example.org/paper_supplement.xls&quot;
+downloadable = true
+required = true
+expected_extension = &quot;.xls&quot;
+</code></pre>
+<p>The downloader:</p>
+<ul>
+<li>follows redirects with <code>allow_redirects=True</code></li>
+<li>stores the file under
+  <code>research_context/source_data/&lt;source_data_subdir&gt;/</code></li>
+<li>preserves the stable <code>source_url</code> from the config in downstream outputs</li>
+<li>optionally uses <code>download_url</code> for the transfer while still preserving the
+  stable <code>source_url</code> in the normalized rows</li>
+<li>falls back to <code>curl</code> with a browser-like user agent when a site returns an
+  HTML block page or challenge page instead of the requested file</li>
+</ul>
+<h3 id="local-only-sources">Local-only sources</h3>
+<p>Use <code>downloadable = false</code> when the file is local and should not be fetched.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[[sources]]
+source_id = &quot;local_manual_csv&quot;
+filename = &quot;manually_curated_points.csv&quot;
+source_url = &quot;local://manually_curated_points.csv&quot;
+downloadable = false
+required = false
+expected_extension = &quot;.csv&quot;
+</code></pre>
+<p>This is the right path for:</p>
+<ul>
+<li>local manually curated tables</li>
+<li>local manually digitized point CSVs</li>
+<li>local PDFs you want to cite but not auto-download</li>
+</ul>
+<h2 id="how-the-engine-builds-rows">How the engine builds rows</h2>
+<p>The engine supports several row families.</p>
+<h3 id="1-static__rows">1. <code>static_*_rows</code></h3>
+<p>Use static rows when the values are already known and you want to write them
+directly into the normalized outputs.</p>
+<p>Available families:</p>
+<ul>
+<li><code>[[static_ephys_rows]]</code></li>
+<li><code>[[static_identity_rows]]</code></li>
+<li><code>[[static_protocol_rows]]</code></li>
+<li><code>[[static_note_rows]]</code></li>
+<li><code>[[static_manual_rows]]</code></li>
+</ul>
+<p>Use these for:</p>
+<ul>
+<li>values reported directly in text</li>
+<li>hand-curated summary values</li>
+<li>protocol metadata</li>
+<li>notes that must travel with the dataset</li>
+<li>manual-extraction backlog entries</li>
+</ul>
+<h3 id="2-summary_rules">2. <code>summary_rules</code></h3>
+<p>Use <code>[[summary_rules]]</code> when a source sheet contains per-cell or per-row values
+that should be summarized into a mean/SD/SEM row.</p>
+<p>The engine will:</p>
+<ul>
+<li>load the source table</li>
+<li>optionally filter rows</li>
+<li>pull the requested numeric column</li>
+<li>compute <code>mean</code>, <code>sd</code>, <code>sem</code>, and <code>n</code></li>
+<li>optionally compute empirical quantile fields such as <code>q_low</code> and <code>q_high</code></li>
+<li>emit a normalized row into either <code>ephys</code> or <code>identity</code></li>
+</ul>
+<p>Required fields for a typical rule:</p>
+<ul>
+<li><code>output</code></li>
+<li><code>source_id</code></li>
+<li><code>sheet_name</code> if the file is multi-sheet</li>
+<li><code>column</code></li>
+<li><code>property_name</code></li>
+<li><code>unit</code></li>
+<li><code>data_kind</code></li>
+<li><code>cell_type</code></li>
+<li><code>marker_profile</code></li>
+</ul>
+<p>Optional filter styles:</p>
+<pre><code class="language-toml">row_filter_column = &quot;cell_type&quot;
+row_filter_equals = &quot;FSI&quot;
+</code></pre>
+<p>or:</p>
+<pre><code class="language-toml">row_filters = [
+  { column = &quot;cell_type&quot;, equals = &quot;FSI&quot; },
+  { column = &quot;condition&quot;, equals = &quot;control&quot; },
+]
+</code></pre>
+<p>Optional numeric transform:</p>
+<pre><code class="language-toml">transform_scale = 1000.0
+</code></pre>
+<p>Optional empirical interval fields for skewed row-level data:</p>
+<pre><code class="language-toml">quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = &quot;5th percentile&quot;
+quantile_high_label = &quot;95th percentile&quot;
+</code></pre>
+<p>Use these when the source table contains individual cell rows and you want the
+normalized reference output to carry empirical interval metadata directly. This
+is useful when the validation layer should prefer a quantile interval over a
+reconstructed mean/standard-deviation band.</p>
+<p>This is useful for unit conversions such as:</p>
+<ul>
+<li><code>Hz/pA -&gt; Hz/nA</code></li>
+</ul>
+<h3 id="3-formatted_summary_rules">3. <code>formatted_summary_rules</code></h3>
+<p>Use <code>[[formatted_summary_rules]]</code> when a source table already stores values in
+formatted cells such as:</p>
+<ul>
+<li><code>74.9 ± 25.9 (19)</code></li>
+<li><code>52.7 +/- 7.6</code></li>
+</ul>
+<p>This is common in:</p>
+<ul>
+<li>DOCX source-data tables</li>
+<li>supplemental tables exported from journal sites</li>
+<li>HTML tables where each cohort is a separate column</li>
+</ul>
+<p>The engine will:</p>
+<ul>
+<li>read the table as text</li>
+<li>normalize property labels</li>
+<li>parse mean/spread/sample-count from the formatted cell text</li>
+<li>emit canonical rows into the requested output</li>
+</ul>
+<p>Typical fields:</p>
+<ul>
+<li><code>output</code></li>
+<li><code>source_id</code></li>
+<li><code>table_index</code></li>
+<li><code>value_column</code></li>
+<li><code>property_map</code></li>
+<li>optional <code>unit_map</code></li>
+<li><code>source_location</code></li>
+</ul>
+<p>Use <code>property_map</code> to normalize paper-facing labels into canonical property
+names, and <code>unit_map</code> when units should be overridden for specific labels.</p>
+<p>If a formatted summary table mixes rows with different unit semantics, do not
+use one blanket <code>transform_scale</code> unless every mapped row truly needs it.</p>
+<p>Instead use:</p>
+<pre><code class="language-toml">property_transform_scales = { &quot;Gain (Hz/pA)&quot; = 1000.0 }
+</code></pre>
+<p>That is the right pattern for tables where, for example, gain should be
+converted from <code>Hz/pA</code> to <code>Hz/nA</code> but rheobase, latency, and peak rate should
+remain in their source units.</p>
+<p>The engine now rejects a risky mixed-property blanket transform by default.
+If you truly have a table where every mapped property needs the same scaling,
+you must opt in explicitly with:</p>
+<pre><code class="language-toml">allow_blanket_transform_scale = true
+</code></pre>
+<h3 id="4-point_rules">4. <code>point_rules</code></h3>
+<p>Use <code>[[point_rules]]</code> when a source table contains actual current-rate points.</p>
+<p>This is the only rule family that should populate <code>fi_curve</code>.</p>
+<p>Do <strong>not</strong> use it for:</p>
+<ul>
+<li>max firing rate summary values</li>
+<li>FI gain summary values</li>
+<li>rheobase-only values</li>
+</ul>
+<p>Those belong in <code>ephys</code>, not <code>fi_curve</code>.</p>
+<p>Typical required fields:</p>
+<ul>
+<li><code>source_id</code></li>
+<li><code>sheet_name</code></li>
+<li><code>current_column</code></li>
+<li><code>value_column</code></li>
+<li><code>cell_type</code></li>
+<li><code>marker_profile</code></li>
+<li><code>protocol_id</code></li>
+<li><code>rate_definition</code></li>
+</ul>
+<p>Useful optional fields:</p>
+<ul>
+<li><code>cell_id</code></li>
+<li><code>sample_scope</code></li>
+<li><code>current_min_pA</code></li>
+<li><code>current_max_pA</code></li>
+<li><code>step_duration_ms</code></li>
+<li><code>baseline_or_holding_vm_mV</code></li>
+<li><code>note_ids</code></li>
+</ul>
+<h3 id="5-conditional-rows">5. Conditional rows</h3>
+<p>Use:</p>
+<ul>
+<li><code>[[conditional_note_rows]]</code></li>
+<li><code>[[conditional_manual_rows]]</code></li>
+</ul>
+<p>when a note or backlog item should only appear if something goes wrong or if a
+particular output ended up empty.</p>
+<p>The current engine supports these conditions:</p>
+<ul>
+<li><code>condition = "missing_source"</code></li>
+<li><code>condition = "output_empty"</code></li>
+</ul>
+<p>Examples:</p>
+<ul>
+<li>add a warning note if a required supplement could not be downloaded</li>
+<li>add a manual-extraction row if no valid <code>fi_curve</code> rows were produced</li>
+</ul>
+<p>When the note/manual row belongs in one output file but the emptiness check
+should watch another output, set:</p>
+<pre><code class="language-toml">condition = &quot;output_empty&quot;
+condition_output = &quot;fi_curve&quot;
+</code></pre>
+<p>That lets a dataset write a note into <code>notes</code> when <code>fi_curve</code> is empty without
+pretending that the <code>notes</code> output itself is empty.</p>
+<h2 id="notes-and-protocol-caveats">Notes and protocol caveats</h2>
+<p>Do not hide protocol incompatibilities in free text.</p>
+<p>Use explicit note rows and attach them with <code>note_ids</code> where needed.</p>
+<p>Typical pattern:</p>
+<ol>
+<li>create a protocol note in <code>[[static_note_rows]]</code></li>
+<li>attach its <code>note_id</code> to:
+   - <code>summary_rules</code> that produce f-I summary metrics
+   - <code>point_rules</code> that produce <code>fi_curve</code> rows
+   - any downstream validation output that compares across protocols</li>
+</ol>
+<p>This is how the repo currently keeps
+<code>N_FI_PROTOCOL_DIFFERENCE</code> visible when MC/TC Burton 2014 data and EPL-FSI
+Burton 2024 data appear together.</p>
+<h2 id="source-provenance-rules">Source provenance rules</h2>
+<p>Every normalized row should preserve:</p>
+<ul>
+<li><code>source</code></li>
+<li><code>source_file</code></li>
+<li><code>source_location</code></li>
+<li><code>source_url</code></li>
+<li><code>extraction_method</code></li>
+</ul>
+<p>Do not replace the stable source URL with a transient redirect target.</p>
+<p>For downloadable sources:</p>
+<ul>
+<li><code>source_url</code> in the dataset config should always be the stable article or
+  supplement URL</li>
+<li>the downloader may follow redirects during transfer</li>
+<li>the CSV rows should still keep the stable URL</li>
+</ul>
+<h2 id="choosing-the-right-output-file">Choosing the right output file</h2>
+<p>Use:</p>
+<ul>
+<li><code>ephys</code> for summary intrinsic/electrophysiology metrics</li>
+<li><code>fi_curve</code> for actual current-vs-rate points only</li>
+<li><code>protocols</code> for stimulation protocol definitions</li>
+<li><code>identity</code> for marker/morphology/axonless/population constraints</li>
+<li><code>notes</code> for visible validation caveats</li>
+<li><code>manual</code> for unresolved extraction tasks</li>
+<li>dataset-specific extra outputs such as <code>subtype_ephys</code>, <code>modulation</code>, or
+  <code>synaptic_latency</code> when those rows should stay separate from baseline
+  intrinsic validation</li>
+</ul>
+<p>If you are unsure whether something belongs in <code>fi_curve</code>, use this rule:</p>
+<p>If it is not a real pair or series of current values and firing-rate values, it
+does <strong>not</strong> belong in <code>fi_curve</code>.</p>
+<h2 id="manual-data-is-still-allowed">Manual data is still allowed</h2>
+<p>The engine does not force every source to be remote and machine-readable.</p>
+<p>Good uses of local manual sources:</p>
+<ul>
+<li>a manually curated CSV copied from a supplemental table</li>
+<li>a manually digitized CSV with provenance</li>
+<li>a local PDF that you cite in static rows</li>
+</ul>
+<p>The point is not to eliminate human judgment. The point is to make the final
+normalized outputs reproducible once the human-curated input exists.</p>
+<h2 id="common-mistakes">Common mistakes</h2>
+<h3 id="mistake-1-putting-summary-values-into-fi_curve">Mistake 1: putting summary values into <code>fi_curve</code></h3>
+<p>Wrong:</p>
+<ul>
+<li>max firing rate only</li>
+<li>FI slope only</li>
+<li>rheobase only</li>
+</ul>
+<p>Right:</p>
+<ul>
+<li>keep those in <code>ephys</code></li>
+<li>reserve <code>fi_curve</code> for actual current-rate pairs</li>
+</ul>
+<h3 id="mistake-2-silently-pooling-incompatible-populations">Mistake 2: silently pooling incompatible populations</h3>
+<p>Do not collapse:</p>
+<ul>
+<li>PV+</li>
+<li>CRH+</li>
+<li>PV/CRH-overlap</li>
+</ul>
+<p>unless the source and protocol truly describe the same population.</p>
+<p>Keep them separate using:</p>
+<ul>
+<li><code>cell_type</code></li>
+<li><code>marker_profile</code></li>
+<li><code>protocol_id</code></li>
+</ul>
+<h3 id="mistake-3-losing-protocol-caveats">Mistake 3: losing protocol caveats</h3>
+<p>If two cell classes use different stimulation protocols, that caveat must stay
+explicit in:</p>
+<ul>
+<li><code>validation_notes.csv</code></li>
+<li><code>note_ids</code></li>
+<li>downstream rendered outputs</li>
+</ul>
+<h3 id="mistake-4-guessing-missing-values">Mistake 4: guessing missing values</h3>
+<p>If a value cannot be extracted reliably:</p>
+<ul>
+<li>do not invent it</li>
+<li>do not back-project it from a summary metric</li>
+<li>put the missing work in <code>needs_manual_extraction.csv</code></li>
+</ul>
+<h3 id="mistake-5-relying-on-pdfs-when-a-spreadsheet-exists">Mistake 5: relying on PDFs when a spreadsheet exists</h3>
+<p>Prefer:</p>
+<ol>
+<li><code>csv/xls/xlsx</code></li>
+<li>structured tables</li>
+<li>local manual CSVs</li>
+<li>PDF text only when needed</li>
+</ol>
+<h2 id="recommended-workflow-for-a-new-paper">Recommended workflow for a new paper</h2>
+<ol>
+<li>Decide whether the paper contributes:
+   - <code>ephys</code>
+   - <code>fi_curve</code>
+   - <code>identity</code>
+   - <code>protocols</code>
+   - <code>notes</code></li>
+<li>Add a <code>[[sources]]</code> entry for every source file you will cite.</li>
+<li>Add protocol rows first.</li>
+<li>Add note rows for protocol caveats before adding f-I rows.</li>
+<li>Add <code>summary_rules</code> for machine-readable summary data.</li>
+<li>Add <code>point_rules</code> only for real current-rate points.</li>
+<li>Add <code>static_*_rows</code> for direct text-derived or hand-curated values.</li>
+<li>Add <code>conditional_manual_rows</code> for any source that might fail acquisition.</li>
+<li>If a source uses cohort-style formatted tables, prefer
+   <code>formatted_summary_rules</code> over handwritten parsing code.</li>
+<li>Run the downloader.</li>
+<li>Run the extractor.</li>
+<li>Inspect the generated CSVs and README.</li>
+<li>Run the official dataset audits.</li>
+<li>Run the dataset-specific tests when you are changing source-specific logic.</li>
+</ol>
+<h2 id="current-example-commands">Current example commands</h2>
+<p>Using the current EPL-FSI dataset:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/download_reference_dataset_sources.py --dataset-id pv_crh_epl_fsi
+python tools/extract_reference_dataset.py --dataset-id pv_crh_epl_fsi
+python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi
+python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
+python tools/run_audit.py test_suite_status --suite reference_bundles
+python -m tests.reference.test_reference_dataset_engine
+python -m tests.reference.test_download_epl_fsi_reference_sources
+python -m tests.reference.test_pv_crh_epl_fsi_reference_data
+</code></pre>
+<p>Using the current GC dataset:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/download_reference_dataset_sources.py --dataset-id granule_cells
+python tools/extract_reference_dataset.py --dataset-id granule_cells
+python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
+python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
+python tools/run_audit.py test_suite_status --suite reference_bundles
+python -m tests.reference.test_reference_dataset_engine
+python -m tests.reference.test_download_gc_reference_sources
+python -m tests.reference.test_gc_reference_data
+</code></pre>
+<h2 id="when-to-add-code-versus-when-to-add-config">When to add code versus when to add config</h2>
+<p>Add config when:</p>
+<ul>
+<li>you are adding a new source</li>
+<li>you are mapping a new source column</li>
+<li>you are declaring a new protocol</li>
+<li>you are adding a new note</li>
+<li>you are adding a new backlog/manual-extraction entry</li>
+</ul>
+<p>Add code only when:</p>
+<ul>
+<li>the dataset engine cannot express the source structure</li>
+<li>the file format is unsupported</li>
+<li>a new kind of conditional behavior is needed</li>
+<li>a new reusable rule family is justified</li>
+</ul>
+<p>That is the core discipline here: prefer extending the config schema over
+writing another one-off extractor script.</p>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#reference-dataset-how-to">Reference Dataset How-To</a><ul>
+<li><a href="#where-the-pieces-live">Where the pieces live</a></li>
+<li><a href="#what-a-dataset-produces">What a dataset produces</a></li>
+<li><a href="#quick-start">Quick start</a><ul>
+<li><a href="#1-copy-the-template">1. Copy the template</a></li>
+<li><a href="#2-fill-in-the-required-sections">2. Fill in the required sections</a></li>
+<li><a href="#3-download-sources">3. Download sources</a></li>
+<li><a href="#4-extract-normalized-outputs">4. Extract normalized outputs</a></li>
+<li><a href="#5-verify-the-outputs">5. Verify the outputs</a></li>
+</ul>
+</li>
+<li><a href="#minimal-working-dataset">Minimal working dataset</a></li>
+<li><a href="#supported-source-types">Supported source types</a><ul>
+<li><a href="#downloadable-sources">Downloadable sources</a></li>
+<li><a href="#local-only-sources">Local-only sources</a></li>
+</ul>
+</li>
+<li><a href="#how-the-engine-builds-rows">How the engine builds rows</a><ul>
+<li><a href="#1-static__rows">1. static_*_rows</a></li>
+<li><a href="#2-summary_rules">2. summary_rules</a></li>
+<li><a href="#3-formatted_summary_rules">3. formatted_summary_rules</a></li>
+<li><a href="#4-point_rules">4. point_rules</a></li>
+<li><a href="#5-conditional-rows">5. Conditional rows</a></li>
+</ul>
+</li>
+<li><a href="#notes-and-protocol-caveats">Notes and protocol caveats</a></li>
+<li><a href="#source-provenance-rules">Source provenance rules</a></li>
+<li><a href="#choosing-the-right-output-file">Choosing the right output file</a></li>
+<li><a href="#manual-data-is-still-allowed">Manual data is still allowed</a></li>
+<li><a href="#common-mistakes">Common mistakes</a><ul>
+<li><a href="#mistake-1-putting-summary-values-into-fi_curve">Mistake 1: putting summary values into fi_curve</a></li>
+<li><a href="#mistake-2-silently-pooling-incompatible-populations">Mistake 2: silently pooling incompatible populations</a></li>
+<li><a href="#mistake-3-losing-protocol-caveats">Mistake 3: losing protocol caveats</a></li>
+<li><a href="#mistake-4-guessing-missing-values">Mistake 4: guessing missing values</a></li>
+<li><a href="#mistake-5-relying-on-pdfs-when-a-spreadsheet-exists">Mistake 5: relying on PDFs when a spreadsheet exists</a></li>
+</ul>
+</li>
+<li><a href="#recommended-workflow-for-a-new-paper">Recommended workflow for a new paper</a></li>
+<li><a href="#current-example-commands">Current example commands</a></li>
+<li><a href="#when-to-add-code-versus-when-to-add-config">When to add code versus when to add config</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

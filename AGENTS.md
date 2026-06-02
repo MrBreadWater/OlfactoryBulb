@@ -352,6 +352,14 @@ contract for future sessions.
     `serve-static` child, check for an older HFO dashboard watchdog/runtime
     process that is respawning the server and stop it via the maintained HFO
     runtime stop command rather than killing only the child PID
+  - the docs tab is a rendered HTML surface, not a raw markdown browser
+    - maintained markdown files remain the authoring source of truth
+    - the served/local docs portal should point at rendered pages under
+      `docs/maintained/`
+    - after changing maintained markdown docs or the render template, rerun:
+      - `python tools/build_maintained_docs_portal.py`
+      - `python tools/run_audit.py maintained_docs_integrity`
+    - do not leave `docs/index.html` pointing at raw `.md` files
 
 - Do not assume a watcher/server is healthy because a status file says so.
   - Verify the listener and the rendered page.
@@ -752,6 +760,9 @@ contract for future sessions.
 
 - Open the maintained local docs portal:
   - `docs/index.html`
+
+- Rebuild the rendered maintained docs portal:
+  - `python tools/build_maintained_docs_portal.py`
 
 - Export an audit dashboard:
   - `python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron`
