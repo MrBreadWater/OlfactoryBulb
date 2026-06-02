@@ -220,6 +220,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/analysis/spectral.py",
             "neuroinfra/analysis/sweeps.py",
             "neuroinfra/analysis/signals.py",
+            "olfactorybulb/analysis_profile.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -265,13 +266,14 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "decoupled analysis-signal catalogs from notebook facades",
         ),
         repo_specific_couplings=(
+            "the concrete olfactory-bulb analysis profile now lives in olfactorybulb.analysis_profile",
             "concrete OBGPU signal families like lfp and gc_output_rate still live in obgpu_experiment_helpers.py",
             "signal semantics still assume this repository's saved result structure",
         ),
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, stable ordered-name helpers, fair round-robin subgroup truncation, ordered group-row flattening with per-bucket limits, grouped row-display policies, grouped stacked-trace and event-raster suites, result-overview builders, shared plotting primitives including stacked labeled traces, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, result-backed frequency plot families plus family-bound suites, labeled-row and trace-derived frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, result-backed event-family specs plus family suites and event plot suites, reusable event-rate series assembly, prepared labeled event display rows, overview-layout derivation from them, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, named sweep plot registries, sweep persistence and animation pipeline, the named-signal provider/registry/view layer, and domain analysis profiles that aggregate concrete repo definitions now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+        recommended_action="The generic result-catalog helpers, stable ordered-name helpers, fair round-robin subgroup truncation, ordered group-row flattening with per-bucket limits, grouped row-display policies, grouped stacked-trace and event-raster suites, result-overview builders, shared plotting primitives including stacked labeled traces, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, result-backed frequency plot families plus family-bound suites, labeled-row and trace-derived frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, result-backed event-family specs plus family suites and event plot suites, reusable event-rate series assembly, prepared labeled event display rows, overview-layout derivation from them, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, named sweep plot registries, sweep persistence and animation pipeline, the named-signal provider/registry/view layer, and domain analysis profiles that aggregate concrete repo definitions now live under neuroinfra.analysis, with the current concrete OBGPU profile now assembled in olfactorybulb.analysis_profile; next move the remaining concrete signal families and notebook presentation logic out of obgpu_experiment_helpers.py and into explicit domain modules.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",

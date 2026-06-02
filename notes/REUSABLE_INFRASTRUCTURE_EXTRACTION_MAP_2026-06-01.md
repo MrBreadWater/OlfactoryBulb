@@ -133,6 +133,7 @@ Current files:
 - `neuroinfra/analysis/spectral.py`
 - `neuroinfra/analysis/sweeps.py`
 - `neuroinfra/analysis/signals.py`
+- `olfactorybulb/analysis_profile.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
@@ -179,15 +180,24 @@ What is already generic:
 
 What is domain-specific:
 
+- the concrete profile assembly that binds the reusable suites into this
+  repo's OBGPU-facing analysis surface
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
 - notebook-specific signal-presentation, concrete cell-family display semantics,
-  plot composition, and the concrete profile definitions that still live in the
-  notebook helper
+  and higher-level plot composition that still live in the notebook helper
 
 Extraction confidence:
 
 - **Medium**
+
+Current progress:
+
+- `neuroinfra.analysis.profiles` now provides the reusable profile boundary
+- the concrete OBGPU profile assembly has moved into
+  `olfactorybulb/analysis_profile.py`
+- `obgpu_experiment_helpers.py` now consumes that explicit domain module instead
+  of assembling the concrete profile inline
 
 ### 3. Remote Slurm execution layer
 
