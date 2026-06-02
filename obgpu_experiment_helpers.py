@@ -275,9 +275,13 @@ from neuroinfra.analysis.events import (
 )
 from neuroinfra.analysis.plotting import (
     plot_band_power_summary as _neuroinfra_plot_band_power_summary,
-    plot_named_time_series as _neuroinfra_plot_named_time_series,
-    plot_time_frequency_map as _neuroinfra_plot_time_frequency_map,
-    plot_time_series as _neuroinfra_plot_time_series,
+)
+from neuroinfra.analysis.signal_views import (
+    log_spectrogram_display_power as _neuroinfra_log_spectrogram_display_power,
+    plot_resolved_signal as _neuroinfra_plot_resolved_signal,
+    plot_resolved_spectrogram as _neuroinfra_plot_resolved_spectrogram,
+    plot_resolved_wavelet as _neuroinfra_plot_resolved_wavelet,
+    plot_resolved_wavelet_band_power as _neuroinfra_plot_resolved_wavelet_band_power,
 )
 from neuroinfra.analysis.sweeps import (
     SweepPlotSpec,
@@ -308,8 +312,6 @@ from neuroinfra.analysis.spectral import (
     DEFAULT_HFO_BANDS,
     butter_bandpass_filter,
     compute_band_power_summary,
-    compute_spectrogram,
-    compute_wavelet_band_power,
     compute_wavelet_map,
     normalize_time_modulus as _normalize_time_modulus,
     uniform_trace,
@@ -7804,23 +7806,23 @@ def plot_named_signal(
     modulus: float | None = None,
 ) -> Any:
     """Plot one named analysis signal as a time trace."""
-    t, y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    return _neuroinfra_plot_time_series(
-        t,
-        y,
+    return _neuroinfra_plot_resolved_signal(
+        result,
+        signal=signal,
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
+        dt_ms=dt_ms,
         ax=ax,
         modulus=modulus,
-        dt_ms=dt_ms,
-        title=f"{signal} Trace",
-        ylabel=signal,
     )
 
 
 def _spectrogram_display_power(power: np.ndarray) -> np.ndarray:
     """Normalize spectrogram power into a stable display range."""
-    values = np.log(np.asarray(power, dtype=float) + 1e-8)
-    values -= values.min()
-    return values
+    return _neuroinfra_log_spectrogram_display_power(power)
 
 
 def plot_spectrogram(
@@ -7834,24 +7836,20 @@ def plot_spectrogram(
     modulus: float | None = None,
 ) -> Any:
     """Plot a spectrogram for a named analysis signal."""
-    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    times_ms, freqs, power = compute_spectrogram(
-        signal_t,
-        signal_y,
+    return _neuroinfra_plot_resolved_spectrogram(
+        result,
+        signal=signal,
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
         dt_ms=dt_ms,
         max_freq_hz=max_freq_hz,
         nperseg=nperseg,
         noverlap=noverlap,
-    )
-    return _neuroinfra_plot_time_frequency_map(
-        times_ms,
-        freqs,
-        power,
         ax=ax,
         modulus=modulus,
-        title=f"{signal.upper()} Spectrogram",
-        colorbar_label="Power (dB)",
-        power_transform=_spectrogram_display_power,
     )
 
 
@@ -7863,16 +7861,17 @@ def plot_wavelet(
     modulus: float | None = None,
 ) -> Any:
     """Plot the continuous wavelet power map for a named signal."""
-    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    t, _bp, freqs, power = compute_wavelet_map(signal_t, signal_y, dt_ms=dt_ms)
-    return _neuroinfra_plot_time_frequency_map(
-        t,
-        freqs,
-        power,
+    return _neuroinfra_plot_resolved_wavelet(
+        result,
+        signal=signal,
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
+        dt_ms=dt_ms,
         ax=ax,
         modulus=modulus,
-        title=f"{signal.upper()} Wavelet Power",
-        colorbar_label="log(1 + |cwt|)",
     )
 
 
@@ -7885,16 +7884,18 @@ def plot_wavelet_band_power(
     modulus: float | None = None,
 ) -> Any:
     """Plot band-collapsed wavelet power traces over time."""
-    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    t, _freqs, _power, traces = compute_wavelet_band_power(signal_t, signal_y, bands=bands, dt_ms=dt_ms)
-    return _neuroinfra_plot_named_time_series(
-        t,
-        traces,
+    return _neuroinfra_plot_resolved_wavelet_band_power(
+        result,
+        signal=signal,
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
+        dt_ms=dt_ms,
+        bands=bands,
         ax=ax,
         modulus=modulus,
-        dt_ms=dt_ms,
-        title="Band Power Over Time",
-        ylabel="Mean Wavelet Power",
     )
 
 

@@ -48,6 +48,13 @@ from .events import (
     smooth_rate_series,
     style_raster_axis,
 )
+from .signal_views import (
+    log_spectrogram_display_power,
+    plot_resolved_signal,
+    plot_resolved_spectrogram,
+    plot_resolved_wavelet,
+    plot_resolved_wavelet_band_power,
+)
 from .sweeps import (
     SweepPlotSpec,
     animate_sweep,
@@ -116,6 +123,10 @@ __all__ = [
     "plot_event_rate_traces",
     "plot_event_raster_rows",
     "plot_named_time_series",
+    "plot_resolved_signal",
+    "plot_resolved_spectrogram",
+    "plot_resolved_wavelet",
+    "plot_resolved_wavelet_band_power",
     "plot_time_frequency_map",
     "plot_time_series",
     "rate_series_label",
@@ -162,4 +173,5 @@ __all__ = [
     "trapezoid_integral",
     "uniform_trace",
     "write_sweep_info",
+    "log_spectrogram_display_power",
 ]
