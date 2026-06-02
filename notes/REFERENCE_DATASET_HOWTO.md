@@ -462,6 +462,14 @@ That is the right pattern for tables where, for example, gain should be
 converted from `Hz/pA` to `Hz/nA` but rheobase, latency, and peak rate should
 remain in their source units.
 
+The engine now rejects a risky mixed-property blanket transform by default.
+If you truly have a table where every mapped property needs the same scaling,
+you must opt in explicitly with:
+
+```toml
+allow_blanket_transform_scale = true
+```
+
 ### 4. `point_rules`
 
 Use `[[point_rules]]` when a source table contains actual current-rate points.

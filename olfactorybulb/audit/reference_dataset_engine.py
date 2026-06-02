@@ -426,6 +426,17 @@ def _formatted_summary_rule_rows(
         _clean_label(key): float(value)
         for key, value in dict(rule.get("property_transform_scales", {})).items()
     }
+    if (
+        not math.isclose(default_scale, 1.0)
+        and len(property_map) > 1
+        and not property_transform_scales
+        and not bool(rule.get("allow_blanket_transform_scale", False))
+    ):
+        raise ValueError(
+            "formatted_summary_rules with multiple mapped properties should not use one blanket "
+            "transform_scale unless allow_blanket_transform_scale=true. Use property_transform_scales "
+            "for mixed-unit tables so only the intended properties are converted."
+        )
     stat_type = str(rule.get("stat_type", "mean_sd"))
     source_id = str(rule["source_id"])
     source_meta = source_entry(source_id, config=config)
