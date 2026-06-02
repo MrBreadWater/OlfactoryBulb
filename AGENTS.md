@@ -4,6 +4,53 @@ This file is for coding agents operating inside `/home/alek/OlfactoryBulb`.
 It is not user-facing product documentation. Treat it as the stable operating
 contract for future sessions.
 
+## 0. Maintenance duty and reproducibility
+
+- Keep this file continuously up to date when durable repo expectations change.
+  - If a session establishes a new long-lived workflow rule, failure pattern,
+    recovery path, validation requirement, or important caution that future
+    agents should know, update `AGENTS.md` in the same task when practical.
+  - Do not wait for undocumented tribal knowledge to accumulate elsewhere.
+
+- Prefer stable rules over stale inventories.
+  - This file should capture:
+    - invariants
+    - durable expectations
+    - source-of-truth locations
+    - verification standards
+    - failure patterns and recovery rules
+  - This file should **not** hardcode dynamic lists that are expected to change
+    over time unless the list itself is the invariant being documented.
+
+- For dynamic inventory, point to the live source of truth instead of copying
+  the current contents into prose.
+  - Examples:
+    - registered audits -> `python tools/run_audit.py --list`
+    - registered reference validations ->
+      `python tools/run_reference_validation.py --list-validations`
+    - registered validation protocols ->
+      `python tools/run_reference_validation.py --list-protocols`
+    - dataset configs -> `research_context/reference_datasets/`
+    - validation configs -> `research_context/reference_validations/`
+  - If a future agent adds a new audit/protocol/validation/dataset, update the
+    registry or config and keep `AGENTS.md` pointing at that live mechanism.
+
+- When documenting behavior here, distinguish clearly between:
+  - stable contract
+  - current example
+  - live-discoverable state
+  - temporary workaround
+
+- If a behavior matters for reproducibility, do not leave it documented only in
+  `AGENTS.md`.
+  - Encode it in one or more of:
+    - code defaults
+    - declarative config
+    - tests
+    - CLI/discovery surfaces
+    - HOWTO/reference docs
+  - Then use `AGENTS.md` to point future agents to that source of truth.
+
 ## 1. Core defaults
 
 - Always use the `OBGPU` environment for repo-local Python work.
@@ -105,14 +152,10 @@ contract for future sessions.
   - `python tools/run_reference_validation.py --list-protocols`
   - `python tools/run_reference_validation.py --validation-id <id>`
 
-- Registered simulation-backed or structural audits currently include:
-  - `env_install`
-  - `burton_urban_fi`
-  - `gc_intrinsic_validation`
-  - `epl_fsi_intrinsic_validation`
-  - `epli_correctness`
-  - `human_review_status`
-  - `hfo_feature_contracts`
+- Do not hardcode the current audit roster here.
+  - Audit IDs change over time.
+  - The live source of truth is `python tools/run_audit.py --list` plus the
+    audit registry in code.
 
 - Keep the CLI output standards intact:
   - explicit `Description`
@@ -217,15 +260,13 @@ contract for future sessions.
   - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
   - `python tools/extract_reference_dataset.py --dataset-id <id>`
 
-- Dataset-specific wrappers exist for convenience, for example:
-  - `tools/download_gc_reference_sources.py`
-  - `tools/extract_gc_reference_data.py`
-  - `tools/download_epl_fsi_reference_sources.py`
-  - `tools/extract_pv_crh_epl_fsi_reference_data.py`
+- Dataset-specific wrappers may exist for convenience, but they are not the
+  stable source of truth. Prefer the generic commands plus dataset IDs.
 
 - Human-readable bundle summaries:
-  - `tools/verify_gc_reference_data.py`
-  - `tools/verify_pv_crh_epl_fsi_reference_data.py`
+  - Use dataset-specific `tools/verify_*_reference_data.py` scripts when
+    present.
+  - Do not assume the exact wrapper set is stable over time.
 
 ## 10. Reference-data boundaries
 
@@ -312,11 +353,8 @@ contract for future sessions.
 - List registered validation protocols:
   - `python tools/run_reference_validation.py --list-protocols`
 
-- Rebuild GC reference bundle:
-  - `python tools/extract_gc_reference_data.py`
-
-- Rebuild EPL-FSI reference bundle:
-  - `python tools/extract_pv_crh_epl_fsi_reference_data.py`
+- Rebuild any reference bundle:
+  - `python tools/extract_reference_dataset.py --dataset-id <id>`
 
 ## 15. Commit hygiene reminder
 
