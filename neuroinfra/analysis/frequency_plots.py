@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Any
+from typing import Any, Mapping
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -36,6 +36,17 @@ class FrequencyPlotConfig:
     guide_line_spacing_ms: float = 0.0
 
 
+@dataclass(frozen=True)
+class ResultFrequencyPlotFamily:
+    """One result-backed frequency-sample family plus its default plot titles."""
+
+    collect_samples_fn: Any
+    selection_label_fn: Any
+    title_1d: str
+    title_2d: str
+    title_time_binned: str
+
+
 def coerce_frequency_plot_config(
     config: FrequencyPlotConfig | dict[str, Any] | None = None,
     **overrides: Any,
@@ -64,6 +75,90 @@ def frequency_plot_config_with_modulus(
     copied = replace(coerce_frequency_plot_config(config))
     copied.modulus = normalize_time_modulus(modulus)
     return copied
+
+
+def plot_result_frequency_kde_1d(
+    result: dict[str, Any],
+    family: ResultFrequencyPlotFamily,
+    *,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+    selection: Any = None,
+    collector_kwargs: Mapping[str, Any] | None = None,
+) -> Any:
+    """Collect one result-backed frequency family and render its 1D KDE view."""
+    plot_config = coerce_frequency_plot_config(config)
+    data = family.collect_samples_fn(
+        result,
+        modulus=plot_config.modulus,
+        **dict(collector_kwargs or {}),
+    )
+    label = family.selection_label_fn(selection)
+    return plot_frequency_kde_1d_from_samples(
+        np.asarray(data["freqs"], dtype=float),
+        config=plot_config,
+        title=title or f"{family.title_1d} ({label})",
+        ax=ax,
+    )
+
+
+def plot_result_frequency_kde_2d(
+    result: dict[str, Any],
+    family: ResultFrequencyPlotFamily,
+    *,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+    selection: Any = None,
+    collector_kwargs: Mapping[str, Any] | None = None,
+) -> Any:
+    """Collect one result-backed frequency family and render its 2D KDE view."""
+    plot_config = coerce_frequency_plot_config(config)
+    data = family.collect_samples_fn(
+        result,
+        modulus=plot_config.modulus,
+        **dict(collector_kwargs or {}),
+    )
+    label = family.selection_label_fn(selection)
+    return plot_frequency_kde_2d_from_samples(
+        np.asarray(data["times"], dtype=float),
+        np.asarray(data["freqs"], dtype=float),
+        config=plot_config,
+        title=title or f"{family.title_2d} ({label})",
+        ax=ax,
+    )
+
+
+def plot_result_frequency_time_binned(
+    result: dict[str, Any],
+    family: ResultFrequencyPlotFamily,
+    *,
+    config: FrequencyPlotConfig | dict[str, Any] | None = None,
+    ax: Any = None,
+    title: str | None = None,
+    selection: Any = None,
+    collector_kwargs: Mapping[str, Any] | None = None,
+    show_dots: bool = True,
+    show_ridgeline_kde: bool = False,
+) -> Any:
+    """Collect one result-backed frequency family and render its time-binned view."""
+    plot_config = coerce_frequency_plot_config(config)
+    data = family.collect_samples_fn(
+        result,
+        modulus=plot_config.modulus,
+        **dict(collector_kwargs or {}),
+    )
+    label = family.selection_label_fn(selection)
+    return plot_frequency_time_binned_from_samples(
+        np.asarray(data["times"], dtype=float),
+        np.asarray(data["freqs"], dtype=float),
+        config=plot_config,
+        title=title or f"{family.title_time_binned} ({label})",
+        ax=ax,
+        show_dots=show_dots,
+        show_ridgeline_kde=show_ridgeline_kde,
+    )
 
 
 def _apply_frequency_kde_y_scale(kde: Any, scale_y: float) -> None:

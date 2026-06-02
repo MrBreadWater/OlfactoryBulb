@@ -308,11 +308,11 @@ from neuroinfra.analysis.plotting import (
 )
 from neuroinfra.analysis.frequency_plots import (
     FrequencyPlotConfig,
-    coerce_frequency_plot_config as _neuroinfra_coerce_frequency_plot_config,
+    ResultFrequencyPlotFamily as _NeuroinfraResultFrequencyPlotFamily,
     frequency_plot_config_with_modulus,
-    plot_frequency_kde_1d_from_samples as _neuroinfra_plot_frequency_kde_1d_from_samples,
-    plot_frequency_kde_2d_from_samples as _neuroinfra_plot_frequency_kde_2d_from_samples,
-    plot_frequency_time_binned_from_samples as _neuroinfra_plot_frequency_time_binned_from_samples,
+    plot_result_frequency_kde_1d as _neuroinfra_plot_result_frequency_kde_1d,
+    plot_result_frequency_kde_2d as _neuroinfra_plot_result_frequency_kde_2d,
+    plot_result_frequency_time_binned as _neuroinfra_plot_result_frequency_time_binned,
 )
 from neuroinfra.analysis.sweeps import (
     SweepPlotSpec,
@@ -6615,6 +6615,24 @@ def collect_gc_output_frequency_samples(
     }
 
 
+_OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY = _NeuroinfraResultFrequencyPlotFamily(
+    collect_samples_fn=collect_spike_frequency_samples,
+    selection_label_fn=lambda cell_types: "all" if not cell_types else "+".join(str(name) for name in cell_types),
+    title_1d="Soma Spike Frequency Distribution",
+    title_2d="Soma Spike Time/Frequency KDE",
+    title_time_binned="Soma Spike Frequency Distributions",
+)
+
+
+_OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY = _NeuroinfraResultFrequencyPlotFamily(
+    collect_samples_fn=collect_gc_output_frequency_samples,
+    selection_label_fn=lambda target_types: "all" if not target_types else "_".join(str(name) for name in target_types),
+    title_1d="GC Inhibitory Output Frequency Distribution",
+    title_2d="GC Inhibitory Output Time/Frequency KDE",
+    title_time_binned="GC Inhibitory Output Frequency Distributions",
+)
+
+
 def plot_spike_frequency_kde_1d(
     result: dict[str, Any],
     *,
@@ -6626,20 +6644,18 @@ def plot_spike_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of detected soma spike frequencies."""
-    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
-    data = collect_spike_frequency_samples(
+    return _neuroinfra_plot_result_frequency_kde_1d(
         result,
-        indices=indices,
-        cell_types=cell_types,
-        modulus=plot_config.modulus,
-        threshold=threshold,
-    )
-    label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
-    return _neuroinfra_plot_frequency_kde_1d_from_samples(
-        data["freqs"],
-        config=plot_config,
-        title=title or f"Soma Spike Frequency Distribution ({label})",
+        _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
+        config=config,
         ax=ax,
+        title=title,
+        selection=cell_types,
+        collector_kwargs={
+            "indices": indices,
+            "cell_types": cell_types,
+            "threshold": threshold,
+        },
     )
 
 
@@ -6654,21 +6670,18 @@ def plot_spike_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of detected soma spike frequencies."""
-    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
-    data = collect_spike_frequency_samples(
+    return _neuroinfra_plot_result_frequency_kde_2d(
         result,
-        indices=indices,
-        cell_types=cell_types,
-        modulus=plot_config.modulus,
-        threshold=threshold,
-    )
-    label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
-    return _neuroinfra_plot_frequency_kde_2d_from_samples(
-        data["times"],
-        data["freqs"],
-        config=plot_config,
-        title=title or f"Soma Spike Time/Frequency KDE ({label})",
+        _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
+        config=config,
         ax=ax,
+        title=title,
+        selection=cell_types,
+        collector_kwargs={
+            "indices": indices,
+            "cell_types": cell_types,
+            "threshold": threshold,
+        },
     )
 
 
@@ -6685,21 +6698,18 @@ def plot_spike_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned soma spike-frequency distributions."""
-    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
-    data = collect_spike_frequency_samples(
+    return _neuroinfra_plot_result_frequency_time_binned(
         result,
-        indices=indices,
-        cell_types=cell_types,
-        modulus=plot_config.modulus,
-        threshold=threshold,
-    )
-    label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
-    return _neuroinfra_plot_frequency_time_binned_from_samples(
-        data["times"],
-        data["freqs"],
-        config=plot_config,
-        title=title or f"Soma Spike Frequency Distributions ({label})",
+        _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
+        config=config,
         ax=ax,
+        title=title,
+        selection=cell_types,
+        collector_kwargs={
+            "indices": indices,
+            "cell_types": cell_types,
+            "threshold": threshold,
+        },
         show_dots=show_dots,
         show_ridgeline_kde=show_ridgeline_kde,
     )
@@ -6715,19 +6725,17 @@ def plot_gc_output_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of reciprocal GC inhibitory-output frequencies."""
-    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
-    data = collect_gc_output_frequency_samples(
+    return _neuroinfra_plot_result_frequency_kde_1d(
         result,
-        indices=indices,
-        target_types=target_types,
-        modulus=plot_config.modulus,
-    )
-    label = "all" if not target_types else "_".join(str(name) for name in target_types)
-    return _neuroinfra_plot_frequency_kde_1d_from_samples(
-        data["freqs"],
-        config=plot_config,
-        title=title or f"GC Inhibitory Output Frequency Distribution ({label})",
+        _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
+        config=config,
         ax=ax,
+        title=title,
+        selection=target_types,
+        collector_kwargs={
+            "indices": indices,
+            "target_types": target_types,
+        },
     )
 
 
@@ -6741,20 +6749,17 @@ def plot_gc_output_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of reciprocal GC inhibitory-output frequencies."""
-    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
-    data = collect_gc_output_frequency_samples(
+    return _neuroinfra_plot_result_frequency_kde_2d(
         result,
-        indices=indices,
-        target_types=target_types,
-        modulus=plot_config.modulus,
-    )
-    label = "all" if not target_types else "_".join(str(name) for name in target_types)
-    return _neuroinfra_plot_frequency_kde_2d_from_samples(
-        data["times"],
-        data["freqs"],
-        config=plot_config,
-        title=title or f"GC Inhibitory Output Time/Frequency KDE ({label})",
+        _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
+        config=config,
         ax=ax,
+        title=title,
+        selection=target_types,
+        collector_kwargs={
+            "indices": indices,
+            "target_types": target_types,
+        },
     )
 
 
@@ -6770,20 +6775,17 @@ def plot_gc_output_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned reciprocal GC inhibitory-output frequency distributions."""
-    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
-    data = collect_gc_output_frequency_samples(
+    return _neuroinfra_plot_result_frequency_time_binned(
         result,
-        indices=indices,
-        target_types=target_types,
-        modulus=plot_config.modulus,
-    )
-    label = "all" if not target_types else "_".join(str(name) for name in target_types)
-    return _neuroinfra_plot_frequency_time_binned_from_samples(
-        data["times"],
-        data["freqs"],
-        config=plot_config,
-        title=title or f"GC Inhibitory Output Frequency Distributions ({label})",
+        _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
+        config=config,
         ax=ax,
+        title=title,
+        selection=target_types,
+        collector_kwargs={
+            "indices": indices,
+            "target_types": target_types,
+        },
         show_dots=show_dots,
         show_ridgeline_kde=show_ridgeline_kde,
     )

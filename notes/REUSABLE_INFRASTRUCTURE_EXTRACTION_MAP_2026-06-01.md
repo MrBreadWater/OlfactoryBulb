@@ -147,6 +147,7 @@ What is already generic:
 - named-signal trace, band-pass, PSD overview, spectrogram, wavelet, and band-power view helpers built on provider-style resolvers
 - phase-locking summaries from resolved signals and labeled spike-time rows
 - frequency KDE and time-binned plotting from precomputed sample arrays
+- result-backed frequency plot families for 1D KDE, 2D KDE, and time-binned rendering
 - instantaneous frequency sample collection from labeled event rows
 - trace-derived instantaneous frequency sample collection from labeled continuous-trace rows
 - row filtering by label-prefix families

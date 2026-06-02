@@ -126,7 +126,8 @@ shared event-rate plotting, reusable event-rate series assembly,
 prepared labeled event display rows, overview-layout derivation from prepared
 rows, label-prefix row filtering, normalization-driven event-rate
 computation, result-backed event-family specs for filtering, sample
-collection, and normalized rate computation, stable ordered-name helpers,
+collection, and normalized rate computation, result-backed frequency plot
+families for KDE/time-binned rendering, stable ordered-name helpers,
 fair round-robin subgroup truncation, ordered group-row flattening with
 per-bucket limits, raster-plus-rate overview layout, and
 the named-signal provider registry plus provider-factory layer for keyed

@@ -84,11 +84,15 @@ from .phase_locking import (
 )
 from .frequency_plots import (
     FrequencyPlotConfig,
+    ResultFrequencyPlotFamily,
     coerce_frequency_plot_config,
     frequency_plot_config_with_modulus,
     plot_frequency_kde_1d_from_samples,
     plot_frequency_kde_2d_from_samples,
     plot_frequency_time_binned_from_samples,
+    plot_result_frequency_kde_1d,
+    plot_result_frequency_kde_2d,
+    plot_result_frequency_time_binned,
 )
 from .sweeps import (
     SweepPlotSpec,
@@ -176,6 +180,7 @@ __all__ = [
     "ensure_raster_axis",
     "fit_raster_labels",
     "FrequencyPlotConfig",
+    "ResultFrequencyPlotFamily",
     "fold_time_matrix_by_modulus",
     "fold_time_series_by_modulus",
     "frequency_plot_config_with_modulus",
@@ -191,6 +196,9 @@ __all__ = [
     "plot_frequency_kde_1d_from_samples",
     "plot_frequency_kde_2d_from_samples",
     "plot_frequency_time_binned_from_samples",
+    "plot_result_frequency_kde_1d",
+    "plot_result_frequency_kde_2d",
+    "plot_result_frequency_time_binned",
     "plot_named_time_series",
     "plot_resolved_band_power_summary",
     "plot_resolved_signal",
