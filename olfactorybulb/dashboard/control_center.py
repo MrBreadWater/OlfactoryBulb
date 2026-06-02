@@ -32,8 +32,8 @@ DEFAULT_STATUS_JSON = (REPO_ROOT / hfo_dashboard.SUMMARY_STATUS_PATH).resolve()
 DEFAULT_OPTIMIZATION_ROOT = REPO_ROOT / "results" / "notebook_runs" / "optimization"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 6006
-DEFAULT_AUDIT_ID = "repo_health"
-DEFAULT_AUDIT_ARGS = ["--profile", "maintained"]
+DEFAULT_AUDIT_ID = "all"
+DEFAULT_AUDIT_ARGS: list[str] = []
 DEFAULT_CONTROL_CENTER_TOP_N = hfo_dashboard.DEFAULT_TOP_N
 DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N = 0
 DEFAULT_CONTROL_CENTER_GENERATE_PACKET_WORKERS = hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS
@@ -205,7 +205,7 @@ def _display_audit_args(audit_id: str, audit_args: list[str]) -> str:
     return " ".join(normalized_args)
 
 
-def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_label: str) -> str:
+def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     options_html = "\n".join(
         (
             f"<option value='{html_escape(entry['audit_id'], quote=True)}'"
@@ -218,58 +218,31 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
     audits_payload = html_escape(_json_script_payload(_available_audit_entries()), quote=False)
     audit_args_text = html_escape(_display_audit_args(audit_id, audit_args))
     return f"""
-<div class="control-grid">
-  <section class="toolbar-card">
-    <div class="toolbar-card-header">
-      <div>
-        <h2>Audit runner</h2>
-        <p id="audit-selection-description">Choose any registered audit, pass explicit arguments, and rerun it without restarting the shell.</p>
-      </div>
+<section class="toolbar-card audit-runner-card">
+  <div class="toolbar-card-header">
+    <div>
+      <h2>Audit runner</h2>
+      <p id="audit-selection-description">Choose any registered audit, pass explicit arguments, and run it without leaving the audit tab.</p>
     </div>
-    <div class="form-grid">
-      <label class="form-field">
-        <span>Audit id</span>
-        <select id="control-center-audit-id">
-          {options_html}
-        </select>
-      </label>
-      <label class="form-field form-field-wide">
-        <span>Audit arguments</span>
-        <input id="control-center-audit-args" type="text" value="{audit_args_text}" placeholder="--profile maintained or --suite reference_bundles --details">
-      </label>
-    </div>
-    <div class="toolbar-actions">
-      <button class="toolbar-button toolbar-button-primary" type="button" id="control-center-run-audit">Run selected audit</button>
-      <button class="toolbar-button" type="button" id="control-center-reset-audit">Reset defaults</button>
-      <span class="toolbar-meta" id="control-center-audit-runner-status">Startup is preparing the default audit.</span>
-    </div>
-  </section>
-  <section class="toolbar-card">
-    <div class="toolbar-card-header">
-      <div>
-        <h2>Module status</h2>
-        <p>Live status is pulled from the control-center state endpoint so badges and content stay in sync.</p>
-      </div>
-    </div>
-    <div class="status-grid">
-      <div class="status-card">
-        <span>Audit tab</span>
-        <strong id="control-center-audit-status-text">starting</strong>
-        <small id="control-center-audit-status-detail">Preparing {html_escape(audit_id)}.</small>
-      </div>
-      <div class="status-card">
-        <span>Optimization tab</span>
-        <strong id="control-center-optimization-status-text">loading</strong>
-        <small id="control-center-optimization-status-detail">{html_escape(campaign_label)}</small>
-      </div>
-      <div class="status-card">
-        <span>Docs tab</span>
-        <strong id="control-center-docs-status-text">ready</strong>
-        <small id="control-center-docs-status-detail">Rendered maintained docs portal.</small>
-      </div>
-    </div>
-  </section>
-</div>
+  </div>
+  <div class="form-grid">
+    <label class="form-field">
+      <span>Audit id</span>
+      <select id="control-center-audit-id">
+        {options_html}
+      </select>
+    </label>
+    <label class="form-field form-field-wide">
+      <span>Audit arguments</span>
+      <input id="control-center-audit-args" type="text" value="{audit_args_text}" placeholder="Leave blank for the audit default, or pass explicit args like --suite maintained_core --details">
+    </label>
+  </div>
+  <div class="toolbar-actions">
+    <button class="toolbar-button toolbar-button-primary" type="button" id="control-center-run-audit">Run selected audit</button>
+    <button class="toolbar-button" type="button" id="control-center-reset-audit">Reset defaults</button>
+    <span class="toolbar-meta" id="control-center-audit-runner-status">No audit is running yet.</span>
+  </div>
+</section>
 <script id="control-center-audit-options" type="application/json">{audits_payload}</script>
 <script>
 (() => {{
@@ -406,23 +379,9 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
   window.addEventListener("dashboard-shell-state", (event) => {{
     const state = event.detail || {{}};
     const auditState = state.audit || {{}};
-    const optimizationState = state.optimization || {{}};
-    const docsState = state.docs || {{}};
     if (!formDirty && auditState.audit_id) {{
       setFormValues(String(auditState.audit_id), Array.isArray(auditState.audit_args) ? auditState.audit_args : []);
     }}
-    const auditStatusText = document.getElementById("control-center-audit-status-text");
-    const auditStatusDetail = document.getElementById("control-center-audit-status-detail");
-    const optimizationStatusText = document.getElementById("control-center-optimization-status-text");
-    const optimizationStatusDetail = document.getElementById("control-center-optimization-status-detail");
-    const docsStatusText = document.getElementById("control-center-docs-status-text");
-    const docsStatusDetail = document.getElementById("control-center-docs-status-detail");
-    if (auditStatusText) auditStatusText.textContent = String(auditState.badge || auditState.status || "starting");
-    if (auditStatusDetail) auditStatusDetail.textContent = String(auditState.message || "");
-    if (optimizationStatusText) optimizationStatusText.textContent = String(optimizationState.badge || optimizationState.status || "loading");
-    if (optimizationStatusDetail) optimizationStatusDetail.textContent = String(optimizationState.message || "");
-    if (docsStatusText) docsStatusText.textContent = String(docsState.badge || docsState.status || "ready");
-    if (docsStatusDetail) docsStatusDetail.textContent = String(docsState.message || "");
     if (runnerStatus && auditState.message) {{
       runnerStatus.textContent = String(auditState.message);
     }}
@@ -443,12 +402,18 @@ def _initial_shell_state(*, audit_id: str, audit_args: list[str], campaign_label
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "campaign_label": campaign_label,
         "audit": {
-            "status": "starting",
-            "badge": "starting",
-            "badge_tone": "running",
+            "status": "idle",
+            "badge": "idle",
+            "badge_tone": "info",
             "audit_id": audit_id,
             "audit_args": list(audit_args),
-            "message": f"Preparing {audit_id} {' '.join(audit_args)}".strip(),
+            "message": "No audit has been run in this session yet.",
+            "progress_active": False,
+            "progress_label": "",
+            "progress_current": 0,
+            "progress_total": 0,
+            "progress_value_text": "",
+            "progress_indeterminate": False,
         },
         "optimization": {
             "status": "loading",
@@ -486,6 +451,13 @@ def _initial_shell_state(*, audit_id: str, audit_args: list[str], campaign_label
                 "revision": "maintained-docs",
             },
         },
+        "progress": {
+            "active": False,
+            "label": "",
+            "value_text": "",
+            "fraction": 0.0,
+            "indeterminate": False,
+        },
         "available_audits": _available_audit_entries(),
     }
 
@@ -503,11 +475,12 @@ def _write_control_center_shell(
         subtitle=f"{campaign_label} | docs, audits, and optimization in one maintained shell",
         tabs=_module_tabs(),
         initial_tab="audits",
-        toolbar_html=_render_control_toolbar(
-            audit_id=audit_id,
-            audit_args=audit_args,
-            campaign_label=campaign_label,
-        ),
+        panel_toolbar_html_by_key={
+            "audits": _render_audit_runner_panel(
+                audit_id=audit_id,
+                audit_args=audit_args,
+            )
+        },
         shell_state=shell_state,
         state_endpoint="/__control_center_state__",
         state_poll_interval_ms=DEFAULT_STATE_POLL_INTERVAL_MS,
@@ -540,9 +513,40 @@ def _audit_history_group_id(entry_index: int, audit_id: str, audit_args: list[st
     return f"{slug}-{entry_index:03d}"
 
 
+def _audit_registry_title(audit_id: str) -> str:
+    normalized_id = str(audit_id or "").strip()
+    if not normalized_id:
+        return ""
+    for entry in _available_audit_entries():
+        if str(entry.get("audit_id") or "").strip() == normalized_id:
+            return str(entry.get("title") or "").strip()
+    return ""
+
+
 def _audit_history_group_title(audit_id: str, audit_args: list[str]) -> str:
+    title = _audit_registry_title(audit_id) or str(audit_id or "").strip()
     args_text = " ".join(str(arg) for arg in audit_args if str(arg).strip()).strip()
-    return f"{audit_id} {args_text}".strip()
+    return f"{title} ({args_text})".strip() if args_text else title
+
+
+def _format_summary_brief(summary: Any) -> str:
+    if not isinstance(summary, dict):
+        return ""
+    ordered_keys = ("FAIL", "WARN", "PASS", "SKIP", "INFO")
+    parts: list[str] = []
+    seen: set[str] = set()
+    for key in ordered_keys:
+        value = summary.get(key)
+        seen.add(key)
+        if value in (None, "", 0):
+            continue
+        parts.append(f"{key.lower()} {value}")
+    for key, value in summary.items():
+        normalized_key = str(key)
+        if normalized_key in seen or value in (None, "", 0):
+            continue
+        parts.append(f"{normalized_key.lower()} {value}")
+    return ", ".join(parts)
 
 
 def _load_audit_history(audits_dir: Path) -> list[dict[str, Any]]:
@@ -570,15 +574,25 @@ def _combine_audit_history(entries: list[dict[str, Any]]) -> AuditReport:
         item_payloads = report_payload.get("items") if isinstance(report_payload, dict) else None
         if not isinstance(item_payloads, list):
             continue
-        group_id = str(entry.get("group_id") or _audit_history_group_id(index, str(entry.get("audit_id") or "audit"), list(entry.get("audit_args") or [])))
-        group_title = str(entry.get("group_title") or _audit_history_group_title(str(entry.get("audit_id") or "audit"), list(entry.get("audit_args") or [])))
+        entry_audit_args = list(entry.get("audit_args") or [])
+        entry_group_id = str(entry.get("group_id") or _audit_history_group_id(index, str(entry.get("audit_id") or "audit"), list(entry.get("audit_args") or [])))
+        entry_group_title = str(entry.get("group_title") or _audit_history_group_title(str(entry.get("audit_id") or "audit"), entry_audit_args))
+        nested_group_count = len(report_payload.get("groups") or []) if isinstance(report_payload.get("groups"), list) else 0
         for item_payload in item_payloads:
             if not isinstance(item_payload, dict):
                 continue
             item = AuditItem(**item_payload)
+            nested_group_id = str(item.group_id or report_payload.get("audit_id") or "items")
+            nested_group_title = str(item.group_title or item.title or nested_group_id)
+            if nested_group_count > 1:
+                display_title = nested_group_title
+            else:
+                report_title = str(report_payload.get("title") or "").strip()
+                display_title = entry_group_title if entry_audit_args else (report_title or entry_group_title or nested_group_title)
+            combined_group_id = f"{entry_group_id}.{nested_group_id}"
             combined_items.append(
                 AuditItem(
-                    check_id=f"{group_id}.{item.check_id}",
+                    check_id=f"{combined_group_id}.{item.check_id}",
                     status=item.status,
                     title=item.title,
                     criterion=item.criterion,
@@ -590,8 +604,8 @@ def _combine_audit_history(entries: list[dict[str, Any]]) -> AuditReport:
                     human_review_status=item.human_review_status,
                     human_review_note=item.human_review_note,
                     human_review_reviewer=item.human_review_reviewer,
-                    group_id=group_id,
-                    group_title=group_title,
+                    group_id=combined_group_id,
+                    group_title=display_title,
                     detail_level=item.detail_level,
                 )
             )
@@ -644,16 +658,18 @@ def _compose_control_center_state(
     optimization_manifest = _read_json_dict(optimization_dir / "manifest.json")
 
     audit_state = state.setdefault("audit", {})
-    if audit_state.get("status") not in {"running", "starting", "error"}:
+    if audit_state.get("status") not in {"running", "starting", "error", "idle"}:
         if audit_manifest:
             latest_history = audit_history[-1] if audit_history else {}
             latest_label = str(latest_history.get("group_title") or audit_state.get("audit_id") or audit_manifest.get("title") or "")
+            summary_brief = _format_summary_brief(audit_manifest.get("summary"))
+            message = f"{latest_label}: {summary_brief}".strip(": ") if summary_brief else latest_label
             audit_state.update(
                 {
                     "status": "ready",
                     "badge": str(audit_manifest.get("worst_status") or "ready"),
                     "badge_tone": _badge_tone(str(audit_manifest.get("worst_status") or "READY")),
-                    "message": f"{latest_label}: {audit_manifest.get('summary') or {}}".strip(": "),
+                    "message": message,
                     "summary": audit_manifest.get("summary") or {},
                     "worst_status": audit_manifest.get("worst_status") or "PASS",
                     "generated_at": audit_manifest.get("generated_at") or "",
@@ -663,9 +679,9 @@ def _compose_control_center_state(
         elif audit_state.get("status") != "error":
             audit_state.update(
                 {
-                    "status": "starting",
-                    "badge": "starting",
-                    "badge_tone": "running",
+                    "status": "idle",
+                    "badge": "idle",
+                    "badge_tone": "info",
                 }
             )
 
@@ -722,6 +738,18 @@ def _compose_control_center_state(
             "src": "/docs/index.html",
             "revision": "maintained-docs",
         },
+    }
+    audit_status = str(audit_state.get("status") or "")
+    progress_active = bool(audit_state.get("progress_active")) or audit_status in {"running", "starting"}
+    progress_current = int(audit_state.get("progress_current") or 0)
+    progress_total = int(audit_state.get("progress_total") or 0)
+    progress_fraction = (progress_current / progress_total) if progress_total > 0 else 0.0
+    state["progress"] = {
+        "active": progress_active,
+        "label": str(audit_state.get("progress_label") or audit_state.get("message") or ""),
+        "value_text": str(audit_state.get("progress_value_text") or (f"{progress_current}/{progress_total}" if progress_total > 0 else "")),
+        "fraction": progress_fraction,
+        "indeterminate": bool(audit_state.get("progress_indeterminate")) or progress_total <= 0,
     }
     state["updated_at"] = datetime.now().isoformat(timespec="seconds")
     return state
@@ -838,6 +866,7 @@ def export_control_center(
     output_dir: str | Path | None = None,
     audit_id: str = DEFAULT_AUDIT_ID,
     audit_args: list[str] | None = None,
+    run_audit_on_start: bool = False,
     top_n: int = DEFAULT_CONTROL_CENTER_TOP_N,
     refresh_s: float = hfo_dashboard.DEFAULT_REFRESH_S,
     generate_packets_top_n: int = DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N,
@@ -877,16 +906,23 @@ def export_control_center(
             asset_url_prefix="/repo",
         )
         campaign_label = str(campaign_path)
-    log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
     _write_audit_history(audits_dir, [])
-    audit_report = run_audit_by_id(audit_id, resolved_audit_args)
-    history_entries = _append_or_replace_audit_history_entry(
-        audits_dir,
-        audit_id=audit_id,
-        audit_args=resolved_audit_args,
-        report=audit_report,
-    )
-    combined_report = _combine_audit_history(history_entries)
+    if run_audit_on_start:
+        log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
+        audit_report = run_audit_by_id(audit_id, resolved_audit_args)
+        history_entries = _append_or_replace_audit_history_entry(
+            audits_dir,
+            audit_id=audit_id,
+            audit_args=resolved_audit_args,
+            report=audit_report,
+        )
+        combined_report = _combine_audit_history(history_entries)
+    else:
+        combined_report = AuditReport(
+            audit_id="control_center_audits",
+            title="Control center audits",
+            items=[],
+        )
     audit_manifest = export_audit_dashboard(
         combined_report,
         audits_dir,
@@ -902,6 +938,29 @@ def export_control_center(
         audits_dir=audits_dir,
         optimization_dir=optimization_dir,
     )
+    if not run_audit_on_start:
+        shell_state["audit"].update(
+            {
+                "status": "idle",
+                "badge": "idle",
+                "badge_tone": "info",
+                "message": "No audit has been run in this session yet.",
+                "summary": {},
+                "worst_status": "",
+                "generated_at": "",
+                "progress_active": False,
+                "progress_label": "",
+                "progress_current": 0,
+                "progress_total": 0,
+                "progress_value_text": "",
+                "progress_indeterminate": False,
+            }
+        )
+        shell_state = _compose_control_center_state(
+            base_state=shell_state,
+            audits_dir=audits_dir,
+            optimization_dir=optimization_dir,
+        )
 
     _write_control_center_shell(
         root_dir,
@@ -969,6 +1028,7 @@ def serve_control_center(
     output_dir: str | Path | None = None,
     audit_id: str = DEFAULT_AUDIT_ID,
     audit_args: list[str] | None = None,
+    run_audit_on_start: bool = False,
     top_n: int = DEFAULT_CONTROL_CENTER_TOP_N,
     refresh_s: float = hfo_dashboard.DEFAULT_REFRESH_S,
     generate_packets_top_n: int = DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N,
@@ -1022,10 +1082,10 @@ def serve_control_center(
                 base_state.setdefault("docs", {}).update(docs_patch)
             return _refresh_state_file()
 
-    _write_loading_frame(
+    export_audit_dashboard(
+        AuditReport(audit_id="control_center_audits", title="Control center audits", items=[]),
         audits_dir,
-        title="Audit starting",
-        message=f"Running {audit_id} {' '.join(resolved_audit_args)}".strip(),
+        refresh_endpoint="/__audit_refresh__",
     )
     _write_audit_history(audits_dir, [])
     _write_loading_frame(
@@ -1052,11 +1112,6 @@ def serve_control_center(
 
     def _run_audit_render(audit_id_to_run: str, audit_args_to_run: list[str]) -> None:
         run_token = time.time_ns()
-        _write_loading_frame(
-            audits_dir,
-            title="Audit running",
-            message=f"Running {audit_id_to_run} {' '.join(audit_args_to_run)}".strip(),
-        )
         _update_base_state(
             audit_patch={
                 "status": "running",
@@ -1068,6 +1123,12 @@ def serve_control_center(
                 "summary": {},
                 "worst_status": "",
                 "generated_at": "",
+                "progress_active": True,
+                "progress_label": f"Running {audit_id_to_run}",
+                "progress_current": 0,
+                "progress_total": 0,
+                "progress_value_text": "",
+                "progress_indeterminate": True,
                 "revision": str(run_token),
             }
         )
@@ -1096,6 +1157,12 @@ def serve_control_center(
                     "summary": report.summary,
                     "worst_status": report.worst_status,
                     "generated_at": audit_manifest.get("generated_at") or "",
+                    "progress_active": False,
+                    "progress_label": "",
+                    "progress_current": 0,
+                    "progress_total": 0,
+                    "progress_value_text": "",
+                    "progress_indeterminate": False,
                     "revision": str(audit_manifest.get("manifest_revision") or audit_manifest.get("generated_at") or run_token),
                 }
             )
@@ -1115,6 +1182,12 @@ def serve_control_center(
                     "audit_id": audit_id_to_run,
                     "audit_args": list(audit_args_to_run),
                     "message": error_text,
+                    "progress_active": False,
+                    "progress_label": "",
+                    "progress_current": 0,
+                    "progress_total": 0,
+                    "progress_value_text": "",
+                    "progress_indeterminate": False,
                     "revision": str(time.time_ns()),
                 }
             )
@@ -1124,6 +1197,26 @@ def serve_control_center(
             active_thread = audit_thread_holder["thread"]
             if active_thread is not None and active_thread.is_alive():
                 return False, "An audit run is already in progress."
+            _update_base_state(
+                audit_patch={
+                    "status": "running",
+                    "badge": "running",
+                    "badge_tone": "running",
+                    "audit_id": audit_id_to_run,
+                    "audit_args": list(audit_args_to_run),
+                    "message": f"Running {audit_id_to_run} {' '.join(audit_args_to_run)}".strip(),
+                    "summary": {},
+                    "worst_status": "",
+                    "generated_at": "",
+                    "progress_active": True,
+                    "progress_label": f"Running {audit_id_to_run}",
+                    "progress_current": 0,
+                    "progress_total": 0,
+                    "progress_value_text": "",
+                    "progress_indeterminate": True,
+                    "revision": str(time.time_ns()),
+                }
+            )
             thread = threading.Thread(
                 target=_run_audit_render,
                 args=(audit_id_to_run, list(audit_args_to_run)),
@@ -1307,7 +1400,10 @@ def serve_control_center(
                         "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or ""),
                     }
                 )
-            ok, _message = _queue_audit_render(audit_id, resolved_audit_args)
+            if run_audit_on_start:
+                ok, _message = _queue_audit_render(audit_id, resolved_audit_args)
+                if not ok:
+                    raise RuntimeError(_message)
             if watch_optimization and campaign_path is not None and not bool(optimization_manifest.get("placeholder")):
                 watcher_thread = threading.Thread(
                     target=hfo_dashboard.watch_visual_dashboard,
@@ -1403,6 +1499,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--host", default=DEFAULT_HOST)
     parser.add_argument("--port", type=int, default=DEFAULT_PORT)
     parser.add_argument("--no-watch-optimization", action="store_true")
+    parser.add_argument("--run-audit-on-start", action="store_true", help="Run the selected audit immediately instead of leaving the audit tab idle on startup.")
     parser.add_argument("--open-browser", action="store_true", help="Open the control center in a local browser after startup.")
     args, extra_args = parser.parse_known_args(argv)
     if extra_args[:1] == ["--"]:
@@ -1412,6 +1509,7 @@ def main(argv: list[str] | None = None) -> int:
         "output_dir": args.output_dir,
         "audit_id": str(args.audit_id),
         "audit_args": extra_args if extra_args else None,
+        "run_audit_on_start": bool(args.run_audit_on_start),
         "top_n": int(args.top_n),
         "refresh_s": float(args.refresh_s),
         "generate_packets_top_n": int(args.generate_packets_top_n),

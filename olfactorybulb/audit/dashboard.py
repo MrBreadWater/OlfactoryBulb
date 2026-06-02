@@ -41,11 +41,14 @@ def _render_summary(summary: dict[str, int]) -> str:
 def _render_evidence(evidence: dict[str, Any]) -> str:
     if not evidence:
         return ""
-    lines = "\n".join(_esc(line) for line in _pretty_evidence_lines(evidence))
+    lines_html = "".join(
+        f"<div class='evidence-line'>{_esc(line)}</div>"
+        for line in _pretty_evidence_lines(evidence)
+    )
     return (
-        "<div class='item-block'>"
+        "<div class='item-block evidence-block'>"
         "<h4>Evidence</h4>"
-        f"<pre>{lines}</pre>"
+        f"<div class='evidence-lines'>{lines_html}</div>"
         "</div>"
     )
 
@@ -125,7 +128,7 @@ def _render_group(group: dict[str, Any]) -> str:
             f"data-group-id='{_esc(group['group_id'])}' data-worst-status='{_esc(group['worst_status'])}'>",
             "<header class='group-header'>",
             f"<div class='group-heading'><h2>{_esc(_expand_terms(group['title'], sentence_case=True))}</h2>",
-            f"<p>{_esc(group['group_id'])}</p></div>",
+            "</div>",
             "<div class='group-header-actions'>",
             f"<div class='summary-row'>{_render_summary(group['summary'])}</div>",
             "<button class='action-button group-toggle' type='button' data-group-toggle>Collapse</button>",
@@ -147,7 +150,7 @@ def render_audit_dashboard_html(
     group_nav = "\n".join(
         (
             f"<a href='#group-{_esc(group['group_id'])}' class='group-link'>"
-            f"<span class='group-link-label'>{_esc(group['group_id'])}</span>"
+            f"<span class='group-link-label'>{_esc(_expand_terms(group['title'], sentence_case=True))}</span>"
             f"<small>{int(group.get('item_count', 0))} items</small>"
             f"{_render_status_badge(str(group['worst_status']))}"
             "</a>"
@@ -155,9 +158,14 @@ def render_audit_dashboard_html(
         for group in groups
     )
     group_sections = "\n".join(_render_group(group) for group in groups)
+    empty_message = (
+        "No audit results yet. Use the audit runner in the Audits tab to start one."
+        if not groups
+        else "No audit items match the current filters."
+    )
     refresh_button = ""
     refresh_script = ""
-    if refresh_endpoint:
+    if refresh_endpoint and payload.get("items"):
         refresh_button = "<button id='refresh-audit-button' class='action-button' type='button'>Rerun current audit</button>"
         refresh_script = f"""
       const button = document.getElementById("refresh-audit-button");
@@ -208,11 +216,11 @@ def render_audit_dashboard_html(
       z-index: 10;
       background: rgba(247, 248, 251, 0.96);
       border-bottom: 1px solid var(--line);
-      padding: 18px 28px 14px;
+      padding: 14px 22px 12px;
       backdrop-filter: blur(8px);
     }}
-    h1 {{ margin: 0 0 4px; font-size: 22px; }}
-    main {{ max-width: 1540px; margin: 0 auto; padding: 24px 28px 60px; }}
+    h1 {{ margin: 0 0 4px; font-size: 18px; }}
+    main {{ max-width: 1540px; margin: 0 auto; padding: 18px 22px 40px; }}
     .subtle {{ color: var(--muted); font-size: 13px; }}
     .stats {{
       display: grid;
@@ -269,12 +277,6 @@ def render_audit_dashboard_html(
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 10px;
       margin-bottom: 16px;
-      position: sticky;
-      top: 76px;
-      z-index: 28;
-      padding-bottom: 4px;
-      background: linear-gradient(to bottom, rgba(247, 248, 251, 0.98), rgba(247, 248, 251, 0.92));
-      backdrop-filter: blur(8px);
     }}
     .control-card {{
       background: var(--panel);
@@ -360,7 +362,7 @@ def render_audit_dashboard_html(
     }}
     .sidebar {{
       position: sticky;
-      top: 88px;
+      top: 74px;
       z-index: 18;
       align-self: start;
       padding: 14px;
@@ -408,7 +410,6 @@ def render_audit_dashboard_html(
       flex: 1 1 auto;
     }}
     .group-header h2 {{ margin: 0; font-size: 16px; }}
-    .group-header p {{ margin: 4px 0 0; color: var(--muted); font-size: 12px; }}
     .group-header-actions {{
       display: flex;
       flex-wrap: wrap;
@@ -451,18 +452,28 @@ def render_audit_dashboard_html(
     .check-id {{ margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
     .item-body {{ padding: 14px; display: flex; flex-direction: column; gap: 12px; }}
     .item-block h4 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); }}
-    .item-block p, .item-block pre {{ margin: 0; }}
-    .item-block pre {{
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
+    .item-block p {{ margin: 0; }}
+    .evidence-block {{
+      gap: 8px;
+    }}
+    .evidence-lines {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
       padding: 10px;
       border-radius: 8px;
       background: #f8fafc;
       border: 1px solid #e6eaf1;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
+    }}
+    .evidence-line {{
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
       font: 12px/1.45 ui-monospace, "SFMono-Regular", Consolas, monospace;
+      color: #243247;
     }}
     .empty-state {{
-      display: none;
+      display: block;
       padding: 24px;
       border: 1px dashed #dbe3ef;
       border-radius: 8px;
@@ -477,12 +488,6 @@ def render_audit_dashboard_html(
     @media (max-width: 980px) {{
       header {{ padding: 14px 16px; }}
       main {{ padding: 16px; }}
-      .control-strip {{
-        position: static;
-        padding-bottom: 0;
-        background: transparent;
-        backdrop-filter: none;
-      }}
       .layout {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; }}
       .group-link {{
@@ -549,7 +554,7 @@ def render_audit_dashboard_html(
       </aside>
       <div class="content">
         {group_sections}
-        <div class="empty-state" id="audit-empty-state">No audit items match the current filters.</div>
+        <div class="empty-state" id="audit-empty-state">{_esc(empty_message)}</div>
       </div>
     </div>
   </main>
@@ -562,6 +567,7 @@ def render_audit_dashboard_html(
       const showDetailToggle = document.getElementById("show-detail-toggle");
       const resultsMeta = document.getElementById("results-meta");
       const emptyState = document.getElementById("audit-empty-state");
+      const emptyStateDefaultText = {json.dumps(empty_message)};
       const groupSections = Array.from(document.querySelectorAll("[data-group-section]"));
 
       function togglePressed(button) {{
@@ -620,6 +626,9 @@ def render_audit_dashboard_html(
 
         if (emptyState) {{
           emptyState.style.display = visibleItems > 0 ? "none" : "block";
+          if (visibleItems === 0) {{
+            emptyState.textContent = groupSections.length === 0 ? emptyStateDefaultText : "No audit items match the current filters.";
+          }}
         }}
         if (resultsMeta) {{
           resultsMeta.textContent = `${{visibleItems}} visible items across ${{visibleGroups}} visible groups`;

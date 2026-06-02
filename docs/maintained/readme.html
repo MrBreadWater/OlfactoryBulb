@@ -181,7 +181,9 @@ python -m olfactorybulb.dashboard.control_center
 <ul>
 <li>auto-detects the active maintained optimization campaign when possible</li>
 <li>serves immediately at <code>http://127.0.0.1:6006/</code> by default</li>
-<li>runs the default maintained audit into the page in the background</li>
+<li>leaves the audit tab idle until you explicitly run an audit</li>
+<li>defaults the audit runner selection to the same new-sweep / <code>all</code> behavior as
+  bare <code>python tools/run_audit.py</code></li>
 <li>lets you choose any registered audit and explicit audit arguments from the
   page itself without restarting the shell</li>
 <li>skips missing-packet regeneration during default startup so the shell comes

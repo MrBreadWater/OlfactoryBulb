@@ -61,7 +61,9 @@ That command now:
 
 - auto-detects the active maintained optimization campaign when possible
 - serves immediately at `http://127.0.0.1:6006/` by default
-- runs the default maintained audit into the page in the background
+- leaves the audit tab idle until you explicitly run an audit
+- defaults the audit runner selection to the same new-sweep / `all` behavior as
+  bare `python tools/run_audit.py`
 - lets you choose any registered audit and explicit audit arguments from the
   page itself without restarting the shell
 - skips missing-packet regeneration during default startup so the shell comes

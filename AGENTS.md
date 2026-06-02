@@ -329,7 +329,11 @@ contract for future sessions.
     - `python -m olfactorybulb.dashboard.control_center`
   - That bare control-center command is now the fastest maintained launch path:
     - default mode: `serve`
-    - default audit: `repo_health --profile maintained`
+    - startup leaves the audit tab idle by default; it does not auto-run an
+      audit unless the caller explicitly asks for that behavior
+    - the default audit selection in the runner should match bare
+      `python tools/run_audit.py`, which is effectively the `all` / new-sweep
+      path rather than the repo-health alias
     - campaign auto-detection from the maintained optimization status path or
       optimization results tree
     - default local URL: `http://127.0.0.1:6006/`
@@ -350,10 +354,18 @@ contract for future sessions.
       tab badge state and `/audits/index.html`
     - when two different audits are run in one control-center session, the
       audit page keeps both groups visible instead of wiping the earlier one
+    - when the selected audit is `all` / new sweep, the rendered audit page
+      should preserve the individual constituent audit groups rather than
+      collapsing the whole run into one giant group
     - editing the audit-runner form must preserve the local draft across
       background state polling; changing the audit id should not snap back to
       the previous state-selected audit, and default-only audit arguments
       should render as blank rather than being force-filled into the text field
+    - the audit runner belongs in the audit tab only; the shell banner should
+      carry the compact module-status view and any progress indicator instead
+      of duplicating those controls in a global page toolbar
+    - the tab content area should read as one full working surface rather than
+      a card nested inside another card
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed

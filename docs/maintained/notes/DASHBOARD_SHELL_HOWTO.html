@@ -177,13 +177,14 @@ python -m olfactorybulb.dashboard.control_center
 <li>defaults to <code>serve</code></li>
 <li>auto-detects the active optimization campaign from the maintained status file
   or optimization results tree</li>
-<li>runs the default maintained audit (<code>repo_health --profile maintained</code>)</li>
+<li>starts with the audit tab idle; no audit is run until you ask for one</li>
+<li>defaults the audit runner selection to <code>all</code>, matching <code>python tools/run_audit.py</code></li>
 <li>opens on the audit tab first</li>
 <li>serves immediately at <code>http://127.0.0.1:6006/</code> by default</li>
 <li>prints startup progress to the terminal while the audit and optimization
   views are rendering in the background</li>
-<li>shows loading placeholders in the audit/optimization tabs until those views
-  are ready</li>
+<li>keeps the optimization tab rendering in the background while the shell itself
+  is already usable</li>
 <li>exposes an on-page audit runner so you can switch to any registered audit and
   pass explicit arguments without restarting the shell</li>
 <li>does not regenerate missing optimization packets during default startup; use
@@ -211,6 +212,12 @@ python -m olfactorybulb.dashboard.control_center serve
 python -m olfactorybulb.dashboard.control_center serve \
   --audit-id repo_health
 </code></pre>
+<p>Run the selected audit immediately on startup if you explicitly want that:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve \
+  --run-audit-on-start \
+  --audit-id repo_health -- --profile maintained
+</code></pre>
 <p>Once the shell is open:</p>
 <ul>
 <li>use the <code>Audit id</code> selector to choose any registered audit</li>
@@ -230,6 +237,8 @@ python -m olfactorybulb.dashboard.control_center serve \
   instead of snapping back to the previously running audit</li>
 <li>when an audit's arguments are only the audit's own implicit defaults, the
   audit-arguments field stays blank rather than force-filling those defaults</li>
+<li>the audit runner lives only inside the audit tab; module status and progress
+  live in the shell banner instead of in a duplicated global toolbar</li>
 <li>the audit page itself now provides display controls for:</li>
 <li>search</li>
 <li>failures/warnings-only filtering</li>

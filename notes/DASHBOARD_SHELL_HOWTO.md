@@ -50,13 +50,14 @@ That command:
 - defaults to `serve`
 - auto-detects the active optimization campaign from the maintained status file
   or optimization results tree
-- runs the default maintained audit (`repo_health --profile maintained`)
+- starts with the audit tab idle; no audit is run until you ask for one
+- defaults the audit runner selection to `all`, matching `python tools/run_audit.py`
 - opens on the audit tab first
 - serves immediately at `http://127.0.0.1:6006/` by default
 - prints startup progress to the terminal while the audit and optimization
   views are rendering in the background
-- shows loading placeholders in the audit/optimization tabs until those views
-  are ready
+- keeps the optimization tab rendering in the background while the shell itself
+  is already usable
 - exposes an on-page audit runner so you can switch to any registered audit and
   pass explicit arguments without restarting the shell
 - does not regenerate missing optimization packets during default startup; use
@@ -99,6 +100,15 @@ python -m olfactorybulb.dashboard.control_center serve \
   --audit-id repo_health
 ```
 
+Run the selected audit immediately on startup if you explicitly want that:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve \
+  --run-audit-on-start \
+  --audit-id repo_health -- --profile maintained
+```
+
 Once the shell is open:
 
 - use the `Audit id` selector to choose any registered audit
@@ -118,6 +128,8 @@ Once the shell is open:
   instead of snapping back to the previously running audit
 - when an audit's arguments are only the audit's own implicit defaults, the
   audit-arguments field stays blank rather than force-filling those defaults
+- the audit runner lives only inside the audit tab; module status and progress
+  live in the shell banner instead of in a duplicated global toolbar
 - the audit page itself now provides display controls for:
   - search
   - failures/warnings-only filtering

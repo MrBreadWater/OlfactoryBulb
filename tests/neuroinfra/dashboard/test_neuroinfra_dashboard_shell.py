@@ -14,7 +14,11 @@ html = render_dashboard_shell(
     ),
     initial_tab="docs",
     toolbar_html="<section>toolbar</section>",
-    shell_state={"tabs": {"audits": {"badge": "FAIL", "badge_tone": "fail", "src": "/audits/index.html", "revision": "123"}}},
+    panel_toolbar_html_by_key={"audits": "<section>audit runner</section>"},
+    shell_state={
+        "tabs": {"audits": {"badge": "FAIL", "badge_tone": "fail", "src": "/audits/index.html", "revision": "123"}},
+        "progress": {"active": True, "label": "Running audit", "value_text": "1/4", "fraction": 0.25, "indeterminate": False},
+    },
     state_endpoint="/__control_center_state__",
     state_poll_interval_ms=1500,
 )
@@ -27,8 +31,11 @@ assert "/audits/index.html" in html
 assert "/docs/index.html" in html
 assert "FAIL" in html
 assert "toolbar" in html
+assert "audit runner" in html
 assert "/__control_center_state__" in html
 assert "dashboard-shell-state" in html
 assert "tab-badge tone-fail" in html
+assert "shell-progress" in html
+assert "Running audit" in html
 
 print("neuroinfra_dashboard_shell: OK")

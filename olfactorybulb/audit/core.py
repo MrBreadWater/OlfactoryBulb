@@ -174,7 +174,7 @@ def _format_scalar(value: Any, *, key: str | None = None) -> str:
             parts = [part.strip() for part in value.split(",") if part.strip()]
             return ", ".join(_expand_terms(part, sentence_case=True) for part in parts)
         return value
-    return json.dumps(value, sort_keys=True)
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
 def _pretty_evidence_lines(payload: Any, *, indent: int = 0) -> list[str]:

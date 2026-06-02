@@ -29,6 +29,7 @@ def render_dashboard_shell(
     tabs: Iterable[ShellTabSpec],
     initial_tab: str | None = None,
     toolbar_html: str = "",
+    panel_toolbar_html_by_key: dict[str, str] | None = None,
     shell_state: dict[str, object] | None = None,
     state_endpoint: str = "",
     state_poll_interval_ms: int = 2500,
@@ -38,10 +39,30 @@ def render_dashboard_shell(
         raise ValueError("Dashboard shell requires at least one tab")
     active_key = initial_tab or tab_specs[0].key
     toolbar_block = f"<section class='shell-toolbar'>{toolbar_html}</section>" if toolbar_html.strip() else ""
+    panel_toolbar_html_by_key = dict(panel_toolbar_html_by_key or {})
+    shell_state = dict(shell_state or {})
     initial_state_json = html.escape(
-        json.dumps(shell_state or {}, indent=2, sort_keys=True).replace("</", "<\\/"),
+        json.dumps(shell_state, indent=2, sort_keys=True).replace("</", "<\\/"),
         quote=False,
     )
+    tab_state_payload = shell_state.get("tabs") if isinstance(shell_state.get("tabs"), dict) else {}
+    header_status_html = "\n".join(
+        (
+            f"<div class='shell-status-chip' data-shell-status-card data-tab-key='{_esc(tab.key)}'>"
+            f"<span>{_esc(tab.label)}</span>"
+            f"<strong class='tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-shell-status-badge>{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge') or tab.badge or 'idle'))}</strong>"
+            f"<small data-shell-status-detail>{_esc(str((shell_state.get(tab.key) or {}).get('message') if isinstance(shell_state.get(tab.key), dict) else tab.description or ''))}</small>"
+            "</div>"
+        )
+        for tab in tab_specs
+    )
+    progress_payload = shell_state.get("progress") if isinstance(shell_state.get("progress"), dict) else {}
+    progress_active = bool(progress_payload.get("active"))
+    progress_label = str(progress_payload.get("label") or "")
+    progress_value = str(progress_payload.get("value_text") or "")
+    progress_fraction = float(progress_payload.get("fraction") or 0.0) if progress_payload.get("fraction") is not None else 0.0
+    progress_width = max(0.0, min(progress_fraction, 1.0)) * 100.0
+    progress_indeterminate = bool(progress_payload.get("indeterminate"))
     nav_html = "\n".join(
         (
             f"<button class='tab-button' type='button' role='tab' data-tab-button "
@@ -53,16 +74,21 @@ def render_dashboard_shell(
         )
         for tab in tab_specs
     )
+    def _panel_toolbar_html(tab_key: str) -> str:
+        panel_toolbar = str(panel_toolbar_html_by_key.get(tab_key, "") or "").strip()
+        if not panel_toolbar:
+            return ""
+        return f"<div class='panel-toolbar-shell' data-panel-toolbar data-tab-key='{_esc(tab_key)}'>{panel_toolbar}</div>"
+
     panel_html = "\n".join(
         (
-            f"<section id='tab-{_esc(tab.key)}' class='tab-panel' role='tabpanel'"
-            f"{'' if tab.key == active_key else ' hidden'}>"
-            f"<header class='panel-header'><div>"
-            f"<h2>{_esc(tab.label)}</h2>"
-            f"{f'<p>{_esc(tab.description)}</p>' if tab.description else ''}"
-            "</div></header>"
-            f"<iframe src='{_esc(tab.src)}' title='{_esc(tab.label)}' data-tab-frame data-tab-key='{_esc(tab.key)}' data-base-src='{_esc(tab.src)}'></iframe>"
-            "</section>"
+            (
+                f"<section id='tab-{_esc(tab.key)}' class='tab-panel' role='tabpanel'"
+                f"{'' if tab.key == active_key else ' hidden'}>"
+                f"{_panel_toolbar_html(tab.key)}"
+                f"<iframe src='{_esc(tab.src)}' title='{_esc(tab.label)}' data-tab-frame data-tab-key='{_esc(tab.key)}' data-base-src='{_esc(tab.src)}'></iframe>"
+                "</section>"
+            )
         )
         for tab in tab_specs
     )
@@ -101,20 +127,109 @@ def render_dashboard_shell(
       z-index: 20;
       background: rgba(243, 246, 251, 0.96);
       border-bottom: 1px solid var(--line);
-      padding: 18px 28px 16px;
+      padding: 10px 20px 10px;
       backdrop-filter: blur(8px);
     }}
-    h1 {{ margin: 0 0 4px; font-size: 22px; letter-spacing: 0; }}
-    .subtle {{ color: var(--muted); font-size: 13px; }}
+    .shell-header {{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }}
+    .shell-heading {{
+      min-width: 0;
+      flex: 1 1 auto;
+    }}
+    h1 {{ margin: 0 0 2px; font-size: 18px; letter-spacing: 0; }}
+    .subtle {{ color: var(--muted); font-size: 12px; }}
+    .shell-status-strip {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      flex: 1 1 620px;
+      max-width: 820px;
+    }}
+    .shell-status-chip {{
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+      min-width: 0;
+    }}
+    .shell-status-chip span {{
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }}
+    .shell-status-chip strong {{
+      font-size: 13px;
+      line-height: 1.3;
+    }}
+    .shell-status-chip small {{
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }}
+    .shell-progress {{
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }}
+    .shell-progress[hidden] {{
+      display: none !important;
+    }}
+    .shell-progress-meta {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }}
+    .shell-progress-label {{
+      font-weight: 700;
+      color: var(--ink);
+    }}
+    .shell-progress-track {{
+      position: relative;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #dbe5f4;
+    }}
+    .shell-progress-bar {{
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2563eb, #60a5fa);
+      transition: width 180ms ease;
+    }}
+    .shell-progress-bar.indeterminate {{
+      position: absolute;
+      width: 32%;
+      animation: shell-progress-indeterminate 1.15s ease-in-out infinite;
+    }}
+    @keyframes shell-progress-indeterminate {{
+      0% {{ left: -30%; }}
+      100% {{ left: 100%; }}
+    }}
     main {{
       max-width: 1600px;
       margin: 0 auto;
-      padding: 20px 28px 28px;
+      padding: 16px 20px 24px;
     }}
     .tab-shell {{
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }}
     .shell-toolbar {{
       display: grid;
@@ -242,7 +357,7 @@ def render_dashboard_shell(
       gap: 10px;
       flex-wrap: wrap;
       position: sticky;
-      top: 84px;
+      top: 72px;
       z-index: 19;
       padding: 8px 0 2px;
       background: rgba(243, 246, 251, 0.96);
@@ -315,49 +430,60 @@ def render_dashboard_shell(
     }}
     .tab-panel[hidden] {{ display: none !important; }}
     .tab-panel {{
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      box-shadow: var(--surface-shadow);
-      overflow: hidden;
-    }}
-    .panel-header {{
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
       gap: 12px;
-      padding: 13px 16px;
-      border-bottom: 1px solid var(--line);
-      background: var(--panel-alt);
+      min-height: calc(100vh - 155px);
     }}
-    .panel-header h2 {{
-      margin: 0;
-      font-size: 16px;
-    }}
-    .panel-header p {{
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 12px;
+    .panel-toolbar-shell {{
+      display: grid;
+      gap: 12px;
     }}
     iframe {{
       display: block;
       width: 100%;
-      min-height: calc(100vh - 220px);
-      border: 0;
+      min-height: calc(100vh - 190px);
+      flex: 1 1 auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
       background: #ffffff;
+      box-shadow: var(--surface-shadow);
     }}
     @media (max-width: 760px) {{
-      header {{ padding: 14px 16px; }}
-      main {{ padding: 16px; }}
-      .tab-bar {{ top: 72px; }}
+      header {{ padding: 10px 14px; }}
+      main {{ padding: 14px; }}
+      .shell-header {{
+        flex-direction: column;
+      }}
+      .shell-status-strip {{
+        width: 100%;
+        max-width: none;
+      }}
+      .tab-bar {{ top: 64px; }}
       iframe {{ min-height: calc(100vh - 210px); }}
     }}
   </style>
 </head>
 <body data-state-endpoint="{_esc(state_endpoint)}" data-state-poll-interval-ms="{_esc(state_poll_interval_ms)}">
   <header>
-    <h1>{_esc(title)}</h1>
-    <div class="subtle">{_esc(subtitle)}</div>
+    <div class="shell-header">
+      <div class="shell-heading">
+        <h1>{_esc(title)}</h1>
+        <div class="subtle">{_esc(subtitle)}</div>
+      </div>
+      <div class="shell-status-strip">
+        {header_status_html}
+      </div>
+    </div>
+    <div class="shell-progress" id="shell-progress" {'hidden' if not progress_active else ''}>
+      <div class="shell-progress-meta">
+        <span class="shell-progress-label" id="shell-progress-label">{_esc(progress_label)}</span>
+        <span id="shell-progress-value">{_esc(progress_value)}</span>
+      </div>
+      <div class="shell-progress-track">
+        <div class="shell-progress-bar{' indeterminate' if progress_indeterminate else ''}" id="shell-progress-bar" style="width: {progress_width:.1f}%"></div>
+      </div>
+    </div>
   </header>
   <main>
     <div class="tab-shell">
@@ -414,6 +540,7 @@ def render_dashboard_shell(
         Object.entries(tabs).forEach(([key, tabState]) => {{
           const button = document.querySelector(`[data-tab-button][data-tab-key="${{key}}"]`);
           const frame = document.querySelector(`iframe[data-tab-frame][data-tab-key="${{key}}"]`);
+          const statusCard = document.querySelector(`[data-shell-status-card][data-tab-key="${{key}}"]`);
           if (button) {{
             const badgeEl = button.querySelector("[data-tab-badge]");
             const badgeText = String(tabState.badge || "").trim();
@@ -421,6 +548,18 @@ def render_dashboard_shell(
               badgeEl.textContent = badgeText;
               badgeEl.hidden = !badgeText;
               badgeEl.className = `tab-badge ${{toneClass(tabState.badge_tone || tabState.status || "neutral")}}`;
+            }}
+          }}
+          if (statusCard) {{
+            const badgeEl = statusCard.querySelector("[data-shell-status-badge]");
+            const detailEl = statusCard.querySelector("[data-shell-status-detail]");
+            const statusValue = state[key] && typeof state[key] === "object" ? state[key] : {{}};
+            if (badgeEl) {{
+              badgeEl.textContent = String(tabState.badge || tabState.status || "idle");
+              badgeEl.className = toneClass(tabState.badge_tone || tabState.status || "neutral");
+            }}
+            if (detailEl) {{
+              detailEl.textContent = String(statusValue.message || "");
             }}
           }}
           if (frame) {{
@@ -435,6 +574,21 @@ def render_dashboard_shell(
             }}
           }}
         }});
+        const progress = state.progress || {{}};
+        const progressRoot = document.getElementById("shell-progress");
+        const progressLabel = document.getElementById("shell-progress-label");
+        const progressValue = document.getElementById("shell-progress-value");
+        const progressBar = document.getElementById("shell-progress-bar");
+        if (progressRoot && progressLabel && progressValue && progressBar) {{
+          const active = Boolean(progress.active);
+          progressRoot.hidden = !active;
+          progressLabel.textContent = String(progress.label || "");
+          progressValue.textContent = String(progress.value_text || "");
+          const fraction = Number(progress.fraction || 0);
+          const clamped = Number.isFinite(fraction) ? Math.max(0, Math.min(fraction, 1)) : 0;
+          progressBar.style.width = `${{clamped * 100}}%`;
+          progressBar.classList.toggle("indeterminate", Boolean(progress.indeterminate));
+        }}
         window.dispatchEvent(new CustomEvent("dashboard-shell-state", {{ detail: state }}));
       }}
       async function pollState() {{

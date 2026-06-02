@@ -86,6 +86,37 @@ def _json_post(url: str, payload: dict[str, object]) -> tuple[int, dict[str, obj
 
 def _capture_run_audit_by_id(audit_id: str, audit_args: list[str]):
     _run_audit_calls.append((audit_id, list(audit_args)))
+    if audit_id == "all":
+        return AuditReport(
+            audit_id="new_sweep",
+            title="New sweep",
+            items=[
+                AuditItem(
+                    check_id="env_install.alpha_pass",
+                    status="PASS",
+                    title="Environment pass",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    group_id="env_install",
+                    group_title="Environment/install audit",
+                    detail_level="summary",
+                ),
+                AuditItem(
+                    check_id="scratch_boundary.beta_warn",
+                    status="WARN",
+                    title="Scratch boundary warn",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    group_id="scratch_boundary",
+                    group_title="Scratch boundary audit",
+                    detail_level="summary",
+                ),
+            ],
+        )
     return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
 
 
@@ -191,16 +222,16 @@ with TemporaryDirectory() as tmp:
     assert "OlfactoryBulb Control Center" in html
     assert "Run selected audit" in html
     assert "/__control_center_state__" in html
+    assert "No audit is running yet." in html
     assert ">default<" in html
     assert ">all<" in html
     assert 'id="control-center-audit-args" type="text" value=""' in html
     assert audit_report["audit_id"] == "control_center_audits"
-    assert len(audit_report["groups"]) == 1
-    assert audit_report["groups"][0]["title"] == "repo_health --profile maintained"
+    assert len(audit_report["groups"]) == 0
     assert _export_call_kwargs["generate_packets_top_n"] == 0
     assert _export_call_kwargs["cleanup_stale_packets_before_render"] is False
     assert _export_call_kwargs["asset_url_prefix"] == "/repo"
-    assert _run_audit_calls[-1] == ("repo_health", ["--profile", "maintained"])
+    assert not _run_audit_calls
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -211,7 +242,12 @@ with TemporaryDirectory() as tmp:
         patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
         patch("olfactorybulb.dashboard.control_center.run_audit_by_id", side_effect=_capture_run_audit_by_id),
     ):
-        export_control_center(campaign_dir, output_dir=root / "control_center_custom", audit_id="human_review_status")
+        export_control_center(
+            campaign_dir,
+            output_dir=root / "control_center_custom",
+            audit_id="human_review_status",
+            run_audit_on_start=True,
+        )
     assert _run_audit_calls[-1] == ("human_review_status", [])
 
 with TemporaryDirectory() as tmp:
@@ -231,8 +267,8 @@ with TemporaryDirectory() as tmp:
         manifest = export_control_center(None, output_dir=root / "control_center")
     output_dir = Path(manifest["output_dir"])
     assert manifest["campaign_dir"] is None
-    assert manifest["audit_id"] == "repo_health"
-    assert manifest["audit_args"] == ["--profile", "maintained"]
+    assert manifest["audit_id"] == "all"
+    assert manifest["audit_args"] == []
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
     assert placeholder["placeholder"] is True
 
@@ -295,7 +331,7 @@ with TemporaryDirectory() as tmp:
 
     def _slow_run_audit_by_id(audit_id: str, audit_args: list[str]):
         time.sleep(0.5)
-        return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
+        return _capture_run_audit_by_id(audit_id, audit_args)
 
     thread = threading.Thread(
         target=serve_control_center,
@@ -327,33 +363,46 @@ with TemporaryDirectory() as tmp:
         initial_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
         assert "Run selected audit" in root_html
         assert "__control_center_state__" in root_html
-        assert "Audit running" in initial_audit_html or "Audit starting" in initial_audit_html
+        assert "Display controls" in initial_audit_html
+        assert "No audit results yet" in initial_audit_html
         assert "maintained/readme.html" in docs_html
         assert "View source markdown" in rendered_doc_html
-        assert initial_state["audit"]["status"] in {"starting", "running"}
+        assert initial_state["audit"]["status"] == "idle"
         assert initial_state["optimization"]["status"] in {"loading", "ready"}
 
         ready_deadline = time.time() + 6.0
         ready_state = initial_state
         while time.time() < ready_deadline:
             ready_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
-            if ready_state["audit"]["status"] == "ready" and ready_state["optimization"]["status"] == "ready":
+            if ready_state["optimization"]["status"] == "ready":
                 break
             time.sleep(0.1)
-        assert ready_state["audit"]["status"] == "ready"
+        assert ready_state["audit"]["status"] == "idle"
         assert ready_state["optimization"]["status"] == "ready"
         assert ready_state["optimization"]["badge"] == "5 packets"
 
-        audits_html = ""
-        audits_deadline = time.time() + 4.0
-        while time.time() < audits_deadline:
-            audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
-            if "--profile maintained" in audits_html:
+        audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+        assert "Display controls" in audits_html
+        assert "No audit results yet" in audits_html
+
+        run_status, run_payload = _json_post(
+            f"{base_url}/__audit_run__",
+            {"audit_id": "all", "audit_args_text": ""},
+        )
+        assert run_status == 202
+        assert run_payload["ok"] is True
+        first_run_deadline = time.time() + 6.0
+        first_run_state = ready_state
+        while time.time() < first_run_deadline:
+            first_run_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+            if first_run_state["audit"]["status"] == "ready" and first_run_state["audit"]["audit_id"] == "all":
                 break
             time.sleep(0.1)
-        assert "Display controls" in audits_html
-        assert "Collapse all groups" in audits_html
-        assert "--profile maintained" in audits_html
+        assert first_run_state["audit"]["audit_id"] == "all"
+        first_run_report = json.loads(urlopen(f"{base_url}/audits/report.json", timeout=3).read().decode("utf-8"))
+        first_run_titles = {group["title"] for group in first_run_report["groups"]}
+        assert "Environment/install audit" in first_run_titles
+        assert "Scratch boundary audit" in first_run_titles
 
         run_status, run_payload = _json_post(
             f"{base_url}/__audit_run__",
@@ -377,11 +426,14 @@ with TemporaryDirectory() as tmp:
             if "--suite maintained_core --details" in rerun_audits_html:
                 break
             time.sleep(0.1)
-        assert "--profile maintained" in rerun_audits_html
+        assert "Environment/install audit" in rerun_audits_html
+        assert "Scratch boundary audit" in rerun_audits_html
         assert "--suite maintained_core --details" in rerun_audits_html
         combined_report = json.loads(urlopen(f"{base_url}/audits/report.json", timeout=3).read().decode("utf-8"))
         assert combined_report["audit_id"] == "control_center_audits"
-        assert len(combined_report["groups"]) == 2
+        assert len(combined_report["groups"]) == 3
+        combined_titles = {group["title"] for group in combined_report["groups"]}
+        assert any(title.startswith("Structured test-suite audit") for title in combined_titles)
 
         refresh_status, refresh_payload = _json_post(f"{base_url}/__audit_refresh__", {})
         assert refresh_status == 202
