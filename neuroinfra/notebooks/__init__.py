@@ -19,6 +19,14 @@ from .local_runs import (
     LocalRunHooks,
     execute_local_run,
 )
+from .remote_jobs import (
+    RemoteJobSession,
+    RemoteJobSessionHooks,
+    RemoteJobSubmission,
+    RemoteJobSubmitHooks,
+    prepare_remote_job_session,
+    submit_remote_json_job,
+)
 from .run_info import (
     RunInfoHooks,
     build_run_info_payload,
@@ -58,6 +66,10 @@ __all__ = [
     "list_json_configs",
     "list_run_dirs",
     "LocalRunHooks",
+    "RemoteJobSession",
+    "RemoteJobSessionHooks",
+    "RemoteJobSubmission",
+    "RemoteJobSubmitHooks",
     "load_json_config",
     "LoadRunPairHooks",
     "load_run_config",
@@ -72,6 +84,7 @@ __all__ = [
     "merge_run_info_payload",
     "persist_run_info",
     "print_diff_section",
+    "prepare_remote_job_session",
     "read_json_if_present",
     "resolve_run_dir",
     "save_json_config",
@@ -84,4 +97,5 @@ __all__ = [
     "run_local_sweep_plan",
     "set_nested_value",
     "split_path_parts",
+    "submit_remote_json_job",
 ]

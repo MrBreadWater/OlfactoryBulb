@@ -37,6 +37,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.signals`
 - `neuroinfra.notebooks.config_store`
 - `neuroinfra.notebooks.local_runs`
+- `neuroinfra.notebooks.remote_jobs`
 - `neuroinfra.notebooks.run_info`
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
@@ -195,6 +196,13 @@ The generic notebook workflow layer that composes `run_and_load`,
 `load_run_pair`, and local sweep execution loops now also lives under
 `neuroinfra.notebooks.workflows`, while the helper still owns concrete path
 policy, progress messages, and the remote execution branches.
+
+The generic notebook remote session lifecycle that publishes one git ref, runs
+preflight, warms helper cache state, prepares reusable allocations, and
+captures one JSON submit response now also lives under
+`neuroinfra.notebooks.remote_jobs`, while the helper still owns concrete
+remote payload construction, failure reporting, live monitoring, finalization,
+and result loading.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

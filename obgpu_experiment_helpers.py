@@ -134,6 +134,12 @@ from neuroinfra.notebooks.local_runs import (
     LocalRunHooks as _NeuroinfraLocalRunHooks,
     execute_local_run as _neuroinfra_execute_local_run,
 )
+from neuroinfra.notebooks.remote_jobs import (
+    RemoteJobSessionHooks as _NeuroinfraRemoteJobSessionHooks,
+    RemoteJobSubmitHooks as _NeuroinfraRemoteJobSubmitHooks,
+    prepare_remote_job_session as _neuroinfra_prepare_remote_job_session,
+    submit_remote_json_job as _neuroinfra_submit_remote_json_job,
+)
 from neuroinfra.notebooks.reporting import (
     diff_values as _neuroinfra_diff_values,
     flatten_for_diff as _neuroinfra_flatten_for_diff,
@@ -2477,6 +2483,37 @@ def _remote_json_poll_hooks(
     )
 
 
+def _remote_job_session_hooks(
+    notebook_timings: dict[str, float],
+) -> _NeuroinfraRemoteJobSessionHooks:
+    """Build reusable hooks for notebook-side remote session preparation."""
+    return _NeuroinfraRemoteJobSessionHooks(
+        ensure_remote_git_ref_available_fn=_ensure_remote_git_ref_available,
+        run_remote_preflight_fn=_run_remote_preflight_cached,
+        ensure_remote_helper_cache_fn=_ensure_remote_helper_cache,
+        helper_cache_hit_fn=lambda config: bool(
+            (_LIVE_REMOTE_HELPER_CACHES.get(_remote_helper_cache_runtime_key(config)) or {}).get("cache_hit", False)
+        ),
+        cleanup_stale_allocations_fn=_maybe_cleanup_stale_remote_slurm_allocations,
+        ensure_cached_remote_allocation_fn=_ensure_cached_remote_slurm_allocation,
+        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        progress_write=_progress_write,
+        perf_counter_fn=time.perf_counter,
+    )
+
+
+def _remote_job_submit_hooks(
+    notebook_timings: dict[str, float],
+) -> _NeuroinfraRemoteJobSubmitHooks:
+    """Build reusable hooks for notebook-side remote JSON job submission."""
+    return _NeuroinfraRemoteJobSubmitHooks(
+        run_ssh_shell_fn=_run_ssh_shell,
+        heartbeat_timeout_s_fn=_remote_heartbeat_timeout_s,
+        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        perf_counter_fn=time.perf_counter,
+    )
+
+
 def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
@@ -4098,8 +4135,6 @@ def _run_remote_simulation(
     remote_git_ref = _resolve_remote_git_ref(effective_config)
     param_overrides, input_spec_file = _benchmark_param_overrides_payload(effective_config)
     remote_overrides_path = _remote_benchmark_overrides_path(effective_config, label)
-    notebook_timings: dict[str, float] = {}
-    remote_helper_dir: PurePosixPath | None = None
     (
         _remote_repo_root_value,
         _remote_results_root_value,
@@ -4113,21 +4148,20 @@ def _run_remote_simulation(
         param_overrides=param_overrides,
         input_spec_file=input_spec_file,
     )
-    started = time.perf_counter()
-    _ensure_remote_git_ref_available(
+    session = _neuroinfra_prepare_remote_job_session(
         effective_config,
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_git_ref,
+        remote_metadata=remote_metadata,
+        preflight_message="[Sol remote] Running remote preflight checks...",
+        hooks=_remote_job_session_hooks({}),
     )
-    _record_timing(notebook_timings, "git_publish_s", started)
-    _progress_write("[Sol remote] Running remote preflight checks...")
-    started = time.perf_counter()
-    preflight_completed, preflight_cached = _run_remote_preflight_cached(
-        effective_config,
-        remote_repo_root=remote_repo_root,
-    )
-    _record_timing(notebook_timings, "preflight_s", started)
-    remote_metadata["preflight_cached"] = bool(preflight_cached)
+    effective_config = session.effective_config
+    remote_metadata = session.remote_metadata
+    notebook_timings = session.notebook_timings
+    preflight_completed = session.preflight_completed
+    remote_helper_dir = session.remote_helper_dir
+    allocation_heartbeat_path = session.allocation_heartbeat_path
     if preflight_completed.returncode != 0:
         local_result_dir.mkdir(parents=True, exist_ok=True)
         completed = SimpleNamespace(
@@ -4151,17 +4185,12 @@ def _run_remote_simulation(
             f"Stdout:\n{preflight_completed.stdout}\n\n"
             f"Stderr:\n{preflight_completed.stderr}"
         )
-
-    started = time.perf_counter()
-    remote_helper_dir = _ensure_remote_helper_cache(effective_config)
-    _record_timing(notebook_timings, "helper_cache_s", started)
-    if remote_helper_dir is not None:
-        helper_cache_meta = _LIVE_REMOTE_HELPER_CACHES.get(_remote_helper_cache_runtime_key(effective_config)) or {}
+    if remote_helper_dir is not None or effective_config.get("slurm_allocation_job_id"):
         (
             _remote_repo_root_value,
             _remote_results_root_value,
             remote_benchmark_command,
-            remote_metadata,
+            refreshed_remote_metadata,
             submit_shell,
         ) = _remote_submission_payload(
             effective_config,
@@ -4171,51 +4200,8 @@ def _run_remote_simulation(
             param_overrides=param_overrides,
             input_spec_file=input_spec_file,
         )
-        remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
-        remote_metadata["remote_helper_cache_hit"] = bool(helper_cache_meta.get("cache_hit", False))
-
-    started = time.perf_counter()
-    cleanup_actions = _maybe_cleanup_stale_remote_slurm_allocations(
-        effective_config,
-        remote_helper_dir=remote_helper_dir,
-    )
-    _record_timing(notebook_timings, "allocation_cleanup_s", started)
-    remote_metadata["stale_allocation_cleanup_count"] = len(cleanup_actions)
-
-    started = time.perf_counter()
-    allocation_info = _ensure_cached_remote_slurm_allocation(
-        effective_config,
-        remote_helper_dir=remote_helper_dir,
-    )
-    _record_timing(notebook_timings, "allocation_wait_s", started)
-    allocation_heartbeat_path = None
-    if allocation_info.get("job_id") not in (None, ""):
-        effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
-        allocation_heartbeat_path = allocation_info.get("heartbeat_path")
-        (
-            _remote_repo_root_value,
-            _remote_results_root_value,
-            remote_benchmark_command,
-            remote_metadata,
-            submit_shell,
-        ) = _remote_submission_payload(
-            effective_config,
-            label=label,
-            remote_helper_dir=remote_helper_dir,
-            overrides_file=remote_overrides_path,
-            param_overrides=param_overrides,
-            input_spec_file=input_spec_file,
-        )
-        if remote_helper_dir is not None:
-            remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
-        remote_metadata["auto_reused_allocation"] = bool(
-            effective_config.get("slurm_reuse_allocation", False)
-            and not allocation_info.get("manual", False)
-        )
-        remote_metadata["allocation_state"] = allocation_info.get("state", "")
-        remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
-        remote_metadata["allocation_location"] = allocation_info.get("location", "")
-        remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
+        refreshed_remote_metadata.update(remote_metadata)
+        remote_metadata = refreshed_remote_metadata
 
     _progress_write("[Sol remote] Uploading benchmark overrides file...")
     started = time.perf_counter()
@@ -4228,12 +4214,13 @@ def _run_remote_simulation(
     remote_metadata["benchmark_overrides_file"] = remote_overrides_path.as_posix()
 
     _progress_write("[Sol remote] Submitting Slurm job...")
-    started = time.perf_counter()
-    submit_completed = _run_ssh_shell(effective_config, submit_shell)
-    _record_timing(notebook_timings, "submit_s", started)
-    local_result_dir.mkdir(parents=True, exist_ok=True)
-    (local_result_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
-    (local_result_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
+    submit_result = _neuroinfra_submit_remote_json_job(
+        effective_config,
+        submit_shell=submit_shell,
+        local_output_dir=local_result_dir,
+        hooks=_remote_job_submit_hooks(notebook_timings),
+    )
+    submit_completed = submit_result.completed
 
     if submit_completed.returncode != 0:
         completed = SimpleNamespace(
@@ -4257,21 +4244,17 @@ def _run_remote_simulation(
             f"Submit stderr:\n{submit_completed.stderr}"
         )
 
-    try:
-        submission = json.loads((submit_completed.stdout or "").strip())
-    except json.JSONDecodeError as exc:
+    if submit_result.submission is None:
         raise RuntimeError(
             "Remote Sol submission did not return valid JSON.\n"
             f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-            ) from exc
+        ) from submit_result.json_error
+    submission = submit_result.submission
 
     remote_result_dir = PurePosixPath(submission["result_dir"])
-    remote_job_heartbeat_path = submission.get("heartbeat_path")
+    remote_job_heartbeat_path = submit_result.job_heartbeat_path
     remote_metadata["job_heartbeat_path"] = remote_job_heartbeat_path
-    remote_metadata["heartbeat_timeout_s"] = submission.get(
-        "heartbeat_timeout_s",
-        _remote_heartbeat_timeout_s(effective_config),
-    )
+    remote_metadata["heartbeat_timeout_s"] = submit_result.heartbeat_timeout_s
     _progress_write(f"[Sol remote] Submitted job {submission['job_id']}.")
     poll_interval_s = max(float(effective_config.get("remote_poll_interval_s", 1.0)), 1.0)
     log_poll_interval_s = max(
@@ -4389,7 +4372,7 @@ def _run_remote_simulation(
         )
 
     if summary is None:
-        raise FileNotFoundError(f"Expected synced benchmark summary at {summary_path}")
+        raise FileNotFoundError(f"Expected synced benchmark summary at {local_result_dir / 'summary.json'}")
 
     return RunRecord(
         label=label,
@@ -4717,8 +4700,6 @@ def _run_remote_sweep(
     """Run a remote sweep as one Slurm job, with optional concurrent in-job steps."""
     base_config = dict(sweep_plan["base_config"])
     effective_config = dict(base_config)
-    notebook_timings: dict[str, float] = {}
-    remote_helper_dir: PurePosixPath | None = None
     sweep_label = str(sweep_plan["sweep_label"])
     timestamp = str(sweep_plan["timestamp"])
     local_sweep_dir = _sweep_dir(effective_config, sweep_label)
@@ -4758,62 +4739,26 @@ def _run_remote_sweep(
     }
     (local_sweep_dir / "sweep_manifest.submit.json").write_text(manifest_json)
 
-    started = time.perf_counter()
-    _ensure_remote_git_ref_available(
+    session = _neuroinfra_prepare_remote_job_session(
         effective_config,
         remote_repo_root=remote_repo_root,
         remote_git_ref=remote_git_ref,
+        remote_metadata=remote_metadata,
+        preflight_message="[Sol remote] Running remote preflight checks for sweep...",
+        hooks=_remote_job_session_hooks({}),
     )
-    _record_timing(notebook_timings, "git_publish_s", started)
-    _progress_write("[Sol remote] Running remote preflight checks for sweep...")
-    started = time.perf_counter()
-    preflight_completed, preflight_cached = _run_remote_preflight_cached(
-        effective_config,
-        remote_repo_root=remote_repo_root,
-    )
-    _record_timing(notebook_timings, "preflight_s", started)
-    remote_metadata["preflight_cached"] = bool(preflight_cached)
+    effective_config = session.effective_config
+    remote_metadata = session.remote_metadata
+    notebook_timings = session.notebook_timings
+    preflight_completed = session.preflight_completed
+    remote_helper_dir = session.remote_helper_dir
+    allocation_heartbeat_path = session.allocation_heartbeat_path
     if preflight_completed.returncode != 0:
         raise RuntimeError(
             "Remote sweep preflight failed.\n"
             f"Stdout:\n{preflight_completed.stdout}\n\n"
             f"Stderr:\n{preflight_completed.stderr}"
         )
-
-    started = time.perf_counter()
-    remote_helper_dir = _ensure_remote_helper_cache(effective_config)
-    _record_timing(notebook_timings, "helper_cache_s", started)
-    if remote_helper_dir is not None:
-        remote_metadata["remote_helper_dir"] = remote_helper_dir.as_posix()
-        helper_cache_meta = _LIVE_REMOTE_HELPER_CACHES.get(_remote_helper_cache_runtime_key(effective_config)) or {}
-        remote_metadata["remote_helper_cache_hit"] = bool(helper_cache_meta.get("cache_hit", False))
-
-    started = time.perf_counter()
-    cleanup_actions = _maybe_cleanup_stale_remote_slurm_allocations(
-        effective_config,
-        remote_helper_dir=remote_helper_dir,
-    )
-    _record_timing(notebook_timings, "allocation_cleanup_s", started)
-    remote_metadata["stale_allocation_cleanup_count"] = len(cleanup_actions)
-
-    started = time.perf_counter()
-    allocation_info = _ensure_cached_remote_slurm_allocation(
-        effective_config,
-        remote_helper_dir=remote_helper_dir,
-    )
-    _record_timing(notebook_timings, "allocation_wait_s", started)
-    allocation_heartbeat_path = None
-    if allocation_info.get("job_id") not in (None, ""):
-        effective_config["slurm_allocation_job_id"] = str(allocation_info["job_id"])
-        allocation_heartbeat_path = allocation_info.get("heartbeat_path")
-        remote_metadata["auto_reused_allocation"] = bool(
-            effective_config.get("slurm_reuse_allocation", False)
-            and not allocation_info.get("manual", False)
-        )
-        remote_metadata["allocation_state"] = allocation_info.get("state", "")
-        remote_metadata["allocation_reason"] = allocation_info.get("reason", "")
-        remote_metadata["allocation_location"] = allocation_info.get("location", "")
-        remote_metadata["allocation_heartbeat_path"] = allocation_heartbeat_path
 
     _progress_write("[Sol remote] Uploading remote sweep manifest...")
     started = time.perf_counter()
@@ -4838,31 +4783,29 @@ def _run_remote_sweep(
     )
 
     _progress_write("[Sol remote] Submitting remote sweep batch job...")
-    started = time.perf_counter()
-    submit_completed = _run_ssh_shell(effective_config, submit_shell)
-    _record_timing(notebook_timings, "submit_s", started)
-    (local_sweep_dir / "submit_stdout.txt").write_text(submit_completed.stdout or "")
-    (local_sweep_dir / "submit_stderr.txt").write_text(submit_completed.stderr or "")
+    submit_result = _neuroinfra_submit_remote_json_job(
+        effective_config,
+        submit_shell=submit_shell,
+        local_output_dir=local_sweep_dir,
+        hooks=_remote_job_submit_hooks(notebook_timings),
+    )
+    submit_completed = submit_result.completed
     if submit_completed.returncode != 0:
         raise RuntimeError(
             "Remote sweep submission failed.\n"
             f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
         )
 
-    try:
-        submission = json.loads((submit_completed.stdout or "").strip())
-    except json.JSONDecodeError as exc:
+    if submit_result.submission is None:
         raise RuntimeError(
             "Remote sweep submission did not return valid JSON.\n"
             f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-        ) from exc
+        ) from submit_result.json_error
+    submission = submit_result.submission
 
-    remote_job_heartbeat_path = submission.get("heartbeat_path")
+    remote_job_heartbeat_path = submit_result.job_heartbeat_path
     remote_metadata["job_heartbeat_path"] = remote_job_heartbeat_path
-    remote_metadata["heartbeat_timeout_s"] = submission.get(
-        "heartbeat_timeout_s",
-        _remote_heartbeat_timeout_s(effective_config),
-    )
+    remote_metadata["heartbeat_timeout_s"] = submit_result.heartbeat_timeout_s
 
     manifest_by_label = {item["label"]: item for item in manifest_items}
     synced_labels: set[str] = set()

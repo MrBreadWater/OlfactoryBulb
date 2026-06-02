@@ -166,6 +166,80 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._neuroinfra_execute_local_run = original_local_run
     print("local run wrapper delegation: OK")
 
+    # --- remote run wrapper delegates through notebook remote session layer ---
+    original_remote_session = hlp._neuroinfra_prepare_remote_job_session
+    original_remote_submission_payload = hlp._remote_submission_payload
+    original_write_run_info = hlp._write_notebook_run_info
+    remote_session_calls = []
+    remote_run_info_calls = []
+    try:
+        def _fake_prepare_remote_job_session(
+            config,
+            *,
+            remote_repo_root,
+            remote_git_ref,
+            remote_metadata,
+            preflight_message,
+            hooks,
+            notebook_timings=None,
+        ):
+            remote_session_calls.append(
+                {
+                    "config": dict(config),
+                    "remote_repo_root": remote_repo_root,
+                    "remote_git_ref": remote_git_ref,
+                    "remote_metadata": dict(remote_metadata),
+                    "preflight_message": preflight_message,
+                }
+            )
+            return SimpleNamespace(
+                effective_config=dict(config),
+                remote_metadata=dict(remote_metadata),
+                notebook_timings={},
+                preflight_completed=subprocess.CompletedProcess(
+                    ["preflight"],
+                    2,
+                    stdout="",
+                    stderr="bad preflight\n",
+                ),
+                remote_helper_dir=None,
+                allocation_info={},
+                allocation_heartbeat_path=None,
+            )
+
+        hlp._neuroinfra_prepare_remote_job_session = _fake_prepare_remote_job_session
+        hlp._remote_submission_payload = lambda *args, **kwargs: (
+            PurePosixPath("/remote/OlfactoryBulb"),
+            PurePosixPath("/remote/OlfactoryBulb/results/notebook_runs"),
+            ["python3", "remote_driver.py"],
+            {"runner_backend": "slurm_remote"},
+            "submit-shell",
+        )
+        hlp._write_notebook_run_info = lambda *args, **kwargs: remote_run_info_calls.append((args, kwargs))
+
+        remote_cfg = build_run_config(
+            paramset="GammaSignature",
+            runner_backend="slurm_remote",
+            remote_host="user@host",
+            remote_repo_root="/remote/OlfactoryBulb",
+            remote_results_root="/remote/OlfactoryBulb/results/notebook_runs",
+            results_base=str(tmp / "remote_runs"),
+        )
+        try:
+            hlp.run_simulation(remote_cfg, label="remote_delegate")
+            raise AssertionError("expected remote preflight failure to raise")
+        except RuntimeError as exc:
+            assert "Remote Sol preflight failed." in str(exc)
+        assert remote_session_calls
+        assert remote_session_calls[0]["preflight_message"] == "[Sol remote] Running remote preflight checks..."
+        assert remote_run_info_calls
+        assert remote_run_info_calls[0][1]["completed"].returncode == 2
+    finally:
+        hlp._neuroinfra_prepare_remote_job_session = original_remote_session
+        hlp._remote_submission_payload = original_remote_submission_payload
+        hlp._write_notebook_run_info = original_write_run_info
+    print("remote run workflow delegation: OK")
+
     # --- run_and_load wrapper delegates through neuroinfra workflow ---
     original_run_and_load_workflow = hlp._neuroinfra_run_and_load_workflow
     run_and_load_calls = []

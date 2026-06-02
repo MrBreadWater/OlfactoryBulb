@@ -350,11 +350,15 @@ Current progress:
 
 Current files:
 
+- `neuroinfra/notebooks/remote_jobs.py`
 - `neuroinfra/notebooks/workflows.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
 
+- remote git publication and preflight session lifecycle
+- helper-cache and reusable-allocation preparation
+- submit stdout/stderr persistence with JSON response parsing
 - `run_and_load` workflow composition
 - saved run-pair loading
 - local sweep-plan execution loops
@@ -364,7 +368,8 @@ What is domain-specific:
 
 - progress output strings
 - local sweep path policy
-- remote run and remote sweep orchestration
+- concrete remote payload construction
+- higher-level remote run and remote sweep orchestration
 - concrete run/load function wiring
 
 Extraction confidence:
@@ -377,11 +382,16 @@ Recommended public package target:
 
 Current progress:
 
+- the generic notebook remote session lifecycle and JSON submit protocol now
+  live under `neuroinfra.notebooks.remote_jobs`
+- `obgpu_experiment_helpers.py` now delegates the shared git/preflight/helper-
+  cache/allocation preparation plus submit stdout/stderr capture and JSON
+  parsing there
 - the generic notebook workflow layer now lives under
   `neuroinfra.notebooks.workflows`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
   and the local branches of parameter/grid sweeps there while still owning the
-  remote branches and concrete path policy
+  higher-level remote branches and concrete path policy
 
 ### 2i. Result analysis and signal registry
 

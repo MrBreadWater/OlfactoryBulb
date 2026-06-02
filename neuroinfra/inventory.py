@@ -271,6 +271,29 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic notebook workflow layer now lives under neuroinfra.notebooks.workflows, while the helper still owns the concrete path policy, progress messaging, and remote execution branches; next separate the remaining remote runner orchestration from the helper.",
     ),
     ExtractionCandidate(
+        key="notebook_remote_jobs",
+        title="Notebook remote job session and submit protocol",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/remote_jobs.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "remote git publication and preflight session lifecycle",
+            "helper-cache and reusable-allocation preparation",
+            "submit stdout/stderr persistence with JSON response parsing",
+        ),
+        repo_specific_couplings=(
+            "remote payload construction still depends on the repo's benchmark command conventions",
+            "run_info failure handling still depends on the notebook helper's reporting policy",
+            "remote monitoring, finalization, and result loading still remain in the notebook facade",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic notebook remote session lifecycle and JSON submit protocol now live under neuroinfra.notebooks.remote_jobs, while the helper still owns concrete remote payload construction, failure reporting, monitoring, finalization, and result loading; next separate the remaining remote run and remote sweep orchestration above this session layer.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",
