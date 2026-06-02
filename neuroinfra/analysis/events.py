@@ -32,6 +32,14 @@ class EventRateSeriesSpec:
 
 
 @dataclass(frozen=True)
+class PreparedEventRows:
+    """Prepared labeled event rows plus derived display metadata."""
+
+    rows: tuple[tuple[str, np.ndarray], ...]
+    max_label_length: int
+
+
+@dataclass(frozen=True)
 class EventOverviewLayout:
     """Layout hints for a raster-plus-rate overview figure."""
 
@@ -278,6 +286,37 @@ def build_event_rate_trace_series(
     return traces
 
 
+def prepare_event_display_rows(
+    rows: Sequence[Any],
+    *,
+    label_fn: Callable[[Any], str],
+    times_fn: Callable[[Any], np.ndarray | list[float]],
+    sort_key_fn: Callable[[Any], Any] | None = None,
+    limit: int | None = None,
+    label_transform_fn: Callable[[str], str] | None = None,
+) -> PreparedEventRows:
+    """Prepare labeled event rows for raster/overview display."""
+    row_sequence = list(rows)
+    if sort_key_fn is not None:
+        row_sequence = sorted(row_sequence, key=sort_key_fn)
+    if limit is not None:
+        row_sequence = row_sequence[: max(int(limit), 0)]
+
+    transformer = label_transform_fn or (lambda label: label)
+    prepared_rows: list[tuple[str, np.ndarray]] = []
+    max_label_length = 0
+    for row in row_sequence:
+        label = str(transformer(str(label_fn(row))))
+        times = np.asarray(times_fn(row), dtype=float)
+        prepared_rows.append((label, times))
+        max_label_length = max(max_label_length, len(label))
+
+    return PreparedEventRows(
+        rows=tuple(prepared_rows),
+        max_label_length=int(max_label_length),
+    )
+
+
 def smooth_rate_series(
     rate_hz: np.ndarray,
     *,
@@ -430,6 +469,45 @@ def build_event_overview_layout(
         rate_height=float(rate_height),
         total_height=float(raster_height + rate_height),
         left_margin=float(left_margin),
+    )
+
+
+def build_event_overview_layout_for_rows(
+    prepared_rows: PreparedEventRows | Sequence[tuple[str, np.ndarray | list[float]]],
+    *,
+    raster_min_height: float = 4.5,
+    rate_height: float = 4.0,
+    default_label_fontsize: float = 7.0,
+    dense_line_spacing_threshold: int = 80,
+    dense_line_spacing: float = 1.6,
+    default_line_spacing: float = 1.4,
+    left_margin_min: float = 0.22,
+    left_margin_max: float = 0.5,
+    left_margin_base: float = 0.15,
+    left_margin_per_char: float = 0.006,
+) -> EventOverviewLayout:
+    """Build overview layout hints from prepared or already-labeled event rows."""
+    if isinstance(prepared_rows, PreparedEventRows):
+        n_rows = len(prepared_rows.rows)
+        max_label_len = int(prepared_rows.max_label_length)
+    else:
+        row_sequence = list(prepared_rows)
+        n_rows = len(row_sequence)
+        max_label_len = max((len(str(label)) for label, _times in row_sequence), default=0)
+
+    return build_event_overview_layout(
+        n_rows=n_rows,
+        max_label_len=max_label_len,
+        raster_min_height=raster_min_height,
+        rate_height=rate_height,
+        default_label_fontsize=default_label_fontsize,
+        dense_line_spacing_threshold=dense_line_spacing_threshold,
+        dense_line_spacing=dense_line_spacing,
+        default_line_spacing=default_line_spacing,
+        left_margin_min=left_margin_min,
+        left_margin_max=left_margin_max,
+        left_margin_base=left_margin_base,
+        left_margin_per_char=left_margin_per_char,
     )
 
 

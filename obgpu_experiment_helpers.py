@@ -266,7 +266,7 @@ from neuroinfra.analysis.events import (
     EventRateNormalizationRule as _NeuroinfraEventRateNormalizationRule,
     EventRateSeriesSpec as _NeuroinfraEventRateSeriesSpec,
     binned_event_rate as _neuroinfra_binned_event_rate,
-    build_event_overview_layout as _neuroinfra_build_event_overview_layout,
+    build_event_overview_layout_for_rows as _neuroinfra_build_event_overview_layout_for_rows,
     build_event_rate_trace_series as _neuroinfra_build_event_rate_trace_series,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
     calculate_trace_event_frequency as _neuroinfra_calculate_trace_event_frequency,
@@ -276,6 +276,7 @@ from neuroinfra.analysis.events import (
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
     filter_rows_by_label_prefix as _neuroinfra_filter_rows_by_label_prefix,
+    prepare_event_display_rows as _neuroinfra_prepare_event_display_rows,
     plot_event_overview as _neuroinfra_plot_event_overview,
     plot_event_rate_traces as _neuroinfra_plot_event_rate_traces,
     plot_event_raster_rows as _neuroinfra_plot_event_raster_rows,
@@ -7097,17 +7098,23 @@ def plot_input_raster(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> Any:
     """Plot the saved odor-input event raster."""
-    rows = sorted(filter_input_events(result, target_types=target_types), key=lambda row: row[0])[:max_segments]
-    display_rows = [(row[0].replace("h.", ""), row[1]) for row in rows]
+    prepared = _neuroinfra_prepare_event_display_rows(
+        filter_input_events(result, target_types=target_types),
+        label_fn=lambda row: row[0],
+        times_fn=lambda row: row[1],
+        sort_key_fn=lambda row: row[0],
+        limit=max_segments,
+        label_transform_fn=lambda label: label.replace("h.", ""),
+    )
     return _neuroinfra_plot_event_raster_rows(
-        display_rows,
+        prepared.rows,
         ax=ax,
         ylabel="Input Segment",
         title="Odor Input Raster",
         width=14.0,
         min_height=4.0,
         per_row_height=0.10,
-        fontsize=_recommended_raster_fontsize(len(rows)),
+        fontsize=_recommended_raster_fontsize(len(prepared.rows)),
         line_spacing=1.4,
         colors="black",
         no_data_message="No input events saved",
@@ -7272,24 +7279,24 @@ def plot_gc_output_event_raster(
     modulus: float | None = None,
 ) -> Any:
     """Plot the saved reciprocal GC inhibitory-output event raster."""
-    rows = filter_gc_output_events(result, target_types=target_types)[:max_connections]
-    display_rows = [
-        f"{normalize_cell_name(row.get('source_section', 'GC'))}->{normalize_cell_name(row.get('dest_section', 'cell'))}"
-        for row in rows
-    ]
-    prepared_rows = [
-        (label, np.asarray(row.get("times", []), dtype=float))
-        for label, row in zip(display_rows, rows)
-    ]
+    prepared = _neuroinfra_prepare_event_display_rows(
+        filter_gc_output_events(result, target_types=target_types),
+        label_fn=lambda row: (
+            f"{normalize_cell_name(row.get('source_section', 'GC'))}->"
+            f"{normalize_cell_name(row.get('dest_section', 'cell'))}"
+        ),
+        times_fn=lambda row: row.get("times", []),
+        limit=max_connections,
+    )
     return _neuroinfra_plot_event_raster_rows(
-        prepared_rows,
+        prepared.rows,
         ax=ax,
         ylabel="Reciprocal GABA Connection",
         title="GC Inhibitory Output Events",
         width=16.0,
         min_height=4.5,
         per_row_height=0.10,
-        fontsize=min(float(fontsize), _recommended_raster_fontsize(len(rows), default=float(fontsize))),
+        fontsize=min(float(fontsize), _recommended_raster_fontsize(len(prepared.rows), default=float(fontsize))),
         line_spacing=line_spacing,
         modulus=modulus,
         colors="black",
@@ -7336,21 +7343,34 @@ def plot_input_overview(
     normalization: str = "per_target_cell",
 ) -> tuple[Any, Any]:
     """Render the standard input raster + input-rate overview figure."""
-    rows = sorted(result.get("input_times", []), key=lambda row: row[0])[:max_segments]
-    max_label_len = max((len(row[0].replace("h.", "")) for row in rows), default=0)
-    layout = _neuroinfra_build_event_overview_layout(
-        n_rows=len(rows),
-        max_label_len=max_label_len,
+    prepared = _neuroinfra_prepare_event_display_rows(
+        result.get("input_times", []),
+        label_fn=lambda row: row[0],
+        times_fn=lambda row: row[1],
+        sort_key_fn=lambda row: row[0],
+        limit=max_segments,
+        label_transform_fn=lambda label: label.replace("h.", ""),
+    )
+    layout = _neuroinfra_build_event_overview_layout_for_rows(
+        prepared,
         raster_min_height=4.5,
         rate_height=4.0,
         left_margin_per_char=0.006,
     )
     return _neuroinfra_plot_event_overview(
         layout=layout,
-        raster_plotter=lambda axis, _layout: plot_input_raster(
-            result,
+        raster_plotter=lambda axis, _layout: _neuroinfra_plot_event_raster_rows(
+            prepared.rows,
             ax=axis,
-            max_segments=max_segments,
+            ylabel="Input Segment",
+            title="Odor Input Raster",
+            width=14.0,
+            min_height=4.0,
+            per_row_height=0.10,
+            fontsize=_recommended_raster_fontsize(len(prepared.rows)),
+            line_spacing=1.4,
+            colors="black",
+            no_data_message="No input events saved",
         ),
         rate_plotter=lambda axis, _layout: plot_input_rate(
             result,
@@ -7370,29 +7390,38 @@ def plot_gc_output_overview(
     normalization: str = "per_target_cell",
 ) -> tuple[Any, Any]:
     """Render the standard GC output raster + rate overview figure."""
-    rows = filter_gc_output_events(result)[:max_connections]
-    max_label_len = 0
-    for row in rows:
-        label = (
+    prepared = _neuroinfra_prepare_event_display_rows(
+        filter_gc_output_events(result),
+        label_fn=lambda row: (
             f"{normalize_cell_name(row.get('source_section', 'GC'))}->"
             f"{normalize_cell_name(row.get('dest_section', 'cell'))}"
-        )
-        max_label_len = max(max_label_len, len(label))
-    layout = _neuroinfra_build_event_overview_layout(
-        n_rows=len(rows),
-        max_label_len=max_label_len,
+        ),
+        times_fn=lambda row: row.get("times", []),
+        limit=max_connections,
+    )
+    layout = _neuroinfra_build_event_overview_layout_for_rows(
+        prepared,
         raster_min_height=4.5,
         rate_height=4.0,
         left_margin_per_char=0.007,
     )
     return _neuroinfra_plot_event_overview(
         layout=layout,
-        raster_plotter=lambda axis, overview_layout: plot_gc_output_event_raster(
-            result,
-            max_connections=max_connections,
+        raster_plotter=lambda axis, overview_layout: _neuroinfra_plot_event_raster_rows(
+            prepared.rows,
             ax=axis,
-            fontsize=overview_layout.label_fontsize,
+            ylabel="Reciprocal GABA Connection",
+            title="GC Inhibitory Output Events",
+            width=16.0,
+            min_height=4.5,
+            per_row_height=0.10,
+            fontsize=min(
+                float(overview_layout.label_fontsize),
+                _recommended_raster_fontsize(len(prepared.rows), default=float(overview_layout.label_fontsize)),
+            ),
             line_spacing=overview_layout.line_spacing,
+            colors="black",
+            no_data_message="No GC inhibitory-output events saved",
         ),
         rate_plotter=lambda axis, _layout: plot_gc_output_rate(
             result,

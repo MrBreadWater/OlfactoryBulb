@@ -152,6 +152,7 @@ What is already generic:
 - row filtering by label-prefix families
 - normalization-driven event-rate computation from arbitrary event rows
 - reusable event-rate series assembly for named subset plots
+- prepared labeled event display rows and overview-layout derivation from them
 - event-frequency conversion, event-rate binning, shared rate-plot helpers, and reusable raster-plot primitives
 - shared raster-plus-rate overview layout for notebook summaries
 - sweep plot specification, placeholder rendering, per-frame rendering, and GIF assembly

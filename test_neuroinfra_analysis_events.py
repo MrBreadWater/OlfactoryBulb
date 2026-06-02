@@ -14,8 +14,10 @@ from neuroinfra.analysis.events import (
     EventRateSeriesSpec,
     EventRateNormalizationRule,
     FrequencySampleCollection,
+    PreparedEventRows,
     binned_event_rate,
     build_event_overview_layout,
+    build_event_overview_layout_for_rows,
     build_event_rate_trace_series,
     calculate_event_frequency,
     calculate_trace_event_frequency,
@@ -26,6 +28,7 @@ from neuroinfra.analysis.events import (
     filter_rows_by_label_prefix,
     fit_raster_labels,
     overview_left_margin,
+    prepare_event_display_rows,
     plot_event_overview,
     plot_event_rate_traces,
     plot_event_raster_rows,
@@ -146,6 +149,31 @@ def main() -> None:
     assert np.allclose(traces[0].rate_hz, [1.0, 2.0])
     assert np.allclose(traces[1].rate_hz, [0.5, 1.5])
     assert traces[1].metadata["n_target_cells"] == 1
+
+    prepared_rows = prepare_event_display_rows(
+        [
+            ("b", [5.0, 15.0]),
+            ("a", [0.0, 10.0]),
+            ("long_name", [20.0]),
+        ],
+        label_fn=lambda row: row[0],
+        times_fn=lambda row: row[1],
+        sort_key_fn=lambda row: row[0],
+        limit=2,
+        label_transform_fn=lambda label: label.upper(),
+    )
+    assert isinstance(prepared_rows, PreparedEventRows)
+    assert [label for label, _times in prepared_rows.rows] == ["A", "B"]
+    assert prepared_rows.max_label_length == 1
+
+    prepared_layout = build_event_overview_layout_for_rows(
+        prepared_rows,
+        raster_min_height=4.5,
+        rate_height=4.0,
+        left_margin_per_char=0.01,
+    )
+    assert prepared_layout.n_rows == 2
+    assert prepared_layout.left_margin >= 0.22
 
     raw_rate = np.array([0.0, 0.0, 10.0, 0.0, 0.0], dtype=float)
     smoothed = smooth_rate_series(raw_rate, bin_ms=5.0, smooth_sigma_ms=10.0)

@@ -512,6 +512,47 @@ with tempfile.TemporaryDirectory() as tmp:
     assert gc_rate_meta["n_target_cells"] == 2
     np.testing.assert_allclose(gc_rate_t, [5.0, 15.0, 25.0, 35.0, 45.0])
     np.testing.assert_allclose(gc_rate_hz, [50.0, 50.0, 50.0, 0.0, 50.0])
+
+    input_raster_ax = hlp.plot_input_raster(input_rate_result, max_segments=10)
+    try:
+        assert input_raster_ax.get_title() == "Odor Input Raster"
+        assert len(input_raster_ax.collections) > 0
+        assert [tick.get_text() for tick in input_raster_ax.get_yticklabels()] == ["MC0[0].tuft", "TC0[0].tuft"]
+    finally:
+        hlp.plt.close(input_raster_ax.figure)
+
+    input_overview_fig, input_overview_axes = hlp.plot_input_overview(
+        input_rate_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        max_segments=10,
+    )
+    try:
+        assert input_overview_axes.shape == (2,)
+        assert input_overview_axes[0].get_title() == "Odor Input Raster"
+        assert input_overview_axes[1].get_title() == "Odor Input Event Rate"
+    finally:
+        hlp.plt.close(input_overview_fig)
+
+    gc_raster_ax = hlp.plot_gc_output_event_raster(gc_freq_result, max_connections=10)
+    try:
+        assert gc_raster_ax.get_title() == "GC Inhibitory Output Events"
+        assert len(gc_raster_ax.collections) > 0
+    finally:
+        hlp.plt.close(gc_raster_ax.figure)
+
+    gc_overview_fig, gc_overview_axes = hlp.plot_gc_output_overview(
+        gc_freq_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        max_connections=10,
+    )
+    try:
+        assert gc_overview_axes.shape == (2,)
+        assert gc_overview_axes[0].get_title() == "GC Inhibitory Output Events"
+        assert gc_overview_axes[1].get_title() == "GC Inhibitory Output Rate"
+    finally:
+        hlp.plt.close(gc_overview_fig)
     print("Input / GC rate wrappers: OK")
 
     # --- Optional int16 soma traces should round-trip with bounded quantization error ---
