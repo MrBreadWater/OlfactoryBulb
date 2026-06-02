@@ -143,9 +143,10 @@ variants, pattern-matched signals, labeled traces, and aligned mean traces,
 plus stacked labeled trace plotting that list,
 summarize, transform, plot, animate, persist, reload, and resolve analysis
 signals in a stable ordered way now also live under `neuroinfra.analysis`,
-while the concrete OBGPU profile is now assembled explicitly in
-`olfactorybulb.analysis_profile`; the remaining notebook-specific presentation
-and higher-level plot composition still remain in
+while the concrete OBGPU result semantics and profile are now assembled
+explicitly in `olfactorybulb.analysis_data` and
+`olfactorybulb.analysis_profile`; the remaining notebook-specific
+presentation and higher-level plot composition still remain in
 `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle

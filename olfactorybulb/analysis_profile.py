@@ -7,8 +7,16 @@ from typing import Any, Callable
 
 import numpy as np
 
+from olfactorybulb.analysis_data import (
+    OLFACTORY_BULB_CATEGORY_CATALOG_HOOKS,
+    collect_spike_frequency_samples,
+    list_available_cell_types,
+    list_available_soma_labels,
+    normalize_cell_name,
+    saved_voltage_summary_signal,
+    split_traces_by_type,
+)
 from neuroinfra.analysis import (
-    CategoryCatalogHooks,
     EventRateNormalizationRule,
     EventRateSeriesSpec,
     ResultAnalysisProfile,
@@ -26,20 +34,13 @@ from neuroinfra.analysis import (
     pattern_result_signal_provider,
     suffix_variant_signal_provider,
 )
+from neuroinfra.analysis.spectral import uniform_trace
 
 
 @dataclass(frozen=True)
 class OlfactoryBulbAnalysisProfileHooks:
     """Domain hooks required to assemble the concrete olfactory-bulb profile."""
 
-    category_hooks: CategoryCatalogHooks
-    uniform_trace_fn: Callable[..., tuple[np.ndarray, np.ndarray]]
-    split_traces_by_type_fn: Callable[[dict[str, Any]], dict[str, list[tuple[str, np.ndarray, np.ndarray]]]]
-    list_available_cell_types_fn: Callable[[dict[str, Any]], list[str]]
-    list_available_soma_labels_fn: Callable[[dict[str, Any]], list[str]]
-    saved_voltage_summary_signal_fn: Callable[..., tuple[np.ndarray, np.ndarray] | None]
-    collect_spike_frequency_samples_fn: Callable[..., dict[str, Any]]
-    normalize_cell_name_fn: Callable[[Any], str]
     plot_voltage_traces_fn: Callable[..., Any]
     plot_spike_raster_fn: Callable[..., Any]
     plot_hfo_power_summary_fn: Callable[..., Any]
@@ -65,7 +66,6 @@ def _resolve_event_tstop(result: dict[str, Any], event_series: list[np.ndarray])
 
 
 def _gc_output_rate_normalization_rules(
-    normalize_cell_name_fn: Callable[[Any], str],
 ) -> dict[str, EventRateNormalizationRule]:
     """Return reusable normalization rules for GC-output event rates."""
     return {
@@ -75,8 +75,8 @@ def _gc_output_rate_normalization_rules(
             denominator_fn=lambda events: 1.0,
             metadata_fn=lambda events: {
                 "n_connections": len(events),
-                "n_source_cells": len({normalize_cell_name_fn(entry.get("source_section", "")) for entry in events}),
-                "n_target_cells": len({normalize_cell_name_fn(entry.get("dest_section", "")) for entry in events}),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
             },
         ),
         "per_connection": EventRateNormalizationRule(
@@ -85,39 +85,38 @@ def _gc_output_rate_normalization_rules(
             denominator_fn=lambda events: float(len(events)),
             metadata_fn=lambda events: {
                 "n_connections": len(events),
-                "n_source_cells": len({normalize_cell_name_fn(entry.get("source_section", "")) for entry in events}),
-                "n_target_cells": len({normalize_cell_name_fn(entry.get("dest_section", "")) for entry in events}),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
             },
         ),
         "per_source_cell": EventRateNormalizationRule(
             unit="events/s per source GC",
             aliases=(),
             denominator_fn=lambda events: float(
-                len({normalize_cell_name_fn(entry.get("source_section", "")) for entry in events})
+                len({normalize_cell_name(entry.get("source_section", "")) for entry in events})
             ),
             metadata_fn=lambda events: {
                 "n_connections": len(events),
-                "n_source_cells": len({normalize_cell_name_fn(entry.get("source_section", "")) for entry in events}),
-                "n_target_cells": len({normalize_cell_name_fn(entry.get("dest_section", "")) for entry in events}),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
             },
         ),
         "per_target_cell": EventRateNormalizationRule(
             unit="events/s per target cell",
             aliases=(),
             denominator_fn=lambda events: float(
-                len({normalize_cell_name_fn(entry.get("dest_section", "")) for entry in events})
+                len({normalize_cell_name(entry.get("dest_section", "")) for entry in events})
             ),
             metadata_fn=lambda events: {
                 "n_connections": len(events),
-                "n_source_cells": len({normalize_cell_name_fn(entry.get("source_section", "")) for entry in events}),
-                "n_target_cells": len({normalize_cell_name_fn(entry.get("dest_section", "")) for entry in events}),
+                "n_source_cells": len({normalize_cell_name(entry.get("source_section", "")) for entry in events}),
+                "n_target_cells": len({normalize_cell_name(entry.get("dest_section", "")) for entry in events}),
             },
         ),
     }
 
 
 def _input_rate_normalization_rules(
-    normalize_cell_name_fn: Callable[[Any], str],
 ) -> dict[str, EventRateNormalizationRule]:
     """Return reusable normalization rules for odor-input event rates."""
     return {
@@ -127,7 +126,7 @@ def _input_rate_normalization_rules(
             denominator_fn=lambda rows: 1.0,
             metadata_fn=lambda rows: {
                 "n_segments": len(rows),
-                "n_target_cells": len({normalize_cell_name_fn(section_name) for section_name, _times in rows}),
+                "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
             },
         ),
         "per_segment": EventRateNormalizationRule(
@@ -136,18 +135,18 @@ def _input_rate_normalization_rules(
             denominator_fn=lambda rows: float(len(rows)),
             metadata_fn=lambda rows: {
                 "n_segments": len(rows),
-                "n_target_cells": len({normalize_cell_name_fn(section_name) for section_name, _times in rows}),
+                "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
             },
         ),
         "per_target_cell": EventRateNormalizationRule(
             unit="events/s per target cell",
             aliases=("per_cell",),
             denominator_fn=lambda rows: float(
-                len({normalize_cell_name_fn(section_name) for section_name, _times in rows})
+                len({normalize_cell_name(section_name) for section_name, _times in rows})
             ),
             metadata_fn=lambda rows: {
                 "n_segments": len(rows),
-                "n_target_cells": len({normalize_cell_name_fn(section_name) for section_name, _times in rows}),
+                "n_target_cells": len({normalize_cell_name(section_name) for section_name, _times in rows}),
             },
         ),
     }
@@ -162,11 +161,11 @@ def _build_gc_output_event_family(
         filter_label_fn=lambda entry: entry.get("dest_section", ""),
         times_fn=lambda entry: entry.get("times", []),
         sample_label_fn=lambda entry: (
-            f"{hooks.normalize_cell_name_fn(entry.get('source_section', 'GC'))}->"
-            f"{hooks.normalize_cell_name_fn(entry.get('dest_section', 'cell'))}"
+            f"{normalize_cell_name(entry.get('source_section', 'GC'))}->"
+            f"{normalize_cell_name(entry.get('dest_section', 'cell'))}"
         ),
-        normalize_label_fn=hooks.normalize_cell_name_fn,
-        normalization_rules=_gc_output_rate_normalization_rules(hooks.normalize_cell_name_fn),
+        normalize_label_fn=normalize_cell_name,
+        normalization_rules=_gc_output_rate_normalization_rules(),
         default_normalization="per_target_cell",
     )
     return ResultEventFamilySuite(
@@ -186,8 +185,8 @@ def _build_input_event_family(
         rows_from_result_fn=lambda result: list(result.get("input_times", [])),
         filter_label_fn=lambda row: row[0],
         times_fn=lambda row: row[1],
-        normalize_label_fn=hooks.normalize_cell_name_fn,
-        normalization_rules=_input_rate_normalization_rules(hooks.normalize_cell_name_fn),
+        normalize_label_fn=normalize_cell_name,
+        normalization_rules=_input_rate_normalization_rules(),
         default_normalization="per_target_cell",
     )
     return ResultEventFamilySuite(
@@ -205,7 +204,7 @@ def _lfp_signal_provider(hooks: OlfactoryBulbAnalysisProfileHooks) -> Any:
         "lfp",
         time_key="lfp_t",
         value_key="lfp",
-        uniform_trace_fn=hooks.uniform_trace_fn,
+        uniform_trace_fn=uniform_trace,
     )
 
 
@@ -263,7 +262,7 @@ def _mean_voltage_signal_provider(hooks: OlfactoryBulbAnalysisProfileHooks) -> A
         cell_type: str,
         dt_ms: float | None,
     ) -> tuple[np.ndarray, np.ndarray]:
-        saved_signal = hooks.saved_voltage_summary_signal_fn(
+        saved_signal = saved_voltage_summary_signal(
             result,
             cell_type=cell_type,
             moment="mean",
@@ -271,7 +270,7 @@ def _mean_voltage_signal_provider(hooks: OlfactoryBulbAnalysisProfileHooks) -> A
         )
         if saved_signal is not None:
             return saved_signal
-        grouped = hooks.split_traces_by_type_fn(result)
+        grouped = split_traces_by_type(result)
         traces = grouped.get(cell_type, [])
         if not traces:
             raise KeyError(f"No soma traces found for {cell_type}")
@@ -279,7 +278,7 @@ def _mean_voltage_signal_provider(hooks: OlfactoryBulbAnalysisProfileHooks) -> A
             traces,
             time_fn=lambda row: row[1],
             value_fn=lambda row: row[2],
-            uniform_trace_fn=hooks.uniform_trace_fn,
+            uniform_trace_fn=uniform_trace,
             dt_ms=dt_ms,
         )
 
@@ -287,7 +286,7 @@ def _mean_voltage_signal_provider(hooks: OlfactoryBulbAnalysisProfileHooks) -> A
         r"mean_([A-Z]+)_voltage",
         list_names_fn=lambda result, _context: [
             f"mean_{cell_type}_voltage"
-            for cell_type in hooks.list_available_cell_types_fn(result)
+            for cell_type in list_available_cell_types(result)
         ],
         resolve_match_fn=lambda result, match, context: _resolve_mean_voltage(
             result,
@@ -301,12 +300,12 @@ def _soma_label_signal_provider(hooks: OlfactoryBulbAnalysisProfileHooks) -> Any
     """Provide direct per-soma trace signals by saved label."""
     return labeled_trace_signal_provider(
         include_context_key="include_soma_labels",
-        list_labels_fn=hooks.list_available_soma_labels_fn,
+        list_labels_fn=list_available_soma_labels,
         iter_rows_fn=lambda result: result.get("soma_vs", []),
         label_fn=lambda row: row[0],
         time_fn=lambda row: row[1],
         value_fn=lambda row: row[2],
-        uniform_trace_fn=hooks.uniform_trace_fn,
+        uniform_trace_fn=uniform_trace,
     )
 
 
@@ -360,7 +359,7 @@ def build_olfactorybulb_analysis_profile(
 
     spike_frequency_suite = ResultFrequencyPlotSuite(
         ResultFrequencyPlotFamily(
-            collect_samples_fn=hooks.collect_spike_frequency_samples_fn,
+            collect_samples_fn=collect_spike_frequency_samples,
             selection_label_fn=lambda cell_types: "all" if not cell_types else "+".join(str(name) for name in cell_types),
             title_1d="Soma Spike Frequency Distribution",
             title_2d="Soma Spike Time/Frequency KDE",
@@ -396,8 +395,8 @@ def build_olfactorybulb_analysis_profile(
     gc_output_event_plots = ResultEventPlotSuite(
         family=gc_output_event_family,
         row_label_fn=lambda row: (
-            f"{hooks.normalize_cell_name_fn(row.get('source_section', 'GC'))}->"
-            f"{hooks.normalize_cell_name_fn(row.get('dest_section', 'cell'))}"
+            f"{normalize_cell_name(row.get('source_section', 'GC'))}->"
+            f"{normalize_cell_name(row.get('dest_section', 'cell'))}"
         ),
         rate_series_specs=(
             EventRateSeriesSpec("All targets", None, "black"),
@@ -448,7 +447,7 @@ def build_olfactorybulb_analysis_profile(
     )
 
     return ResultAnalysisProfile(
-        category_hooks=hooks.category_hooks,
+        category_hooks=OLFACTORY_BULB_CATEGORY_CATALOG_HOOKS,
         signal_registry=signal_registry,
         signal_views=signal_views,
         event_families={

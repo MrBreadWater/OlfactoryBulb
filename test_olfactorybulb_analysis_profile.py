@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import numpy as np
 
-from neuroinfra.analysis import CategoryCatalogHooks
 from olfactorybulb.analysis_profile import (
     OlfactoryBulbAnalysisProfileHooks,
     build_olfactorybulb_analysis_profile,
@@ -13,37 +12,6 @@ from olfactorybulb.analysis_profile import (
 
 def main() -> None:
     hooks = OlfactoryBulbAnalysisProfileHooks(
-        category_hooks=CategoryCatalogHooks(
-            categorize_label_fn=lambda label: "MC" if str(label).startswith("MC") else "other",
-            order_categories_fn=lambda names: sorted(set(str(name) for name in names)),
-        ),
-        uniform_trace_fn=lambda t, values, dt_ms=None: (
-            np.asarray(t, dtype=float),
-            np.asarray(values, dtype=float),
-        ),
-        split_traces_by_type_fn=lambda result: {
-            "MC": [
-                (
-                    "MC0.soma",
-                    np.asarray(result["soma_vs"][0][1], dtype=float),
-                    np.asarray(result["soma_vs"][0][2], dtype=float),
-                )
-            ]
-        },
-        list_available_cell_types_fn=lambda _result: ["MC"],
-        list_available_soma_labels_fn=lambda _result: ["MC0.soma"],
-        saved_voltage_summary_signal_fn=lambda result, *, cell_type, moment="mean", dt_ms=None: (
-            np.asarray(result["voltage_summary"]["t_by_type"][cell_type], dtype=float),
-            np.asarray(result["voltage_summary"][f"{moment}_by_type"][cell_type], dtype=float),
-        ),
-        collect_spike_frequency_samples_fn=lambda result, **_kwargs: {
-            "times": np.asarray(result.get("sample_t", []), dtype=float),
-            "freqs": np.asarray(result.get("sample_f", []), dtype=float),
-            "labels": ["MC0.soma"],
-            "n_traces": 1,
-            "cell_types": ["MC"],
-        },
-        normalize_cell_name_fn=lambda name: str(name).split(".", 1)[0],
         plot_voltage_traces_fn=lambda result, **_kwargs: result.get("soma_vs"),
         plot_spike_raster_fn=lambda result, **_kwargs: result.get("soma_spikes"),
         plot_hfo_power_summary_fn=lambda result, **_kwargs: result.get("lfp"),
@@ -66,12 +34,14 @@ def main() -> None:
             }
         ],
         "soma_vs": [("MC0.soma", [0.0, 1.0], [-65.0, -60.0])],
+        "soma_spikes": {
+            "labels": ["MC0.soma"],
+            "spike_times": [np.asarray([10.0, 20.0], dtype=float)],
+        },
         "voltage_summary": {
             "t_by_type": {"MC": [0.0, 1.0]},
             "mean_by_type": {"MC": [-64.0, -61.0]},
         },
-        "sample_t": [10.0, 20.0],
-        "sample_f": [90.0, 100.0],
     }
 
     assert profile.list_available_signals(result) == [
@@ -85,8 +55,10 @@ def main() -> None:
         "mean_MC_voltage",
     ]
     signal_t, signal_y = profile.resolve_signal(result, "lfp", dt_ms=0.1)
-    np.testing.assert_allclose(signal_t, [0.0, 1.0, 2.0])
-    np.testing.assert_allclose(signal_y, [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(signal_t[[0, -1]], [0.0, 2.0])
+    np.testing.assert_allclose(signal_y[[0, -1]], [1.0, 3.0])
+    assert len(signal_t) == 21
+    assert len(signal_y) == 21
 
     gc_output_suite = profile.event_family("gc_output")
     assert len(gc_output_suite.filter_rows(result, include_prefixes=("MC",))) == 1
