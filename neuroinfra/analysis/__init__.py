@@ -65,6 +65,14 @@ from .signal_views import (
 from .phase_locking import (
     compute_phase_locking_from_spike_rows,
 )
+from .frequency_plots import (
+    FrequencyPlotConfig,
+    coerce_frequency_plot_config,
+    frequency_plot_config_with_modulus,
+    plot_frequency_kde_1d_from_samples,
+    plot_frequency_kde_2d_from_samples,
+    plot_frequency_time_binned_from_samples,
+)
 from .sweeps import (
     SweepPlotSpec,
     animate_sweep,
@@ -122,14 +130,17 @@ __all__ = [
     "compute_welch_psd",
     "compute_wavelet_band_power",
     "compute_wavelet_map",
+    "coerce_frequency_plot_config",
     "compute_resolved_bandpassed_signal",
     "compute_resolved_band_power_summary",
     "compute_phase_locking_from_spike_rows",
     "DEFAULT_HFO_BANDS",
     "ensure_raster_axis",
     "fit_raster_labels",
+    "FrequencyPlotConfig",
     "fold_time_matrix_by_modulus",
     "fold_time_series_by_modulus",
+    "frequency_plot_config_with_modulus",
     "first_result_file_metadata",
     "normalize_time_modulus",
     "overview_left_margin",
@@ -137,6 +148,9 @@ __all__ = [
     "plot_event_overview",
     "plot_event_rate_traces",
     "plot_event_raster_rows",
+    "plot_frequency_kde_1d_from_samples",
+    "plot_frequency_kde_2d_from_samples",
+    "plot_frequency_time_binned_from_samples",
     "plot_named_time_series",
     "plot_resolved_band_power_summary",
     "plot_resolved_signal",

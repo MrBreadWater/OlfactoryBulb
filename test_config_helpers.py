@@ -414,6 +414,19 @@ with tempfile.TemporaryDirectory() as tmp:
     assert phase_summary["per_cell"][0]["label"] == "MC0[0].soma"
     print("Phase-lock wrapper: OK")
 
+    freq_ax = hlp.plot_spike_frequency_kde_1d(
+        loaded_result,
+        cell_types=("MC",),
+        threshold=0.0,
+        config={"max_freq_hz": 400.0},
+    )
+    try:
+        assert freq_ax.get_title() == "Soma Spike Frequency Distribution (MC)"
+        assert freq_ax.get_xlabel() == "Frequency (Hz)"
+    finally:
+        hlp.plt.close(freq_ax.figure)
+    print("Frequency KDE wrapper: OK")
+
     # --- Optional int16 soma traces should round-trip with bounded quantization error ---
     quantized_dir = tmp / "quantized_soma"
     quantized_dir.mkdir()

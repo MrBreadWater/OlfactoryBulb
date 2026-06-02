@@ -51,8 +51,6 @@ except ImportError:  # pragma: no cover - optional runtime dependency
     _tqdm_notebook = None
 
 tqdm = _tqdm_plain or _tqdm_notebook
-from scipy.ndimage import gaussian_filter, gaussian_filter1d
-from scipy.stats import gaussian_kde
 from modify_model import (
     add_synaptic_connection,
     modify_synaptic_connection,
@@ -287,6 +285,14 @@ from neuroinfra.analysis.signal_views import (
 from neuroinfra.analysis.phase_locking import (
     compute_phase_locking_from_spike_rows as _neuroinfra_compute_phase_locking_from_spike_rows,
 )
+from neuroinfra.analysis.frequency_plots import (
+    FrequencyPlotConfig,
+    coerce_frequency_plot_config as _neuroinfra_coerce_frequency_plot_config,
+    frequency_plot_config_with_modulus,
+    plot_frequency_kde_1d_from_samples as _neuroinfra_plot_frequency_kde_1d_from_samples,
+    plot_frequency_kde_2d_from_samples as _neuroinfra_plot_frequency_kde_2d_from_samples,
+    plot_frequency_time_binned_from_samples as _neuroinfra_plot_frequency_time_binned_from_samples,
+)
 from neuroinfra.analysis.sweeps import (
     SweepPlotSpec,
     animate_sweep as _neuroinfra_animate_sweep,
@@ -458,29 +464,6 @@ class RunRecord:
     command: list[str]
     stdout: str
     stderr: str
-
-
-@dataclass
-class FrequencyPlotConfig:
-    """Shared rendering controls for spike/event frequency distribution plots."""
-
-    modulus: float | None = 1e8
-    max_freq_hz: float = 200.0
-    kde_bw_method: str | float = "scott"
-    kde1d_engine: str = "histogram"
-    kde_bw_x: float = 0.15
-    kde_bw_y: float = 0.2
-    kde2d_engine: str = "histogram"
-    kde_resolution_t: int = 100
-    kde_resolution_f: int = 100
-    kde_f_resolution: int = 1600
-    num_time_bins: int = 32
-    bin_alpha: float = 0.5
-    kde_cmap: str = "inferno"
-    dot_size: float = 5.0
-    dot_alpha: float = 0.2
-    strip_plot: bool = True
-    guide_line_spacing_ms: float = 0.0
 
 
 def _format_bytes(num_bytes: int | float) -> str:
@@ -6400,57 +6383,6 @@ def _saved_voltage_summary_signal(
     return uniform_trace(t_by_type[cell_type], values_by_type[cell_type], dt_ms=dt_ms)
 
 
-def _coerce_frequency_plot_config(
-    config: FrequencyPlotConfig | dict[str, Any] | None = None,
-    **overrides: Any,
-) -> FrequencyPlotConfig:
-    """Normalize a frequency-plot config input into a dataclass instance."""
-    if config is None:
-        base = FrequencyPlotConfig()
-    elif isinstance(config, FrequencyPlotConfig):
-        base = FrequencyPlotConfig(**vars(config))
-    elif isinstance(config, dict):
-        base = FrequencyPlotConfig(**config)
-    else:
-        raise TypeError(f"Unsupported frequency-plot config type {type(config)!r}")
-
-    for key, value in overrides.items():
-        if value is not None:
-            setattr(base, key, value)
-    return base
-
-
-def frequency_plot_config_with_modulus(
-    config: FrequencyPlotConfig | dict[str, Any] | None,
-    modulus: float | int | None,
-) -> FrequencyPlotConfig:
-    """Copy one frequency plot config while replacing its time modulus."""
-    copied = replace(_coerce_frequency_plot_config(config))
-    copied.modulus = _normalize_time_modulus(modulus)
-    return copied
-
-
-def _apply_frequency_kde_y_scale(kde: Any, scale_y: float) -> None:
-    """Rescale a 1D KDE in-place along its frequency axis."""
-    if float(scale_y) == 1.0:
-        return
-    kde.covariance *= float(scale_y) ** 2
-    kde.cho_cov = np.linalg.cholesky(kde.covariance)
-    kde.log_det = 2 * np.log(np.diag(kde.cho_cov * np.sqrt(2 * np.pi))).sum()
-
-
-def _apply_frequency_kde_xy_scale(kernel: Any, scale_x: float, scale_y: float) -> None:
-    """Rescale a 2D time/frequency KDE in-place."""
-    if float(scale_x) == 1.0 and float(scale_y) == 1.0:
-        return
-    kernel.covariance[0, 0] *= float(scale_x) ** 2
-    kernel.covariance[1, 1] *= float(scale_y) ** 2
-    kernel.covariance[0, 1] *= float(scale_x) * float(scale_y)
-    kernel.covariance[1, 0] *= float(scale_x) * float(scale_y)
-    kernel.cho_cov = np.linalg.cholesky(kernel.covariance)
-    kernel.log_det = 2 * np.log(np.diag(kernel.cho_cov * np.sqrt(2 * np.pi))).sum()
-
-
 def collect_spike_frequency_samples(
     result: dict[str, Any],
     indices: list[int] | range | None = None,
@@ -6510,195 +6442,6 @@ def collect_spike_frequency_samples(
         "n_traces": len(labels),
         "cell_types": list(prefixes) if prefixes is not None else None,
     }
-
-
-def _plot_frequency_kde_1d_from_samples(
-    freqs: np.ndarray,
-    *,
-    config: FrequencyPlotConfig,
-    title: str,
-    ax: Any = None,
-) -> Any:
-    """Plot a 1D KDE from frequency samples."""
-    ax = ax or plt.subplots(figsize=(10, 5))[1]
-    freqs = np.asarray(freqs, dtype=float)
-    freqs = freqs[np.isfinite(freqs)]
-    if len(freqs) == 0:
-        ax.text(0.5, 0.5, "No frequency samples", ha="center", va="center", transform=ax.transAxes)
-        ax.set_title(title)
-        ax.set_xlabel("Frequency (Hz)")
-        ax.set_ylabel("Density")
-        ax.set_xlim(0, float(config.max_freq_hz))
-        return ax
-
-    f_upper = max(float(config.max_freq_hz), float(np.max(freqs)) * 1.1)
-    engine = str(getattr(config, "kde1d_engine", "histogram")).strip().lower()
-    if engine in {"exact", "gaussian", "gaussian_kde", "scipy"}:
-        kde = gaussian_kde(freqs, bw_method=config.kde_bw_method)
-        _apply_frequency_kde_y_scale(kde, config.kde_bw_y)
-        f_range = np.linspace(0.0, f_upper, int(config.kde_f_resolution))
-        density = kde(f_range)
-    else:
-        bins = max(16, int(config.kde_f_resolution))
-        clipped = freqs[(freqs >= 0.0) & (freqs <= f_upper)]
-        if len(clipped) == 0:
-            clipped = freqs
-        density, edges = np.histogram(clipped, bins=bins, range=(0.0, f_upper), density=True)
-        sigma = max(0.0, float(config.kde_bw_y) * 8.0)
-        density = gaussian_filter1d(density, sigma=sigma, mode="nearest")
-        f_range = (edges[:-1] + edges[1:]) / 2.0
-    ax.plot(f_range, density)
-    ax.fill_between(f_range, density, alpha=0.3)
-    ax.set_xlabel("Frequency (Hz)")
-    ax.set_ylabel("Density")
-    ax.set_title(title)
-    ax.set_xlim(0, float(config.max_freq_hz))
-    return ax
-
-
-def _plot_frequency_kde_2d_from_samples(
-    times: np.ndarray,
-    freqs: np.ndarray,
-    *,
-    config: FrequencyPlotConfig,
-    title: str,
-    ax: Any = None,
-) -> Any:
-    """Plot a 2D time/frequency KDE from samples."""
-    ax = ax or plt.subplots(figsize=(14, 8))[1]
-    times = np.asarray(times, dtype=float)
-    freqs = np.asarray(freqs, dtype=float)
-    finite = np.isfinite(times) & np.isfinite(freqs)
-    times = times[finite]
-    freqs = freqs[finite]
-    if len(times) < 2 or len(freqs) < 2:
-        ax.text(0.5, 0.5, "Not enough frequency samples", ha="center", va="center", transform=ax.transAxes)
-        ax.set_title(title)
-        ax.set_xlabel("Time (ms)")
-        ax.set_ylabel("Frequency (Hz)")
-        ax.set_ylim(0, float(config.max_freq_hz))
-        return ax
-
-    tstop = float(np.max(times))
-    max_freq_hz = float(config.max_freq_hz)
-    engine = str(getattr(config, "kde2d_engine", "histogram")).strip().lower()
-    if engine in {"exact", "gaussian", "gaussian_kde", "scipy"}:
-        kernel = gaussian_kde(np.vstack([times, freqs]), bw_method=config.kde_bw_method)
-        _apply_frequency_kde_xy_scale(kernel, config.kde_bw_x, config.kde_bw_y)
-        t_grid = np.linspace(0.0, tstop, int(config.kde_resolution_t))
-        f_grid = np.linspace(0.0, max_freq_hz, int(config.kde_resolution_f))
-        t_mesh, f_mesh = np.meshgrid(t_grid, f_grid)
-        positions = np.vstack([t_mesh.ravel(), f_mesh.ravel()])
-        density = np.reshape(kernel(positions).T, t_mesh.shape)
-    else:
-        # Exact gaussian_kde is O(samples * grid) per frame and is too slow for
-        # large sweeps. A smoothed 2D histogram preserves the sweep-level visual
-        # signal while scaling linearly in sample count plus grid size.
-        mask = (times >= 0.0) & (freqs >= 0.0) & (freqs <= max_freq_hz)
-        times = times[mask]
-        freqs = freqs[mask]
-        density, _t_edges, _f_edges = np.histogram2d(
-            times,
-            freqs,
-            bins=(int(config.kde_resolution_t), int(config.kde_resolution_f)),
-            range=((0.0, tstop), (0.0, max_freq_hz)),
-        )
-        sigma_t = max(0.0, float(config.kde_bw_x) * 6.0)
-        sigma_f = max(0.0, float(config.kde_bw_y) * 6.0)
-        density = gaussian_filter(density.T, sigma=(sigma_f, sigma_t), mode="nearest")
-
-    im = ax.imshow(
-        density,
-        origin="lower",
-        extent=[0, tstop, 0, max_freq_hz],
-        aspect="auto",
-        cmap=config.kde_cmap,
-        interpolation="bilinear",
-    )
-    plt.colorbar(im, ax=ax, label="Density (KDE)")
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Frequency (Hz)")
-    ax.set_title(title)
-    return ax
-
-
-def _plot_frequency_time_binned_from_samples(
-    times: np.ndarray,
-    freqs: np.ndarray,
-    *,
-    config: FrequencyPlotConfig,
-    title: str,
-    ax: Any = None,
-    show_dots: bool = True,
-    show_ridgeline_kde: bool = False,
-) -> Any:
-    """Plot time-binned frequency distributions from midpoint/frequency samples."""
-    ax = ax or plt.subplots(figsize=(14, 8))[1]
-    times = np.asarray(times, dtype=float)
-    freqs = np.asarray(freqs, dtype=float)
-    if len(times) == 0 or len(freqs) == 0:
-        ax.text(0.5, 0.5, "No frequency samples", ha="center", va="center", transform=ax.transAxes)
-        ax.set_title(title)
-        ax.set_xlabel("Time (ms)")
-        ax.set_ylabel("Frequency (Hz)")
-        ax.set_ylim(0, float(config.max_freq_hz))
-        return ax
-
-    tstop = float(np.max(times))
-    t_bins = np.linspace(0.0, tstop, int(config.num_time_bins) + 1)
-    if len(t_bins) < 2:
-        t_bins = np.array([0.0, max(tstop, 1.0)], dtype=float)
-    bin_width = float(t_bins[1] - t_bins[0])
-
-    for i in range(len(t_bins) - 1):
-        t_start, t_end = float(t_bins[i]), float(t_bins[i + 1])
-        mask = (times >= t_start) & (times < t_end)
-        if not np.any(mask):
-            continue
-        bin_f = freqs[mask]
-
-        if show_dots:
-            if bool(config.strip_plot):
-                x_pos = np.full_like(bin_f, t_start + bin_width / 2.0)
-            else:
-                jitter = np.random.uniform(0.0, bin_width * 0.8, size=len(bin_f))
-                x_pos = t_start + jitter
-            ax.scatter(
-                x_pos,
-                bin_f,
-                s=float(config.dot_size),
-                alpha=float(config.dot_alpha),
-                color="black",
-                edgecolors="none",
-            )
-
-        if show_ridgeline_kde and len(bin_f) > 2:
-            kde = gaussian_kde(bin_f, bw_method=config.kde_bw_method)
-            _apply_frequency_kde_y_scale(kde, config.kde_bw_y)
-            f_range = np.linspace(0.0, max(float(np.max(freqs)) * 1.1, float(config.max_freq_hz)), int(config.kde_f_resolution))
-            density = kde(f_range)
-            if float(np.max(density)) > 0:
-                density = density / float(np.max(density))
-            ax.fill_betweenx(
-                f_range,
-                t_start,
-                t_start + density * bin_width * 0.8,
-                alpha=float(config.bin_alpha),
-            )
-            ax.plot(
-                t_start + density * bin_width * 0.8,
-                f_range,
-                linewidth=1.0,
-                color="black",
-                alpha=0.3,
-            )
-
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Frequency (Hz)")
-    ax.set_title(title)
-    ax.set_ylim(0, float(config.max_freq_hz))
-    ax.grid(True, alpha=0.3)
-    return ax
 
 
 def split_traces_by_type(result: dict[str, Any]) -> dict[str, list[tuple[str, np.ndarray, np.ndarray]]]:
@@ -6985,7 +6728,7 @@ def plot_spike_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of detected soma spike frequencies."""
-    plot_config = _coerce_frequency_plot_config(config)
+    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
     data = collect_spike_frequency_samples(
         result,
         indices=indices,
@@ -6994,7 +6737,7 @@ def plot_spike_frequency_kde_1d(
         threshold=threshold,
     )
     label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
-    return _plot_frequency_kde_1d_from_samples(
+    return _neuroinfra_plot_frequency_kde_1d_from_samples(
         data["freqs"],
         config=plot_config,
         title=title or f"Soma Spike Frequency Distribution ({label})",
@@ -7013,7 +6756,7 @@ def plot_spike_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of detected soma spike frequencies."""
-    plot_config = _coerce_frequency_plot_config(config)
+    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
     data = collect_spike_frequency_samples(
         result,
         indices=indices,
@@ -7022,7 +6765,7 @@ def plot_spike_frequency_kde_2d(
         threshold=threshold,
     )
     label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
-    return _plot_frequency_kde_2d_from_samples(
+    return _neuroinfra_plot_frequency_kde_2d_from_samples(
         data["times"],
         data["freqs"],
         config=plot_config,
@@ -7044,7 +6787,7 @@ def plot_spike_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned soma spike-frequency distributions."""
-    plot_config = _coerce_frequency_plot_config(config)
+    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
     data = collect_spike_frequency_samples(
         result,
         indices=indices,
@@ -7053,7 +6796,7 @@ def plot_spike_frequency_time_binned(
         threshold=threshold,
     )
     label = "all" if not cell_types else "+".join(str(name) for name in cell_types)
-    return _plot_frequency_time_binned_from_samples(
+    return _neuroinfra_plot_frequency_time_binned_from_samples(
         data["times"],
         data["freqs"],
         config=plot_config,
@@ -7074,7 +6817,7 @@ def plot_gc_output_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of reciprocal GC inhibitory-output frequencies."""
-    plot_config = _coerce_frequency_plot_config(config)
+    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
     data = collect_gc_output_frequency_samples(
         result,
         indices=indices,
@@ -7082,7 +6825,7 @@ def plot_gc_output_frequency_kde_1d(
         modulus=plot_config.modulus,
     )
     label = "all" if not target_types else "_".join(str(name) for name in target_types)
-    return _plot_frequency_kde_1d_from_samples(
+    return _neuroinfra_plot_frequency_kde_1d_from_samples(
         data["freqs"],
         config=plot_config,
         title=title or f"GC Inhibitory Output Frequency Distribution ({label})",
@@ -7100,7 +6843,7 @@ def plot_gc_output_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of reciprocal GC inhibitory-output frequencies."""
-    plot_config = _coerce_frequency_plot_config(config)
+    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
     data = collect_gc_output_frequency_samples(
         result,
         indices=indices,
@@ -7108,7 +6851,7 @@ def plot_gc_output_frequency_kde_2d(
         modulus=plot_config.modulus,
     )
     label = "all" if not target_types else "_".join(str(name) for name in target_types)
-    return _plot_frequency_kde_2d_from_samples(
+    return _neuroinfra_plot_frequency_kde_2d_from_samples(
         data["times"],
         data["freqs"],
         config=plot_config,
@@ -7129,7 +6872,7 @@ def plot_gc_output_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned reciprocal GC inhibitory-output frequency distributions."""
-    plot_config = _coerce_frequency_plot_config(config)
+    plot_config = _neuroinfra_coerce_frequency_plot_config(config)
     data = collect_gc_output_frequency_samples(
         result,
         indices=indices,
@@ -7137,7 +6880,7 @@ def plot_gc_output_frequency_time_binned(
         modulus=plot_config.modulus,
     )
     label = "all" if not target_types else "_".join(str(name) for name in target_types)
-    return _plot_frequency_time_binned_from_samples(
+    return _neuroinfra_plot_frequency_time_binned_from_samples(
         data["times"],
         data["freqs"],
         config=plot_config,

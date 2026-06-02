@@ -209,6 +209,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.analysis",
         source_paths=(
             "neuroinfra/analysis/events.py",
+            "neuroinfra/analysis/frequency_plots.py",
             "neuroinfra/analysis/catalog.py",
             "neuroinfra/analysis/overview.py",
             "neuroinfra/analysis/phase_locking.py",
@@ -227,6 +228,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "shared spectrogram, wavelet, and band-power analysis",
             "named-signal trace, band-pass, PSD overview, spectrogram, wavelet, and band-power view helpers",
             "phase-locking summaries from resolved signals and labeled spike-time rows",
+            "frequency KDE and time-binned plotting from precomputed sample arrays",
             "event-frequency conversion, binned event-rate analysis, rate-plot helpers, and raster-plot primitives",
             "shared raster-plus-rate overview layout",
             "sweep plot specification and placeholder rendering",
@@ -244,7 +246,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, named-signal trace, band-pass, PSD overview, time-frequency view helpers, and resolved-signal phase-locking summaries, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, sweep persistence and animation pipeline, and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, sweep persistence and animation pipeline, and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",
