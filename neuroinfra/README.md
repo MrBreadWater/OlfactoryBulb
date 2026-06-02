@@ -37,6 +37,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.signals`
 - `neuroinfra.notebooks.config_store`
 - `neuroinfra.notebooks.local_runs`
+- `neuroinfra.notebooks.run_info`
 - `neuroinfra.notebooks.reporting`
 - `neuroinfra.notebooks.runs`
 - `neuroinfra.notebooks.sweeps`
@@ -183,6 +184,11 @@ file presence, and delegates run-info persistence now also lives under
 `neuroinfra.notebooks.local_runs`, while the concrete OBGPU env setup,
 command construction, and remote dispatch still remain in
 `obgpu_experiment_helpers.py`.
+
+The generic notebook `run_info.json` protocol now also lives under
+`neuroinfra.notebooks.run_info`, while the olfactory-bulb-specific env keys,
+override payloads, execution-mode summaries, and effective-param summaries
+now live in `olfactorybulb.notebook_run_info`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

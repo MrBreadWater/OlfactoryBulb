@@ -206,6 +206,35 @@ with tempfile.TemporaryDirectory() as tmp:
     assert "Command: python demo.py" in summary_text
     print("print_run_summary wrapper: OK")
 
+    # --- run_info wrapper paths ---
+    run_info_dir = tmp / "run_info_case"
+    completed = SimpleNamespace(returncode=0, stdout="", stderr="")
+    run_info_path = hlp._write_notebook_run_info(
+        run_info_dir,
+        config=cfg,
+        label="demo-run",
+        timestamp="2026-06-02T00:00:00",
+        command=["python", "demo.py"],
+        env={
+            "OB_RUN_TIMESTAMP": "20260602_000000",
+            "OB_RESULT_LABEL": "demo-run",
+            "OB_CORENRN_CELL_PERMUTE": "2",
+            "OB_RESULTS_BASE": str(tmp),
+        },
+        completed=completed,
+        summary={"label": "demo-run"},
+        extra_payload={"remote": None},
+    )
+    assert run_info_path.name == "run_info.json"
+    payload = json.loads(run_info_path.read_text())
+    assert payload["label"] == "demo-run"
+    assert payload["runner"] == "obgpu_experiment_helpers.run_simulation"
+    assert payload["env"]["OB_RESULT_LABEL"] == "demo-run"
+    hlp._merge_run_info_payload(run_info_dir, {"artifact_sizes": {"lfp.pkl": 11}})
+    merged_payload = json.loads(run_info_path.read_text())
+    assert merged_payload["artifact_sizes"]["lfp.pkl"] == 11
+    print("run_info wrapper paths: OK")
+
     # --- list_paramsets (builtin only) ---
     names = list_paramsets()
     assert isinstance(names, list) and len(names) > 0

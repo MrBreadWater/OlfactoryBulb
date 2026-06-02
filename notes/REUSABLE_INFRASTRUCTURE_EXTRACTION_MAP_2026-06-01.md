@@ -306,7 +306,47 @@ Current progress:
   execution path there while still owning env setup, command construction,
   and remote dispatch
 
-### 2g. Result analysis and signal registry
+### 2g. Notebook run-info protocol
+
+Current files:
+
+- `neuroinfra/notebooks/run_info.py`
+- `olfactorybulb/notebook_run_info.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- normalized `run_info.json` payload assembly
+- env subset capture for persisted run metadata
+- hook-driven overrides, execution-mode, and effective-param payloads
+- merge helpers for later artifact-size and load-timing metadata
+
+What is domain-specific:
+
+- the concrete env key set
+- parameter override semantics
+- execution-mode summaries
+- effective-param summaries
+- orchestration of when local, remote, and sweep paths persist metadata
+
+Extraction confidence:
+
+- **High**
+
+Recommended public package target:
+
+- `neuroinfra.notebooks`
+
+Current progress:
+
+- the generic notebook run-info protocol now lives under
+  `neuroinfra.notebooks.run_info`
+- the concrete olfactory-bulb payload semantics now live in
+  `olfactorybulb/notebook_run_info.py`
+- `obgpu_experiment_helpers.py` now delegates both full run-info writes and
+  later metadata merges there
+
+### 2h. Result analysis and signal registry
 
 Current files:
 

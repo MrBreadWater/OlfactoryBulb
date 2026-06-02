@@ -19,6 +19,14 @@ from .local_runs import (
     LocalRunHooks,
     execute_local_run,
 )
+from .run_info import (
+    RunInfoHooks,
+    build_run_info_payload,
+    env_subset,
+    load_run_info_payload,
+    merge_run_info_payload,
+    persist_run_info,
+)
 from .reporting import (
     diff_values,
     flatten_for_diff,
@@ -45,8 +53,14 @@ __all__ = [
     "load_json_config",
     "load_run_config",
     "load_run_record",
+    "RunInfoHooks",
+    "build_run_info_payload",
     "DEFAULT_COMMAND_FILENAME",
+    "env_subset",
     "execute_local_run",
+    "load_run_info_payload",
+    "merge_run_info_payload",
+    "persist_run_info",
     "print_diff_section",
     "read_json_if_present",
     "resolve_run_dir",

@@ -115,6 +115,11 @@ from olfactorybulb.notebook_configs import (
     load_config as _ob_load_config,
     save_config as _ob_save_config,
 )
+from olfactorybulb.notebook_run_info import (
+    NotebookRunInfoHooks as _OlfactoryBulbNotebookRunInfoHooks,
+    merge_extra_run_info as _ob_merge_extra_run_info,
+    write_run_info as _ob_write_run_info,
+)
 from olfactorybulb.notebook_reports import (
     NotebookReportHooks as _OlfactoryBulbNotebookReportHooks,
     print_run_summary as _ob_print_run_summary,
@@ -1963,11 +1968,16 @@ def _remote_sweep_item_diagnostic_files() -> tuple[str, ...]:
 
 def _merge_run_info_payload(result_dir: str | Path, extra_payload: dict[str, Any]) -> None:
     """Merge extra metadata into an existing run_info.json payload."""
-    result_dir = Path(result_dir)
-    run_info_path = result_dir / "run_info.json"
-    payload = _read_json_if_present(run_info_path) or {}
-    payload.update(_json_ready(extra_payload))
-    run_info_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
+    _ob_merge_extra_run_info(
+        _OlfactoryBulbNotebookRunInfoHooks(
+            json_ready_fn=_json_ready,
+            build_param_overrides_fn=build_param_overrides,
+            resolve_execution_mode_fn=_resolve_execution_mode,
+            resolve_effective_params_fn=resolve_effective_params,
+        ),
+        result_dir,
+        extra_payload=extra_payload,
+    )
 
 
 def _remote_helper_bundle_entries() -> tuple[HelperBundleEntry, ...]:
@@ -4405,49 +4415,24 @@ def _write_notebook_run_info(
     extra_payload: dict[str, Any] | None = None,
 ):
     """Persist normalized config, effective params, and subprocess metadata for a run."""
-    result_dir = Path(result_dir)
-    result_dir.mkdir(parents=True, exist_ok=True)
-
-    run_info_path = result_dir / "run_info.json"
-    existing = {}
-    if run_info_path.exists() and run_info_path.stat().st_size > 0:
-        with open(run_info_path) as f:
-            existing = json.load(f)
-
-    payload = dict(existing)
-    payload.update(
-        {
-            "label": label,
-            "requested_label": label,
-            "timestamp": timestamp,
-            "runner": str(runner),
-            "config": _json_ready(config),
-            "overrides": _json_ready(build_param_overrides(config)),
-            "command": list(command),
-            "returncode": int(completed.returncode),
-            "env": {
-                "OB_RUN_TIMESTAMP": env.get("OB_RUN_TIMESTAMP"),
-                "OB_RESULT_LABEL": env.get("OB_RESULT_LABEL"),
-                "OB_CORENRN_CELL_PERMUTE": env.get("OB_CORENRN_CELL_PERMUTE"),
-                "OB_RESULTS_BASE": env.get("OB_RESULTS_BASE"),
-            },
-        }
+    return _ob_write_run_info(
+        _OlfactoryBulbNotebookRunInfoHooks(
+            json_ready_fn=_json_ready,
+            build_param_overrides_fn=build_param_overrides,
+            resolve_execution_mode_fn=_resolve_execution_mode,
+            resolve_effective_params_fn=resolve_effective_params,
+        ),
+        result_dir,
+        config=config,
+        label=label,
+        timestamp=timestamp,
+        command=command,
+        env=env,
+        completed=completed,
+        runner=runner,
+        summary=summary,
+        extra_payload=extra_payload,
     )
-    payload["resolved_execution_mode"] = _json_ready(_resolve_execution_mode(config))
-
-    try:
-        payload["effective_params"] = _json_ready(resolve_effective_params(config))
-    except Exception as exc:
-        payload["effective_params_error"] = f"{type(exc).__name__}: {exc}"
-
-    if summary is not None:
-        payload["summary"] = _json_ready(summary)
-
-    if extra_payload:
-        payload.update(_json_ready(extra_payload))
-
-    run_info_path.write_text(json.dumps(payload, indent=2, sort_keys=True))
-    return run_info_path
 
 
 def run_simulation(

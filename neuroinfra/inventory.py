@@ -222,6 +222,31 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic local notebook subprocess runner now lives under neuroinfra.notebooks.local_runs, while the notebook helper still owns concrete env setup, command construction, remote dispatch, and run-info semantics; next separate the remaining sweep and remote execution orchestration from the helper.",
     ),
     ExtractionCandidate(
+        key="notebook_run_info_protocol",
+        title="Notebook run-info protocol",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "neuroinfra/notebooks/run_info.py",
+            "olfactorybulb/notebook_run_info.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "run_info payload building with preserved existing fields",
+            "env subset capture for persisted run metadata",
+            "hook-driven override, execution-mode, and effective-param payloads",
+            "run_info merge helpers for post-load artifact metadata",
+        ),
+        repo_specific_couplings=(
+            "the concrete env key set is still chosen by the olfactory-bulb notebook layer",
+            "effective-param and execution-mode semantics still depend on the repo's config model",
+            "the notebook helper still chooses when local, remote, and sweep paths persist metadata",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic notebook run-info protocol now lives under neuroinfra.notebooks.run_info, while the olfactory-bulb-specific payload semantics live in olfactorybulb.notebook_run_info; next keep shrinking the helper by separating the remaining local/remote runner orchestration that decides when those payloads are written.",
+    ),
+    ExtractionCandidate(
         key="remote_slurm_execution",
         title="Remote Slurm execution layer",
         target_module="neuroinfra.remote.slurm",
