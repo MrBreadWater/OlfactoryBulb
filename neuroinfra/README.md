@@ -112,9 +112,10 @@ lazy-path bookkeeping, while the concrete OBGPU signal names and higher-level
 presentation policy still remain in `obgpu_experiment_helpers.py`.
 
 The generic result-catalog helpers, result-overview builders, shared plotting
-primitives, spectral-analysis core, sweep plot protocol, and named-signal
-provider registry that list, summarize, transform, plot, animate, and resolve
-analysis signals in a stable ordered way now also live under
+primitives, spectral-analysis core, sweep plot protocol, sweep persistence and
+reload helpers, streamed GIF rendering pipeline, and named-signal provider
+registry that list, summarize, transform, plot, animate, persist, reload, and
+resolve analysis signals in a stable ordered way now also live under
 `neuroinfra.analysis`, while the concrete OBGPU signal families and
 notebook-specific presentation and higher-level plot composition still remain
 in `obgpu_experiment_helpers.py`.

@@ -8,20 +8,34 @@ matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
 import numpy as np
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
 
 from neuroinfra.analysis.sweeps import (
     SweepPlotSpec,
+    animate_sweep,
+    animate_sweep_plots,
     build_sweep_plot_callable,
+    compose_sweep_display_frame,
+    default_sweep_animation_worker_count,
     describe_unavailable_sweep_item,
     format_sweep_frame_title,
     format_sweep_progress_label,
     format_sweep_value,
     format_sweep_value_label,
+    iter_parallel_sweep_display_frames,
     is_deprecated_sweep_animation_spec,
+    list_sweeps,
+    load_sweep,
     make_sweep_placeholder_figure,
     make_sweep_plot_spec,
     normalize_sweep_plot_spec,
     render_sweep_frame,
+    save_animation,
+    save_sweep,
+    save_sweep_animation_stream,
+    write_sweep_info,
 )
 
 
@@ -30,6 +44,10 @@ def _simple_plot(result):
     ax.plot(result["x"], result["y"], linewidth=1.0)
     ax.set_title("simple")
     return fig
+
+
+def _safe_name(value: object) -> str:
+    return str(value).replace(" ", "_").replace("/", "_")
 
 
 def main() -> None:
@@ -99,6 +117,146 @@ def main() -> None:
     assert isinstance(placeholder_rgb, np.ndarray)
     assert placeholder_rgb.ndim == 3
     assert "2/3" in placeholder_title
+
+    display_frame = compose_sweep_display_frame(
+        np.zeros((8, 10, 3), dtype=np.uint8),
+        "demo title",
+        figsize=(2.0, 1.0),
+        frame_index=1,
+        total_frames=3,
+    )
+    assert display_frame.ndim == 3
+    assert default_sweep_animation_worker_count(2) == 1
+
+    with tempfile.TemporaryDirectory() as tmp_dir_text:
+        tmp_dir = Path(tmp_dir_text)
+        good_result_dir = tmp_dir / "good-run"
+        good_result_dir.mkdir(parents=True, exist_ok=True)
+        (good_result_dir / "run_info.json").write_text("{}")
+
+        sweep = {
+            "path": "gaba_tau2_ms",
+            "values": [50.0, 55.0],
+            "paramset": "GammaSignature",
+            "partial": True,
+            "missing_labels": ["item_001"],
+            "items": [
+                {
+                    "label": "item_000",
+                    "value": 50.0,
+                    "run": SimpleNamespace(result_dir=good_result_dir),
+                    "result": {"result_dir": good_result_dir},
+                    "status": {"ok": True},
+                },
+                {
+                    "label": "item_001",
+                    "value": 55.0,
+                    "run": None,
+                    "result": None,
+                    "status": {"ok": False},
+                },
+            ],
+        }
+        sweep_dir = save_sweep(
+            sweep,
+            name="demo_sweep",
+            base_dir=tmp_dir / "sweeps",
+            timestamp_factory=lambda: "20260601_220000",
+            safe_name=_safe_name,
+            json_ready=lambda value: value,
+            resolve_git_head=lambda: "deadbeef",
+        )
+        assert (sweep_dir / "sweep_info.json").exists()
+        assert (sweep_dir / "runs" / "00_50.0" / "result_dir.txt").exists()
+
+        listed = list_sweeps(base_dir=tmp_dir / "sweeps")
+        assert listed == [sweep_dir]
+
+        def _load_result(result_dir: Path) -> dict[str, object]:
+            return {"result_dir": result_dir, "loaded": True}
+
+        reloaded = load_sweep(
+            sweep_dir,
+            load_result_fn=_load_result,
+            safe_name=_safe_name,
+        )
+        assert len(reloaded["items"]) == 2
+        assert reloaded["items"][0]["result"]["loaded"] is True
+        assert reloaded["items"][1]["result"] is None
+        assert reloaded["partial"] is True
+        assert reloaded["missing_labels"] == ["item_001"]
+
+        metadata_only_sweep = {
+            "path": "gaba_tau2_ms",
+            "values": [50.0],
+            "items": [{"label": "item_000", "value": 50.0, "status": {"ok": True}}],
+        }
+        metadata_dir = tmp_dir / "metadata_only"
+        write_sweep_info(
+            metadata_only_sweep,
+            sweep_dir=metadata_dir,
+            timestamp="20260601_220500",
+            json_ready=lambda value: value,
+            resolve_git_head=lambda: "cafebabe",
+        )
+        assert (metadata_dir / "sweep_info.json").exists()
+
+        animation_sweep = {
+            "path": "gaba_tau2_ms",
+            "sweep_dir": tmp_dir / "anim-sweep",
+            "items": [
+                {"label": "item_000", "value": 50.0, "result": {"x": [0, 1], "y": [1, 2]}},
+                {"label": "item_001", "value": 55.0, "result": {"x": [0, 1], "y": [2, 3]}},
+            ],
+        }
+        animation_sweep["sweep_dir"].mkdir(parents=True, exist_ok=True)
+
+        frames = list(
+            iter_parallel_sweep_display_frames(
+                animation_sweep,
+                _simple_plot,
+                figsize=(2.0, 1.5),
+                workers=1,
+            )
+        )
+        assert len(frames) == 2
+        assert all(frame.ndim == 3 for frame in frames)
+
+        anim = animate_sweep(animation_sweep, _simple_plot, figsize=(2.0, 1.5), interval=10)
+        gif_path = save_animation(
+            anim,
+            "anim_demo",
+            safe_name=_safe_name,
+            output_dir=tmp_dir / "manual-gifs",
+            fps=2,
+        )
+        assert gif_path.exists()
+
+        stream_gif = save_sweep_animation_stream(
+            animation_sweep,
+            _simple_plot,
+            "stream_demo",
+            safe_name=_safe_name,
+            output_dir=tmp_dir / "stream-gifs",
+            figsize=(2.0, 1.5),
+            fps=2,
+            workers=1,
+        )
+        assert stream_gif.exists()
+
+        animated = animate_sweep_plots(
+            animation_sweep,
+            [make_sweep_plot_spec(_simple_plot, name="simple", fps=2)],
+            plot_builder=lambda spec: (
+                build_sweep_plot_callable(spec, plot_resolver=lambda _name: _simple_plot),
+                spec.name,
+            ),
+            safe_name=_safe_name,
+            output_dir=tmp_dir / "auto-gifs",
+            workers=1,
+        )
+        assert set(animated.keys()) == {"simple"}
+        assert next(iter(animated.values())).exists()
 
     print("analysis sweep helpers: OK")
 

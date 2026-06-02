@@ -1,9 +1,17 @@
-"""Reusable sweep-plot and frame-rendering helpers."""
+"""Reusable sweep planning, persistence, and animation helpers."""
 
 from __future__ import annotations
 
+import concurrent.futures
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable
+import json
+import multiprocessing as _multiprocessing
+import os
+from pathlib import Path
+from typing import Any, Callable, Iterable, Iterator, Mapping
+
+from matplotlib import animation
+from matplotlib.patches import Rectangle
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -317,3 +325,714 @@ def render_sweep_frame(
         plt.close(fig)
 
     return frame_rgb, str(title)
+
+
+def resolve_sweep_item_result_dir(item: Mapping[str, Any] | Any) -> Path | None:
+    """Resolve the concrete result directory for one sweep item if available."""
+    if not isinstance(item, Mapping):
+        return None
+    run = item.get("run")
+    result = item.get("result")
+    if run is not None and getattr(run, "result_dir", None) is not None:
+        return Path(run.result_dir)
+    if isinstance(result, Mapping) and result.get("result_dir") is not None:
+        return Path(result["result_dir"])
+    return None
+
+
+def write_sweep_info(
+    sweep: Mapping[str, Any] | dict[str, Any],
+    *,
+    sweep_dir: str | Path,
+    timestamp: str,
+    json_ready: Callable[[Any], Any],
+    resolve_git_head: Callable[[], str | None] | None = None,
+    result_dir_resolver: Callable[[Mapping[str, Any] | Any], Path | None] = resolve_sweep_item_result_dir,
+) -> Path:
+    """Persist sweep metadata in a compact, reloadable directory layout."""
+    sweep_dir = Path(sweep_dir)
+    sweep_dir.mkdir(parents=True, exist_ok=True)
+    (sweep_dir / "animations").mkdir(exist_ok=True)
+    (sweep_dir / "figures").mkdir(exist_ok=True)
+    (sweep_dir / "runs").mkdir(exist_ok=True)
+
+    git_ref = None
+    if resolve_git_head is not None:
+        try:
+            git_ref = resolve_git_head()
+        except Exception:
+            git_ref = None
+
+    run_dirs: list[str | None] = []
+    item_statuses: list[Any] = []
+    item_labels: list[str] = []
+    for item in sweep.get("items", []):
+        result_dir = result_dir_resolver(item)
+        run_dirs.append(str(result_dir) if result_dir is not None else None)
+        if isinstance(item, Mapping):
+            item_statuses.append(json_ready(item.get("status", {})))
+            item_labels.append(str(item.get("label", "")))
+
+    sweep_info: dict[str, Any] = {
+        "path": sweep.get("path"),
+        "values": [json_ready(v) for v in sweep.get("values", [])],
+        "paramset": sweep.get("paramset"),
+        "timestamp": timestamp,
+        "git_ref": git_ref,
+        "run_dirs": run_dirs,
+        "n_items": len(sweep.get("items", [])),
+    }
+    if item_statuses:
+        sweep_info["item_statuses"] = item_statuses
+    if item_labels:
+        sweep_info["item_labels"] = item_labels
+    for key in (
+        "partial",
+        "failed_labels",
+        "failed_without_result",
+        "recovered_failed_labels",
+        "missing_labels",
+        "load_errors",
+    ):
+        if key in sweep:
+            sweep_info[key] = json_ready(sweep[key])
+    if sweep.get("grid") is not None:
+        sweep_info["grid"] = json_ready(sweep.get("grid"))
+
+    (sweep_dir / "sweep_info.json").write_text(json.dumps(sweep_info, indent=2, sort_keys=True))
+    if isinstance(sweep, dict):
+        sweep["sweep_dir"] = sweep_dir
+        sweep["sweep_info"] = sweep_info
+    return sweep_dir
+
+
+def save_sweep(
+    sweep: Mapping[str, Any] | dict[str, Any],
+    *,
+    base_dir: str | Path,
+    timestamp_factory: Callable[[], str],
+    safe_name: Callable[[Any], str],
+    json_ready: Callable[[Any], Any],
+    name: str | None = None,
+    resolve_git_head: Callable[[], str | None] | None = None,
+    result_dir_resolver: Callable[[Mapping[str, Any] | Any], Path | None] = resolve_sweep_item_result_dir,
+) -> Path:
+    """Persist a completed sweep together with stable per-slot run pointers."""
+    base_dir = Path(base_dir)
+    timestamp = str(timestamp_factory())
+    path_label = sweep.get("path", "sweep")
+    if isinstance(path_label, dict):
+        path_label = "_".join(str(key) for key in path_label.keys())
+    auto_name = safe_name(f"{path_label}_{timestamp}")
+    sweep_dir = base_dir / str(name or auto_name)
+    sweep_dir.mkdir(parents=True, exist_ok=True)
+    (sweep_dir / "animations").mkdir(exist_ok=True)
+    (sweep_dir / "figures").mkdir(exist_ok=True)
+    runs_dir = sweep_dir / "runs"
+    runs_dir.mkdir(exist_ok=True)
+
+    for index, item in enumerate(sweep.get("items", [])):
+        value = item.get("value") if isinstance(item, Mapping) else None
+        result_dir = result_dir_resolver(item)
+        value_text = safe_name(str(value)) if value is not None else str(index)
+        slot = runs_dir / f"{index:02d}_{value_text}"
+        slot.mkdir(exist_ok=True)
+        if result_dir is None:
+            continue
+        (slot / "result_dir.txt").write_text(str(result_dir))
+        run_info_path = result_dir / "run_info.json"
+        if run_info_path.exists():
+            import shutil as _shutil
+
+            _shutil.copy2(run_info_path, slot / "run_info.json")
+
+    return write_sweep_info(
+        sweep,
+        sweep_dir=sweep_dir,
+        timestamp=timestamp,
+        json_ready=json_ready,
+        resolve_git_head=resolve_git_head,
+        result_dir_resolver=result_dir_resolver,
+    )
+
+
+def load_sweep(
+    path: str | Path,
+    *,
+    load_result_fn: Callable[[Path], Any],
+    safe_name: Callable[[Any], str],
+) -> dict[str, Any]:
+    """Reconstruct a saved sweep using a caller-provided result loader."""
+    sweep_dir = Path(path)
+    info_path = sweep_dir / "sweep_info.json"
+    if not info_path.exists():
+        raise FileNotFoundError(f"No sweep_info.json found in {sweep_dir}")
+
+    info = json.loads(info_path.read_text())
+    items: list[dict[str, Any]] = []
+    runs_dir = sweep_dir / "runs"
+    values = list(info.get("values", []))
+    run_dirs = list(info.get("run_dirs", []))
+    item_statuses = list(info.get("item_statuses", []))
+    item_labels = list(info.get("item_labels", []))
+    for index, value in enumerate(values):
+        run_dir_str = run_dirs[index] if index < len(run_dirs) else None
+        status = item_statuses[index] if index < len(item_statuses) and isinstance(item_statuses[index], dict) else {}
+        label = (
+            str(item_labels[index])
+            if index < len(item_labels) and item_labels[index] not in (None, "")
+            else None
+        )
+        result = None
+        load_error = None
+        if run_dir_str is not None:
+            run_dir = Path(run_dir_str)
+            try:
+                if run_dir.exists():
+                    result = load_result_fn(run_dir)
+                else:
+                    slot = runs_dir / f"{index:02d}_{safe_name(str(value))}"
+                    pointer_path = slot / "result_dir.txt"
+                    if pointer_path.exists():
+                        alt = Path(pointer_path.read_text().strip())
+                        if alt.exists():
+                            result = load_result_fn(alt)
+            except Exception as exc:
+                load_error = str(exc)
+        item = {"value": value, "config": None, "run": None, "result": result, "status": status}
+        if label is not None:
+            item["label"] = label
+        if load_error is not None:
+            item["load_error"] = load_error
+        items.append(item)
+
+    inferred_missing_labels = [
+        str(item.get("label") or index)
+        for index, item in enumerate(items)
+        if item.get("result") is None
+    ]
+    missing_labels = list(info.get("missing_labels", [])) or inferred_missing_labels
+    item_load_errors = {
+        str(item.get("label") or index): item["load_error"]
+        for index, item in enumerate(items)
+        if isinstance(item, dict) and item.get("load_error")
+    }
+    saved_load_errors = dict(info.get("load_errors", {})) if isinstance(info.get("load_errors"), dict) else {}
+    load_errors = {**saved_load_errors, **item_load_errors}
+
+    return {
+        "path": info.get("path"),
+        "values": values,
+        "items": items,
+        "sweep_dir": sweep_dir,
+        "sweep_info": info,
+        "paramset": info.get("paramset"),
+        "grid": info.get("grid"),
+        "partial": bool(info.get("partial", False) or missing_labels or load_errors),
+        "failed_labels": list(info.get("failed_labels", [])),
+        "failed_without_result": list(info.get("failed_without_result", [])),
+        "recovered_failed_labels": list(info.get("recovered_failed_labels", [])),
+        "missing_labels": missing_labels,
+        "load_errors": load_errors,
+    }
+
+
+def list_sweeps(
+    *,
+    base_dir: str | Path,
+    prefix: str | None = None,
+) -> list[Path]:
+    """List saved sweep directories from oldest to newest."""
+    base_dir = Path(base_dir)
+    if not base_dir.exists():
+        return []
+    return [
+        path
+        for path in sorted(base_dir.iterdir())
+        if path.is_dir()
+        and (path / "sweep_info.json").exists()
+        and (prefix is None or path.name.startswith(prefix))
+    ]
+
+
+def compose_sweep_display_frame(
+    frame_rgb: np.ndarray,
+    title: str,
+    *,
+    figsize: tuple[float, float],
+    frame_index: int | None = None,
+    total_frames: int | None = None,
+) -> np.ndarray:
+    """Compose one frame with title and a simple embedded progress bar."""
+    display_fig = plt.figure(figsize=figsize)
+    header_ax = display_fig.add_axes([0.045, 0.905, 0.91, 0.085])
+    image_ax = display_fig.add_axes([0.0, 0.0, 1.0, 0.895])
+    header_ax.axis("off")
+    image_ax.axis("off")
+    image_ax.imshow(frame_rgb)
+
+    progress_label = ""
+    fraction = 0.0
+    if frame_index is not None and total_frames:
+        total = max(int(total_frames), 1)
+        current = max(1, min(int(frame_index) + 1, total))
+        fraction = current / total
+        progress_label = f"{current}/{total} ({fraction * 100.0:.1f}%)"
+
+    header_text = str(title)
+    if progress_label and progress_label not in header_text:
+        header_text = f"{header_text} | {progress_label}"
+    header_ax.text(
+        0.0,
+        0.72,
+        header_text,
+        ha="left",
+        va="center",
+        fontsize=10,
+        fontweight="semibold",
+        color="#111111",
+        transform=header_ax.transAxes,
+    )
+    if progress_label:
+        header_ax.add_patch(
+            Rectangle(
+                (0.0, 0.12),
+                1.0,
+                0.22,
+                transform=header_ax.transAxes,
+                facecolor="#e6e8eb",
+                edgecolor="#9aa1a9",
+                linewidth=0.6,
+            )
+        )
+        header_ax.add_patch(
+            Rectangle(
+                (0.0, 0.12),
+                fraction,
+                0.22,
+                transform=header_ax.transAxes,
+                facecolor="#1f77b4",
+                edgecolor="none",
+            )
+        )
+    try:
+        return fig_to_rgb_array(display_fig)
+    finally:
+        plt.close(display_fig)
+
+
+def iter_sweep_animation_frames(
+    sweep: Mapping[str, Any],
+    plot_fn: Any,
+    *,
+    figsize: tuple[float, float],
+    title_fn: Any = None,
+    close_frames: bool = True,
+) -> Iterator[tuple[np.ndarray, str]]:
+    """Yield raw frame arrays and titles for one sweep animation."""
+    total_frames = len(sweep["items"])
+    for frame_index, item in enumerate(sweep["items"]):
+        yield render_sweep_frame(
+            dict(sweep),
+            item,
+            frame_index,
+            total_frames,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+        )
+
+
+_SWEEP_ANIMATION_WORKER_STATE: dict[str, Any] = {}
+
+
+def default_sweep_animation_worker_count(
+    frame_count: int,
+    *,
+    env_var_name: str = "NEUROINFRA_SWEEP_RENDER_WORKERS",
+) -> int:
+    """Choose a safe default worker count for CPU-bound frame rendering."""
+    if frame_count < 4:
+        return 1
+    raw = os.environ.get(env_var_name)
+    if raw not in (None, ""):
+        try:
+            requested = int(raw)
+        except ValueError:
+            requested = 1
+        return max(1, min(frame_count, requested))
+    cpu_count = os.cpu_count() or 1
+    return max(1, min(frame_count, cpu_count))
+
+
+def _init_sweep_animation_worker(
+    sweep: Mapping[str, Any],
+    plot_fn: Any,
+    figsize: tuple[float, float],
+    title_fn: Any,
+    close_frames: bool,
+) -> None:
+    """Initialise per-process worker state for parallel frame rendering."""
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg", force=True)
+    except Exception:
+        pass
+    _SWEEP_ANIMATION_WORKER_STATE.clear()
+    _SWEEP_ANIMATION_WORKER_STATE.update(
+        {
+            "sweep": dict(sweep),
+            "plot_fn": plot_fn,
+            "figsize": figsize,
+            "title_fn": title_fn,
+            "close_frames": close_frames,
+        }
+    )
+
+
+def _render_sweep_animation_worker_frame(frame_index: int) -> tuple[int, np.ndarray]:
+    """Render one composed sweep frame in a worker process."""
+    state = _SWEEP_ANIMATION_WORKER_STATE
+    sweep = state["sweep"]
+    frame_rgb, title = render_sweep_frame(
+        sweep,
+        sweep["items"][frame_index],
+        frame_index,
+        len(sweep["items"]),
+        state["plot_fn"],
+        figsize=state["figsize"],
+        title_fn=state["title_fn"],
+        close_frames=state["close_frames"],
+    )
+    return (
+        frame_index,
+        compose_sweep_display_frame(
+            np.asarray(frame_rgb, dtype=np.uint8),
+            title,
+            figsize=state["figsize"],
+            frame_index=frame_index,
+            total_frames=len(sweep["items"]),
+        ),
+    )
+
+
+def iter_parallel_sweep_display_frames(
+    sweep: Mapping[str, Any],
+    plot_fn: Any,
+    *,
+    figsize: tuple[float, float],
+    title_fn: Any = None,
+    close_frames: bool = True,
+    workers: int | None = None,
+    env_var_name: str = "NEUROINFRA_SWEEP_RENDER_WORKERS",
+) -> Iterator[np.ndarray]:
+    """Yield composed sweep display frames, rendering in parallel when possible."""
+    total_frames = len(sweep["items"])
+    worker_count = (
+        default_sweep_animation_worker_count(total_frames, env_var_name=env_var_name)
+        if workers is None
+        else max(1, min(total_frames, int(workers)))
+    )
+    if worker_count <= 1:
+        for frame_index, (frame_rgb, title) in enumerate(
+            iter_sweep_animation_frames(
+                sweep,
+                plot_fn,
+                figsize=figsize,
+                title_fn=title_fn,
+                close_frames=close_frames,
+            )
+        ):
+            yield compose_sweep_display_frame(
+                np.asarray(frame_rgb, dtype=np.uint8),
+                title,
+                figsize=figsize,
+                frame_index=frame_index,
+                total_frames=total_frames,
+            )
+        return
+
+    try:
+        context = _multiprocessing.get_context("fork")
+    except ValueError:
+        for frame_index, (frame_rgb, title) in enumerate(
+            iter_sweep_animation_frames(
+                sweep,
+                plot_fn,
+                figsize=figsize,
+                title_fn=title_fn,
+                close_frames=close_frames,
+            )
+        ):
+            yield compose_sweep_display_frame(
+                np.asarray(frame_rgb, dtype=np.uint8),
+                title,
+                figsize=figsize,
+                frame_index=frame_index,
+                total_frames=total_frames,
+            )
+        return
+
+    next_submit = 0
+    next_yield = 0
+    completed: dict[int, np.ndarray] = {}
+    pending: set[concurrent.futures.Future] = set()
+    max_pending = max(worker_count * 2, worker_count)
+    with concurrent.futures.ProcessPoolExecutor(
+        max_workers=worker_count,
+        mp_context=context,
+        initializer=_init_sweep_animation_worker,
+        initargs=(sweep, plot_fn, figsize, title_fn, close_frames),
+    ) as executor:
+        while next_submit < total_frames and len(pending) < max_pending:
+            pending.add(executor.submit(_render_sweep_animation_worker_frame, next_submit))
+            next_submit += 1
+
+        while pending:
+            done, pending = concurrent.futures.wait(
+                pending,
+                return_when=concurrent.futures.FIRST_COMPLETED,
+            )
+            for future in done:
+                frame_index, frame = future.result()
+                completed[frame_index] = frame
+
+            while next_submit < total_frames and len(pending) < max_pending:
+                pending.add(executor.submit(_render_sweep_animation_worker_frame, next_submit))
+                next_submit += 1
+
+            while next_yield in completed:
+                yield completed.pop(next_yield)
+                next_yield += 1
+
+
+def animate_sweep(
+    sweep: Mapping[str, Any],
+    plot_fn: Any,
+    *,
+    figsize: tuple[float, float] = (12.0, 5.0),
+    interval: int = 100,
+    title_fn: Any = None,
+    close_frames: bool = True,
+) -> animation.FuncAnimation:
+    """Render a full in-memory animation for one completed sweep."""
+    frames_rgb: list[np.ndarray] = []
+    total_frames = len(sweep["items"])
+    for frame_index, (frame_rgb, title) in enumerate(
+        iter_sweep_animation_frames(
+            sweep,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+        )
+    ):
+        frames_rgb.append(
+            compose_sweep_display_frame(
+                np.asarray(frame_rgb, dtype=np.uint8),
+                title,
+                figsize=figsize,
+                frame_index=frame_index,
+                total_frames=total_frames,
+            )
+        )
+    if not frames_rgb:
+        raise ValueError("sweep has no items to animate")
+
+    display_fig, ax = plt.subplots(figsize=figsize)
+    ax.axis("off")
+    display_fig.tight_layout(pad=0)
+    image = ax.imshow(frames_rgb[0])
+
+    def _update(index: int) -> list[Any]:
+        image.set_data(frames_rgb[index])
+        return [image]
+
+    anim = animation.FuncAnimation(
+        display_fig,
+        _update,
+        frames=len(frames_rgb),
+        interval=interval,
+        repeat=True,
+    )
+    plt.close(display_fig)
+    return anim
+
+
+def save_animation(
+    anim: animation.FuncAnimation,
+    name: str,
+    *,
+    safe_name: Callable[[Any], str],
+    output_dir: str | Path | None = None,
+    sweep: Mapping[str, Any] | None = None,
+    fps: int = 10,
+    default_output_dir_factory: Callable[[], Path] | None = None,
+) -> Path:
+    """Save an already-built animation as a GIF and return the written path."""
+    if output_dir is None and sweep is not None and "sweep_dir" in sweep:
+        output_dir = Path(sweep["sweep_dir"]) / "animations"
+    elif output_dir is None and default_output_dir_factory is not None:
+        output_dir = default_output_dir_factory()
+    if output_dir is None:
+        raise ValueError("output_dir or default_output_dir_factory is required when sweep_dir is absent")
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    gif_path = output_dir / f"{safe_name(name)}.gif"
+    writer = animation.PillowWriter(fps=max(1, int(fps)))
+    anim.save(str(gif_path), writer=writer)
+    return gif_path
+
+
+def save_sweep_animation_stream(
+    sweep: Mapping[str, Any],
+    plot_fn: Any,
+    name: str,
+    *,
+    safe_name: Callable[[Any], str],
+    output_dir: str | Path | None = None,
+    figsize: tuple[float, float] = (12.0, 5.0),
+    title_fn: Any = None,
+    close_frames: bool = True,
+    fps: int = 10,
+    workers: int | None = None,
+    env_var_name: str = "NEUROINFRA_SWEEP_RENDER_WORKERS",
+    progress_callback: Callable[[int, int], None] | None = None,
+    default_output_dir_factory: Callable[[], Path] | None = None,
+) -> Path:
+    """Stream-render a sweep GIF without retaining all frames in memory."""
+    if not sweep.get("items"):
+        raise ValueError("sweep has no items to animate")
+    if output_dir is None and "sweep_dir" in sweep:
+        output_dir = Path(sweep["sweep_dir"]) / "animations"
+    elif output_dir is None and default_output_dir_factory is not None:
+        output_dir = default_output_dir_factory()
+    if output_dir is None:
+        raise ValueError("output_dir or default_output_dir_factory is required when sweep_dir is absent")
+
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    gif_path = output_dir / f"{safe_name(name)}.gif"
+
+    frame_count = 0
+    total_frames = len(sweep["items"])
+    duration_s = 1.0 / max(1, int(fps))
+    try:
+        import imageio.v2 as imageio
+
+        with imageio.get_writer(
+            gif_path,
+            mode="I",
+            fps=max(1, int(fps)),
+            loop=0,
+            palettesize=256,
+            subrectangles=False,
+        ) as writer:
+            import gc as _gc
+
+            for frame_rgb in iter_parallel_sweep_display_frames(
+                sweep,
+                plot_fn,
+                figsize=figsize,
+                title_fn=title_fn,
+                close_frames=close_frames,
+                workers=workers,
+                env_var_name=env_var_name,
+            ):
+                writer.append_data(np.asarray(frame_rgb, dtype=np.uint8))
+                frame_count += 1
+                if progress_callback is not None:
+                    progress_callback(frame_count, total_frames)
+                if frame_count % 16 == 0:
+                    _gc.collect()
+    except ImportError:
+        from PIL import Image
+
+        frames = []
+        for frame_rgb in iter_parallel_sweep_display_frames(
+            sweep,
+            plot_fn,
+            figsize=figsize,
+            title_fn=title_fn,
+            close_frames=close_frames,
+            workers=workers,
+            env_var_name=env_var_name,
+        ):
+            frames.append(Image.fromarray(np.asarray(frame_rgb, dtype=np.uint8)))
+            frame_count += 1
+            if progress_callback is not None:
+                progress_callback(frame_count, total_frames)
+        if frames:
+            frames[0].save(
+                gif_path,
+                save_all=True,
+                append_images=frames[1:],
+                duration=max(1, int(round(duration_s * 1000))),
+                loop=0,
+            )
+
+    if frame_count == 0:
+        raise ValueError("sweep has no items to animate")
+    return gif_path
+
+
+def animate_sweep_plots(
+    sweep: Mapping[str, Any],
+    plots: Iterable[SweepPlotSpec | str | Any | dict[str, Any]],
+    *,
+    plot_builder: Callable[[SweepPlotSpec], tuple[Any, str]],
+    safe_name: Callable[[Any], str],
+    deprecated_names: Iterable[str] = (),
+    close_frames: bool = True,
+    stream: bool = True,
+    workers: int | None = None,
+    output_dir: str | Path | None = None,
+    env_var_name: str = "NEUROINFRA_SWEEP_RENDER_WORKERS",
+    progress_callback: Callable[[int, int], None] | None = None,
+    default_output_dir_factory: Callable[[], Path] | None = None,
+) -> dict[str, Path]:
+    """Render and save multiple sweep animation artifacts from one sweep."""
+    artifacts: dict[str, Path] = {}
+    for raw_spec in plots:
+        spec = normalize_sweep_plot_spec(raw_spec)
+        if is_deprecated_sweep_animation_spec(spec, deprecated_names=deprecated_names):
+            continue
+        plot_fn, filename = plot_builder(spec)
+        if stream:
+            artifacts[filename] = save_sweep_animation_stream(
+                sweep,
+                plot_fn,
+                filename,
+                safe_name=safe_name,
+                output_dir=output_dir,
+                figsize=spec.figsize,
+                title_fn=spec.title_fn,
+                close_frames=close_frames,
+                fps=spec.fps,
+                workers=workers,
+                env_var_name=env_var_name,
+                progress_callback=progress_callback,
+                default_output_dir_factory=default_output_dir_factory,
+            )
+        else:
+            anim = animate_sweep(
+                sweep,
+                plot_fn,
+                figsize=spec.figsize,
+                interval=spec.interval,
+                title_fn=spec.title_fn,
+                close_frames=close_frames,
+            )
+            artifacts[filename] = save_animation(
+                anim,
+                filename,
+                safe_name=safe_name,
+                output_dir=output_dir,
+                sweep=sweep,
+                fps=spec.fps,
+                default_output_dir_factory=default_output_dir_factory,
+            )
+    return artifacts

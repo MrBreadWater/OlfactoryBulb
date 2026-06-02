@@ -8,9 +8,7 @@ notebook reruns do not corrupt the live HOC state.
 from __future__ import annotations
 
 import atexit
-import concurrent.futures
 import json
-import multiprocessing as _multiprocessing
 import os
 import pickle
 import re
@@ -35,7 +33,6 @@ from typing import Any, Callable, MutableMapping
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
 import numpy as np
 try:
     import paramiko
@@ -268,15 +265,28 @@ from neuroinfra.analysis.plotting import (
 )
 from neuroinfra.analysis.sweeps import (
     SweepPlotSpec,
+    animate_sweep as _neuroinfra_animate_sweep,
+    animate_sweep_plots as _neuroinfra_animate_sweep_plots,
     build_sweep_plot_callable as _neuroinfra_build_sweep_plot_callable,
+    compose_sweep_display_frame as _neuroinfra_compose_sweep_display_frame,
+    default_sweep_animation_worker_count as _neuroinfra_default_sweep_animation_worker_count,
     describe_unavailable_sweep_item as _neuroinfra_describe_unavailable_sweep_item,
     extract_figure_from_plot_result as _neuroinfra_extract_figure_from_plot_result,
+    fig_to_rgb_array as _neuroinfra_fig_to_rgb_array,
     format_sweep_frame_title as _neuroinfra_format_sweep_frame_title,
+    iter_parallel_sweep_display_frames as _neuroinfra_iter_parallel_sweep_display_frames,
+    iter_sweep_animation_frames as _neuroinfra_iter_sweep_animation_frames,
     is_deprecated_sweep_animation_spec as _neuroinfra_is_deprecated_sweep_animation_spec,
+    list_sweeps as _neuroinfra_list_sweeps,
+    load_sweep as _neuroinfra_load_sweep,
     make_sweep_placeholder_figure as _neuroinfra_make_sweep_placeholder_figure,
     make_sweep_plot_spec as _neuroinfra_make_sweep_plot_spec,
     normalize_sweep_plot_spec as _neuroinfra_normalize_sweep_plot_spec,
     render_sweep_frame as _neuroinfra_render_sweep_frame,
+    save_animation as _neuroinfra_save_animation,
+    save_sweep as _neuroinfra_save_sweep,
+    save_sweep_animation_stream as _neuroinfra_save_sweep_animation_stream,
+    write_sweep_info as _neuroinfra_write_sweep_info,
 )
 from neuroinfra.analysis.spectral import (
     DEFAULT_HFO_BANDS,
@@ -4737,63 +4747,13 @@ def _write_sweep_info(
     timestamp: str,
 ) -> Path:
     """Persist sweep metadata for both local and remote-batch sweep runs."""
-    sweep_dir = Path(sweep_dir)
-    sweep_dir.mkdir(parents=True, exist_ok=True)
-    (sweep_dir / "animations").mkdir(exist_ok=True)
-    (sweep_dir / "figures").mkdir(exist_ok=True)
-    (sweep_dir / "runs").mkdir(exist_ok=True)
-
-    git_ref = None
-    try:
-        git_ref = _resolve_local_git_head()
-    except Exception:
-        pass
-
-    run_dirs = []
-    item_statuses = []
-    item_labels = []
-    for item in sweep.get("items", []):
-        run = item.get("run") if isinstance(item, dict) else None
-        result = item.get("result") if isinstance(item, dict) else None
-        result_dir = None
-        if run is not None and getattr(run, "result_dir", None) is not None:
-            result_dir = Path(run.result_dir)
-        elif isinstance(result, dict) and result.get("result_dir") is not None:
-            result_dir = Path(result["result_dir"])
-        run_dirs.append(str(result_dir) if result_dir is not None else None)
-        if isinstance(item, dict):
-            item_statuses.append(_json_ready(item.get("status", {})))
-            item_labels.append(str(item.get("label", "")))
-
-    sweep_info = {
-        "path": sweep.get("path"),
-        "values": [_json_ready(v) for v in sweep.get("values", [])],
-        "paramset": sweep.get("paramset"),
-        "timestamp": timestamp,
-        "git_ref": git_ref,
-        "run_dirs": run_dirs,
-        "n_items": len(sweep.get("items", [])),
-    }
-    if item_statuses:
-        sweep_info["item_statuses"] = item_statuses
-    if item_labels:
-        sweep_info["item_labels"] = item_labels
-    for key in (
-        "partial",
-        "failed_labels",
-        "failed_without_result",
-        "recovered_failed_labels",
-        "missing_labels",
-        "load_errors",
-    ):
-        if key in sweep:
-            sweep_info[key] = _json_ready(sweep[key])
-    if sweep.get("grid") is not None:
-        sweep_info["grid"] = _json_ready(sweep.get("grid"))
-    (sweep_dir / "sweep_info.json").write_text(json.dumps(sweep_info, indent=2, sort_keys=True))
-    sweep["sweep_dir"] = sweep_dir
-    sweep["sweep_info"] = sweep_info
-    return sweep_dir
+    return _neuroinfra_write_sweep_info(
+        sweep,
+        sweep_dir=sweep_dir,
+        timestamp=timestamp,
+        json_ready=_json_ready,
+        resolve_git_head=_resolve_local_git_head,
+    )
 
 
 def _build_remote_sweep_driver_command(
@@ -8386,11 +8346,7 @@ def _sweep_plot_artifact_stem(spec: SweepPlotSpec) -> str:
 
 def _fig_to_rgb_array(fig: Any) -> np.ndarray:
     """Render a matplotlib figure to an H×W×3 uint8 numpy array."""
-    from matplotlib.backends.backend_agg import FigureCanvasAgg
-    canvas = FigureCanvasAgg(fig)
-    canvas.draw()
-    rgba = np.asarray(canvas.buffer_rgba(), dtype=np.uint8)
-    return np.ascontiguousarray(rgba[..., :3])
+    return _neuroinfra_fig_to_rgb_array(fig)
 
 
 def _render_sweep_frame(
@@ -8426,61 +8382,13 @@ def _compose_sweep_display_frame(
     total_frames: int | None = None,
 ) -> np.ndarray:
     """Compose one sweep frame with a baked-in title and visual progress bar."""
-    display_fig = plt.figure(figsize=figsize)
-    header_ax = display_fig.add_axes([0.045, 0.905, 0.91, 0.085])
-    image_ax = display_fig.add_axes([0.0, 0.0, 1.0, 0.895])
-    header_ax.axis("off")
-    image_ax.axis("off")
-    image_ax.imshow(frame_rgb)
-
-    progress_label = ""
-    fraction = 0.0
-    if frame_index is not None and total_frames:
-        total = max(int(total_frames), 1)
-        current = max(1, min(int(frame_index) + 1, total))
-        fraction = current / total
-        progress_label = f"{current}/{total} ({fraction * 100.0:.1f}%)"
-
-    header_text = str(title)
-    if progress_label and progress_label not in header_text:
-        header_text = f"{header_text} | {progress_label}"
-    header_ax.text(
-        0.0,
-        0.72,
-        header_text,
-        ha="left",
-        va="center",
-        fontsize=10,
-        fontweight="semibold",
-        color="#111111",
-        transform=header_ax.transAxes,
+    return _neuroinfra_compose_sweep_display_frame(
+        frame_rgb,
+        title,
+        figsize=figsize,
+        frame_index=frame_index,
+        total_frames=total_frames,
     )
-    if progress_label:
-        header_ax.add_patch(
-            Rectangle(
-                (0.0, 0.12),
-                1.0,
-                0.22,
-                transform=header_ax.transAxes,
-                facecolor="#e6e8eb",
-                edgecolor="#9aa1a9",
-                linewidth=0.6,
-            )
-        )
-        header_ax.add_patch(
-            Rectangle(
-                (0.0, 0.12),
-                fraction,
-                0.22,
-                transform=header_ax.transAxes,
-                facecolor="#1f77b4",
-                edgecolor="none",
-            )
-        )
-    try:
-        return _fig_to_rgb_array(display_fig)
-    finally:
-        plt.close(display_fig)
 
 
 def _iter_sweep_animation_frames(
@@ -8492,87 +8400,20 @@ def _iter_sweep_animation_frames(
     close_frames: bool = True,
 ) -> Any:
     """Yield rendered sweep animation frames one at a time."""
-    total_frames = len(sweep["items"])
-    for frame_index, item in enumerate(sweep["items"]):
-        yield _render_sweep_frame(
-            sweep,
-            item,
-            frame_index,
-            total_frames,
-            plot_fn,
-            figsize=figsize,
-            title_fn=title_fn,
-            close_frames=close_frames,
-        )
-
-
-_SWEEP_ANIMATION_WORKER_STATE: dict[str, Any] = {}
+    yield from _neuroinfra_iter_sweep_animation_frames(
+        sweep,
+        plot_fn,
+        figsize=figsize,
+        title_fn=title_fn,
+        close_frames=close_frames,
+    )
 
 
 def _default_sweep_animation_worker_count(frame_count: int) -> int:
     """Choose a safe default worker count for CPU-bound Matplotlib frame rendering."""
-    if frame_count < 4:
-        return 1
-    raw = os.environ.get("OBGPU_SWEEP_RENDER_WORKERS")
-    if raw not in (None, ""):
-        try:
-            requested = int(raw)
-        except ValueError:
-            requested = 1
-        return max(1, min(frame_count, requested))
-    cpu_count = os.cpu_count() or 1
-    return max(1, min(frame_count, cpu_count))
-
-
-def _init_sweep_animation_worker(
-    sweep: dict[str, Any],
-    plot_fn: Any,
-    figsize: tuple[float, float],
-    title_fn: Any,
-    close_frames: bool,
-) -> None:
-    """Initialise per-process state inherited through fork for frame rendering."""
-    try:
-        import matplotlib
-
-        matplotlib.use("Agg", force=True)
-    except Exception:
-        pass
-    _SWEEP_ANIMATION_WORKER_STATE.clear()
-    _SWEEP_ANIMATION_WORKER_STATE.update(
-        {
-            "sweep": sweep,
-            "plot_fn": plot_fn,
-            "figsize": figsize,
-            "title_fn": title_fn,
-            "close_frames": close_frames,
-        }
-    )
-
-
-def _render_sweep_animation_worker_frame(frame_index: int) -> tuple[int, np.ndarray]:
-    """Render one composed animation frame in a worker process."""
-    state = _SWEEP_ANIMATION_WORKER_STATE
-    sweep = state["sweep"]
-    frame_rgb, title = _render_sweep_frame(
-        sweep,
-        sweep["items"][frame_index],
-        frame_index,
-        len(sweep["items"]),
-        state["plot_fn"],
-        figsize=state["figsize"],
-        title_fn=state["title_fn"],
-        close_frames=state["close_frames"],
-    )
-    return (
-        frame_index,
-        _compose_sweep_display_frame(
-            np.asarray(frame_rgb, dtype=np.uint8),
-            title,
-            figsize=state["figsize"],
-            frame_index=frame_index,
-            total_frames=len(sweep["items"]),
-        ),
+    return _neuroinfra_default_sweep_animation_worker_count(
+        frame_count,
+        env_var_name="OBGPU_SWEEP_RENDER_WORKERS",
     )
 
 
@@ -8586,79 +8427,15 @@ def _iter_parallel_sweep_display_frames(
     workers: int | None = None,
 ) -> Any:
     """Yield composed frames in order while rendering independent frames concurrently."""
-    total_frames = len(sweep["items"])
-    worker_count = (
-        _default_sweep_animation_worker_count(total_frames)
-        if workers is None
-        else max(1, min(total_frames, int(workers)))
+    yield from _neuroinfra_iter_parallel_sweep_display_frames(
+        sweep,
+        plot_fn,
+        figsize=figsize,
+        title_fn=title_fn,
+        close_frames=close_frames,
+        workers=workers,
+        env_var_name="OBGPU_SWEEP_RENDER_WORKERS",
     )
-    if worker_count <= 1:
-        for frame_index, (frame_rgb, title) in enumerate(_iter_sweep_animation_frames(
-            sweep,
-            plot_fn,
-            figsize=figsize,
-            title_fn=title_fn,
-            close_frames=close_frames,
-        )):
-            yield _compose_sweep_display_frame(
-                np.asarray(frame_rgb, dtype=np.uint8),
-                title,
-                figsize=figsize,
-                frame_index=frame_index,
-                total_frames=total_frames,
-            )
-        return
-
-    try:
-        context = _multiprocessing.get_context("fork")
-    except ValueError:
-        for frame_index, (frame_rgb, title) in enumerate(_iter_sweep_animation_frames(
-            sweep,
-            plot_fn,
-            figsize=figsize,
-            title_fn=title_fn,
-            close_frames=close_frames,
-        )):
-            yield _compose_sweep_display_frame(
-                np.asarray(frame_rgb, dtype=np.uint8),
-                title,
-                figsize=figsize,
-                frame_index=frame_index,
-                total_frames=total_frames,
-            )
-        return
-
-    next_submit = 0
-    next_yield = 0
-    completed: dict[int, np.ndarray] = {}
-    pending: set[concurrent.futures.Future] = set()
-    max_pending = max(worker_count * 2, worker_count)
-    with concurrent.futures.ProcessPoolExecutor(
-        max_workers=worker_count,
-        mp_context=context,
-        initializer=_init_sweep_animation_worker,
-        initargs=(sweep, plot_fn, figsize, title_fn, close_frames),
-    ) as executor:
-        while next_submit < total_frames and len(pending) < max_pending:
-            pending.add(executor.submit(_render_sweep_animation_worker_frame, next_submit))
-            next_submit += 1
-
-        while pending:
-            done, pending = concurrent.futures.wait(
-                pending,
-                return_when=concurrent.futures.FIRST_COMPLETED,
-            )
-            for future in done:
-                frame_index, frame = future.result()
-                completed[frame_index] = frame
-
-            while next_submit < total_frames and len(pending) < max_pending:
-                pending.add(executor.submit(_render_sweep_animation_worker_frame, next_submit))
-                next_submit += 1
-
-            while next_yield in completed:
-                yield completed.pop(next_yield)
-                next_yield += 1
 
 
 def animate_sweep(
@@ -8705,46 +8482,14 @@ def animate_sweep(
         )
         gif = save_animation(anim, 'my_sweep', sweep=sweep)
     """
-    frames_rgb: list[np.ndarray] = []
-    total_frames = len(sweep["items"])
-    for frame_index, (frame_rgb, title) in enumerate(_iter_sweep_animation_frames(
+    return _neuroinfra_animate_sweep(
         sweep,
         plot_fn,
         figsize=figsize,
+        interval=interval,
         title_fn=title_fn,
         close_frames=close_frames,
-    )):
-        frames_rgb.append(
-            _compose_sweep_display_frame(
-                np.asarray(frame_rgb, dtype=np.uint8),
-                title,
-                figsize=figsize,
-                frame_index=frame_index,
-                total_frames=total_frames,
-            )
-        )
-
-    if not frames_rgb:
-        raise ValueError("sweep has no items to animate")
-
-    display_fig, ax = plt.subplots(figsize=figsize)
-    ax.axis("off")
-    display_fig.tight_layout(pad=0)
-    im = ax.imshow(frames_rgb[0])
-
-    def _update(i: int) -> list:
-        im.set_data(frames_rgb[i])
-        return [im]
-
-    anim = animation.FuncAnimation(
-        display_fig,
-        _update,
-        frames=len(frames_rgb),
-        interval=interval,
-        repeat=True,
     )
-    plt.close(display_fig)
-    return anim
 
 
 def animate_lfp_sweep(
@@ -8872,85 +8617,15 @@ def save_sweep(
 
     The sweep dict is updated in-place with ``sweep["sweep_dir"]``.
     """
-    base_dir = Path(base_dir or SWEEPS_BASE)
-    timestamp = make_timestamp()
-    path_label = sweep.get("path", "sweep")
-    if isinstance(path_label, dict):
-        path_label = "_".join(str(k) for k in path_label.keys())
-    auto_name = _safe_name(f"{path_label}_{timestamp}")
-    sweep_dir = base_dir / (name or auto_name)
-    sweep_dir.mkdir(parents=True, exist_ok=True)
-    (sweep_dir / "animations").mkdir(exist_ok=True)
-    (sweep_dir / "figures").mkdir(exist_ok=True)
-    runs_dir = sweep_dir / "runs"
-    runs_dir.mkdir(exist_ok=True)
-
-    # Write per-run pointers
-    run_dirs = []
-    item_statuses = []
-    item_labels = []
-    for i, item in enumerate(sweep.get("items", [])):
-        val = item.get("value")
-        run = item.get("run")
-        result = item.get("result")
-        result_dir = None
-        if run is not None and hasattr(run, "result_dir"):
-            result_dir = Path(run.result_dir)
-        elif isinstance(result, dict) and "result_dir" in result:
-            result_dir = Path(result["result_dir"])
-
-        val_str = _safe_name(str(val)) if val is not None else str(i)
-        slot = runs_dir / f"{i:02d}_{val_str}"
-        slot.mkdir(exist_ok=True)
-
-        if result_dir is not None:
-            # Write a small pointer file so load_sweep can find the original dir
-            (slot / "result_dir.txt").write_text(str(result_dir))
-            # Copy run_info.json if present for quick inspection
-            src = result_dir / "run_info.json"
-            if src.exists():
-                import shutil as _shutil
-                _shutil.copy2(src, slot / "run_info.json")
-
-        run_dirs.append(str(result_dir) if result_dir else None)
-        item_statuses.append(_json_ready(item.get("status", {})))
-        item_labels.append(str(item.get("label", "")))
-
-    # Write sweep_info.json
-    git_ref = None
-    try:
-        git_ref = _resolve_local_git_head()
-    except Exception:
-        pass
-
-    sweep_info = {
-        "path": sweep.get("path"),
-        "values": [_json_ready(v) for v in sweep.get("values", [])],
-        "paramset": sweep.get("paramset"),
-        "timestamp": timestamp,
-        "git_ref": git_ref,
-        "run_dirs": run_dirs,
-        "n_items": len(sweep.get("items", [])),
-    }
-    if item_statuses:
-        sweep_info["item_statuses"] = item_statuses
-    if item_labels:
-        sweep_info["item_labels"] = item_labels
-    for key in (
-        "partial",
-        "failed_labels",
-        "failed_without_result",
-        "recovered_failed_labels",
-        "missing_labels",
-        "load_errors",
-    ):
-        if key in sweep:
-            sweep_info[key] = _json_ready(sweep[key])
-    (sweep_dir / "sweep_info.json").write_text(
-        json.dumps(sweep_info, indent=2, sort_keys=True)
+    return _neuroinfra_save_sweep(
+        sweep,
+        name=name,
+        base_dir=base_dir or SWEEPS_BASE,
+        timestamp_factory=make_timestamp,
+        safe_name=_safe_name,
+        json_ready=_json_ready,
+        resolve_git_head=_resolve_local_git_head,
     )
-    sweep["sweep_dir"] = sweep_dir
-    return sweep_dir
 
 
 def load_sweep(path: str | Path) -> dict[str, Any]:
@@ -8959,73 +8634,11 @@ def load_sweep(path: str | Path) -> dict[str, Any]:
     Results are loaded lazily (same as load_result) so re-animating old
     sweeps does not require loading all soma traces upfront.
     """
-    sweep_dir = Path(path)
-    info_path = sweep_dir / "sweep_info.json"
-    if not info_path.exists():
-        raise FileNotFoundError(f"No sweep_info.json found in {sweep_dir}")
-
-    info = json.loads(info_path.read_text())
-    items = []
-    runs_dir = sweep_dir / "runs"
-    values = list(info.get("values", []))
-    run_dirs = list(info.get("run_dirs", []))
-    item_statuses = list(info.get("item_statuses", []))
-    item_labels = list(info.get("item_labels", []))
-    for i, value in enumerate(values):
-        run_dir_str = run_dirs[i] if i < len(run_dirs) else None
-        status = item_statuses[i] if i < len(item_statuses) and isinstance(item_statuses[i], dict) else {}
-        label = str(item_labels[i]) if i < len(item_labels) and item_labels[i] not in (None, "") else None
-        result = None
-        load_error = None
-        if run_dir_str is not None:
-            run_dir = Path(run_dir_str)
-            try:
-                if run_dir.exists():
-                    result = load_result(run_dir, progress=False)
-                else:
-                    # Try the pointer file in the runs/ slot
-                    slot = runs_dir / f"{i:02d}_{_safe_name(str(value))}"
-                    ptr = slot / "result_dir.txt"
-                    if ptr.exists():
-                        alt = Path(ptr.read_text().strip())
-                        if alt.exists():
-                            result = load_result(alt, progress=False)
-            except Exception as exc:
-                load_error = str(exc)
-        item = {"value": value, "config": None, "run": None, "result": result, "status": status}
-        if label is not None:
-            item["label"] = label
-        if load_error is not None:
-            item["load_error"] = load_error
-        items.append(item)
-    inferred_missing_labels = []
-    for index, item in enumerate(items):
-        if item.get("result") is not None:
-            continue
-        inferred_missing_labels.append(str(item.get("label") or index))
-    missing_labels = list(info.get("missing_labels", [])) or inferred_missing_labels
-    item_load_errors = {
-        str(item.get("label") or index): item["load_error"]
-        for index, item in enumerate(items)
-        if isinstance(item, dict) and item.get("load_error")
-    }
-    saved_load_errors = dict(info.get("load_errors", {})) if isinstance(info.get("load_errors"), dict) else {}
-    load_errors = {**saved_load_errors, **item_load_errors}
-
-    return {
-        "path": info.get("path"),
-        "values": values,
-        "items": items,
-        "sweep_dir": sweep_dir,
-        "sweep_info": info,
-        "paramset": info.get("paramset"),
-        "partial": bool(info.get("partial", False) or missing_labels or load_errors),
-        "failed_labels": list(info.get("failed_labels", [])),
-        "failed_without_result": list(info.get("failed_without_result", [])),
-        "recovered_failed_labels": list(info.get("recovered_failed_labels", [])),
-        "missing_labels": missing_labels,
-        "load_errors": load_errors,
-    }
+    return _neuroinfra_load_sweep(
+        path,
+        load_result_fn=lambda result_dir: load_result(result_dir, progress=False),
+        safe_name=_safe_name,
+    )
 
 
 def list_sweeps(
@@ -9033,15 +8646,7 @@ def list_sweeps(
     base_dir: str | Path | None = None,
 ) -> list[Path]:
     """Return saved sweep directories sorted from oldest to newest."""
-    base_dir = Path(base_dir or SWEEPS_BASE)
-    if not base_dir.exists():
-        return []
-    dirs = [
-        d for d in sorted(base_dir.iterdir())
-        if d.is_dir() and (d / "sweep_info.json").exists()
-        and (prefix is None or d.name.startswith(prefix))
-    ]
-    return dirs
+    return _neuroinfra_list_sweeps(base_dir=base_dir or SWEEPS_BASE, prefix=prefix)
 
 
 def save_animation(
@@ -9056,14 +8661,15 @@ def save_animation(
     When ``sweep`` is provided and has a ``sweep_dir``, the GIF is saved to
     ``sweep_dir/animations/`` automatically (``output_dir`` is ignored).
     """
-    if output_dir is None and sweep is not None and "sweep_dir" in sweep:
-        output_dir = Path(sweep["sweep_dir"]) / "animations"
-    output_dir = Path(output_dir or (DEFAULT_RESULTS_BASE / "animations" / make_timestamp()))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    gif_path = output_dir / f"{_safe_name(name)}.gif"
-    writer = animation.PillowWriter(fps=max(1, int(fps)))
-    anim.save(str(gif_path), writer=writer)
-    return gif_path
+    return _neuroinfra_save_animation(
+        anim,
+        name,
+        safe_name=_safe_name,
+        output_dir=output_dir,
+        sweep=sweep,
+        fps=fps,
+        default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "animations" / make_timestamp(),
+    )
 
 
 def save_sweep_animation_stream(
@@ -9080,15 +8686,6 @@ def save_sweep_animation_stream(
     workers: int | None = None,
 ) -> Path:
     """Render and save a sweep GIF without retaining all frames in memory."""
-    if not sweep.get("items"):
-        raise ValueError("sweep has no items to animate")
-    if output_dir is None and "sweep_dir" in sweep:
-        output_dir = Path(sweep["sweep_dir"]) / "animations"
-    output_dir = Path(output_dir or (DEFAULT_RESULTS_BASE / "animations" / make_timestamp()))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    gif_path = output_dir / f"{_safe_name(name)}.gif"
-
-    frame_count = 0
     progress = _ProgressBar(
         total=len(sweep["items"]),
         desc=f"[OBGPU load] Render {name}",
@@ -9096,63 +8693,24 @@ def save_sweep_animation_stream(
         unit_scale=False,
         display_step=max(1, len(sweep["items"]) // 100),
     )
-
-    duration_s = 1.0 / max(1, int(fps))
     try:
-        import imageio.v2 as imageio
-
-        with imageio.get_writer(
-            gif_path,
-            mode="I",
-            fps=max(1, int(fps)),
-            loop=0,
-            palettesize=256,
-            subrectangles=False,
-        ) as writer:
-            import gc as _gc
-
-            for frame_rgb in _iter_parallel_sweep_display_frames(
-                sweep,
-                plot_fn,
-                figsize=figsize,
-                title_fn=title_fn,
-                close_frames=close_frames,
-                workers=workers,
-            ):
-                writer.append_data(np.asarray(frame_rgb, dtype=np.uint8))
-                frame_count += 1
-                progress.update_to(frame_count)
-                if frame_count % 16 == 0:
-                    _gc.collect()
-    except ImportError:
-        from PIL import Image
-
-        frames = []
-        for frame_rgb in _iter_parallel_sweep_display_frames(
+        return _neuroinfra_save_sweep_animation_stream(
             sweep,
             plot_fn,
+            name,
+            safe_name=_safe_name,
+            output_dir=output_dir,
             figsize=figsize,
             title_fn=title_fn,
             close_frames=close_frames,
+            fps=fps,
             workers=workers,
-        ):
-            frames.append(Image.fromarray(np.asarray(frame_rgb, dtype=np.uint8)))
-            frame_count += 1
-            progress.update_to(frame_count)
-        if frames:
-            frames[0].save(
-                gif_path,
-                save_all=True,
-                append_images=frames[1:],
-                duration=max(1, int(round(duration_s * 1000))),
-                loop=0,
-            )
+            env_var_name="OBGPU_SWEEP_RENDER_WORKERS",
+            progress_callback=lambda current, total: progress.update_to(current),
+            default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "animations" / make_timestamp(),
+        )
     finally:
         progress.close()
-
-    if frame_count == 0:
-        raise ValueError("sweep has no items to animate")
-    return gif_path
 
 
 def animate_sweep_plots(
@@ -9172,43 +8730,25 @@ def animate_sweep_plots(
     - a :class:`SweepPlotSpec`
     - a dict like ``{"plot": "spike_frequency_kde_2d", "plot_kwargs": {...}}``
     """
-    artifacts: dict[str, Path] = {}
+    deprecated_names = set(_DEPRECATED_SWEEP_ANIMATION_PLOTS)
     for raw_spec in plots:
         spec = _normalize_sweep_plot_spec(raw_spec)
         if _is_deprecated_sweep_animation_spec(spec):
             _progress_write(
                 f"[OBGPU load] Skipping deprecated sweep animation plot {spec.name!r}."
             )
-            continue
-        plot_fn, filename = _build_sweep_plot_callable(spec)
-        if stream:
-            artifacts[filename] = save_sweep_animation_stream(
-                sweep,
-                plot_fn,
-                filename,
-                figsize=spec.figsize,
-                interval=spec.interval,
-                title_fn=spec.title_fn,
-                close_frames=close_frames,
-                fps=spec.fps,
-                workers=workers,
-            )
-        else:
-            anim = animate_sweep(
-                sweep,
-                plot_fn,
-                figsize=spec.figsize,
-                interval=spec.interval,
-                title_fn=spec.title_fn,
-                close_frames=close_frames,
-            )
-            artifacts[filename] = save_animation(
-                anim,
-                filename,
-                sweep=sweep,
-                fps=spec.fps,
-            )
-    return artifacts
+    return _neuroinfra_animate_sweep_plots(
+        sweep,
+        plots,
+        plot_builder=_build_sweep_plot_callable,
+        safe_name=_safe_name,
+        deprecated_names=deprecated_names,
+        close_frames=close_frames,
+        stream=stream,
+        workers=workers,
+        env_var_name="OBGPU_SWEEP_RENDER_WORKERS",
+        default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "animations" / make_timestamp(),
+    )
 
 
 def run_sweep_with_animations(
