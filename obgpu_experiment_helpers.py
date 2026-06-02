@@ -20,7 +20,6 @@ import socket
 import subprocess
 import sys
 import tempfile
-import threading
 import time
 import builtins
 import warnings
@@ -58,17 +57,6 @@ try:
 except ImportError:  # pragma: no cover - optional runtime dependency
     _tqdm_notebook = None
 
-if paramiko is None:  # pragma: no cover - optional runtime dependency
-    _PARAMIKO_PARTIAL_AUTH_EXC: tuple[type[BaseException], ...] = ()
-else:
-    _PARAMIKO_PARTIAL_AUTH_EXC = tuple(
-        exc
-        for exc in (
-            getattr(paramiko, "PartialAuthentication", None),
-            getattr(getattr(paramiko, "ssh_exception", None), "PartialAuthentication", None),
-        )
-        if exc is not None
-    )
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.interpolate import interp1d
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
@@ -166,6 +154,11 @@ from neuroinfra.remote.notebook_runtime import (
     midrun_reauth_error as _neuroinfra_midrun_reauth_error,
     prompt_key as _neuroinfra_prompt_key,
     transport_is_usable as _neuroinfra_transport_is_usable,
+)
+from neuroinfra.remote.paramiko_transport import (
+    ParamikoTransportContext as _NeuroinfraParamikoTransportContext,
+    SSHCommandTimeoutError as _NeuroinfraSSHCommandTimeoutError,
+    connect_error_is_retryable as _neuroinfra_connect_error_is_retryable,
 )
 from neuroinfra.remote.archive_stream import (
     build_remote_archive_command as _neuroinfra_build_remote_archive_command,
@@ -774,8 +767,8 @@ _LIVE_REMOTE_PREFLIGHTS: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_preflight"]
 _LIVE_REMOTE_STALE_CLEANUPS: dict[str, Any] = _NOTEBOOK_RUNTIME["remote_stale_cleanup"]
 
 
-class _SSHCommandTimeoutError(TimeoutError):
-    """Raised when one notebook-managed remote shell command exceeds its budget."""
+class _SSHCommandTimeoutError(_NeuroinfraSSHCommandTimeoutError):
+    """Backward-compatible local alias for the extracted timeout surface."""
 
 
 def _slurm_allocation_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
@@ -2027,22 +2020,42 @@ def _paramiko_connect_retry_backoff_s(config: dict[str, Any]) -> float:
     return _neuroinfra_connect_retry_backoff_s(config)
 
 
+def _paramiko_transport_context(config: dict[str, Any]) -> _NeuroinfraParamikoTransportContext:
+    """Build the reusable Paramiko transport context for one notebook config."""
+    def _dynamic_ipython_getter() -> Any:
+        try:
+            from IPython import get_ipython as _ipython_getter
+        except Exception:  # pragma: no cover - optional notebook integration
+            return None
+        return _ipython_getter()
+
+    return _NeuroinfraParamikoTransportContext(
+        config=config,
+        paramiko_module=paramiko,
+        live_connections=_LIVE_PARAMIKO_CONNECTIONS,
+        authenticated_keys=_LIVE_PARAMIKO_AUTHENTICATED_KEYS,
+        progress_write=_progress_write,
+        connection_key_fn=_paramiko_connection_key,
+        can_reconnect_fn=_paramiko_can_reconnect,
+        midrun_reauth_error_fn=_paramiko_midrun_reauth_error,
+        remote_endpoint_fn=_remote_endpoint,
+        connect_retry_count_fn=_paramiko_connect_retry_count,
+        connect_retry_backoff_s_fn=_paramiko_connect_retry_backoff_s,
+        transport_is_usable_fn=_paramiko_transport_is_usable,
+        get_cached_prompt_response_fn=_get_cached_paramiko_prompt_response,
+        cache_prompt_response_fn=_cache_paramiko_prompt_response,
+        ssh_command_timeout_s_fn=_remote_ssh_command_timeout_s,
+        ssh_exec_timeout_s_fn=_remote_ssh_exec_timeout_s,
+        socket_create_connection_fn=socket.create_connection,
+        sleep_fn=time.sleep,
+        getpass_fn=getpass,
+        ipython_getter=_dynamic_ipython_getter,
+    )
+
+
 def _paramiko_connect_error_is_retryable(exc: BaseException) -> bool:
     """Return whether one fresh Paramiko connect failure is transient enough to retry."""
-    try:
-        import socket
-    except Exception:  # pragma: no cover - defensive import fallback
-        socket = None  # type: ignore[assignment]
-
-    if isinstance(exc, EOFError):
-        return True
-    if socket is not None and isinstance(exc, (socket.timeout, TimeoutError, OSError)):
-        return True
-    if paramiko is not None and isinstance(exc, getattr(paramiko, "AuthenticationException", tuple())):
-        return False
-    if paramiko is not None and isinstance(exc, getattr(paramiko, "SSHException", tuple())):
-        return True
-    return False
+    return _neuroinfra_connect_error_is_retryable(exc, paramiko_module=paramiko)
 
 
 def _paramiko_prompt_key(prompt_text: str) -> str:
@@ -2164,74 +2177,13 @@ def _slurm_allocation_cache_key(config: dict[str, Any]) -> str:
 
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
     """Prompt the notebook user for one interactive SSH auth field."""
-    prompt = prompt_text.strip() or "SSH authentication:"
-    if config is not None:
-        cached = _get_cached_paramiko_prompt_response(config, prompt)
-        if cached is not None:
-            return cached
-    lowered = prompt.lower()
-    kernel_prompt_exc: Exception | None = None
-    try:
-        from IPython import get_ipython as _ipython_getter
-    except Exception:  # pragma: no cover - optional notebook integration
-        _ipython_getter = None
-    if _ipython_getter is not None:
-        shell = _ipython_getter()
-        kernel = getattr(shell, "kernel", None)
-        if kernel is not None:
-            try:
-                if "password" in lowered or "passphrase" in lowered:
-                    response = kernel.getpass(prompt + " ")
-                else:
-                    response = kernel.raw_input(prompt + " ")
-            except EOFError as exc:
-                kernel_prompt_exc = exc
-            except Exception as exc:  # pragma: no cover - frontend-dependent
-                kernel_prompt_exc = exc
-            else:
-                if config is not None:
-                    _cache_paramiko_prompt_response(config, prompt, response)
-                return response
-    try:
-        if "password" in lowered or "passphrase" in lowered:
-            response = getpass(prompt + " ")
-        else:
-            response = input(prompt + " ")
-    except EOFError as exc:
-        endpoint = _paramiko_connection_key(config) if isinstance(config, dict) else "<unknown>"
-        frontend_note = ""
-        if kernel_prompt_exc is not None:
-            frontend_note = f"\nKernel input request error: {kernel_prompt_exc}"
-        raise RuntimeError(
-            "Paramiko authentication could not read notebook input.\n"
-            f"Endpoint: {endpoint}\n"
-            "This usually means the live notebook kernel cannot service an interactive getpass/input prompt. "
-            "Run `paramiko_auth_probe(REMOTE_CONFIG)` in the active kernel to refresh auth, "
-            "or rely on cached auth responses for unattended reconnects."
-            f"{frontend_note}"
-        ) from exc
-    if config is not None:
-        _cache_paramiko_prompt_response(config, prompt, response)
-    return response
+    cfg = {} if config is None else config
+    return _paramiko_transport_context(cfg).prompt_response(prompt_text, config=config)
 
 
 def _drop_paramiko_connection(config: dict[str, Any]) -> None:
     """Close and forget one cached Paramiko connection."""
-    cached = _LIVE_PARAMIKO_CONNECTIONS.pop(_paramiko_connection_key(config), None)
-    if cached is None:
-        return
-    sftp = cached.get("sftp")
-    if sftp is not None:
-        try:
-            sftp.close()
-        except Exception:
-            pass
-    transport = cached.get("transport")
-    if transport is not None:
-        try:
-            transport.close()
-        except Exception:
-            pass
+    _paramiko_transport_context(config).drop_connection()
 
 
 def _get_paramiko_sftp(config: dict[str, Any]) -> Any:
@@ -2269,140 +2221,7 @@ def _close_paramiko_sftp(config: dict[str, Any]) -> None:
 
 def _connect_paramiko(config: dict[str, Any]) -> Any:
     """Open or reuse one persistent Paramiko transport for the Sol backend."""
-    if paramiko is None:
-        raise RuntimeError("Paramiko transport requested but the 'paramiko' package is not installed.")
-
-    cache_key = _paramiko_connection_key(config)
-    preserve_session = bool(config.get("remote_preserve_paramiko_session", True))
-    cached = _LIVE_PARAMIKO_CONNECTIONS.get(cache_key)
-    if cached is not None:
-        transport = cached.get("transport")
-        if _paramiko_transport_is_usable(transport):
-            return cached
-        _LIVE_PARAMIKO_CONNECTIONS.pop(cache_key, None)
-        if preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not _paramiko_can_reconnect(config):
-            raise RuntimeError(_paramiko_midrun_reauth_error(config))
-    elif preserve_session and cache_key in _LIVE_PARAMIKO_AUTHENTICATED_KEYS and not _paramiko_can_reconnect(config):
-        raise RuntimeError(_paramiko_midrun_reauth_error(config))
-
-    hostname, port, username = _remote_endpoint(config)
-    connect_retries = _paramiko_connect_retry_count(config)
-    backoff_s = _paramiko_connect_retry_backoff_s(config)
-    last_exc: Exception | None = None
-    for attempt in range(connect_retries):
-        raw_sock = None
-        transport = None
-        try:
-            import socket
-
-            _progress_write(f"[Sol remote] Opening SSH session to {username}@{hostname}:{port}...")
-            raw_sock = socket.create_connection((hostname, port), timeout=30.0)
-            transport = paramiko.Transport(raw_sock)
-            transport.start_client(timeout=30.0)
-            keepalive_seconds = int(config.get("ssh_keepalive_s", 30) or 0)
-            if keepalive_seconds > 0:
-                transport.set_keepalive(keepalive_seconds)
-
-            auth_methods: list[str] = []
-            try:
-                transport.auth_none(username)
-            except paramiko.BadAuthenticationType as exc:
-                auth_methods = list(exc.allowed_types)
-            except _PARAMIKO_PARTIAL_AUTH_EXC as exc:  # pragma: no cover - defensive
-                auth_methods = list(exc.allowed_types)
-            except paramiko.AuthenticationException:
-                auth_methods = []
-
-            authenticated = False
-            if "keyboard-interactive" in auth_methods or not auth_methods:
-                _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
-                def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
-                    responses: list[str] = []
-                    if title:
-                        print(title)
-                    if instructions:
-                        print(instructions)
-                    for prompt_text, _echo in prompt_list:
-                        responses.append(_paramiko_prompt_response(prompt_text, config=config))
-                    return responses
-
-                try:
-                    transport.auth_interactive(username, handler)
-                    authenticated = transport.is_authenticated()
-                except paramiko.AuthenticationException:
-                    authenticated = False
-
-            if not authenticated and "password" in auth_methods:
-                try:
-                    _progress_write(f"[Sol remote] Waiting for password authentication...")
-                    transport.auth_password(
-                        username,
-                        _paramiko_prompt_response(f"Password for {username}@{hostname}:", config=config),
-                    )
-                    authenticated = transport.is_authenticated()
-                except _PARAMIKO_PARTIAL_AUTH_EXC as exc:
-                    auth_methods = list(exc.allowed_types)
-                    authenticated = False
-
-            if not authenticated and "keyboard-interactive" in auth_methods:
-                _progress_write(f"[Sol remote] Waiting for interactive SSH authentication...")
-                def handler(title: str, instructions: str, prompt_list: list[tuple[str, bool]]) -> list[str]:
-                    responses: list[str] = []
-                    if title:
-                        print(title)
-                    if instructions:
-                        print(instructions)
-                    for prompt_text, _echo in prompt_list:
-                        responses.append(_paramiko_prompt_response(prompt_text, config=config))
-                    return responses
-
-                transport.auth_interactive(username, handler)
-                authenticated = transport.is_authenticated()
-
-            if not authenticated:
-                raise RuntimeError(
-                    "Paramiko could not authenticate to the Sol backend.\n"
-                    f"Host: {username}@{hostname}:{port}\n"
-                    f"Auth methods: {auth_methods}"
-                )
-
-            _progress_write(f"[Sol remote] SSH authentication complete.")
-            connection = {
-                "transport": transport,
-                "sftp": None,
-                "hostname": hostname,
-                "port": port,
-                "username": username,
-            }
-            _LIVE_PARAMIKO_CONNECTIONS[cache_key] = connection
-            _LIVE_PARAMIKO_AUTHENTICATED_KEYS.add(cache_key)
-            _progress_write(f"[Sol remote] SSH session ready for {username}@{hostname}:{port}.")
-            return connection
-        except Exception as exc:
-            last_exc = exc
-            if transport is not None:
-                try:
-                    transport.close()
-                except Exception:
-                    pass
-            if raw_sock is not None:
-                try:
-                    raw_sock.close()
-                except Exception:
-                    pass
-            if attempt + 1 >= connect_retries or not _paramiko_connect_error_is_retryable(exc):
-                raise
-            retry_sleep_s = min(backoff_s * float(attempt + 1), 5.0)
-            _progress_write(
-                "[Sol remote] Fresh SSH connect failed; retrying "
-                f"({attempt + 1}/{connect_retries - 1} retries used). "
-                f"Reason: {exc}"
-            )
-            if retry_sleep_s > 0:
-                time.sleep(retry_sleep_s)
-    if last_exc is not None:
-        raise last_exc
-    raise RuntimeError("Paramiko connect failed without an exception")
+    return _paramiko_transport_context(config).connect()
 
 
 def _run_paramiko_shell(
@@ -2410,100 +2229,7 @@ def _run_paramiko_shell(
     remote_shell_command: str,
 ) -> subprocess.CompletedProcess[str]:
     """Run one shell command over a persistent Paramiko transport."""
-    last_exc: Exception | None = None
-    command_timeout_s = _remote_ssh_command_timeout_s(config)
-    exec_timeout_s = _remote_ssh_exec_timeout_s(config)
-    for attempt in range(2):
-        connection = _connect_paramiko(config)
-        transport = connection["transport"]
-        channel = None
-        try:
-            channel = transport.open_session()
-            channel.settimeout(1.0)
-            exec_error: list[BaseException] = []
-
-            def exec_target() -> None:
-                try:
-                    channel.exec_command(f"bash -lc {shlex.quote(remote_shell_command)}")
-                except BaseException as exc:  # pragma: no cover - defensive thread bridge
-                    exec_error.append(exc)
-
-            exec_thread = threading.Thread(target=exec_target, name="obgpu-paramiko-exec", daemon=True)
-            exec_thread.start()
-            exec_thread.join(exec_timeout_s)
-            if exec_thread.is_alive():
-                try:
-                    channel.close()
-                except Exception:
-                    pass
-                raise _SSHCommandTimeoutError(
-                    "Paramiko exec_command acknowledgement timed out after "
-                    f"{exec_timeout_s:.1f}s.\n"
-                    f"Command: {remote_shell_command}"
-                )
-            if exec_error:
-                raise exec_error[0]
-            stdout_chunks: list[bytes] = []
-            stderr_chunks: list[bytes] = []
-            deadline = None if command_timeout_s is None else time.monotonic() + command_timeout_s
-            while True:
-                while channel.recv_ready():
-                    stdout_chunks.append(channel.recv(65536))
-                while channel.recv_stderr_ready():
-                    stderr_chunks.append(channel.recv_stderr(65536))
-                if channel.exit_status_ready():
-                    while channel.recv_ready():
-                        stdout_chunks.append(channel.recv(65536))
-                    while channel.recv_stderr_ready():
-                        stderr_chunks.append(channel.recv_stderr(65536))
-                    returncode = channel.recv_exit_status()
-                    break
-                if deadline is not None and time.monotonic() >= deadline:
-                    stdout_data = b"".join(stdout_chunks).decode("utf-8", errors="replace")
-                    stderr_data = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-                    try:
-                        channel.close()
-                    except Exception:
-                        pass
-                    raise _SSHCommandTimeoutError(
-                        "Paramiko shell command timed out after "
-                        f"{command_timeout_s:.1f}s.\n"
-                        f"Command: {remote_shell_command}\n"
-                        f"Stdout tail:\n{stdout_data[-2000:]}\n\n"
-                        f"Stderr tail:\n{stderr_data[-2000:]}"
-                    )
-                time.sleep(0.05)
-            stdout_data = b"".join(stdout_chunks).decode("utf-8", errors="replace")
-            stderr_data = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-            return subprocess.CompletedProcess(
-                args=["paramiko", connection["hostname"], remote_shell_command],
-                returncode=returncode,
-                stdout=stdout_data,
-                stderr=stderr_data,
-            )
-        except _SSHCommandTimeoutError:
-            _close_paramiko_sftp(config)
-            raise
-        except Exception as exc:
-            last_exc = exc
-            _close_paramiko_sftp(config)
-            if not _paramiko_transport_is_usable(transport):
-                if (
-                    bool(config.get("remote_preserve_paramiko_session", True))
-                    and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS
-                    and not _paramiko_can_reconnect(config)
-                ):
-                    raise RuntimeError(
-                        _paramiko_midrun_reauth_error(config) + f"\nOriginal error: {exc}"
-                    ) from exc
-                _drop_paramiko_connection(config)
-            if attempt == 0:
-                continue
-            raise
-        finally:
-            if channel is not None:
-                channel.close()
-    raise RuntimeError(f"Paramiko shell command failed unexpectedly: {last_exc}")
+    return _paramiko_transport_context(config).run_shell(remote_shell_command)
 
 
 def _sftp_copy_tree(sftp: Any, remote_dir: str, local_dir: Path) -> None:

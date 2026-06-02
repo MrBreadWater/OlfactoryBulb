@@ -26,6 +26,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
 - `neuroinfra.remote.notebook_runtime`
+- `neuroinfra.remote.paramiko_transport`
 - `neuroinfra.remote.sftp_sync`
 - `neuroinfra.remote.archive_stream`
 - `neuroinfra.remote.slurm_launch`
@@ -95,6 +96,11 @@ The notebook-shared remote runtime keys, Paramiko prompt-cache handling, and
 fail-closed reconnect policy that sit underneath the live notebook SSH path now
 also live under `neuroinfra.remote.notebook_runtime`, while the transport I/O
 and prompt plumbing still remain in `obgpu_experiment_helpers.py`.
+
+The reusable Paramiko transport/session surface now also lives under
+`neuroinfra.remote.paramiko_transport`, including cached connection reuse,
+interactive authentication, lazy SFTP opening, and remote shell execution,
+while the notebook-facing wrappers still remain in `obgpu_experiment_helpers.py`.
 
 The SFTP transfer planning and copy loops that power selected-file and full
 result syncs now live under `neuroinfra.remote.sftp_sync`, while the notebook

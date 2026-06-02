@@ -150,6 +150,9 @@ Current progress:
 - the notebook-shared remote runtime keys, Paramiko prompt-cache handling,
   and fail-closed reconnect policy that sit underneath the live notebook SSH
   path now live under `neuroinfra.remote.notebook_runtime`
+- the reusable Paramiko transport/session surface now also lives under
+  `neuroinfra.remote.paramiko_transport`, including cached connection reuse,
+  interactive authentication, lazy SFTP opening, and remote shell execution
 - the SFTP transfer planning and copy loops that power selected-file and full
   result syncs now live under `neuroinfra.remote.sftp_sync`
 - the remote archive probe/stream command builders and local decompressor

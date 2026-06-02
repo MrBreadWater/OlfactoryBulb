@@ -42,6 +42,12 @@ from .notebook_runtime import (
     prompt_key,
     transport_is_usable,
 )
+from .paramiko_transport import (
+    ParamikoTransportContext,
+    SSHCommandTimeoutError,
+    connect_error_is_retryable,
+    partial_auth_exceptions,
+)
 from .sftp_sync import (
     SFTPSyncHooks,
     TransferItem,
@@ -135,6 +141,7 @@ __all__ = [
     "disabled_allocation_record",
     "ensure_notebook_remote_runtime",
     "get_cached_prompt_response",
+    "ParamikoTransportContext",
     "HelperBundleEntry",
     "build_remote_git_bundle_fetch_command",
     "build_remote_git_repo_probe_command",
@@ -158,6 +165,9 @@ __all__ = [
     "heartbeat_timeout_s",
     "manual_allocation_record",
     "midrun_reauth_error",
+    "SSHCommandTimeoutError",
+    "connect_error_is_retryable",
+    "partial_auth_exceptions",
     "normalize_helper_relative_path",
     "local_archive_decompress_command",
     "paramiko_channel_stream_finished",

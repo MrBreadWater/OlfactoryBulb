@@ -99,6 +99,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "neuroinfra/remote/command_launch.py",
             "neuroinfra/remote/helper_bundle.py",
             "neuroinfra/remote/notebook_runtime.py",
+            "neuroinfra/remote/paramiko_transport.py",
             "neuroinfra/remote/sftp_sync.py",
             "neuroinfra/remote/archive_stream.py",
             "neuroinfra/remote/slurm_launch.py",
@@ -131,8 +132,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         extraction_confidence="medium-high",
         proposed_phase=2,
-        current_status="config_sync_launch_state_script_common_submit_polling_allocations_sweeps_git_helper_cache_and_allocation_seams_standardized",
-        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook runtime/session policy, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote single-run submit helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract more of the shared remote entrypoint logic from tools/remote without breaking the live wrappers.",
+        current_status="config_sync_launch_state_transport_script_common_submit_polling_allocations_sweeps_git_helper_cache_and_allocation_seams_standardized",
+        recommended_action="The remote config-normalization, helper-bundle packaging, helper-cache lifecycle, allocation cache policy, notebook runtime/session policy, Paramiko transport/session logic, SFTP sync loops, archive-stream builders, Slurm state/preflight helpers, remote-script common helpers, remote single-run submit helpers, remote polling/status helpers, remote allocation lifecycle helpers, remote sweep runner helpers, Slurm helper argv/launch assembly, and local Git publication/base-resolution helpers now live under neuroinfra; next extract more of the shared remote entrypoint logic from tools/remote without breaking the live wrappers.",
     ),
     ExtractionCandidate(
         key="campaign_archive_framework",
