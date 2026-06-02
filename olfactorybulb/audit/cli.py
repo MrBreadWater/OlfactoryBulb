@@ -7,6 +7,7 @@ import sys
 
 from olfactorybulb.audit import AuditItem, AuditReport, format_report, get_audit_spec, iter_audit_specs
 from olfactorybulb.audit.core import _expand_terms
+from olfactorybulb.audit.registry import iter_new_sweep_audit_specs
 
 
 def _build_root_parser() -> argparse.ArgumentParser:
@@ -79,7 +80,7 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
 
 
 def run_new_sweep(argv: list[str]) -> AuditReport:
-    reports = [_run_one_audit(spec, argv, allow_unknown=True) for spec in iter_audit_specs()]
+    reports = [_run_one_audit(spec, argv, allow_unknown=True) for spec in iter_new_sweep_audit_specs()]
     items = [item for report in reports for item in _prefixed_items(report)]
     return AuditReport(
         audit_id="new_sweep",

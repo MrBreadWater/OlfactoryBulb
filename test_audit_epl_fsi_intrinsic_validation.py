@@ -10,7 +10,8 @@ import sys
 completed = subprocess.run(
     [
         sys.executable,
-        "tools/audit_epl_fsi_intrinsic_validation.py",
+        "tools/run_audit.py",
+        "epl_fsi_intrinsic_validation",
         "--cell-models",
         "SyntheticEPL2026.PVCRH_FSI1",
         "--jobs",

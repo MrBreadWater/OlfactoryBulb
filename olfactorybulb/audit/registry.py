@@ -14,6 +14,7 @@ class AuditSpec:
     title: str
     description: str
     module_path: str
+    include_in_new_sweep: bool = True
 
     def load_module(self):
         return importlib.import_module(self.module_path)
@@ -37,6 +38,7 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
                 title="Repo health audit",
                 description="Run the curated maintained-surface environment, wrapper, contract, and reference-data health checks.",
                 module_path="olfactorybulb.audit.repo_health",
+                include_in_new_sweep=False,
             ),
         ),
         (
@@ -107,3 +109,7 @@ def get_audit_spec(audit_id: str) -> AuditSpec:
 
 def iter_audit_specs() -> Iterable[AuditSpec]:
     return AUDITS.values()
+
+
+def iter_new_sweep_audit_specs() -> Iterable[AuditSpec]:
+    return (spec for spec in AUDITS.values() if spec.include_in_new_sweep)

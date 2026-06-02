@@ -11,10 +11,9 @@ The goal is stricter than "looks plausible." The implementation should satisfy:
 4. explicit network-readiness criteria, and
 5. explicit behavioral validation gates.
 
-The corresponding machine-checkable script is:
+The corresponding machine-checkable entrypoint is:
 
-- `tools/audit_epli_correctness.py`
-- generic audit entrypoint: `tools/run_audit.py`
+- `tools/run_audit.py epli_correctness`
 - reusable package: `olfactorybulb/audit/`
 
 ## Source constraints

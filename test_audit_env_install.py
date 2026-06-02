@@ -39,7 +39,7 @@ def _assert_exit_matches_summary(run: subprocess.CompletedProcess[str]) -> dict:
 
 
 skip_imports = subprocess.run(
-    [sys.executable, "tools/audit_env_install.py", "--skip-imports", "--json"],
+    [sys.executable, "tools/run_audit.py", "env_install", "--skip-imports", "--json"],
     capture_output=True,
     text=True,
     check=False,

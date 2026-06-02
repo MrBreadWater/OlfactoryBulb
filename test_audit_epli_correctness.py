@@ -1,4 +1,4 @@
-"""Smoke test for the audit submodule and EPLI compatibility wrapper.
+"""Smoke test for the audit submodule and EPLI audit entrypoint.
 
 Run with:
     python test_audit_epli_correctness.py
@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 
-completed = subprocess.run([sys.executable, "tools/audit_epli_correctness.py", "--skip-neuron", "--json"], capture_output=True, text=True, check=False)
+completed = subprocess.run([sys.executable, "tools/run_audit.py", "epli_correctness", "--skip-neuron", "--json"], capture_output=True, text=True, check=False)
 
 assert completed.returncode == 1, completed
 payload = json.loads(completed.stdout)

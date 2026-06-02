@@ -10,7 +10,8 @@ import sys
 completed = subprocess.run(
     [
         sys.executable,
-        "tools/audit_gc_intrinsic_validation.py",
+        "tools/run_audit.py",
+        "gc_intrinsic_validation",
         "--cell-models",
         "GC1",
         "--jobs",
