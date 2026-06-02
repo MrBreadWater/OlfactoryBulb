@@ -83,14 +83,14 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
             command=_py("test_gc_reference_data.py"),
         ),
         RepoHealthCheck(
-            check_id="verify_epl_fsi_reference_data",
-            title="EPL-FSI generated bundle verifier",
-            command=_py("tools/verify_pv_crh_epl_fsi_reference_data.py"),
+            check_id="epl_fsi_reference_dataset_status",
+            title="EPL-FSI generated bundle status audit",
+            command=_py("tools/run_audit.py", "reference_dataset_status", "--dataset-id", "pv_crh_epl_fsi"),
         ),
         RepoHealthCheck(
-            check_id="verify_gc_reference_data",
-            title="Granule-cell generated bundle verifier",
-            command=_py("tools/verify_gc_reference_data.py"),
+            check_id="gc_reference_dataset_status",
+            title="Granule-cell generated bundle status audit",
+            command=_py("tools/run_audit.py", "reference_dataset_status", "--dataset-id", "granule_cells"),
         ),
     ),
 }

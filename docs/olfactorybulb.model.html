@@ -172,16 +172,10 @@
 <p>The main class to build and run the network model. The class constructor builds the model using one of the
 specified <a class="reference external" href="olfactorybulb.paramsets.html">parameter classes</a>. If <cite>autorun==True</cite>, the model will be simulated
 after building. Otherwise, <a class="reference external" href="#olfactorybulb.model.OlfactoryBulb.run">run(tstop)</a> is used to run the simulation.</p>
-<p>MPI/multi-core simulations can be performed using <cite>initslice.py</cite> found in the repo root. For example, the following
-command will build and run the network model using the
-<a class="reference external" href="olfactorybulb.paramsets.html#olfactorybulb.paramsets.case_studies.GammaSignature">GammaSignature parameter set</a>
-using 16 cores:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># From repo root, run this shell command (replace 16 with the number of cores you would like to use):</span>
-<span class="n">mpiexec</span> <span class="o">-</span><span class="n">np</span> <span class="mi">16</span> <span class="n">python</span> <span class="n">initslice</span><span class="o">.</span><span class="n">py</span> <span class="o">-</span><span class="n">paramset</span> <span class="n">GammaSignature</span> <span class="o">-</span><span class="n">mpi</span>
-</pre></div>
-</div>
-<p>Simulation results will be stored under <cite>[repo]/olfactorybulb/results/GammaSignature</cite>. The last folder in the path uses
-the name of the parameter class.</p>
+<p>This page predates the maintained OBGPU workflow. The old <cite>initslice.py</cite>
+entrypoint has been removed. For current command-line runs, use
+<cite>tools/benchmarks/benchmark_ob.py</cite>; for interactive work, use the maintained
+notebook/helper path documented in <cite>readme.md</cite> and <cite>INSTALL.md</cite>.</p>
 <p>See the
 <a class="reference external" href="https://github.com/JustasB/OlfactoryBulb/blob/master/notebooks/LFP%20Wavelet%20Analysis.ipynb">LFP Wavelet Analysis.ipynb</a>
 notebook for examples of how the results are analyzed.</p>

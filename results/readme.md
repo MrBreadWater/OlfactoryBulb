@@ -29,5 +29,5 @@ Remote runs may also include orchestration diagnostics such as
 `bootstrap.log`, `submit_stdout.txt`, `submit_stderr.txt`, `sync_stdout.txt`,
 and `sync_stderr.txt`.
 
-Older `initslice.py` and `runbatch.py` outputs may still appear here, but the
-maintained notebook/benchmark path is the timestamped `notebook_runs` layout.
+Older pre-OBGPU historical outputs may still appear here, but the maintained
+notebook/benchmark path is the timestamped `notebook_runs` layout.

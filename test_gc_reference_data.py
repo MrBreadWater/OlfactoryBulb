@@ -36,10 +36,10 @@ from olfactorybulb.audit.reference_data import (
     load_normalized_legacy_mc_tc_rows,
 )
 from olfactorybulb.audit.reference_notes import load_notes, notes_for_rows, render_notes
-from tools.extract_gc_reference_data import main as extract_reference_data
+from olfactorybulb.audit.reference_dataset_engine import write_reference_dataset_outputs
 
 
-extract_reference_data()
+write_reference_dataset_outputs(dataset_id="granule_cells")
 
 paths = {
     "ephys": REFERENCE_DATA_DIR / GC_EPHYS_FILENAME,

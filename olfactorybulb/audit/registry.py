@@ -42,6 +42,16 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
             ),
         ),
         (
+            "reference_dataset_status",
+            AuditSpec(
+                audit_id="reference_dataset_status",
+                title="Reference dataset status audit",
+                description="Audit that one declarative reference dataset's generated outputs exist and load cleanly.",
+                module_path="olfactorybulb.audit.reference_dataset_status",
+                include_in_new_sweep=False,
+            ),
+        ),
+        (
             "burton_urban_fi",
             AuditSpec(
                 audit_id="burton_urban_fi",

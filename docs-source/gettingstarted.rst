@@ -103,13 +103,10 @@ class.
 To change the simulation parameters, use the right panel in Jupyter Lab
 to open the ``[repo]/olfactorybulb/paramsets/case_studies.py`` file.
 
-After modifying e.g. the ``GammaFingerprint`` class, rerun the
-simulation with the new parameter values with this notebook command (replace
-``16`` with the number of cores in your machine):
-
-::
-
-    !cd ..; mpiexec -np 16 python initslice.py -paramset GammaSignature -mpi
+After modifying e.g. the ``GammaFingerprint`` class, use the maintained
+OBGPU notebook/helper workflow described in ``readme.md`` and ``INSTALL.md``.
+This page is historical and its old ``initslice.py`` command examples no
+longer apply.
 
 
 
@@ -160,11 +157,8 @@ Consider creating a new conda environment (e.g. ``conda create --name obenv pyth
    cd ..
 
 
-To test the above steps, the following 1ms test simulation should run without errors:
-
-::
-
-    mpiexec -np 2 python initslice.py -paramset OneMsTest -mpi
+To smoke-test the current maintained path, use the benchmark runner examples in
+``INSTALL.md`` instead of the removed ``initslice.py`` entrypoint.
 
 
 After the above steps are finished, run ``jupyter lab`` and follow the

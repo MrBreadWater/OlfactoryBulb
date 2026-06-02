@@ -64,9 +64,6 @@ The important active files are:
 - `prev_ob_models/Birgiolas2020/Mechanisms/`
 - `olfactorybulb/result_artifacts.py`
 
-`initslice.py` and `runbatch.py` remain useful compatibility entrypoints, but
-new performance and notebook work should use the benchmark/helper path.
-
 ## Remote Slurm Runs
 
 Remote notebook runs use Paramiko over SSH and Slurm on the remote host. The

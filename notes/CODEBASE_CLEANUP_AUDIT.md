@@ -33,8 +33,9 @@ documentation, and cleanup priority.
 - `fi_curve_utils.py`
 - `notebooks/fi_curve_analysis.ipynb`
 
-`initslice.py` and `runbatch.py` remain compatibility entrypoints, but new
-notebook, benchmark, and Slurm work should use the helper/benchmark path.
+The old `initslice.py` and `runbatch.py` entrypoints have been removed. Use
+the notebook/helper path or `tools/benchmarks/benchmark_ob.py` for maintained
+run surfaces.
 
 ## Remote Execution Cleanup
 

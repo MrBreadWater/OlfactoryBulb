@@ -25,8 +25,8 @@ reference_checks = repo_health_checks("reference")
 reference_ids = {check.check_id for check in reference_checks}
 assert "epl_fsi_reference_data" in reference_ids
 assert "gc_reference_data" in reference_ids
-assert "verify_epl_fsi_reference_data" in reference_ids
-assert "verify_gc_reference_data" in reference_ids
+assert "epl_fsi_reference_dataset_status" in reference_ids
+assert "gc_reference_dataset_status" in reference_ids
 
 full_checks = repo_health_checks("full")
 assert len(full_checks) == len(maintained_checks) + len(reference_checks)

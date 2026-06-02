@@ -36,10 +36,10 @@ from olfactorybulb.audit.reference_sources import (
     local_source_path,
     stable_source_url,
 )
-from tools.extract_pv_crh_epl_fsi_reference_data import main as extract_reference_data
+from olfactorybulb.audit.reference_dataset_engine import write_reference_dataset_outputs
 
 
-extract_reference_data()
+write_reference_dataset_outputs(dataset_id="pv_crh_epl_fsi")
 
 paths = {
     "ephys": REFERENCE_DATA_DIR / PV_CRH_EPL_FSI_EPHYS_FILENAME,

@@ -93,6 +93,16 @@ multiple places and to decide where a doc change should land first.
   - Should not own:
     - detailed install or remote execution procedures
 
+- `docs-source/` and tracked generated `docs/`
+  - Purpose: historical documentation from older repo eras.
+  - Owns:
+    - historical examples and archived user docs
+  - Should not own:
+    - the current maintained OBGPU install/run path
+    - current audit or reference-data workflows
+  - If these conflict with `readme.md`, `INSTALL.md`, or the maintained notes
+    under `notes/`, treat the maintained docs as authoritative.
+
 - `AGENTS.md`
   - Purpose: coding-agent operating contract.
   - Owns:

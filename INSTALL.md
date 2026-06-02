@@ -152,12 +152,8 @@ Maintained benchmark smoke, GPU/CoreNEURON-oriented:
 mpiexec -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_gpu --paramset GammaSignature --coreneuron --coreneuron-gpu
 ```
 
-Legacy compatibility entrypoints still exist:
-
-```bash
-mpiexec -n 4 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
-python runbatch.py
-```
+Historical `initslice.py` / `runbatch.py` entrypoints have been removed. Use
+the benchmark runner or the notebook/helper path instead.
 
 ## Important Repo-Specific Notes
 

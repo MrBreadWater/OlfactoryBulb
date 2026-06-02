@@ -699,7 +699,7 @@ python tools/extract_reference_dataset.py --dataset-id pv_crh_epl_fsi
 python test_reference_dataset_engine.py
 python test_download_epl_fsi_reference_sources.py
 python test_pv_crh_epl_fsi_reference_data.py
-python tools/verify_pv_crh_epl_fsi_reference_data.py
+python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
 ```
 
 Using the current GC dataset:
@@ -711,17 +711,7 @@ python tools/extract_reference_dataset.py --dataset-id granule_cells
 python test_reference_dataset_engine.py
 python test_download_gc_reference_sources.py
 python test_gc_reference_data.py
-python tools/verify_gc_reference_data.py
-```
-
-Backward-compatible wrappers still exist:
-
-```bash
-source tools/setup/activate_obgpu.sh OBGPU
-python tools/download_epl_fsi_reference_sources.py
-python tools/extract_pv_crh_epl_fsi_reference_data.py
-python tools/download_gc_reference_sources.py
-python tools/extract_gc_reference_data.py
+python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 ```
 
 ## When to add code versus when to add config

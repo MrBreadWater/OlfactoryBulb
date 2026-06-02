@@ -20,12 +20,6 @@ mpiexec -n 4 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_c
 mpiexec -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_gpu --paramset GammaSignature --coreneuron --coreneuron-gpu
 ```
 
-**Legacy compatibility entrypoints**:
-```bash
-mpiexec -n 4 nrniv -mpi -python initslice.py -paramset GammaSignature -mpi
-python runbatch.py
-```
-
 **Notebook**: Open `notebooks/obgpu-working-experiment.ipynb` — this is the primary interactive interface and the one actively maintained.
 
 ## Key Environment Variables
@@ -37,7 +31,6 @@ python runbatch.py
 | `OB_RUNTIME_MODE` | `scientific` or `exploratory` |
 | `OB_RESULT_LABEL` | Override result folder name |
 | `OB_RESULTS_BASE` | Override base results directory |
-| `OB_MPI_RANKS` | Override MPI rank count in `runbatch.py` |
 | `OBGPU_STATUS_MODE` | `stdout`, `file`, or `off` |
 | `OBGPU_STATUS_INTERVAL_MS` | Status reporting interval in ms |
 

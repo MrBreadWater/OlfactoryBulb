@@ -250,12 +250,10 @@ when one of the key network mechanisms is disabled.</p>
 class.</p>
 <p>To change the simulation parameters, use the right panel in Jupyter Lab
 to open the <code class="docutils literal notranslate"><span class="pre">[repo]/olfactorybulb/paramsets/case_studies.py</span></code> file.</p>
-<p>After modifying e.g. the <code class="docutils literal notranslate"><span class="pre">GammaFingerprint</span></code> class, rerun the
-simulation with the new parameter values with this notebook command (replace
-<code class="docutils literal notranslate"><span class="pre">16</span></code> with the number of cores in your machine):</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span>!cd ..; mpiexec -np 16 python initslice.py -paramset GammaSignature -mpi
-</pre></div>
-</div>
+<p>After modifying e.g. the <code class="docutils literal notranslate"><span class="pre">GammaFingerprint</span></code> class, use the maintained
+OBGPU notebook/helper workflow described in <code class="docutils literal notranslate"><span class="pre">readme.md</span></code> and <code class="docutils literal notranslate"><span class="pre">INSTALL.md</span></code>.
+This page is historical and its old <code class="docutils literal notranslate"><span class="pre">initslice.py</span></code> command examples no
+longer apply.</p>
 <p>After simulation completes, re-run the <code class="docutils literal notranslate"><span class="pre">show_plots</span></code> function to see
 the updated results:</p>
 <div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">show_plots</span><span class="p">(</span><span class="s1">&#39;GammaSignature&#39;</span><span class="p">,</span> <span class="n">sniff_count</span><span class="o">=</span><span class="mi">8</span><span class="p">)</span>

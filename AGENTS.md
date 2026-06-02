@@ -102,8 +102,6 @@ contract for future sessions.
     - active notebooks: `notebooks/obgpu-working-experiment.ipynb`, `notebooks/fi_curve_analysis.ipynb`
 
 - Treat compatibility and archival paths cautiously.
-  - `initslice.py` and `runbatch.py` are compatibility entrypoints, not the
-    preferred path for new notebook, benchmark, or Slurm work.
   - `prev_ob_models/` contains important references, but most trees are
     archival rather than active runtime surfaces.
   - Do not treat a historical model tree as active just because it exists.
@@ -333,9 +331,10 @@ contract for future sessions.
     audits.
   - `tools/run_reference_validation.py` is the generic declarative
     literature-validation runner.
-  - `test_*reference_data.py` and `tools/verify_*_reference_data.py` validate
-    extracted literature bundles and provenance; they are not, by themselves,
-    simulation-backed model-vs-literature audits.
+  - `test_*reference_data.py` and
+    `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
+    validate extracted literature bundles and provenance; they are not, by
+    themselves, simulation-backed model-vs-literature audits.
   - Do not stop at reference-data extraction tests if the user asked for an
     actual literature-validation audit.
 
@@ -539,13 +538,9 @@ contract for future sessions.
   - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
   - `python tools/extract_reference_dataset.py --dataset-id <id>`
 
-- Dataset-specific wrappers may exist for convenience, but they are not the
-  stable source of truth. Prefer the generic commands plus dataset IDs.
-
 - Human-readable bundle summaries:
-  - Use dataset-specific `tools/verify_*_reference_data.py` scripts when
-    present.
-  - Do not assume the exact wrapper set is stable over time.
+  - `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
+  - Do not assume dataset-specific helper wrappers exist.
 
 - Treat normalized reference bundle outputs in `research_context/` as generated
   artifacts unless a file is explicitly a manual-intake template or a raw
@@ -640,8 +635,7 @@ contract for future sessions.
   - Generic/source checks:
     - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
   - Human-readable verification:
-    - `python tools/verify_*_reference_data.py` when a dataset-specific wrapper
-      exists
+    - `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
 
 - That test is heuristic, not exhaustive. It is intended to catch obvious
   mistakes such as:
