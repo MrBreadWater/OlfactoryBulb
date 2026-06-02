@@ -127,6 +127,18 @@ contract for future sessions.
 - Keep `external/` treated as a resettable upstream/dependency cache, not a
   hand-edited source of truth.
 
+- Use the central cell-model registry as the source of truth for family, role,
+  aliases, and `network_ready` status.
+  - Do not bypass it with ad hoc direct imports when the registry path exists.
+
+- Current biological/runtime boundaries:
+  - `Birgiolas2020` MC/TC/GC models are the maintained current-network family.
+  - The canonical maintained slice path is MC/TC/GC-first.
+  - The synthetic `SyntheticEPL2026.PVCRH_FSI1` external plexiform layer
+    interneuron surrogate is provisional and not network-ready by default.
+  - Published candidate/proxy families in the registry are useful references,
+    but should not be silently treated as maintained runtime defaults.
+
 ## 1b. OBGPU build and setup path
 
 - The maintained build/setup path is the modern OBGPU path.
@@ -143,6 +155,10 @@ contract for future sessions.
 
 - Do not resurrect older build/setup branches when the modern path is the
   maintained one.
+
+- The generic Linux/GPU OBGPU path is the primary build path.
+  - Jetson-specific helpers remain secondary and should not become the main
+    source of truth for the general workflow.
 
 - Any NEURON/CoreNEURON portability or compatibility fix must land in:
   - `third_party_patches/nrn/`
@@ -165,6 +181,11 @@ contract for future sessions.
     - `python tools/run_audit.py env_install`
   - Do not treat that warning as harmless without checking the actual mechanism
     libraries.
+
+- After changing environment/bootstrap/import/runtime-surface code, run the
+  maintained environment audit:
+  - `python tools/run_audit.py env_install`
+  - Use that instead of relying on ad hoc import spot-checks alone.
 
 ## 2. Verification standard
 
@@ -189,6 +210,16 @@ contract for future sessions.
 
 - Prefer proving behavior with the maintained live path when practical.
   - In this repo, helper-only validation is often insufficient.
+
+- When changing result loading, remote sync, or notebook monitoring behavior,
+  preserve the maintained performance/reliability semantics:
+  - selected-file sync is an optimization, not the only success path
+  - deferred artifact loading and lazy local/remote loaders are intentional
+  - compact sync and partial-result recovery are intentional
+  - heartbeat refresh/poll paths must stay bounded rather than inheriting
+    unbounded remote waits
+  - file/JSON-backed simulation progress is preferred over fragile stdout
+    scraping
 
 ## 3. Live HFO optimizer and notebook-managed remote workflows
 
@@ -258,6 +289,19 @@ contract for future sessions.
     local analysis helpers and notebooks, rather than inventing a second result
     format for remote execution.
 
+- Selected-file sync and deferred-artifact fetches are maintained optimization
+  layers.
+  - Keep the fallback path to full/safer sync behavior intact.
+  - Do not convert an optimization failure into silent data loss or a false
+    success report.
+
+- Preserve the distinction between local execution knobs and remote resource
+  requests.
+  - Local notebook runs still use settings such as `use_corenrn` and `use_gpu`.
+  - Remote Slurm runs infer execution mode from the resource request unless
+    explicitly overridden.
+  - Do not collapse those two layers into one ambiguous configuration surface.
+
 - On Sol, do not run heavy jobs on the login node.
   - Allocate first, then activate:
     - `salloc ...`
@@ -287,6 +331,17 @@ contract for future sessions.
 
 ## 5. Audit system: current architecture
 
+- Keep the layer distinction clear:
+  - `tools/run_audit.py` is the main human-facing surface for live system/model
+    audits.
+  - `tools/run_reference_validation.py` is the generic declarative
+    literature-validation runner.
+  - `test_*reference_data.py` and `tools/verify_*_reference_data.py` validate
+    extracted literature bundles and provenance; they are not, by themselves,
+    simulation-backed model-vs-literature audits.
+  - Do not stop at reference-data extraction tests if the user asked for an
+    actual literature-validation audit.
+
 - Human-facing audit CLI:
   - `python tools/run_audit.py --list`
   - `python tools/run_audit.py <audit_id>`
@@ -315,6 +370,16 @@ contract for future sessions.
   - Do not reintroduce hand-maintained duplicate lists when a contract or
     registry already exists.
 
+- Keep user-facing parameter surfaces centralized.
+  - When adding or changing notebook/run/network/cell parameters, prefer one
+    canonical config or contract path rather than parallel helper-only knobs.
+  - If human-facing parameter catalog docs are still relevant to the task, keep
+    them aligned with the real runtime/config surface:
+    - `build_run_config_parameters.md`
+    - `notes/porting/NETWORK_AND_CELL_PARAMETER_CATALOG.md`
+  - Do not let helper wrappers or notebooks become the only place a new
+    user-facing knob exists.
+
 - For HFO-facing parameter and visualization surfaces:
   - use the current contract/registry path rather than ad hoc whitelists
   - keep dashboard, packets, controls, and optimizer/search-space views derived
@@ -327,6 +392,8 @@ contract for future sessions.
   - validation behavior belongs in validation configs, protocol runners, and
     rule kinds
   - human review status belongs in validation metadata
+  - default behavior should preserve separation across incompatible targets
+    rather than silently pooling them
 
 ## 5b. Reusable infrastructure extraction rules
 
@@ -365,6 +432,15 @@ contract for future sessions.
   wrappers around `neuroinfra.remote_*` modules.
   - Keep user-facing CLI wrappers working, but put new generic logic in the
     extracted module rather than the wrapper script.
+
+- `tools/debug/` scripts are one-off diagnostics, not maintained public
+  workflow entrypoints.
+  - Do not infer supported workflow contracts from a debug helper unless the
+    same rule is anchored in the maintained setup/notebook/audit surfaces.
+
+- The maintained import/runtime audit scope is the OBGPU workflow surface.
+  - Blender-only paths and the older `neuronunit` stack are not part of the
+    maintained import-verification contract for current OBGPU work.
 
 ## 6. Declarative literature-validation rules
 
@@ -474,6 +550,24 @@ contract for future sessions.
     present.
   - Do not assume the exact wrapper set is stable over time.
 
+- Treat normalized reference bundle outputs in `research_context/` as generated
+  artifacts unless a file is explicitly a manual-intake template or a raw
+  downloaded source file.
+  - Prefer changing:
+    - dataset config
+    - extraction engine
+    - source downloader/manifest
+    - manual intake artifact
+  - Then regenerate the normalized CSV/README outputs.
+  - Do not hand-edit generated canonical outputs just to “fix the data” unless
+    the task is explicitly about a one-off manual correction and the provenance
+    implications are understood.
+
+- Preserve stable provenance URLs.
+  - When download URLs redirect through signed/object-store links, keep the
+    stable publisher URL in `source_url` and treat the redirected fetch target
+    as transport detail rather than canonical provenance.
+
 ## 10. Reference-data boundaries
 
 - The pipeline directly supports:
@@ -502,6 +596,16 @@ contract for future sessions.
     such as max rate or gain alone
   - keep one row per metric for summary tables, one row per current step for
     f-I tables, and one row per protocol variant for protocol templates
+
+- Default literature-validation discipline:
+  - do not silently pool different cell classes
+  - do not silently pool subtype-specific and generic targets
+  - do not silently pool different protocols
+  - do not silently pool baseline with pharmacology/modulation conditions
+  - do not silently pool across species, age, or maturity when those
+    distinctions are part of the reference meaning
+  - if incompatible targets appear together, keep the relevant notes/caveats
+    visible in downstream outputs
 
 - Preserve provenance in all extracted rows:
   - `source_file`
@@ -532,6 +636,15 @@ contract for future sessions.
 
 - Run the reference-data sanity test when changing extraction logic:
   - `python test_reference_data_sanity.py`
+
+- Also rerun the relevant dataset extractor and verifier, not just unit tests.
+  - Generic rebuild:
+    - `python tools/extract_reference_dataset.py --dataset-id <id>`
+  - Generic/source checks:
+    - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
+  - Human-readable verification:
+    - `python tools/verify_*_reference_data.py` when a dataset-specific wrapper
+      exists
 
 - That test is heuristic, not exhaustive. It is intended to catch obvious
   mistakes such as:
