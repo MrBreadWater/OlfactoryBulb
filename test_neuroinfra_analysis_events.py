@@ -17,6 +17,7 @@ from neuroinfra.analysis.events import (
     PreparedEventRows,
     ResultEventFamilySpec,
     ResultEventFamilySuite,
+    ResultEventPlotSuite,
     binned_event_rate,
     build_event_overview_layout,
     build_event_overview_layout_for_rows,
@@ -235,6 +236,62 @@ def main() -> None:
     assert suite_meta["normalization"] == "per_target_cell"
     np.testing.assert_allclose(suite_rate_t, [5.0, 15.0, 25.0, 35.0, 45.0])
     np.testing.assert_allclose(suite_rate_hz, [50.0, 50.0, 50.0, 50.0, 50.0])
+
+    plot_suite = ResultEventPlotSuite(
+        family=family_suite,
+        row_label_fn=lambda row: f"{row['src']}->{row['dest']}",
+        rate_series_specs=(
+            EventRateSeriesSpec("All targets", None, "black"),
+            EventRateSeriesSpec("To MC", ["MC"], "tab:blue"),
+        ),
+        raster_ylabel="Connection",
+        raster_title="Family Raster",
+        rate_title="Family Rate",
+    )
+    prepared_suite_rows = plot_suite.prepare_rows(
+        family_result,
+        include_prefixes=("MC",),
+        limit=1,
+    )
+    assert [label for label, _times in prepared_suite_rows.rows] == ["GC0->MC0"]
+
+    suite_raster_ax = plot_suite.plot_raster(
+        family_result,
+        include_prefixes=("MC",),
+        limit=1,
+    )
+    try:
+        assert suite_raster_ax.get_title() == "Family Raster"
+        assert len(suite_raster_ax.collections) > 0
+    finally:
+        plt.close(suite_raster_ax.figure)
+
+    suite_rate_ax = plot_suite.plot_rate(
+        family_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_cell",
+    )
+    try:
+        assert suite_rate_ax.get_title() == "Family Rate"
+        assert len(suite_rate_ax.lines) == 2
+    finally:
+        plt.close(suite_rate_ax.figure)
+
+    suite_overview_fig, suite_overview_axes = plot_suite.plot_overview(
+        family_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_cell",
+        include_prefixes=("MC",),
+        limit=1,
+    )
+    try:
+        assert suite_overview_axes.shape == (2,)
+        assert suite_overview_axes[0].get_title() == "Family Raster"
+        assert suite_overview_axes[1].get_title() == "Family Rate"
+    finally:
+        plt.close(suite_overview_fig)
 
     prepared_rows = prepare_event_display_rows(
         [

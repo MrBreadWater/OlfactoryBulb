@@ -35,6 +35,7 @@ from .plotting import (
 from .events import (
     EventOverviewLayout,
     ResultEventFamilySuite,
+    ResultEventPlotSuite,
     EventRateNormalizationRule,
     EventRateSeriesSpec,
     EventRateTrace,
@@ -163,6 +164,7 @@ __all__ = [
     "PreparedEventRows",
     "ResultEventFamilySpec",
     "ResultEventFamilySuite",
+    "ResultEventPlotSuite",
     "binned_event_rate",
     "build_event_overview_layout",
     "build_event_overview_layout_for_rows",

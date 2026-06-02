@@ -162,6 +162,192 @@ class ResultEventFamilySuite:
         return float(self.infer_t_stop_fn(result, rows))
 
 
+@dataclass(frozen=True)
+class ResultEventPlotSuite:
+    """Reusable raster/rate/overview composition for one result-backed event family."""
+
+    family: ResultEventFamilySuite
+    row_label_fn: Callable[[Any], str]
+    rate_series_specs: Sequence[EventRateSeriesSpec]
+    sort_key_fn: Callable[[Any], Any] | None = None
+    label_transform_fn: Callable[[str], str] | None = None
+    raster_ylabel: str = "Row"
+    raster_title: str = "Event Raster"
+    raster_width: float = 14.0
+    raster_min_height: float = 4.0
+    raster_per_row_height: float = 0.10
+    raster_default_fontsize: float = 7.0
+    raster_line_spacing: float = 1.4
+    raster_colors: Sequence[Any] | Any = "black"
+    raster_linelengths: float = 1.0
+    raster_no_data_message: str = "No events saved"
+    rate_title: str = "Event Rate"
+    rate_no_data_message: str = "No events saved"
+    rate_ylabel_fallback: str = "events/s"
+    rate_selection_kwarg: str = "include_prefixes"
+    overview_figure_width: float = 16.0
+    overview_raster_min_height: float = 4.5
+    overview_rate_height: float = 4.0
+    overview_left_margin_per_char: float = 0.006
+    overview_hspace: float = 0.25
+
+    def prepare_rows(
+        self,
+        result: dict[str, Any],
+        *,
+        include_prefixes: Sequence[str] | None = None,
+        limit: int | None = None,
+    ) -> PreparedEventRows:
+        """Prepare this family's event rows for raster/overview display."""
+        rows = self.family.filter_rows(result, include_prefixes=include_prefixes)
+        return prepare_event_display_rows(
+            rows,
+            label_fn=self.row_label_fn,
+            times_fn=self.family.spec.times_fn,
+            sort_key_fn=self.sort_key_fn,
+            limit=limit,
+            label_transform_fn=self.label_transform_fn,
+        )
+
+    def plot_raster(
+        self,
+        result: dict[str, Any],
+        *,
+        ax: Any = None,
+        include_prefixes: Sequence[str] | None = None,
+        limit: int | None = None,
+        modulus: float | int | None = None,
+        fontsize: float | None = None,
+        line_spacing: float | None = None,
+    ) -> Any:
+        """Render a raster for this event family."""
+        prepared = self.prepare_rows(
+            result,
+            include_prefixes=include_prefixes,
+            limit=limit,
+        )
+        return plot_event_raster_rows(
+            prepared.rows,
+            ax=ax,
+            ylabel=self.raster_ylabel,
+            title=self.raster_title,
+            width=self.raster_width,
+            min_height=self.raster_min_height,
+            per_row_height=self.raster_per_row_height,
+            fontsize=(
+                recommended_raster_fontsize(len(prepared.rows), default=self.raster_default_fontsize)
+                if fontsize is None
+                else min(
+                    float(fontsize),
+                    recommended_raster_fontsize(len(prepared.rows), default=float(fontsize)),
+                )
+            ),
+            line_spacing=float(line_spacing if line_spacing is not None else self.raster_line_spacing),
+            modulus=modulus,
+            colors=self.raster_colors,
+            linelengths=self.raster_linelengths,
+            no_data_message=self.raster_no_data_message,
+        )
+
+    def plot_rate(
+        self,
+        result: dict[str, Any],
+        *,
+        bin_ms: float = 5.0,
+        smooth_sigma_ms: float = 10.0,
+        normalization: str = "per_target_cell",
+        ax: Any = None,
+    ) -> Any:
+        """Render normalized event-rate traces for this family."""
+        traces = build_event_rate_trace_series(
+            result,
+            self.rate_series_specs,
+            compute_rate_fn=self._compute_rate,
+            selection_kwarg=self.rate_selection_kwarg,
+            compute_rate_kwargs={
+                "bin_ms": bin_ms,
+                "smooth_sigma_ms": smooth_sigma_ms,
+                "normalization": normalization,
+            },
+        )
+        return plot_event_rate_traces(
+            traces,
+            ax=ax,
+            title=self.rate_title,
+            ylabel_fallback=self.rate_ylabel_fallback,
+            no_data_message=self.rate_no_data_message,
+        )
+
+    def plot_overview(
+        self,
+        result: dict[str, Any],
+        *,
+        bin_ms: float = 5.0,
+        smooth_sigma_ms: float = 10.0,
+        normalization: str = "per_target_cell",
+        include_prefixes: Sequence[str] | None = None,
+        limit: int | None = None,
+    ) -> tuple[Any, Any]:
+        """Render the standard raster-plus-rate overview for this event family."""
+        prepared = self.prepare_rows(
+            result,
+            include_prefixes=include_prefixes,
+            limit=limit,
+        )
+        layout = build_event_overview_layout_for_rows(
+            prepared,
+            raster_min_height=self.overview_raster_min_height,
+            rate_height=self.overview_rate_height,
+            left_margin_per_char=self.overview_left_margin_per_char,
+        )
+        return plot_event_overview(
+            layout=layout,
+            raster_plotter=lambda axis, current_layout: plot_event_raster_rows(
+                prepared.rows,
+                ax=axis,
+                ylabel=self.raster_ylabel,
+                title=self.raster_title,
+                width=self.raster_width,
+                min_height=self.raster_min_height,
+                per_row_height=self.raster_per_row_height,
+                fontsize=min(
+                    float(current_layout.label_fontsize),
+                    recommended_raster_fontsize(
+                        len(prepared.rows),
+                        default=float(current_layout.label_fontsize),
+                    ),
+                ),
+                line_spacing=current_layout.line_spacing,
+                colors=self.raster_colors,
+                linelengths=self.raster_linelengths,
+                no_data_message=self.raster_no_data_message,
+            ),
+            rate_plotter=lambda axis, _layout: self.plot_rate(
+                result,
+                bin_ms=bin_ms,
+                smooth_sigma_ms=smooth_sigma_ms,
+                normalization=normalization,
+                ax=axis,
+            ),
+            figure_width=self.overview_figure_width,
+            hspace=self.overview_hspace,
+        )
+
+    def _compute_rate(
+        self,
+        result: dict[str, Any],
+        *,
+        return_metadata: bool,
+        **kwargs: Any,
+    ) -> Any:
+        """Bridge build_event_rate_trace_series onto the family compute-rate API."""
+        return self.family.compute_rate(
+            result,
+            return_metadata=return_metadata,
+            **kwargs,
+        )
+
+
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
     """Convert event times into midpoint/frequency samples."""
     times = np.asarray(times, dtype=float)
