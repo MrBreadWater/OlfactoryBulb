@@ -196,6 +196,15 @@ def _available_audit_entries() -> list[dict[str, str]]:
     ]
 
 
+def _display_audit_args(audit_id: str, audit_args: list[str]) -> str:
+    normalized_id = str(audit_id or "").strip()
+    normalized_args = [str(arg) for arg in (audit_args or []) if str(arg).strip()]
+    default_args = [str(arg) for arg in _default_audit_args_for(normalized_id) if str(arg).strip()]
+    if normalized_args == default_args:
+        return ""
+    return " ".join(normalized_args)
+
+
 def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_label: str) -> str:
     options_html = "\n".join(
         (
@@ -207,7 +216,7 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
         for entry in _available_audit_entries()
     )
     audits_payload = html_escape(_json_script_payload(_available_audit_entries()), quote=False)
-    audit_args_text = html_escape(" ".join(audit_args))
+    audit_args_text = html_escape(_display_audit_args(audit_id, audit_args))
     return f"""
 <div class="control-grid">
   <section class="toolbar-card">
@@ -274,15 +283,59 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
   const selectionDescription = document.getElementById("audit-selection-description");
   const defaultAuditId = {json.dumps(audit_id)};
   const defaultAuditArgs = {json.dumps(audit_args)};
+  let formDirty = false;
+  let suppressFormEvents = false;
 
   function selectedAuditEntry() {{
     const selectedId = String(auditSelect?.value || "");
     return availableAudits.find((entry) => entry.audit_id === selectedId) || null;
   }}
 
+  function auditEntryForId(auditId) {{
+    return availableAudits.find((entry) => entry.audit_id === String(auditId || "")) || null;
+  }}
+
   function selectedAuditDefaultArgs() {{
     const entry = selectedAuditEntry();
     return Array.isArray(entry?.default_args) ? entry.default_args : [];
+  }}
+
+  function defaultArgsForAuditId(auditId) {{
+    const entry = auditEntryForId(auditId);
+    return Array.isArray(entry?.default_args) ? entry.default_args : [];
+  }}
+
+  function arraysEqual(left, right) {{
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => String(value) === String(right[index]));
+  }}
+
+  function displayAuditArgs(auditId, auditArgs) {{
+    const normalizedArgs = Array.isArray(auditArgs)
+      ? auditArgs.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const defaultArgs = defaultArgsForAuditId(auditId)
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    if (arraysEqual(normalizedArgs, defaultArgs)) {{
+      return "";
+    }}
+    return normalizedArgs.join(" ");
+  }}
+
+  function setFormValues(auditId, auditArgs, {{ preserveDirty = false }} = {{}}) {{
+    suppressFormEvents = true;
+    if (auditSelect && auditId) {{
+      auditSelect.value = String(auditId);
+    }}
+    if (auditArgsInput) {{
+      auditArgsInput.value = displayAuditArgs(auditId, auditArgs);
+    }}
+    suppressFormEvents = false;
+    if (!preserveDirty) {{
+      formDirty = false;
+    }}
+    updateSelectionDescription();
   }}
 
   function updateSelectionDescription() {{
@@ -314,6 +367,7 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
       }}
       const auditTabButton = document.querySelector('[data-tab-button][data-tab-key="audits"]');
       auditTabButton?.click();
+      formDirty = false;
       if (runnerStatus) {{
         runnerStatus.textContent = `Running ${{payload.audit_id}} with live status updates.`;
       }}
@@ -327,21 +381,21 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
   }}
 
   auditSelect?.addEventListener("change", () => {{
-    if (auditArgsInput && document.activeElement !== auditArgsInput) {{
-      auditArgsInput.value = selectedAuditDefaultArgs().join(" ");
+    if (suppressFormEvents) return;
+    formDirty = true;
+    if (auditArgsInput) {{
+      auditArgsInput.value = "";
     }}
     updateSelectionDescription();
   }});
   resetButton?.addEventListener("click", () => {{
-    if (auditSelect) {{
-      auditSelect.value = defaultAuditId;
-    }}
-    if (auditArgsInput) {{
-      auditArgsInput.value = defaultAuditArgs.join(" ");
-    }}
-    updateSelectionDescription();
+    setFormValues(defaultAuditId, defaultAuditArgs);
   }});
   runButton?.addEventListener("click", runSelectedAudit);
+  auditArgsInput?.addEventListener("input", () => {{
+    if (suppressFormEvents) return;
+    formDirty = true;
+  }});
   auditArgsInput?.addEventListener("keydown", (event) => {{
     if (event.key === "Enter") {{
       event.preventDefault();
@@ -354,11 +408,8 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
     const auditState = state.audit || {{}};
     const optimizationState = state.optimization || {{}};
     const docsState = state.docs || {{}};
-    if (auditSelect && auditState.audit_id && document.activeElement !== auditSelect) {{
-      auditSelect.value = String(auditState.audit_id);
-    }}
-    if (auditArgsInput && Array.isArray(auditState.audit_args) && document.activeElement !== auditArgsInput) {{
-      auditArgsInput.value = auditState.audit_args.join(" ");
+    if (!formDirty && auditState.audit_id) {{
+      setFormValues(String(auditState.audit_id), Array.isArray(auditState.audit_args) ? auditState.audit_args : []);
     }}
     const auditStatusText = document.getElementById("control-center-audit-status-text");
     const auditStatusDetail = document.getElementById("control-center-audit-status-detail");
@@ -381,7 +432,7 @@ def _render_control_toolbar(*, audit_id: str, audit_args: list[str], campaign_la
     updateSelectionDescription();
   }});
 
-  updateSelectionDescription();
+  setFormValues(defaultAuditId, defaultAuditArgs);
 }})();
 </script>
 """

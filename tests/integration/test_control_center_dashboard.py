@@ -6,14 +6,18 @@ import http.server
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
+import shutil
 import socket
+import subprocess
 import threading
 import time
+from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.dashboard.control_center import export_control_center, resolve_control_center_campaign, serve_control_center
+from websocket import create_connection
 
 
 def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> AuditReport:
@@ -85,6 +89,87 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str]):
     return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
 
 
+def _chromium_binary() -> str | None:
+    return (
+        shutil.which("chromium")
+        or shutil.which("chromium-browser")
+        or shutil.which("google-chrome")
+        or shutil.which("google-chrome-stable")
+    )
+
+
+def _launch_chromium_cdp() -> tuple[subprocess.Popen[str], str, TemporaryDirectory]:
+    binary = _chromium_binary()
+    assert binary, "Chromium is required for control-center browser regression coverage"
+    profile_dir = TemporaryDirectory()
+    stderr_path = Path(profile_dir.name) / "chromium.stderr.log"
+    stderr_handle = stderr_path.open("w+")
+    proc = subprocess.Popen(
+        [
+            binary,
+            "--headless=new",
+            "--disable-gpu",
+            "--no-sandbox",
+            "--disable-dev-shm-usage",
+            "--no-first-run",
+            "--no-default-browser-check",
+            "--remote-allow-origins=*",
+            "--remote-debugging-port=0",
+            f"--user-data-dir={profile_dir.name}",
+            "about:blank",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=stderr_handle,
+        text=True,
+    )
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        stderr_handle.flush()
+        stderr_text = stderr_path.read_text() if stderr_path.exists() else ""
+        devtools_line = next((line for line in stderr_text.splitlines() if "DevTools listening on ws://" in line), "")
+        if devtools_line:
+            browser_ws = devtools_line.split("DevTools listening on ", 1)[-1].strip()
+            port = urlparse(browser_ws).port
+            targets = json.loads(urlopen(f"http://127.0.0.1:{port}/json/list", timeout=5).read().decode("utf-8"))
+            page_target = next((target for target in targets if target.get("type") == "page"), None)
+            if page_target and page_target.get("webSocketDebuggerUrl"):
+                return proc, str(page_target["webSocketDebuggerUrl"]), profile_dir
+        time.sleep(0.1)
+    proc.terminate()
+    stderr_handle.close()
+    profile_dir.cleanup()
+    raise RuntimeError("Chromium DevTools endpoint did not become ready")
+
+
+class _CDPClient:
+    def __init__(self, ws_url: str):
+        self._ws = create_connection(ws_url, timeout=10)
+        self._next_id = 0
+
+    def close(self) -> None:
+        self._ws.close()
+
+    def call(self, method: str, params: dict[str, object] | None = None) -> dict[str, object]:
+        self._next_id += 1
+        message_id = self._next_id
+        self._ws.send(json.dumps({"id": message_id, "method": method, "params": params or {}}))
+        while True:
+            payload = json.loads(self._ws.recv())
+            if payload.get("id") == message_id:
+                return payload
+
+    def eval(self, expression: str, *, await_promise: bool = True) -> object:
+        result = self.call(
+            "Runtime.evaluate",
+            {
+                "expression": expression,
+                "awaitPromise": await_promise,
+                "returnByValue": True,
+            },
+        )
+        return result.get("result", {}).get("result", {}).get("value")
+
+
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
     campaign_dir = root / "campaign"
@@ -108,6 +193,7 @@ with TemporaryDirectory() as tmp:
     assert "/__control_center_state__" in html
     assert ">default<" in html
     assert ">all<" in html
+    assert 'id="control-center-audit-args" type="text" value=""' in html
     assert audit_report["audit_id"] == "control_center_audits"
     assert len(audit_report["groups"]) == 1
     assert audit_report["groups"][0]["title"] == "repo_health --profile maintained"
@@ -351,3 +437,95 @@ with TemporaryDirectory() as tmp:
     blocker.close()
 
 print("control_center_dashboard_port_fallback: OK")
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    campaign_dir = root / "campaign"
+    campaign_dir.mkdir()
+    server_holder: dict[str, http.server.ThreadingHTTPServer] = {}
+
+    class CapturingServer(http.server.ThreadingHTTPServer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            server_holder["server"] = self
+
+    thread = threading.Thread(
+        target=serve_control_center,
+        kwargs={
+            "campaign_dir": campaign_dir,
+            "output_dir": root / "control_center_browser",
+            "port": 0,
+            "watch_optimization": False,
+        },
+        daemon=True,
+    )
+    with (
+        patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer),
+        patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", side_effect=_capture_run_audit_by_id),
+    ):
+        thread.start()
+        deadline = time.time() + 5.0
+        while "server" not in server_holder and time.time() < deadline:
+            time.sleep(0.05)
+        assert "server" in server_holder
+        server = server_holder["server"]
+        base_url = f"http://127.0.0.1:{server.server_port}/"
+
+        proc, ws_url, profile_dir = _launch_chromium_cdp()
+        client = _CDPClient(ws_url)
+        try:
+            client.call("Page.enable")
+            client.call("Runtime.enable")
+            client.call("Page.navigate", {"url": base_url})
+            ready = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 8000;"
+                "  const tick = () => {"
+                "    const select = document.getElementById('control-center-audit-id');"
+                "    const input = document.getElementById('control-center-audit-args');"
+                "    if (select && input) { resolve(true); return; }"
+                "    if (Date.now() > deadline) { resolve(false); return; }"
+                "    setTimeout(tick, 100);"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert ready is True
+
+            blanked = client.eval(
+                "(() => {"
+                "  const select = document.getElementById('control-center-audit-id');"
+                "  const input = document.getElementById('control-center-audit-args');"
+                "  input.value = '--profile maintained';"
+                "  input.dispatchEvent(new Event('input', { bubbles: true }));"
+                "  select.value = 'human_review_status';"
+                "  select.dispatchEvent(new Event('change', { bubbles: true }));"
+                "  return { auditId: select.value, auditArgs: input.value };"
+                "})()"
+            )
+            assert blanked == {"auditId": "human_review_status", "auditArgs": ""}
+
+            preserved = client.eval(
+                "new Promise((resolve) => {"
+                "  const select = document.getElementById('control-center-audit-id');"
+                "  const input = document.getElementById('control-center-audit-args');"
+                "  input.value = '--custom-check';"
+                "  input.dispatchEvent(new Event('input', { bubbles: true }));"
+                "  setTimeout(() => resolve({ auditId: select.value, auditArgs: input.value }), 2600);"
+                "})"
+            )
+            assert preserved == {"auditId": "human_review_status", "auditArgs": "--custom-check"}
+        finally:
+            client.close()
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+            profile_dir.cleanup()
+            server.shutdown()
+            thread.join(timeout=6.0)
+            assert not thread.is_alive()
+
+print("control_center_dashboard_browser: OK")

@@ -350,6 +350,10 @@ contract for future sessions.
       tab badge state and `/audits/index.html`
     - when two different audits are run in one control-center session, the
       audit page keeps both groups visible instead of wiping the earlier one
+    - editing the audit-runner form must preserve the local draft across
+      background state polling; changing the audit id should not snap back to
+      the previous state-selected audit, and default-only audit arguments
+      should render as blank rather than being force-filled into the text field
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed

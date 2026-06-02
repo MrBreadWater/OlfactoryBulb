@@ -114,6 +114,10 @@ Once the shell is open:
   earlier groups from the page
 - the shell state endpoint keeps the audit/optimization/doc badges in sync with
   the real rendered content
+- the audit-runner form keeps local edits stable across background state polls
+  instead of snapping back to the previously running audit
+- when an audit's arguments are only the audit's own implicit defaults, the
+  audit-arguments field stays blank rather than force-filling those defaults
 - the audit page itself now provides display controls for:
   - search
   - failures/warnings-only filtering

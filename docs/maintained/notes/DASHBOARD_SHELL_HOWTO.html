@@ -226,6 +226,10 @@ python -m olfactorybulb.dashboard.control_center serve \
   earlier groups from the page</li>
 <li>the shell state endpoint keeps the audit/optimization/doc badges in sync with
   the real rendered content</li>
+<li>the audit-runner form keeps local edits stable across background state polls
+  instead of snapping back to the previously running audit</li>
+<li>when an audit's arguments are only the audit's own implicit defaults, the
+  audit-arguments field stays blank rather than force-filling those defaults</li>
 <li>the audit page itself now provides display controls for:</li>
 <li>search</li>
 <li>failures/warnings-only filtering</li>
