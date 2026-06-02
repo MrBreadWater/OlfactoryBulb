@@ -10,14 +10,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from neuroinfra.analysis.events import (
+    EventRateTrace,
     binned_event_rate,
+    build_event_overview_layout,
     calculate_event_frequency,
     ensure_raster_axis,
     fit_raster_labels,
+    overview_left_margin,
+    plot_event_overview,
+    plot_event_rate_traces,
     plot_event_raster_rows,
     rate_series_label,
     recommended_raster_fontsize,
     recommended_raster_height,
+    recommended_raster_line_spacing,
     smooth_rate_series,
     style_raster_axis,
 )
@@ -49,6 +55,19 @@ def main() -> None:
     assert recommended_raster_fontsize(100) == 6.0
     assert recommended_raster_height(0, min_height=4.0) == 4.0
     assert recommended_raster_height(100, min_height=4.0) > 4.0
+    assert recommended_raster_line_spacing(20) == 1.4
+    assert recommended_raster_line_spacing(120) == 1.6
+    assert overview_left_margin(30, per_char=0.006) > 0.22
+
+    layout = build_event_overview_layout(
+        n_rows=90,
+        max_label_len=18,
+        raster_min_height=4.5,
+        rate_height=4.0,
+    )
+    assert layout.n_rows == 90
+    assert layout.line_spacing == 1.6
+    assert layout.total_height > layout.rate_height
 
     fig, ax = plt.subplots(figsize=(4, 3))
     offsets = style_raster_axis(
@@ -98,6 +117,67 @@ def main() -> None:
         assert empty_ax.get_title() == "No rows"
     finally:
         plt.close(empty_ax.figure)
+
+    rate_ax = plot_event_rate_traces(
+        [
+            EventRateTrace(
+                base_label="All inputs",
+                times_ms=np.array([5.0, 15.0, 25.0]),
+                rate_hz=np.array([1.0, 2.0, 1.5]),
+                metadata={"normalization": "per_target_cell", "n_target_cells": 4, "unit": "events/s per target cell"},
+                color="tab:blue",
+            ),
+            EventRateTrace(
+                base_label="To MCs",
+                times_ms=np.array([]),
+                rate_hz=np.array([]),
+                metadata={"normalization": "per_target_cell", "n_target_cells": 2, "unit": "events/s per target cell"},
+                color="tab:red",
+            ),
+        ],
+        title="Event Rate Demo",
+    )
+    try:
+        assert rate_ax.get_title() == "Event Rate Demo"
+        assert len(rate_ax.lines) == 1
+        legend_texts = [text.get_text() for text in rate_ax.get_legend().get_texts()]
+        assert "All inputs (n=4 cells)" in legend_texts
+    finally:
+        plt.close(rate_ax.figure)
+
+    empty_rate_ax = plot_event_rate_traces([], title="Empty Rate", no_data_message="Nothing here")
+    try:
+        assert empty_rate_ax.get_title() == "Empty Rate"
+        assert any(text.get_text() == "Nothing here" for text in empty_rate_ax.texts)
+    finally:
+        plt.close(empty_rate_ax.figure)
+
+    overview_fig, overview_axes = plot_event_overview(
+        layout=layout,
+        raster_plotter=lambda axis, current_layout: plot_event_raster_rows(
+            rows,
+            ax=axis,
+            title=f"Raster {current_layout.line_spacing}",
+        ),
+        rate_plotter=lambda axis, _layout: plot_event_rate_traces(
+            [
+                EventRateTrace(
+                    base_label="All inputs",
+                    times_ms=np.array([5.0, 15.0, 25.0]),
+                    rate_hz=np.array([1.0, 2.0, 1.5]),
+                    metadata={"normalization": "per_target_cell", "n_target_cells": 4, "unit": "events/s"},
+                )
+            ],
+            ax=axis,
+            title="Rate Panel",
+        ),
+    )
+    try:
+        assert overview_axes.shape == (2,)
+        assert overview_axes[0].get_title().startswith("Raster")
+        assert overview_axes[1].get_title() == "Rate Panel"
+    finally:
+        plt.close(overview_fig)
 
     print("analysis event helpers: OK")
 

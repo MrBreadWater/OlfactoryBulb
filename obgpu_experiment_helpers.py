@@ -258,10 +258,14 @@ from neuroinfra.analysis.overview import (
     metadata_value_or_result_length as _neuroinfra_metadata_value_or_result_length,
 )
 from neuroinfra.analysis.events import (
+    EventRateTrace as _NeuroinfraEventRateTrace,
     binned_event_rate as _neuroinfra_binned_event_rate,
+    build_event_overview_layout as _neuroinfra_build_event_overview_layout,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
+    plot_event_overview as _neuroinfra_plot_event_overview,
+    plot_event_rate_traces as _neuroinfra_plot_event_rate_traces,
     plot_event_raster_rows as _neuroinfra_plot_event_raster_rows,
     rate_series_label as _neuroinfra_rate_series_label,
     recommended_raster_fontsize as _neuroinfra_recommended_raster_fontsize,
@@ -7405,15 +7409,13 @@ def plot_input_rate(
     ax: Any = None,
 ) -> Any:
     """Plot normalized odor-input event-rate traces over time."""
-    ax = ax or plt.subplots(figsize=(14, 4))[1]
-    traces = [
+    trace_specs = [
         ("All inputs", None, "black"),
         ("To MCs", ["MC"], "tab:blue"),
         ("To TCs", ["TC"], "tab:red"),
     ]
-    plotted = False
-    ylabel = None
-    for base_label, target_types, color in traces:
+    traces: list[_NeuroinfraEventRateTrace] = []
+    for base_label, target_types, color in trace_specs:
         t, rate_hz, meta = compute_input_rate(
             result,
             bin_ms=bin_ms,
@@ -7422,20 +7424,22 @@ def plot_input_rate(
             normalization=normalization,
             return_metadata=True,
         )
-        if len(t) == 0:
-            continue
-        ylabel = meta["unit"]
-        ax.plot(t, rate_hz, color=color, linewidth=1.2, label=_rate_series_label(base_label, meta))
-        plotted = True
+        traces.append(
+            _NeuroinfraEventRateTrace(
+                base_label=base_label,
+                times_ms=t,
+                rate_hz=rate_hz,
+                metadata=meta,
+                color=color,
+            )
+        )
 
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel(ylabel or "events/s")
-    ax.set_title("Odor Input Event Rate")
-    if plotted:
-        ax.legend(loc="upper right", fontsize=8)
-    else:
-        ax.text(0.5, 0.5, "No input events saved", ha="center", va="center", transform=ax.transAxes)
-    return ax
+    return _neuroinfra_plot_event_rate_traces(
+        traces,
+        ax=ax,
+        title="Odor Input Event Rate",
+        no_data_message="No input events saved",
+    )
 
 
 def plot_voltage_traces(
@@ -7599,15 +7603,13 @@ def plot_gc_output_rate(
     ax: Any = None,
 ) -> Any:
     """Plot normalized GC inhibitory-output rate traces over time."""
-    ax = ax or plt.subplots(figsize=(14, 4))[1]
-    traces = [
+    trace_specs = [
         ("All targets", None, "black"),
         ("To MCs", ["MC"], "tab:blue"),
         ("To TCs", ["TC"], "tab:red"),
     ]
-    plotted = False
-    ylabel = None
-    for base_label, target_types, color in traces:
+    traces: list[_NeuroinfraEventRateTrace] = []
+    for base_label, target_types, color in trace_specs:
         t, rate_hz, meta = compute_gc_output_rate(
             result,
             bin_ms=bin_ms,
@@ -7616,20 +7618,21 @@ def plot_gc_output_rate(
             normalization=normalization,
             return_metadata=True,
         )
-        if len(t) == 0:
-            continue
-        ylabel = meta["unit"]
-        ax.plot(t, rate_hz, color=color, linewidth=1.2, label=_rate_series_label(base_label, meta))
-        plotted = True
-
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel(ylabel or "events/s")
-    ax.set_title("GC Inhibitory Output Rate")
-    if plotted:
-        ax.legend(loc="upper right", fontsize=8)
-    else:
-        ax.text(0.5, 0.5, "No GC inhibitory-output events saved", ha="center", va="center", transform=ax.transAxes)
-    return ax
+        traces.append(
+            _NeuroinfraEventRateTrace(
+                base_label=base_label,
+                times_ms=t,
+                rate_hz=rate_hz,
+                metadata=meta,
+                color=color,
+            )
+        )
+    return _neuroinfra_plot_event_rate_traces(
+        traces,
+        ax=ax,
+        title="GC Inhibitory Output Rate",
+        no_data_message="No GC inhibitory-output events saved",
+    )
 
 
 def plot_input_overview(
@@ -7641,37 +7644,29 @@ def plot_input_overview(
 ) -> tuple[Any, Any]:
     """Render the standard input raster + input-rate overview figure."""
     rows = sorted(result.get("input_times", []), key=lambda row: row[0])[:max_segments]
-    n_rows = len(rows)
-    label_fontsize = _recommended_raster_fontsize(n_rows)
-    line_spacing = 1.6 if n_rows > 80 else 1.4
-    raster_height = _recommended_raster_height(n_rows, min_height=4.5)
-    rate_height = 4.0
-    total_height = raster_height + rate_height
-
     max_label_len = max((len(row[0].replace("h.", "")) for row in rows), default=0)
-    left_margin = min(0.5, max(0.22, 0.15 + 0.006 * max_label_len))
-
-    fig, axes = plt.subplots(
-        2,
-        1,
-        figsize=(16, total_height),
-        sharex=False,
-        gridspec_kw={"height_ratios": [raster_height, rate_height]},
+    layout = _neuroinfra_build_event_overview_layout(
+        n_rows=len(rows),
+        max_label_len=max_label_len,
+        raster_min_height=4.5,
+        rate_height=4.0,
+        left_margin_per_char=0.006,
     )
-    plot_input_raster(
-        result,
-        ax=axes[0],
-        max_segments=max_segments,
+    return _neuroinfra_plot_event_overview(
+        layout=layout,
+        raster_plotter=lambda axis, _layout: plot_input_raster(
+            result,
+            ax=axis,
+            max_segments=max_segments,
+        ),
+        rate_plotter=lambda axis, _layout: plot_input_rate(
+            result,
+            bin_ms=bin_ms,
+            smooth_sigma_ms=smooth_sigma_ms,
+            normalization=normalization,
+            ax=axis,
+        ),
     )
-    plot_input_rate(
-        result,
-        bin_ms=bin_ms,
-        smooth_sigma_ms=smooth_sigma_ms,
-        normalization=normalization,
-        ax=axes[1],
-    )
-    fig.subplots_adjust(left=left_margin, hspace=0.25)
-    return fig, axes
 
 
 def plot_gc_output_overview(
@@ -7683,13 +7678,6 @@ def plot_gc_output_overview(
 ) -> tuple[Any, Any]:
     """Render the standard GC output raster + rate overview figure."""
     rows = filter_gc_output_events(result)[:max_connections]
-    n_rows = len(rows)
-    label_fontsize = _recommended_raster_fontsize(n_rows)
-    line_spacing = 1.6 if n_rows > 80 else 1.4
-    raster_height = _recommended_raster_height(n_rows, min_height=4.5)
-    rate_height = 4.0
-    total_height = raster_height + rate_height
-
     max_label_len = 0
     for row in rows:
         label = (
@@ -7697,32 +7685,30 @@ def plot_gc_output_overview(
             f"{normalize_cell_name(row.get('dest_section', 'cell'))}"
         )
         max_label_len = max(max_label_len, len(label))
-
-    left_margin = min(0.5, max(0.22, 0.15 + 0.007 * max_label_len))
-
-    fig, axes = plt.subplots(
-        2,
-        1,
-        figsize=(16, total_height),
-        sharex=False,
-        gridspec_kw={"height_ratios": [raster_height, rate_height]},
+    layout = _neuroinfra_build_event_overview_layout(
+        n_rows=len(rows),
+        max_label_len=max_label_len,
+        raster_min_height=4.5,
+        rate_height=4.0,
+        left_margin_per_char=0.007,
     )
-    plot_gc_output_event_raster(
-        result,
-        max_connections=max_connections,
-        ax=axes[0],
-        fontsize=label_fontsize,
-        line_spacing=line_spacing,
+    return _neuroinfra_plot_event_overview(
+        layout=layout,
+        raster_plotter=lambda axis, overview_layout: plot_gc_output_event_raster(
+            result,
+            max_connections=max_connections,
+            ax=axis,
+            fontsize=overview_layout.label_fontsize,
+            line_spacing=overview_layout.line_spacing,
+        ),
+        rate_plotter=lambda axis, _layout: plot_gc_output_rate(
+            result,
+            bin_ms=bin_ms,
+            smooth_sigma_ms=smooth_sigma_ms,
+            normalization=normalization,
+            ax=axis,
+        ),
     )
-    plot_gc_output_rate(
-        result,
-        bin_ms=bin_ms,
-        smooth_sigma_ms=smooth_sigma_ms,
-        normalization=normalization,
-        ax=axes[1],
-    )
-    fig.subplots_adjust(left=left_margin, hspace=0.25)
-    return fig, axes
 
 
 def plot_lfp_overview(

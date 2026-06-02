@@ -2,12 +2,37 @@
 
 from __future__ import annotations
 
-from typing import Any, Sequence
+from dataclasses import dataclass
+from typing import Any, Callable, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from .spectral import normalize_time_modulus
+
+
+@dataclass(frozen=True)
+class EventRateTrace:
+    """One named event-rate series prepared for plotting."""
+
+    base_label: str
+    times_ms: np.ndarray | list[float]
+    rate_hz: np.ndarray | list[float]
+    metadata: dict[str, Any]
+    color: Any = "black"
+
+
+@dataclass(frozen=True)
+class EventOverviewLayout:
+    """Layout hints for a raster-plus-rate overview figure."""
+
+    n_rows: int
+    label_fontsize: float
+    line_spacing: float
+    raster_height: float
+    rate_height: float
+    total_height: float
+    left_margin: float
 
 
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
@@ -108,6 +133,71 @@ def recommended_raster_height(n_rows: int, *, min_height: float = 4.0) -> float:
     if n_rows <= 0:
         return float(min_height)
     return max(float(min_height), 0.06 * float(n_rows) + 1.5)
+
+
+def recommended_raster_line_spacing(
+    n_rows: int,
+    *,
+    threshold: int = 80,
+    dense_value: float = 1.6,
+    default: float = 1.4,
+) -> float:
+    """Pick a slightly wider line spacing for dense rasters."""
+    return float(dense_value if int(n_rows) > int(threshold) else default)
+
+
+def overview_left_margin(
+    max_label_len: int,
+    *,
+    min_margin: float = 0.22,
+    max_margin: float = 0.5,
+    base: float = 0.15,
+    per_char: float = 0.006,
+) -> float:
+    """Estimate a figure left margin from the longest raster label."""
+    return min(float(max_margin), max(float(min_margin), float(base) + float(per_char) * float(max_label_len)))
+
+
+def build_event_overview_layout(
+    *,
+    n_rows: int,
+    max_label_len: int,
+    raster_min_height: float = 4.5,
+    rate_height: float = 4.0,
+    default_label_fontsize: float = 7.0,
+    dense_line_spacing_threshold: int = 80,
+    dense_line_spacing: float = 1.6,
+    default_line_spacing: float = 1.4,
+    left_margin_min: float = 0.22,
+    left_margin_max: float = 0.5,
+    left_margin_base: float = 0.15,
+    left_margin_per_char: float = 0.006,
+) -> EventOverviewLayout:
+    """Build shared layout hints for a raster-plus-rate overview figure."""
+    label_fontsize = recommended_raster_fontsize(n_rows, default=default_label_fontsize)
+    line_spacing = recommended_raster_line_spacing(
+        n_rows,
+        threshold=dense_line_spacing_threshold,
+        dense_value=dense_line_spacing,
+        default=default_line_spacing,
+    )
+    raster_height = recommended_raster_height(n_rows, min_height=raster_min_height)
+    left_margin = overview_left_margin(
+        max_label_len,
+        min_margin=left_margin_min,
+        max_margin=left_margin_max,
+        base=left_margin_base,
+        per_char=left_margin_per_char,
+    )
+    return EventOverviewLayout(
+        n_rows=int(n_rows),
+        label_fontsize=float(label_fontsize),
+        line_spacing=float(line_spacing),
+        raster_height=float(raster_height),
+        rate_height=float(rate_height),
+        total_height=float(raster_height + rate_height),
+        left_margin=float(left_margin),
+    )
 
 
 def ensure_raster_axis(
@@ -265,3 +355,66 @@ def plot_event_raster_rows(
         ax.set_xlabel(f"Time modulo {modulus_value:g} ms")
     fit_raster_labels(ax, offsets, min_height=min_height)
     return ax
+
+
+def plot_event_rate_traces(
+    traces: Sequence[EventRateTrace],
+    *,
+    ax: Any = None,
+    title: str = "Event Rate",
+    ylabel_fallback: str = "events/s",
+    xlabel: str = "Time (ms)",
+    linewidth: float = 1.2,
+    legend_loc: str = "upper right",
+    no_data_message: str = "No events saved",
+    label_formatter: Callable[[str, dict[str, Any]], str] = rate_series_label,
+) -> Any:
+    """Plot one or more event-rate traces with consistent label handling."""
+    ax = ax or plt.subplots(figsize=(14, 4))[1]
+    plotted = False
+    ylabel = None
+    for trace in traces:
+        times = np.asarray(trace.times_ms, dtype=float)
+        rate = np.asarray(trace.rate_hz, dtype=float)
+        if len(times) == 0 or len(rate) == 0:
+            continue
+        ylabel = str(trace.metadata.get("unit", ylabel_fallback))
+        ax.plot(
+            times,
+            rate,
+            color=trace.color,
+            linewidth=linewidth,
+            label=label_formatter(trace.base_label, trace.metadata),
+        )
+        plotted = True
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel or ylabel_fallback)
+    ax.set_title(title)
+    if plotted:
+        ax.legend(loc=legend_loc, fontsize=8)
+    else:
+        ax.text(0.5, 0.5, no_data_message, ha="center", va="center", transform=ax.transAxes)
+    return ax
+
+
+def plot_event_overview(
+    *,
+    layout: EventOverviewLayout,
+    raster_plotter: Callable[[Any, EventOverviewLayout], Any],
+    rate_plotter: Callable[[Any, EventOverviewLayout], Any],
+    figure_width: float = 16.0,
+    hspace: float = 0.25,
+) -> tuple[Any, Any]:
+    """Render a two-row raster-plus-rate overview using a shared layout."""
+    fig, axes = plt.subplots(
+        2,
+        1,
+        figsize=(figure_width, layout.total_height),
+        sharex=False,
+        gridspec_kw={"height_ratios": [layout.raster_height, layout.rate_height]},
+    )
+    raster_plotter(axes[0], layout)
+    rate_plotter(axes[1], layout)
+    fig.subplots_adjust(left=layout.left_margin, hspace=hspace)
+    return fig, axes
