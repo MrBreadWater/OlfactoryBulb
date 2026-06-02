@@ -165,6 +165,20 @@ from olfactorybulb.notebook_remote_sweeps import (
     build_remote_sweep_payload as _ob_build_remote_sweep_payload,
     build_remote_sweep_workflow_hooks as _ob_build_remote_sweep_workflow_hooks,
 )
+from olfactorybulb.notebook_runtime_hooks import (
+    build_artifact_loading_hooks as _ob_build_artifact_loading_hooks,
+    build_deferred_artifact_sync_hooks as _ob_build_deferred_artifact_sync_hooks,
+    build_paramiko_stream_sync_hooks as _ob_build_paramiko_stream_sync_hooks,
+    build_remote_job_session_hooks as _ob_build_remote_job_session_runtime_hooks,
+    build_remote_job_submit_hooks as _ob_build_remote_job_submit_runtime_hooks,
+    build_remote_json_poll_hooks as _ob_build_remote_json_poll_runtime_hooks,
+    build_remote_result_sync_hooks as _ob_build_remote_result_sync_hooks,
+    build_remote_run_artifact_hooks as _ob_build_remote_run_artifact_runtime_hooks,
+    build_remote_run_monitor_hooks as _ob_build_remote_run_monitor_runtime_hooks,
+    build_remote_sweep_artifact_hooks as _ob_build_remote_sweep_artifact_runtime_hooks,
+    build_remote_sweep_monitor_hooks as _ob_build_remote_sweep_monitor_runtime_hooks,
+    build_result_view_hooks as _ob_build_result_view_runtime_hooks,
+)
 from olfactorybulb.notebook_presentations import (
     NotebookPresentationHooks as _OlfactoryBulbNotebookPresentationHooks,
     print_run_summary as _ob_print_notebook_run_summary,
@@ -2139,7 +2153,7 @@ def _remote_allocation_runtime_context(config: dict[str, Any]) -> _NeuroinfraRem
 
 def _paramiko_stream_sync_hooks() -> _NeuroinfraParamikoStreamSyncHooks:
     """Build reusable hooks for Paramiko-driven archive and direct-file streaming."""
-    return _NeuroinfraParamikoStreamSyncHooks(
+    return _ob_build_paramiko_stream_sync_hooks(
         transport_for_config_fn=lambda cfg: _connect_paramiko(cfg)["transport"],
         run_paramiko_shell_fn=_run_paramiko_shell,
         build_remote_stream_archive_command_fn=lambda remote_result_dir, compressor: _build_remote_stream_archive_command(
@@ -2165,7 +2179,7 @@ def _paramiko_stream_sync_hooks() -> _NeuroinfraParamikoStreamSyncHooks:
 
 def _remote_result_sync_hooks() -> _NeuroinfraRemoteResultSyncHooks:
     """Build reusable hooks for higher-level Paramiko result-sync policy."""
-    return _NeuroinfraRemoteResultSyncHooks(
+    return _ob_build_remote_result_sync_hooks(
         remote_transport_fn=_remote_transport,
         run_paramiko_shell_fn=_run_paramiko_shell,
         build_remote_archive_probe_command_fn=_build_remote_archive_probe_command,
@@ -2217,7 +2231,7 @@ def _remote_result_sync_hooks() -> _NeuroinfraRemoteResultSyncHooks:
 
 def _deferred_remote_artifact_sync_hooks() -> _NeuroinfraDeferredArtifactSyncHooks:
     """Build reusable hooks for deferred remote artifact sync policy."""
-    return _NeuroinfraDeferredArtifactSyncHooks(
+    return _ob_build_deferred_artifact_sync_hooks(
         local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
         sync_remote_result_dir_fn=_sync_remote_result_dir,
         progress_write=_progress_write,
@@ -2231,7 +2245,7 @@ def _deferred_remote_artifact_sync_hooks() -> _NeuroinfraDeferredArtifactSyncHoo
 
 def _artifact_loading_hooks() -> _NeuroinfraArtifactLoadingHooks:
     """Build reusable hooks for local result artifact loading."""
-    return _NeuroinfraArtifactLoadingHooks(
+    return _ob_build_artifact_loading_hooks(
         load_pickle_fn=load_pickle,
         apply_loaded_fn=_apply_loaded_result_artifact,
         progress_factory_fn=lambda total_bytes, desc: _ProgressBar(
@@ -2249,19 +2263,14 @@ def _artifact_loading_hooks() -> _NeuroinfraArtifactLoadingHooks:
 
 def _result_view_hooks() -> _NeuroinfraResultViewHooks:
     """Build reusable hooks for result-view planning and lazy artifact wiring."""
-    return _NeuroinfraResultViewHooks(
+    return _ob_build_result_view_runtime_hooks(
         read_json_if_present_fn=_read_json_if_present,
         standard_result_artifact_sizes_fn=_standard_result_artifact_sizes,
         local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
         sync_deferred_artifact_fn=_sync_deferred_remote_artifact,
         load_pickle_fn=load_pickle,
         set_lazy_artifact_path_fn=_ob_set_lazy_result_artifact_path,
-        local_lazy_notice_fn=lambda key, path: (
-            f"[OBGPU load] Deferred {key} ({_format_bytes(path.stat().st_size)}) until result['{key}'] is accessed."
-        ),
-        remote_lazy_notice_fn=lambda key, _path: (
-            f"[OBGPU load] Deferred {key} stays remote until result['{key}'] is accessed."
-        ),
+        format_bytes_fn=_format_bytes,
         progress_write=_progress_write,
     )
 
@@ -2271,13 +2280,11 @@ def _remote_json_poll_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteJSONPollHooks:
     """Build reusable hooks for remote JSON status polling."""
-    return _NeuroinfraRemoteJSONPollHooks(
-        run_command_fn=lambda command, timeout_s=None: _run_ssh_shell(
-            config,
-            command,
-            timeout_s=timeout_s,
-        ),
-        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+    return _ob_build_remote_json_poll_runtime_hooks(
+        config,
+        notebook_timings,
+        run_ssh_shell_fn=_run_ssh_shell,
+        record_timing_fn=_record_timing,
         sleep_fn=time.sleep,
         perf_counter_fn=time.perf_counter,
     )
@@ -2287,16 +2294,17 @@ def _remote_job_session_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteJobSessionHooks:
     """Build reusable hooks for notebook-side remote session preparation."""
-    return _NeuroinfraRemoteJobSessionHooks(
+    return _ob_build_remote_job_session_runtime_hooks(
+        notebook_timings,
         ensure_remote_git_ref_available_fn=_ensure_remote_git_ref_available,
         run_remote_preflight_fn=_run_remote_preflight_cached,
         ensure_remote_helper_cache_fn=_ensure_remote_helper_cache,
-        helper_cache_hit_fn=lambda config: bool(
+        helper_cache_lookup_fn=lambda config: bool(
             (_LIVE_REMOTE_HELPER_CACHES.get(_remote_helper_cache_runtime_key(config)) or {}).get("cache_hit", False)
         ),
         cleanup_stale_allocations_fn=_maybe_cleanup_stale_remote_slurm_allocations,
         ensure_cached_remote_allocation_fn=_ensure_cached_remote_slurm_allocation,
-        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        record_timing_fn=_record_timing,
         progress_write=_progress_write,
         perf_counter_fn=time.perf_counter,
     )
@@ -2306,10 +2314,11 @@ def _remote_job_submit_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteJobSubmitHooks:
     """Build reusable hooks for notebook-side remote JSON job submission."""
-    return _NeuroinfraRemoteJobSubmitHooks(
+    return _ob_build_remote_job_submit_runtime_hooks(
+        notebook_timings,
         run_ssh_shell_fn=_run_ssh_shell,
         heartbeat_timeout_s_fn=_remote_heartbeat_timeout_s,
-        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        record_timing_fn=_record_timing,
         perf_counter_fn=time.perf_counter,
     )
 
@@ -2549,7 +2558,8 @@ def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
     """Build reusable hooks for remote single-run final sync and artifact collection."""
-    return _NeuroinfraRemoteRunArtifactHooks(
+    return _ob_build_remote_run_artifact_runtime_hooks(
+        notebook_timings,
         sync_remote_result_dir_resilient_fn=_sync_remote_result_dir_resilient,
         sync_remote_result_dir_fn=_sync_remote_result_dir,
         run_paramiko_shell_fn=_run_ssh_shell,
@@ -2561,7 +2571,7 @@ def _remote_run_artifact_hooks(
         compact_remote_poll_events_fn=_compact_remote_poll_events,
         read_json_if_present_fn=_read_json_if_present,
         progress_write=_progress_write,
-        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        record_timing_fn=_record_timing,
         sleep_fn=time.sleep,
         perf_counter_fn=time.perf_counter,
     )
@@ -2580,60 +2590,25 @@ def _remote_run_monitor_hooks(
     local_result_dir: Path,
 ) -> _NeuroinfraRemoteRunMonitorHooks:
     """Build reusable hooks for live remote single-run monitoring."""
-
-    def refresh_remote_leases(*, warn: bool = False) -> None:
-        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
-        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
-
-    def poll_status_once(
-        *,
-        refresh_heartbeat: bool = True,
-        include_logs: bool = True,
-        include_sacct: bool = True,
-    ) -> dict[str, Any]:
-        if refresh_heartbeat:
-            refresh_remote_leases()
-        poll_shell = _build_remote_poll_command(
-            effective_config,
-            remote_repo_root=remote_repo_root,
-            remote_result_dir=remote_result_dir,
-            job_id=str(submission["job_id"]),
-            wrapper_dir=str(submission.get("wrapper_dir") or ""),
-            worktree_path=str(submission.get("worktree_path") or ""),
-            remote_helper_dir=remote_helper_dir,
-            include_sacct=include_sacct,
-            include_tails=include_logs,
-        )
-        return _neuroinfra_poll_remote_json_status(
-            poll_shell,
-            poll_json_retries=max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1),
-            error_prefix="Remote Sol status poll",
-            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
-        )
-
-    def cancel_job() -> subprocess.CompletedProcess[str]:
-        return _run_ssh_shell(
-            effective_config,
-            _build_remote_cancel_command(job_id=str(submission["job_id"])),
-        )
-
-    def sync_partial_artifacts() -> subprocess.CompletedProcess[str]:
-        sync_started = time.perf_counter()
-        sync_completed = _sync_remote_result_dir(
-            effective_config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=local_result_dir,
-        )
-        _record_timing(notebook_timings, "partial_sync_s", sync_started)
-        (local_result_dir / "sync_stdout.txt").write_text(sync_completed.stdout or "")
-        (local_result_dir / "sync_stderr.txt").write_text(sync_completed.stderr or "")
-        return sync_completed
-
-    return _NeuroinfraRemoteRunMonitorHooks(
-        refresh_remote_leases_fn=refresh_remote_leases,
-        poll_status_fn=poll_status_once,
-        cancel_job_fn=cancel_job,
-        sync_partial_artifacts_fn=sync_partial_artifacts,
+    return _ob_build_remote_run_monitor_runtime_hooks(
+        effective_config=effective_config,
+        remote_job_heartbeat_path=remote_job_heartbeat_path,
+        allocation_heartbeat_path=allocation_heartbeat_path,
+        remote_repo_root=remote_repo_root,
+        remote_result_dir=remote_result_dir,
+        remote_helper_dir=remote_helper_dir,
+        notebook_timings=notebook_timings,
+        submission=submission,
+        local_result_dir=local_result_dir,
+        refresh_remote_heartbeat_fn=_refresh_remote_heartbeat,
+        build_remote_poll_command_fn=_build_remote_poll_command,
+        poll_remote_json_status_fn=_neuroinfra_poll_remote_json_status,
+        remote_json_poll_hooks_fn=_remote_json_poll_hooks,
+        remote_poll_command_timeout_s_fn=_remote_poll_command_timeout_s,
+        run_ssh_shell_fn=_run_ssh_shell,
+        build_remote_cancel_command_fn=_build_remote_cancel_command,
+        sync_remote_result_dir_fn=_sync_remote_result_dir,
+        record_timing_fn=_record_timing,
         remote_status_has_artifacts_fn=_remote_status_has_artifacts,
         progress_bar_factory_fn=lambda total_ms, desc: _ProgressBar(
             total=total_ms,
@@ -2663,45 +2638,24 @@ def _remote_sweep_monitor_hooks(
     sync_finished_items_fn: Callable[[dict[str, Any]], None],
 ) -> _NeuroinfraRemoteSweepMonitorHooks:
     """Build reusable hooks for live remote sweep monitoring."""
-
-    def refresh_remote_leases(*, warn: bool = False) -> None:
-        _refresh_remote_heartbeat(effective_config, remote_job_heartbeat_path, warn=warn)
-        _refresh_remote_heartbeat(effective_config, allocation_heartbeat_path, warn=warn)
-
-    def poll_status_once(*, refresh_heartbeat: bool = True, include_sacct: bool = True) -> dict[str, Any]:
-        if refresh_heartbeat:
-            refresh_remote_leases()
-        poll_shell = _build_remote_poll_command(
-            effective_config,
-            remote_repo_root=remote_repo_root,
-            remote_result_dir=remote_sweep_root,
-            job_id=str(submission["job_id"]),
-            wrapper_dir=str(submission.get("wrapper_dir") or ""),
-            worktree_path=str(submission.get("worktree_path") or ""),
-            remote_helper_dir=remote_helper_dir,
-            include_sacct=include_sacct,
-            include_tails=False,
-        )
-        return _neuroinfra_poll_remote_json_status(
-            poll_shell,
-            poll_json_retries=max(int(effective_config.get("remote_poll_json_retries", 3) or 1), 1),
-            error_prefix="Remote sweep status poll",
-            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
-            timeout_s=_remote_poll_command_timeout_s(effective_config),
-        )
-
-    def cancel_job() -> subprocess.CompletedProcess[str]:
-        return _run_ssh_shell(
-            effective_config,
-            _build_remote_cancel_command(job_id=str(submission["job_id"])),
-        )
-
-    return _NeuroinfraRemoteSweepMonitorHooks(
-        refresh_remote_leases_fn=refresh_remote_leases,
-        poll_status_fn=poll_status_once,
+    return _ob_build_remote_sweep_monitor_runtime_hooks(
+        effective_config=effective_config,
+        remote_job_heartbeat_path=remote_job_heartbeat_path,
+        allocation_heartbeat_path=allocation_heartbeat_path,
+        remote_repo_root=remote_repo_root,
+        remote_sweep_root=remote_sweep_root,
+        remote_helper_dir=remote_helper_dir,
+        notebook_timings=notebook_timings,
+        submission=submission,
+        synced_labels=synced_labels,
         sync_finished_items_fn=sync_finished_items_fn,
-        cancel_job_fn=cancel_job,
-        synced_count_fn=lambda: len(synced_labels),
+        refresh_remote_heartbeat_fn=_refresh_remote_heartbeat,
+        build_remote_poll_command_fn=_build_remote_poll_command,
+        poll_remote_json_status_fn=_neuroinfra_poll_remote_json_status,
+        remote_json_poll_hooks_fn=_remote_json_poll_hooks,
+        remote_poll_command_timeout_s_fn=_remote_poll_command_timeout_s,
+        run_ssh_shell_fn=_run_ssh_shell,
+        build_remote_cancel_command_fn=_build_remote_cancel_command,
         progress_write=_progress_write,
         sleep_fn=time.sleep,
         monotonic_fn=time.monotonic,
@@ -2714,7 +2668,9 @@ def _remote_sweep_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteSweepArtifactHooks:
     """Build reusable hooks for remote sweep final sync and artifact collection."""
-    return _NeuroinfraRemoteSweepArtifactHooks(
+    return _ob_build_remote_sweep_artifact_runtime_hooks(
+        refresh_remote_leases_fn=refresh_remote_leases_fn,
+        notebook_timings=notebook_timings,
         sync_remote_result_dir_fn=_sync_remote_result_dir,
         sync_remote_sweep_compact_items_fn=_sync_remote_sweep_compact_items,
         read_json_if_present_fn=_read_json_if_present,
@@ -2725,8 +2681,7 @@ def _remote_sweep_artifact_hooks(
         local_sweep_item_sync_complete_fn=_local_sweep_item_sync_complete,
         local_result_dir_has_diagnostics_fn=_local_result_dir_has_diagnostics,
         progress_write=_progress_write,
-        refresh_remote_leases_fn=refresh_remote_leases_fn,
-        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        record_timing_fn=_record_timing,
         perf_counter_fn=time.perf_counter,
     )
 

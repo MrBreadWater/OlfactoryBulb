@@ -236,6 +236,12 @@ presentation, local-run, and remote-run/sweep adapters together now lives in
 `obgpu_experiment_helpers.py` closer to thin compatibility wrappers over the
 explicit domain modules.
 
+The remaining concrete runtime hook assembly that binds result loading,
+deferred artifact sync, remote session prep, JSON status polling, and remote
+monitor/finalization hooks together now also lives in
+`olfactorybulb.notebook_runtime_hooks`, which further reduces
+`obgpu_experiment_helpers.py` to notebook-facing compatibility wrappers.
+
 The generic notebook remote session lifecycle that publishes one git ref, runs
 preflight, warms helper cache state, prepares reusable allocations, and
 captures one JSON submit response now also lives under

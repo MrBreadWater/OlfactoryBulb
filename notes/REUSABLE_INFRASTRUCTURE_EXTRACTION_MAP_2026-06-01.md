@@ -482,6 +482,10 @@ Current progress:
 - the remaining concrete hook-object assembly that wires dispatch, result,
   presentation, local-run, and remote run/sweep adapters together now lives
   under `olfactorybulb/notebook_adapter_hooks.py`
+- the remaining concrete runtime hook assembly for result loading, deferred
+  artifact sync, remote session prep, JSON status polling, and remote
+  monitor/finalization now also lives under
+  `olfactorybulb/notebook_runtime_hooks.py`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
   `run_simulation`, and the parameter/grid sweep entrypoints through those
   domain adapters while still owning notebook-facing progress messages and a

@@ -203,6 +203,25 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._ob_build_notebook_presentation_adapter_hooks = original_presentation_hook_builder
     print("notebook presentation hook wrapper delegation: OK")
 
+    # --- runtime result-view hook wrapper delegates through explicit domain hooks ---
+    original_result_view_hook_builder = hlp._ob_build_result_view_runtime_hooks
+    result_view_hook_calls = []
+    try:
+        def _fake_result_view_hook_builder(**kwargs):
+            result_view_hook_calls.append(dict(kwargs))
+            return "RESULT-VIEW-HOOKS"
+
+        hlp._ob_build_result_view_runtime_hooks = _fake_result_view_hook_builder
+        delegated_hooks = hlp._result_view_hooks()
+        assert delegated_hooks == "RESULT-VIEW-HOOKS"
+        assert result_view_hook_calls
+        assert result_view_hook_calls[0]["read_json_if_present_fn"] is hlp._read_json_if_present
+        assert result_view_hook_calls[0]["sync_deferred_artifact_fn"] is hlp._sync_deferred_remote_artifact
+        assert result_view_hook_calls[0]["format_bytes_fn"] is hlp._format_bytes
+    finally:
+        hlp._ob_build_result_view_runtime_hooks = original_result_view_hook_builder
+    print("result view hook wrapper delegation: OK")
+
     # --- remote run wrapper delegates through notebook remote session layer ---
     original_remote_session = ob_remote_runs.prepare_remote_job_session
     original_write_run_info = hlp._write_notebook_run_info
