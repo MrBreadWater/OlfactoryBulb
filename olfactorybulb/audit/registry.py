@@ -129,8 +129,8 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
             "human_review_status",
             AuditSpec(
                 audit_id="human_review_status",
-                title="Human review status audit",
-                description="Audit that declarative reference-validation items resolve to explicit human-review states.",
+                title="Validation design review status audit",
+                description="Audit that declarative reference-validation items resolve to explicit review states for validation-design choices such as distribution assumptions, pooling rules, and protocol matching.",
                 module_path="olfactorybulb.audit.human_review_status",
             ),
         ),

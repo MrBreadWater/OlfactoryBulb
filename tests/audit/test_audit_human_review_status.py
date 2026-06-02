@@ -14,6 +14,7 @@ report = run_human_review_status(argparse.Namespace())
 item_by_id = {item.check_id: item for item in report.items}
 
 assert report.audit_id == "human_review_status"
+assert report.title == "Validation design review status audit"
 assert item_by_id["reference_validation_review_status_coverage"].status == "PASS"
 assert item_by_id["reference_validation_review_status_values"].status == "PASS"
 assert item_by_id["reference_validation_pending_review_items"].status == "WARN"

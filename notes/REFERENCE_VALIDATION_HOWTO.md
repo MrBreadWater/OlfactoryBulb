@@ -198,9 +198,28 @@ The framework now supports two skip behaviors:
     slice-export checks should still run when NEURON-backed morphology or
     behavior checks are skipped
 
-## Human review status is mandatory
+## Validation-design review status is mandatory
 
-Every declarative validation item should resolve to a human-review state.
+Every declarative validation item should resolve to a validation-design review
+state.
+
+The config key is still called `[human_review]` for compatibility, but the
+intended meaning is narrower than that name suggests.
+
+It means:
+
+- whether a human has reviewed the validation-design choice itself
+- whether the chosen reference-band shape is acceptable
+- whether a pooling/separation rule is acceptable
+- whether a protocol-equivalence assumption is acceptable
+- whether a manual extraction or mapping choice is acceptable
+
+It does not mean:
+
+- that a human has manually checked this specific observed audit result
+- that a human has read and verified the full stack of code the audit uses
+- that the underlying model implementation is therefore endorsed in general
+- that every upstream paper/source file was re-reviewed in full for this run
 
 Use the shared vocabulary:
 
@@ -222,6 +241,9 @@ Then override where needed:
 - `human_review_reviewer` and `human_review_note` on a single check
 - `property_human_review_statuses` for `reference_band_rows`
 - `property_human_review_notes` for per-property caveats
+
+Think of these as review fields for the test design, not for the observed run
+result.
 
 Example:
 
@@ -255,6 +277,9 @@ That audit:
 - fails if a config uses an unknown status string
 - warns on `pending_review`
 - warns on `provisional`
+
+The audit title uses the clearer phrase `Validation design review status audit`
+even though the config key remains `human_review`.
 
 ## Built-in rule kinds
 

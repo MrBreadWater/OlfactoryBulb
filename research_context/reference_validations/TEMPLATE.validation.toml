@@ -7,6 +7,12 @@ metric_group_field = "cell_type"
 # notes_path = "research_context/EXAMPLE_validation_notes.csv"
 # skip_neuron_mode = "short_circuit"
 
+# Compatibility note:
+# - the config key is still called [human_review]
+# - but this metadata is about review of validation-design choices
+#   (distribution assumptions, pooling rules, protocol matching, manual
+#   extraction/mapping decisions), not about whether a human re-checked one
+#   specific observed audit result row
 [human_review]
 default_status = "pending_review"
 # default_reviewer = "human"
@@ -223,7 +229,8 @@ human_review_status = "pending_review"
 
 # `reference_band_rows` requires `property_band_modes` to select one mode for
 # every property in `property_metric_map`. There is no default fallback.
-# Every generated item should also resolve to a human-review status through
+# Every generated item should also resolve to a validation-design review status
+# through
 # either:
 # - [human_review].default_status
 # - rule-level human_review_status

@@ -1,4 +1,4 @@
-"""Audit declarative reference-validation configs for human-review metadata coverage."""
+"""Audit declarative reference-validation configs for validation-design review metadata coverage."""
 
 from __future__ import annotations
 
@@ -152,11 +152,11 @@ def run(args: argparse.Namespace) -> AuditReport:
         AuditItem(
             check_id="reference_validation_review_status_coverage",
             status="PASS" if not missing_statuses else "FAIL",
-            title="Every declarative reference-validation item resolves to a human-review status",
-            criterion="Every declarative validation check, skip item, and generated reference-band property must resolve to a non-empty human-review status.",
-            description="This audit prevents the validation framework from silently emitting literature-comparison items with no review-state metadata at all.",
-            acceptable="Every validation config provides either an explicit human-review status for each item or a config-level default that resolves for every item.",
-            acceptable_basis="The audit statically inspects the reference-validation TOML files and expands reference-band checks into per-property decisions. Missing resolved statuses are treated as failures because review-state coverage is now mandatory.",
+            title="Every declarative reference-validation item resolves to a validation-design review status",
+            criterion="Every declarative validation check, skip item, and generated reference-band property must resolve to a non-empty review status for the validation-design choice behind it.",
+            description="This audit prevents the validation framework from silently emitting literature-comparison items with no metadata about whether a human has reviewed the underlying test-design choice, such as a distribution assumption, pooling rule, protocol equivalence decision, or manual extraction judgment.",
+            acceptable="Every validation config provides either an explicit design-review status for each item or a config-level default that resolves for every item.",
+            acceptable_basis="The audit statically inspects the reference-validation TOML files and expands reference-band checks into per-property decisions. Missing resolved statuses are treated as failures because design-review coverage is now mandatory.",
             evidence={
                 "validation_ids": validation_ids,
                 "default_statuses": default_statuses,
@@ -167,9 +167,9 @@ def run(args: argparse.Namespace) -> AuditReport:
         AuditItem(
             check_id="reference_validation_review_status_values",
             status="PASS" if not unknown_statuses else "FAIL",
-            title="Every declarative reference-validation human-review status uses a known value",
-            criterion="Human-review status values should stay inside the supported status vocabulary so downstream tools can interpret them consistently.",
-            description="This audit enforces a small explicit vocabulary instead of letting each config invent ad hoc review states.",
+            title="Every declarative reference-validation design-review status uses a known value",
+            criterion="Design-review status values should stay inside the supported status vocabulary so downstream tools can interpret them consistently.",
+            description="This audit enforces a small explicit vocabulary instead of letting each config invent ad hoc review-state labels for validation-design decisions.",
             acceptable="All resolved statuses are one of accepted, provisional, pending_review, or not_applicable.",
             acceptable_basis="The accepted vocabulary is declared in the audit core module so all validation configs share the same status language.",
             evidence={
@@ -181,9 +181,9 @@ def run(args: argparse.Namespace) -> AuditReport:
         AuditItem(
             check_id="reference_validation_pending_review_items",
             status="WARN" if pending_statuses else "PASS",
-            title="Pending-review validation items remain visible",
-            criterion="Items that still rely on unreviewed LLM-authored choices should stay marked as pending review until a human accepts or revises them.",
-            description="This warning is the tracking surface for unresolved review work. It is not a framework failure; it is a deliberate reminder that some validation decisions still lack human sign-off.",
+            title="Pending validation-design review items remain visible",
+            criterion="Items that still rely on unreviewed LLM-authored or otherwise unreviewed test-design choices should stay marked as pending review until a human accepts or revises them.",
+            description="This warning is the tracking surface for unresolved design-review work. It is not a framework failure; it is a deliberate reminder that some validation decisions still lack human sign-off on the choice of rule, mapping, or statistical assumption.",
             acceptable="The report lists every item still marked pending_review so it can be triaged explicitly.",
             acceptable_basis="Pending-review is a first-class status in the review vocabulary. The audit surfaces it as a warning rather than a failure so work can continue without hiding the unresolved review debt.",
             evidence={
@@ -195,9 +195,9 @@ def run(args: argparse.Namespace) -> AuditReport:
         AuditItem(
             check_id="reference_validation_provisional_items",
             status="WARN" if provisional_statuses else "PASS",
-            title="Provisional validation items remain explicitly caveated",
-            criterion="Any item that is still using a provisional acceptance rule should remain marked provisional until a better source-backed rule replaces it.",
-            description="This warning separates intentionally provisional literature-comparison decisions from fully accepted ones.",
+            title="Provisional validation-design review items remain explicitly caveated",
+            criterion="Any item that is still using a provisional validation-design choice should remain marked provisional until a better source-backed rule replaces it.",
+            description="This warning separates intentionally provisional literature-comparison decisions from fully accepted ones, especially where the current rule still depends on a stopgap distribution shape, approximate protocol-equivalence assumption, or incomplete source backing.",
             acceptable="Every provisional item is listed explicitly so downstream readers can see where the current validation logic is still a stopgap.",
             acceptable_basis="Provisional is a first-class review status distinct from pending_review because a human may consciously accept a temporary rule while still marking it as caveated.",
             evidence={
@@ -209,6 +209,6 @@ def run(args: argparse.Namespace) -> AuditReport:
     ]
     return AuditReport(
         audit_id="human_review_status",
-        title="Human review status audit",
+        title="Validation design review status audit",
         items=items,
     )

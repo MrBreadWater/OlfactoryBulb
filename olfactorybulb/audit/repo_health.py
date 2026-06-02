@@ -42,7 +42,7 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
         ),
         RepoHealthCheck(
             check_id="human_review_status",
-            title="Human-review coverage audit",
+            title="Validation design review coverage audit",
             command=_py("tools/run_audit.py", "human_review_status"),
         ),
         RepoHealthCheck(

@@ -304,8 +304,26 @@ needs a different shape.</p>
     slice-export checks should still run when NEURON-backed morphology or
     behavior checks are skipped</li>
 </ul>
-<h2 id="human-review-status-is-mandatory">Human review status is mandatory</h2>
-<p>Every declarative validation item should resolve to a human-review state.</p>
+<h2 id="validation-design-review-status-is-mandatory">Validation-design review status is mandatory</h2>
+<p>Every declarative validation item should resolve to a validation-design review
+state.</p>
+<p>The config key is still called <code>[human_review]</code> for compatibility, but the
+intended meaning is narrower than that name suggests.</p>
+<p>It means:</p>
+<ul>
+<li>whether a human has reviewed the validation-design choice itself</li>
+<li>whether the chosen reference-band shape is acceptable</li>
+<li>whether a pooling/separation rule is acceptable</li>
+<li>whether a protocol-equivalence assumption is acceptable</li>
+<li>whether a manual extraction or mapping choice is acceptable</li>
+</ul>
+<p>It does not mean:</p>
+<ul>
+<li>that a human has manually checked this specific observed audit result</li>
+<li>that a human has read and verified the full stack of code the audit uses</li>
+<li>that the underlying model implementation is therefore endorsed in general</li>
+<li>that every upstream paper/source file was re-reviewed in full for this run</li>
+</ul>
 <p>Use the shared vocabulary:</p>
 <ul>
 <li><code>accepted</code></li>
@@ -324,6 +342,8 @@ default_status = &quot;pending_review&quot;
 <li><code>property_human_review_statuses</code> for <code>reference_band_rows</code></li>
 <li><code>property_human_review_notes</code> for per-property caveats</li>
 </ul>
+<p>Think of these as review fields for the test design, not for the observed run
+result.</p>
 <p>Example:</p>
 <pre><code class="language-toml">[human_review]
 default_status = &quot;pending_review&quot;
@@ -351,6 +371,8 @@ python tools/run_audit.py human_review_status
 <li>warns on <code>pending_review</code></li>
 <li>warns on <code>provisional</code></li>
 </ul>
+<p>The audit title uses the clearer phrase <code>Validation design review status audit</code>
+even though the config key remains <code>human_review</code>.</p>
 <h2 id="built-in-rule-kinds">Built-in rule kinds</h2>
 <p>The built-in rule layer already covers common cases:</p>
 <ul>
@@ -752,7 +774,7 @@ the lab instead of turning back into one-off audit scripts.</p>
 </li>
 <li><a href="#minimal-validation-config">Minimal validation config</a></li>
 <li><a href="#how-a-validation-is-evaluated">How a validation is evaluated</a></li>
-<li><a href="#human-review-status-is-mandatory">Human review status is mandatory</a></li>
+<li><a href="#validation-design-review-status-is-mandatory">Validation-design review status is mandatory</a></li>
 <li><a href="#built-in-rule-kinds">Built-in rule kinds</a></li>
 <li><a href="#choosing-acceptable-bands-for-literature-rows">Choosing acceptable bands for literature rows</a></li>
 <li><a href="#registering-a-new-protocol-runner">Registering a new protocol runner</a></li>

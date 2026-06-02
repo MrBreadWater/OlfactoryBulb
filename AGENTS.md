@@ -587,9 +587,10 @@ contract for future sessions.
   - `skip_neuron_mode = "protocol_handles_skip"`
   - This is how `epli_correctness` now works.
 
-## 7. Human review metadata is mandatory
+## 7. Validation-design review metadata is mandatory
 
-- Every declarative validation item should resolve to a human-review state.
+- Every declarative validation item should resolve to a validation-design
+  review state.
 
 - Supported review statuses:
   - `accepted`
@@ -598,6 +599,8 @@ contract for future sessions.
   - `not_applicable`
 
 - Use `[human_review]` in validation configs.
+  - The key name is historical/compatibility-focused.
+  - The semantic meaning is review of the validation-design choice itself.
   - At minimum:
     - `[human_review]`
     - `default_status = "pending_review"`
@@ -621,6 +624,15 @@ contract for future sessions.
   - Human-review metadata describes the review state of the underlying
     validation rule or reference-band choice, not whether one specific observed
     audit result row was manually checked after the fact.
+  - Good examples:
+    - whether a reference-band distribution shape is acceptable
+    - whether pooling/separation choices are acceptable
+    - whether a protocol-equivalence assumption is acceptable
+    - whether a manual extraction or mapping choice is acceptable
+  - Non-examples:
+    - a human has verified the full code stack used by the audit
+    - a human has manually confirmed this specific PASS/WARN/FAIL outcome
+    - a human has re-reviewed every upstream source document in full for this run
   - Do not render human-review metadata inline on individual audit result items
     in the CLI or HTML dashboards unless the wording is explicitly reframed to
     avoid that confusion.
