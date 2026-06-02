@@ -81,6 +81,77 @@ contract for future sessions.
 - For notebooks, avoid committing transient execution output unless the output
   is intentionally part of the deliverable.
 
+## 1a. Active maintained surface and archival boundaries
+
+- Prefer the actively maintained OBGPU workflow over historical entrypoints.
+  - High-priority maintained surfaces include:
+    - `tools/setup/setup_ob_modern.sh`
+    - `tools/setup/activate_obgpu.sh`
+    - `tools/setup/activate_sol_obgpu.sh`
+    - `tools/setup/verify_obgpu_python_imports.py`
+    - `tools/remote/`
+    - `tools/benchmarks/benchmark_ob.py`
+    - `obgpu_experiment_helpers.py`
+    - `olfactorybulb/model.py`
+    - `olfactorybulb/paramsets/`
+    - `single_cell_utils.py`
+    - `fi_curve_utils.py`
+    - `notebooks/obgpu-working-experiment.ipynb`
+    - `notebooks/fi_curve_analysis.ipynb`
+  - For the longer active-vs-archival reasoning, also check:
+    - `notes/CODEBASE_CLEANUP_AUDIT.md`
+
+- Treat compatibility and archival paths cautiously.
+  - `initslice.py` and `runbatch.py` are compatibility entrypoints, not the
+    preferred path for new notebook, benchmark, or Slurm work.
+  - `prev_ob_models/` contains important references, but most trees are
+    archival rather than active runtime surfaces.
+  - Do not treat a historical model tree as active just because it exists.
+    Use the current runtime registry/configuration path as the source of truth.
+
+- Keep generated and local-only noise out of normal commits.
+  - In particular:
+    - `results/notebook_runs/`
+    - `results/sweeps/`
+    - `results/benchmarks/`
+    - `results/comparisons/`
+    - `results/profiles/`
+    - `results/debug_*/`
+    - `results/tmp_*/`
+    - `.jupyter-ai-state/`
+    - `.codex/`
+    - `.ipynb_checkpoints/`
+    - architecture build outputs such as `aarch64/`, `x86_64/`,
+      `corenrn_data/`, generated mechanism C/object/shared-library files
+
+- Keep `external/` treated as a resettable upstream/dependency cache, not a
+  hand-edited source of truth.
+
+## 1b. OBGPU build and setup path
+
+- The maintained build/setup path is the modern OBGPU path.
+  - Start with:
+    - `install-obgpu.sh`
+    - `tools/setup/setup_ob_modern.sh`
+    - `tools/setup/activate_obgpu.sh`
+    - `tools/setup/activate_sol_obgpu.sh`
+    - `tools/setup/verify_obgpu_python_imports.py`
+  - Prefer current setup docs under:
+    - `tools/README.md`
+    - `notes/porting/SOL_REMOTE_WORKFLOW.md`
+    - `notes/porting/NEURON_UPGRADE_WORKFLOW.md`
+
+- Do not resurrect older build/setup branches when the modern path is the
+  maintained one.
+
+- If the environment shows NVHPC stale temp-object loader failures such as
+  `dlopen failed ... /tmp/pgcudafat...`:
+  - use `tools/setup/fix_nvhpc_libnrnmech.sh`
+  - and verify with:
+    - `python tools/run_audit.py env_install`
+  - Do not treat that warning as harmless without checking the actual mechanism
+    libraries.
+
 ## 2. Verification standard
 
 - Do not claim a fix without checking the actual result path the user will rely
@@ -125,6 +196,29 @@ contract for future sessions.
 - If notebook kernel auto-discovery drifts, use the explicit connection-file
   path sooner instead of relying on ambient discovery.
 
+## 3a. Remote execution architecture
+
+- The maintained remote notebook/backend path is Paramiko-only.
+  - Do not reintroduce or fork behavior around:
+    - OpenSSH control-master transport
+    - `ssh_multiplex`
+    - `ssh_control_path`
+    - `ssh_control_persist_s`
+    - rsync result-sync paths
+    - `rsync_binary`
+    - `rsync_options`
+
+- The supported concepts are:
+  - Paramiko persistent sessions
+  - streamed compressed result sync
+  - selected-file sync for sweeps and deferred artifacts
+  - reusable Slurm allocations and manual `slurm_allocation_job_id`
+  - `ssh_options` for port/jump-host behavior
+
+- Keep remote config builders minimal.
+  - If a value can be inferred from execution mode or Slurm resources, avoid
+    adding a second independent knob.
+
 ## 4. Dashboard/runtime expectations
 
 - If touching the HFO dashboard/runtime:
@@ -164,6 +258,59 @@ contract for future sessions.
   - visible `Human Review` line when review metadata exists
   - evidence blocks readable in plain text
 
+## 5a. Contract and registry discipline
+
+- Keep feature/validation/dashboard surfaces mechanically linked to their
+  registries or contracts.
+  - Do not reintroduce hand-maintained duplicate lists when a contract or
+    registry already exists.
+
+- For HFO-facing parameter and visualization surfaces:
+  - use the current contract/registry path rather than ad hoc whitelists
+  - keep dashboard, packets, controls, and optimizer/search-space views derived
+    from the same contract layer
+  - run the contract audit after changes:
+    - `python tools/run_audit.py hfo_feature_contracts`
+
+- For literature validation:
+  - dataset membership belongs in dataset configs
+  - validation behavior belongs in validation configs, protocol runners, and
+    rule kinds
+  - human review status belongs in validation metadata
+
+## 5b. Reusable infrastructure extraction rules
+
+- `neuroinfra/` is the internal extraction target for reusable infrastructure.
+  - Use:
+    - `neuroinfra/README.md`
+    - `python -m neuroinfra`
+  - to inspect the current extraction inventory and source-of-truth locations.
+
+- Do not grow new mixed-responsibility monoliths when a reusable layer already
+  exists under `neuroinfra`.
+  - Prefer extending the extracted generic modules and keeping repo-specific
+    wiring in the `olfactorybulb.*` adapters or notebook-facing glue.
+
+- `obgpu_experiment_helpers.py` is still a major notebook-facing facade, but it
+  should keep shrinking toward orchestration glue rather than regaining
+  ownership of:
+  - remote transport internals
+  - result-artifact schemas
+  - generic analysis primitives
+  - dashboard runtime supervision
+  - generic config/run catalog logic
+
+- Before adding new helper logic, check whether the reusable home already
+  exists in:
+  - `neuroinfra.notebooks`
+  - `neuroinfra.remote`
+  - `neuroinfra.analysis`
+  - `neuroinfra.artifacts`
+  - `neuroinfra.dashboard`
+  - `neuroinfra.contracts`
+  - `neuroinfra.campaigns`
+  - `neuroinfra.models`
+
 ## 6. Declarative literature-validation rules
 
 - Use the declarative validation framework instead of bespoke one-off audit code
@@ -173,6 +320,8 @@ contract for future sessions.
     - `research_context/reference_validations/TEMPLATE.validation.toml`
   - guide:
     - `notes/REFERENCE_VALIDATION_HOWTO.md`
+  - system overview:
+    - `notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md`
 
 - `burton_urban_fi` is one registered protocol-backed validation in this
   system, not the architecture itself.
@@ -255,6 +404,8 @@ contract for future sessions.
     - `research_context/reference_datasets/TEMPLATE.dataset.toml`
   - guide:
     - `notes/REFERENCE_DATASET_HOWTO.md`
+  - manual intake templates:
+    - `research_context/manual_reference_templates/`
 
 - Main generic commands:
   - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
