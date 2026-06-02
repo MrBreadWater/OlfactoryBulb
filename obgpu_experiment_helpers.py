@@ -284,6 +284,9 @@ from neuroinfra.analysis.signal_views import (
     SignalPsdOverlay as _NeuroinfraSignalPsdOverlay,
     log_spectrogram_display_power as _neuroinfra_log_spectrogram_display_power,
 )
+from neuroinfra.analysis.profiles import (
+    ResultAnalysisProfile as _NeuroinfraResultAnalysisProfile,
+)
 from neuroinfra.analysis.phase_locking import (
     compute_phase_locking_from_spike_rows as _neuroinfra_compute_phase_locking_from_spike_rows,
 )
@@ -313,14 +316,12 @@ from neuroinfra.analysis.sweeps import (
     iter_parallel_sweep_display_frames as _neuroinfra_iter_parallel_sweep_display_frames,
     iter_sweep_animation_frames as _neuroinfra_iter_sweep_animation_frames,
     is_deprecated_sweep_animation_spec as _neuroinfra_is_deprecated_sweep_animation_spec,
-    list_registry_plot_names as _neuroinfra_list_registry_plot_names,
     list_sweeps as _neuroinfra_list_sweeps,
     load_sweep as _neuroinfra_load_sweep,
     make_sweep_placeholder_figure as _neuroinfra_make_sweep_placeholder_figure,
     make_sweep_plot_spec as _neuroinfra_make_sweep_plot_spec,
     normalize_sweep_plot_spec as _neuroinfra_normalize_sweep_plot_spec,
     render_sweep_frame as _neuroinfra_render_sweep_frame,
-    resolve_registry_plot as _neuroinfra_resolve_registry_plot,
     save_animation as _neuroinfra_save_animation,
     save_sweep as _neuroinfra_save_sweep,
     save_sweep_animation_stream as _neuroinfra_save_sweep_animation_stream,
@@ -6200,7 +6201,7 @@ def compute_lfp_bandpassed(
     order: int = 4,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the saved LFP resampled and band-pass filtered."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.compute_bandpassed_signal(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().compute_bandpassed_signal(
         result,
         signal="lfp",
         dt_ms=dt_ms,
@@ -6219,7 +6220,7 @@ def compute_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> dict[str, Any]:
     """Compute HFO band-power metrics for a named saved signal."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.compute_band_power_summary(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().compute_band_power_summary(
         result,
         signal=signal,
         bands=bands,
@@ -6275,9 +6276,9 @@ def compute_spike_phase_locking(
     dt_ms: float = 0.1,
 ) -> dict[str, Any]:
     """Measure soma-spike phase locking to a band-passed LFP-like signal."""
-    signal_t, signal_y = _OBGPU_RESULT_SIGNAL_VIEWS.resolve(
+    signal_t, signal_y = _OBGPU_ANALYSIS_PROFILE.resolve_signal(
         result,
-        signal=signal,
+        signal,
         dt_ms=dt_ms,
     )
     allowed_types = tuple(str(cell_type) for cell_type in cell_types)
@@ -6643,7 +6644,7 @@ def list_available_named_signals(
     include_soma_labels: bool = False,
 ) -> list[str]:
     """List named analysis signals currently resolvable for one loaded result."""
-    return _OBGPU_RESULT_SIGNAL_REGISTRY.list_available(
+    return _OBGPU_ANALYSIS_PROFILE.list_available_signals(
         result,
         include_soma_labels=include_soma_labels,
     )
@@ -6654,7 +6655,7 @@ def filter_gc_output_events(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     """Filter saved GC inhibitory-output events by destination cell family."""
-    return _OBGPU_GC_OUTPUT_EVENT_FAMILY.filter_rows(
+    return _OBGPU_ANALYSIS_PROFILE.event_family("gc_output").filter_rows(
         result,
         include_prefixes=target_types,
     )
@@ -6667,7 +6668,7 @@ def collect_gc_output_frequency_samples(
     modulus: float | None = None,
 ) -> dict[str, Any]:
     """Collect instantaneous GC inhibitory-output frequency samples for KDE plots."""
-    sample_collection = _OBGPU_GC_OUTPUT_EVENT_FAMILY.collect_samples(
+    sample_collection = _OBGPU_ANALYSIS_PROFILE.event_family("gc_output").collect_samples(
         result,
         indices=indices,
         include_prefixes=target_types,
@@ -6717,7 +6718,7 @@ def plot_spike_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of detected soma spike frequencies."""
-    return _OBGPU_SPIKE_FREQUENCY_PLOTS.plot_kde_1d(
+    return _OBGPU_ANALYSIS_PROFILE.frequency_plot_suite("spike").plot_kde_1d(
         result,
         config=config,
         ax=ax,
@@ -6742,7 +6743,7 @@ def plot_spike_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of detected soma spike frequencies."""
-    return _OBGPU_SPIKE_FREQUENCY_PLOTS.plot_kde_2d(
+    return _OBGPU_ANALYSIS_PROFILE.frequency_plot_suite("spike").plot_kde_2d(
         result,
         config=config,
         ax=ax,
@@ -6769,7 +6770,7 @@ def plot_spike_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned soma spike-frequency distributions."""
-    return _OBGPU_SPIKE_FREQUENCY_PLOTS.plot_time_binned(
+    return _OBGPU_ANALYSIS_PROFILE.frequency_plot_suite("spike").plot_time_binned(
         result,
         config=config,
         ax=ax,
@@ -6795,7 +6796,7 @@ def plot_gc_output_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of reciprocal GC inhibitory-output frequencies."""
-    return _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS.plot_kde_1d(
+    return _OBGPU_ANALYSIS_PROFILE.frequency_plot_suite("gc_output").plot_kde_1d(
         result,
         config=config,
         ax=ax,
@@ -6818,7 +6819,7 @@ def plot_gc_output_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of reciprocal GC inhibitory-output frequencies."""
-    return _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS.plot_kde_2d(
+    return _OBGPU_ANALYSIS_PROFILE.frequency_plot_suite("gc_output").plot_kde_2d(
         result,
         config=config,
         ax=ax,
@@ -6843,7 +6844,7 @@ def plot_gc_output_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned reciprocal GC inhibitory-output frequency distributions."""
-    return _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS.plot_time_binned(
+    return _OBGPU_ANALYSIS_PROFILE.frequency_plot_suite("gc_output").plot_time_binned(
         result,
         config=config,
         ax=ax,
@@ -6980,7 +6981,7 @@ def compute_gc_output_rate(
     return_metadata: bool = False,
 ) -> Any:
     """Compute a GC inhibitory-output rate trace with configurable normalization."""
-    computed = _OBGPU_GC_OUTPUT_EVENT_FAMILY.compute_rate(
+    computed = _OBGPU_ANALYSIS_PROFILE.event_family("gc_output").compute_rate(
         result,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
@@ -6996,7 +6997,7 @@ def filter_input_events(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> list[tuple[str, Any]]:
     """Filter odor-input event rows by destination cell family."""
-    return _OBGPU_INPUT_EVENT_FAMILY.filter_rows(
+    return _OBGPU_ANALYSIS_PROFILE.event_family("input").filter_rows(
         result,
         include_prefixes=target_types,
     )
@@ -7114,7 +7115,7 @@ def compute_input_rate(
     return_metadata: bool = False,
 ) -> Any:
     """Compute an odor-input event-rate trace with configurable normalization."""
-    computed = _OBGPU_INPUT_EVENT_FAMILY.compute_rate(
+    computed = _OBGPU_ANALYSIS_PROFILE.event_family("input").compute_rate(
         result,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
@@ -7136,9 +7137,9 @@ def get_named_signal(
     dt_ms: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Resolve one named analysis signal into a uniform time/value trace."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.resolve(
+    return _OBGPU_ANALYSIS_PROFILE.resolve_signal(
         result,
-        signal=signal,
+        signal,
         dt_ms=dt_ms,
     )
 
@@ -7218,7 +7219,7 @@ def plot_input_raster(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> Any:
     """Plot the saved odor-input event raster."""
-    return _OBGPU_INPUT_EVENT_PLOTS.plot_raster(
+    return _OBGPU_ANALYSIS_PROFILE.event_plot_suite("input").plot_raster(
         result,
         ax=ax,
         include_prefixes=target_types,
@@ -7234,7 +7235,7 @@ def plot_input_rate(
     ax: Any = None,
 ) -> Any:
     """Plot normalized odor-input event-rate traces over time."""
-    return _OBGPU_INPUT_EVENT_PLOTS.plot_rate(
+    return _OBGPU_ANALYSIS_PROFILE.event_plot_suite("input").plot_rate(
         result,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
@@ -7309,7 +7310,7 @@ def plot_gc_output_event_raster(
     modulus: float | None = None,
 ) -> Any:
     """Plot the saved reciprocal GC inhibitory-output event raster."""
-    return _OBGPU_GC_OUTPUT_EVENT_PLOTS.plot_raster(
+    return _OBGPU_ANALYSIS_PROFILE.event_plot_suite("gc_output").plot_raster(
         result,
         ax=ax,
         include_prefixes=target_types,
@@ -7328,7 +7329,7 @@ def plot_gc_output_rate(
     ax: Any = None,
 ) -> Any:
     """Plot normalized GC inhibitory-output rate traces over time."""
-    return _OBGPU_GC_OUTPUT_EVENT_PLOTS.plot_rate(
+    return _OBGPU_ANALYSIS_PROFILE.event_plot_suite("gc_output").plot_rate(
         result,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
@@ -7345,7 +7346,7 @@ def plot_input_overview(
     normalization: str = "per_target_cell",
 ) -> tuple[Any, Any]:
     """Render the standard input raster + input-rate overview figure."""
-    return _OBGPU_INPUT_EVENT_PLOTS.plot_overview(
+    return _OBGPU_ANALYSIS_PROFILE.event_plot_suite("input").plot_overview(
         result,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
@@ -7362,7 +7363,7 @@ def plot_gc_output_overview(
     normalization: str = "per_target_cell",
 ) -> tuple[Any, Any]:
     """Render the standard GC output raster + rate overview figure."""
-    return _OBGPU_GC_OUTPUT_EVENT_PLOTS.plot_overview(
+    return _OBGPU_ANALYSIS_PROFILE.event_plot_suite("gc_output").plot_overview(
         result,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
@@ -7395,7 +7396,7 @@ def plot_lfp_overview(
             psd_template_floor=psd_template_floor,
             psd_template_color=psd_template_color,
         )
-    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_signal_psd_overview(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_signal_psd_overview(
         result,
         signal="lfp",
         dt_ms=dt_ms,
@@ -7416,7 +7417,7 @@ def plot_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> tuple[Any, Any, dict[str, Any]]:
     """Plot absolute and relative HFO band power for a named signal."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_band_power_summary(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_band_power_summary(
         result,
         signal=signal,
         bands=bands,
@@ -7433,7 +7434,7 @@ def plot_named_signal(
     modulus: float | None = None,
 ) -> Any:
     """Plot one named analysis signal as a time trace."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_signal(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_signal(
         result,
         signal=signal,
         dt_ms=dt_ms,
@@ -7458,7 +7459,7 @@ def plot_spectrogram(
     modulus: float | None = None,
 ) -> Any:
     """Plot a spectrogram for a named analysis signal."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_spectrogram(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_spectrogram(
         result,
         signal=signal,
         dt_ms=dt_ms,
@@ -7478,7 +7479,7 @@ def plot_wavelet(
     modulus: float | None = None,
 ) -> Any:
     """Plot the continuous wavelet power map for a named signal."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_wavelet(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_wavelet(
         result,
         signal=signal,
         dt_ms=dt_ms,
@@ -7496,7 +7497,7 @@ def plot_wavelet_band_power(
     modulus: float | None = None,
 ) -> Any:
     """Plot band-collapsed wavelet power traces over time."""
-    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_wavelet_band_power(
+    return _OBGPU_ANALYSIS_PROFILE.require_signal_views().plot_wavelet_band_power(
         result,
         signal=signal,
         dt_ms=dt_ms,
@@ -7539,15 +7540,34 @@ _OBGPU_SWEEP_PLOT_REGISTRY = _NeuroinfraSweepPlotRegistry(
     deprecated_names=frozenset(_DEPRECATED_SWEEP_ANIMATION_PLOTS),
 )
 
+_OBGPU_ANALYSIS_PROFILE = _NeuroinfraResultAnalysisProfile(
+    category_hooks=_OBGPU_CATEGORY_CATALOG_HOOKS,
+    signal_registry=_OBGPU_RESULT_SIGNAL_REGISTRY,
+    signal_views=_OBGPU_RESULT_SIGNAL_VIEWS,
+    event_families={
+        "input": _OBGPU_INPUT_EVENT_FAMILY,
+        "gc_output": _OBGPU_GC_OUTPUT_EVENT_FAMILY,
+    },
+    event_plots={
+        "input": _OBGPU_INPUT_EVENT_PLOTS,
+        "gc_output": _OBGPU_GC_OUTPUT_EVENT_PLOTS,
+    },
+    frequency_plots={
+        "spike": _OBGPU_SPIKE_FREQUENCY_PLOTS,
+        "gc_output": _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS,
+    },
+    sweep_plot_registry=_OBGPU_SWEEP_PLOT_REGISTRY,
+)
+
 
 def get_builtin_sweep_plot_names() -> list[str]:
     """Return built-in plot names that can be rendered across a sweep."""
-    return _neuroinfra_list_registry_plot_names(_OBGPU_SWEEP_PLOT_REGISTRY)
+    return _OBGPU_ANALYSIS_PROFILE.list_builtin_sweep_plot_names()
 
 
 def _get_builtin_sweep_plot(plot_name: str) -> Any:
     """Resolve a built-in sweep-plot name to a plotting helper."""
-    return _neuroinfra_resolve_registry_plot(_OBGPU_SWEEP_PLOT_REGISTRY, plot_name)
+    return _OBGPU_ANALYSIS_PROFILE.resolve_builtin_sweep_plot(plot_name)
 
 
 def make_sweep_plot_spec(

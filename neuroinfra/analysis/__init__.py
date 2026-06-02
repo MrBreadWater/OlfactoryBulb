@@ -87,6 +87,9 @@ from .signal_views import (
     plot_resolved_wavelet,
     plot_resolved_wavelet_band_power,
 )
+from .profiles import (
+    ResultAnalysisProfile,
+)
 from .phase_locking import (
     compute_phase_locking_from_spike_rows,
 )
@@ -225,6 +228,7 @@ __all__ = [
     "plot_stacked_labeled_traces",
     "plot_time_frequency_map",
     "plot_time_series",
+    "ResultAnalysisProfile",
     "GroupedEventRasterSuite",
     "GroupedRowPolicy",
     "GroupedTracePlotSuite",

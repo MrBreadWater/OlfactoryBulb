@@ -128,6 +128,7 @@ Current files:
 - `neuroinfra/analysis/overview.py`
 - `neuroinfra/analysis/phase_locking.py`
 - `neuroinfra/analysis/plotting.py`
+- `neuroinfra/analysis/profiles.py`
 - `neuroinfra/analysis/signal_views.py`
 - `neuroinfra/analysis/spectral.py`
 - `neuroinfra/analysis/sweeps.py`
@@ -142,6 +143,8 @@ What is already generic:
 - ordered group-row flattening across display buckets with per-bucket limits
 - grouped row-display policies for stable bucketed ordering and per-bucket limits
 - grouped stacked-trace and event-raster suites built on those row policies
+- domain analysis profiles that aggregate concrete signal, event, frequency,
+  and sweep suites behind one plugin-style boundary
 - result-overview context and summary builders
 - stacked labeled trace plotting with configurable offsets and styling
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
@@ -179,7 +182,8 @@ What is domain-specific:
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
 - notebook-specific signal-presentation, concrete cell-family display semantics,
-  plot composition, and built-in sweep plot registry
+  plot composition, and the concrete profile definitions that still live in the
+  notebook helper
 
 Extraction confidence:
 
