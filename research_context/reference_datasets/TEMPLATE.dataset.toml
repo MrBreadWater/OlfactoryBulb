@@ -155,6 +155,11 @@ column = "rest_mV"
 property_name = "Membrane Resting Voltage"
 reported_definition = "resting potential"
 unit = "mV"
+# Optional empirical interval fields for row-level source tables:
+# quantile_low = 0.05
+# quantile_high = 0.95
+# quantile_low_label = "5th percentile"
+# quantile_high_label = "95th percentile"
 data_kind = "intrinsic_property"
 notes = "Computed directly from example rows in the source table."
 cell_type = "Example Cell"

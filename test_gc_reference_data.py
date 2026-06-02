@@ -118,7 +118,7 @@ assert fi_summary_rows["protocol_id"].fillna("").ne("").all()
 assert fi_summary_rows["note_ids"].fillna("").ne("").all()
 
 for df in (ephys_df, subtype_ephys_df, identity_df, latency_df, modulation_df):
-    for column in ("mean", "sd", "sem", "n"):
+    for column in ("mean", "sd", "sem", "q_low", "q_high", "n"):
         populated = df[column].dropna()
         if len(populated):
             converted = pd.to_numeric(populated, errors="coerce")

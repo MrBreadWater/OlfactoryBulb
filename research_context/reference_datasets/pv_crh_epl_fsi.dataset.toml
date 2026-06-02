@@ -22,6 +22,7 @@ source_summary = [
 ]
 suitable_now = [
   "Burton 2024 S15-derived intrinsic-property rows",
+  "Burton 2024 S15-derived empirical 5th-to-95th percentile bands for skew-sensitive intrinsic metrics",
   "Burton 2024 S8-derived example-cell current-rate rows",
   "Burton 2024 S16-derived morphology rows",
   "Huang 2013 spontaneous-firing and maximum current-evoked firing summary rows",
@@ -30,6 +31,7 @@ suitable_now = [
 ]
 caveats = [
   "Burton 2024 S8 rows are tagged sample_scope = example_cell; they are not population-average firing-rate curves.",
+  "For selected Burton 2024 S15-derived intrinsic metrics, the extracted rows now carry empirical 5th and 95th percentile fields in addition to mean and standard deviation so validation can use quantile-based intervals when that is more defensible than symmetric dispersion bands.",
   "Burton 2014 MC/TC and Burton/Malyshko/Urban 2024 EPL-FSI firing-rate validation remain protocol-non-equivalent. N_FI_PROTOCOL_DIFFERENCE must remain visible in combined outputs.",
   "The pipeline does not perform built-in figure digitization. Figure-only gaps stay in needs_manual_extraction.csv."
 ]
@@ -329,6 +331,10 @@ column = "input resistance (MΩ)"
 property_name = "Input Resistance"
 reported_definition = "input resistance"
 unit = "MOhm"
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "intrinsic_property"
 notes = "Computed directly from FSI rows in S15 Data."
 cell_type = "EPL-FSI"
@@ -344,6 +350,10 @@ column = "membrane time constant (ms)"
 property_name = "Membrane Time Constant"
 reported_definition = "membrane time constant"
 unit = "ms"
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "intrinsic_property"
 notes = "Computed directly from FSI rows in S15 Data."
 cell_type = "EPL-FSI"
@@ -374,6 +384,10 @@ column = "spontaneous firing rate (Hz)"
 property_name = "Spontaneous Firing Rate"
 reported_definition = "spontaneous firing rate"
 unit = "Hz"
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "intrinsic_property"
 notes = "Computed directly from FSI rows in S15 Data."
 cell_type = "EPL-FSI"
@@ -464,6 +478,10 @@ column = "rheobase (pA)"
 property_name = "Rheobase Current"
 reported_definition = "rheobase"
 unit = "pA"
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "fI_summary_metric"
 notes = "Computed directly from FSI rows in S15 Data under the Burton, Malyshko & Urban 2024 EPL-FSI current-clamp protocol. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
 cell_type = "EPL-FSI"
@@ -483,6 +501,10 @@ property_name = "FI Curve Slope"
 reported_definition = "maximum gain"
 unit = "Hz/nA"
 transform_scale = 1000.0
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "fI_summary_metric"
 notes = "The source defines this as maximum gain in hertz per picoampere. It is converted here to hertz per nanoampere by multiplying by one thousand. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
 cell_type = "EPL-FSI"
@@ -501,6 +523,10 @@ column = "max. instantaneous rate (Hz)"
 property_name = "Max FI Rate"
 reported_definition = "maximum instantaneous rate"
 unit = "Hz"
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "fI_summary_metric"
 notes = "The source defines this as maximum instantaneous rate rather than a full current-rate point set. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
 cell_type = "EPL-FSI"
@@ -519,6 +545,10 @@ column = "max. interspike interval (ISI) C.V."
 property_name = "ISI Coefficient of Variation"
 reported_definition = "maximum interspike interval coefficient of variation"
 unit = ""
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "fI_summary_metric"
 notes = "The source defines this as the maximum interspike-interval coefficient of variation across the protocol, not as a baseline irregularity measure. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
 cell_type = "EPL-FSI"
@@ -537,6 +567,10 @@ column = "relative adaptation (ISIfirst/ISIlast; %)"
 property_name = "Spiking Rate Accommodation"
 reported_definition = "relative adaptation (ISI first / ISI last; percent)"
 unit = "%"
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
 data_kind = "fI_summary_metric"
 notes = "The source defines this row as relative adaptation using first-interval over last-interval ratio in percent. The companion absolute-adaptation column remains available in the raw S15 workbook but is not emitted as a separate canonical row here. Step duration 500 ms, current range 50 to 600 pA in 50 pA increments, firing rate defined as median inverse interspike interval, spike detection rule = voltage derivative threshold 15 mV/ms."
 cell_type = "EPL-FSI"

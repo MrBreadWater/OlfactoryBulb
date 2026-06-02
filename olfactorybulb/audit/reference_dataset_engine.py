@@ -77,6 +77,34 @@ def _stats(values: list[float]) -> tuple[float, float, float, int]:
     return mean_value, sd_value, sem_value, len(values)
 
 
+def _quantile(values: list[float], quantile: float) -> float:
+    if not values:
+        raise ValueError("Cannot compute a quantile for an empty value list")
+    if quantile < 0.0 or quantile > 1.0:
+        raise ValueError(f"Quantile must be between 0 and 1 inclusive, got {quantile}")
+    ordered = sorted(float(value) for value in values)
+    if len(ordered) == 1:
+        return ordered[0]
+    position = (len(ordered) - 1) * float(quantile)
+    lower_index = int(math.floor(position))
+    upper_index = int(math.ceil(position))
+    if lower_index == upper_index:
+        return ordered[lower_index]
+    lower_value = ordered[lower_index]
+    upper_value = ordered[upper_index]
+    fraction = position - lower_index
+    return lower_value + (upper_value - lower_value) * fraction
+
+
+def _quantile_label(quantile: float) -> str:
+    percent = float(quantile) * 100.0
+    if percent.is_integer():
+        percent_text = str(int(percent))
+    else:
+        percent_text = f"{percent:g}"
+    return f"{percent_text}th percentile"
+
+
 def _parse_summary_stat_cell(text: object) -> tuple[float | None, float | None, float | None, int | None]:
     raw = " ".join(str(text or "").replace("−", "-").replace("±", "+/-").split())
     if not raw:
@@ -243,6 +271,17 @@ def _summary_rule_rows(
         if value is not None
     ]
     mean_value, sd_value, sem_value, count = _stats(values)
+    quantile_low = _float_or_none(rule.get("quantile_low"))
+    quantile_high = _float_or_none(rule.get("quantile_high"))
+    q_low_value: float | str = ""
+    q_high_value: float | str = ""
+    q_low_label = ""
+    q_high_label = ""
+    if quantile_low is not None and quantile_high is not None:
+        q_low_value = _quantile(values, quantile_low)
+        q_high_value = _quantile(values, quantile_high)
+        q_low_label = str(rule.get("quantile_low_label") or _quantile_label(quantile_low))
+        q_high_label = str(rule.get("quantile_high_label") or _quantile_label(quantile_high))
     source_id = str(rule["source_id"])
     source_meta = source_entry(source_id, config=config)
     base_row = {
@@ -261,6 +300,10 @@ def _summary_rule_rows(
         "mean": mean_value,
         "sd": sd_value,
         "sem": sem_value,
+        "q_low": q_low_value,
+        "q_high": q_high_value,
+        "q_low_label": q_low_label,
+        "q_high_label": q_high_label,
         "n": count,
         "stat_type": rule.get("stat_type", "mean_sd"),
         "unit": rule.get("unit") or PROPERTY_UNITS.get(str(rule.get("property_name", "")), ""),

@@ -354,6 +354,7 @@ The engine will:
 - optionally filter rows
 - pull the requested numeric column
 - compute `mean`, `sd`, `sem`, and `n`
+- optionally compute empirical quantile fields such as `q_low` and `q_high`
 - emit a normalized row into either `ephys` or `identity`
 
 Required fields for a typical rule:
@@ -389,6 +390,20 @@ Optional numeric transform:
 ```toml
 transform_scale = 1000.0
 ```
+
+Optional empirical interval fields for skewed row-level data:
+
+```toml
+quantile_low = 0.05
+quantile_high = 0.95
+quantile_low_label = "5th percentile"
+quantile_high_label = "95th percentile"
+```
+
+Use these when the source table contains individual cell rows and you want the
+normalized reference output to carry empirical interval metadata directly. This
+is useful when the validation layer should prefer a quantile interval over a
+reconstructed mean/standard-deviation band.
 
 This is useful for unit conversions such as:
 

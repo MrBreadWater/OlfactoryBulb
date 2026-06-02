@@ -93,6 +93,13 @@ for df in (ephys_df, identity_df):
             converted = pd.to_numeric(populated, errors="coerce")
             assert converted.notna().all(), (column, populated.tolist())
 
+for column in ("q_low", "q_high"):
+    populated = ephys_df[column].dropna()
+    if len(populated):
+        converted = pd.to_numeric(populated, errors="coerce")
+        converted = converted[populated.astype(str).str.strip().ne("")]
+        assert converted.notna().all(), (column, populated.tolist())
+
 digitized_rows = pd.concat(
     [
         ephys_df[ephys_df["extraction_method"] == "figure_digitized"],
@@ -127,6 +134,23 @@ s15_rows = ephys_df[ephys_df["source_file"] == s15_path.name]
 assert not s15_rows.empty
 assert (s15_rows["Source"] == "Burton, Malyshko & Urban (2024)").all()
 assert (s15_rows["source_url"] == stable_source_url(BURTON2024_S15_DATA_SOURCE_ID)).all()
+
+quantile_properties = {
+    "Input Resistance",
+    "Membrane Time Constant",
+    "Spontaneous Firing Rate",
+    "Rheobase Current",
+    "FI Curve Slope",
+    "Max FI Rate",
+    "ISI Coefficient of Variation",
+    "Spiking Rate Accommodation",
+}
+quantile_rows = s15_rows[s15_rows["Property"].isin(quantile_properties)]
+assert not quantile_rows.empty
+assert quantile_rows["q_low"].fillna("").astype(str).str.strip().ne("").all()
+assert quantile_rows["q_high"].fillna("").astype(str).str.strip().ne("").all()
+assert (quantile_rows["q_low_label"] == "5th percentile").all()
+assert (quantile_rows["q_high_label"] == "95th percentile").all()
 
 normalized_legacy_rows = [
     row for row in load_normalized_legacy_mc_tc_rows() if row["protocol_id"] == BU2014_MC_TC_PROTOCOL_ID
