@@ -139,6 +139,7 @@ What is already generic:
 - stable ordered-name helpers with preferred ordering and unknown-last handling
 - fair round-robin subgroup truncation for merged display buckets
 - result-overview context and summary builders
+- stacked labeled trace plotting with configurable offsets and styling
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
 - uniform-trace interpolation and time-modulus folding
 - spectrogram, wavelet, and band-power analysis on plain time/value arrays

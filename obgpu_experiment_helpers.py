@@ -296,6 +296,9 @@ from neuroinfra.analysis.signal_views import (
 from neuroinfra.analysis.phase_locking import (
     compute_phase_locking_from_spike_rows as _neuroinfra_compute_phase_locking_from_spike_rows,
 )
+from neuroinfra.analysis.plotting import (
+    plot_stacked_labeled_traces as _neuroinfra_plot_stacked_labeled_traces,
+)
 from neuroinfra.analysis.frequency_plots import (
     FrequencyPlotConfig,
     coerce_frequency_plot_config as _neuroinfra_coerce_frequency_plot_config,
@@ -7159,7 +7162,6 @@ def plot_voltage_traces(
     combine_mt: bool = True,
 ) -> Any:
     """Plot a small representative subset of saved soma voltages."""
-    ax = ax or plt.subplots(figsize=(14, 8))[1]
     grouped = split_traces_by_type(result)
     ordered_cell_types = _ordered_display_groups(
         [
@@ -7176,7 +7178,7 @@ def plot_voltage_traces(
             group = "other"
         if group in buckets:
             buckets[group].append((label, t, v))
-    offset = 0.0
+    rows: list[tuple[str, Any, Any]] = []
     for display_group in ordered_cell_types:
         traces = _truncate_display_rows_for_group(
             buckets.get(display_group, []),
@@ -7184,27 +7186,35 @@ def plot_voltage_traces(
             combine_mt=combine_mt,
             display_group=display_group,
         )
-        if display_group == "MT":
-            # Keep MC/TC color/identity while grouping them with the same banner.
-            for label, t, v in traces:
-                original_type = cell_type_of(label)
-                ax.plot(t, v + offset, color=_cell_color(original_type), linewidth=1.0, label=label)
-                offset += 120.0
-            continue
+        rows.extend(traces)
 
-        for label, t, v in traces:
-            try:
-                color_key = cell_type_of(label)
-            except ValueError:
-                color_key = "other"
-            ax.plot(t, v + offset, color=_cell_color(color_key), linewidth=1.0, label=label)
-            offset += 40.0 if display_group == "GC" else 120.0
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel("Offset Voltage")
-    ax.set_title("Sample Soma Voltages" + (" (MT grouped)" if combine_mt else ""))
-    if ax.lines:
-        ax.legend(loc="upper right", fontsize=8, ncol=2)
-    return ax
+    def _line_kwargs(row: tuple[str, Any, Any]) -> dict[str, Any]:
+        label = row[0]
+        try:
+            color_key = cell_type_of(label)
+        except ValueError:
+            color_key = "other"
+        return {"color": _cell_color(color_key)}
+
+    def _offset_step(row: tuple[str, Any, Any]) -> float:
+        label = row[0]
+        try:
+            display_group = _display_group_for_cell_type(cell_type_of(label), combine_mt=combine_mt)
+        except ValueError:
+            display_group = "other"
+        return 40.0 if display_group == "GC" else 120.0
+
+    return _neuroinfra_plot_stacked_labeled_traces(
+        rows,
+        ax=ax,
+        title="Sample Soma Voltages" + (" (MT grouped)" if combine_mt else ""),
+        ylabel="Offset Voltage",
+        line_kwargs_fn=_line_kwargs,
+        offset_step_fn=_offset_step,
+        legend_loc="upper right",
+        legend_fontsize=8.0,
+        legend_ncol=2,
+    )
 
 
 def plot_spike_raster(

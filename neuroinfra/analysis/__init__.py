@@ -27,6 +27,7 @@ from .spectral import (
 from .plotting import (
     plot_band_power_summary,
     plot_named_time_series,
+    plot_stacked_labeled_traces,
     plot_time_frequency_map,
     plot_time_series,
     time_axis_label,
@@ -175,6 +176,7 @@ __all__ = [
     "plot_resolved_spectrogram",
     "plot_resolved_wavelet",
     "plot_resolved_wavelet_band_power",
+    "plot_stacked_labeled_traces",
     "plot_time_frequency_map",
     "plot_time_series",
     "rate_series_label",

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -127,3 +127,44 @@ def plot_band_power_summary(
     axes[1].tick_params(axis="x", rotation=30)
     fig.tight_layout()
     return fig, axes
+
+
+def plot_stacked_labeled_traces(
+    rows: Sequence[tuple[str, Any, Any]],
+    *,
+    ax: Any = None,
+    title: str = "Stacked Traces",
+    xlabel: str = "Time (ms)",
+    ylabel: str = "Offset Value",
+    linewidth: float = 1.0,
+    line_kwargs_fn: Callable[[tuple[str, Any, Any]], dict[str, Any]] | None = None,
+    offset_step_fn: Callable[[tuple[str, Any, Any]], float] | None = None,
+    legend_loc: str = "upper right",
+    legend_fontsize: float = 8.0,
+    legend_ncol: int = 2,
+) -> Any:
+    """Plot labeled traces stacked vertically with configurable offsets."""
+    ax = ax or plt.subplots(figsize=(14, 8))[1]
+    line_kwargs_fn = line_kwargs_fn or (lambda _row: {})
+    offset_step_fn = offset_step_fn or (lambda _row: 1.0)
+
+    offset = 0.0
+    for row in rows:
+        label, t, values = row
+        plot_t = np.asarray(t, dtype=float)
+        plot_values = np.asarray(values, dtype=float) + float(offset)
+        ax.plot(
+            plot_t,
+            plot_values,
+            linewidth=linewidth,
+            label=str(label),
+            **dict(line_kwargs_fn(row)),
+        )
+        offset += float(offset_step_fn(row))
+
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+    if ax.lines:
+        ax.legend(loc=legend_loc, fontsize=legend_fontsize, ncol=legend_ncol)
+    return ax

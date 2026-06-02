@@ -12,6 +12,7 @@ import numpy as np
 from neuroinfra.analysis.plotting import (
     plot_band_power_summary,
     plot_named_time_series,
+    plot_stacked_labeled_traces,
     plot_time_frequency_map,
     plot_time_series,
     time_axis_label,
@@ -57,6 +58,29 @@ def main() -> None:
         legend = ax.get_legend()
         assert legend is not None
         assert {text.get_text() for text in legend.texts} == {"alpha", "beta"}
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots()
+    try:
+        plot_stacked_labeled_traces(
+            [
+                ("MC0", np.array([0.0, 1.0]), np.array([1.0, 2.0])),
+                ("GC0", np.array([0.0, 1.0]), np.array([0.5, 0.75])),
+            ],
+            ax=ax,
+            title="Stacked",
+            ylabel="offset voltage",
+            line_kwargs_fn=lambda row: {"color": "tab:blue" if row[0].startswith("MC") else "tab:green"},
+            offset_step_fn=lambda row: 40.0 if row[0].startswith("GC") else 120.0,
+        )
+        assert ax.get_title() == "Stacked"
+        assert ax.get_ylabel() == "offset voltage"
+        assert len(ax.lines) == 2
+        legend = ax.get_legend()
+        assert legend is not None
+        assert [text.get_text() for text in legend.texts] == ["MC0", "GC0"]
+        np.testing.assert_allclose(ax.lines[1].get_ydata(), [120.5, 120.75])
     finally:
         plt.close(fig)
 
