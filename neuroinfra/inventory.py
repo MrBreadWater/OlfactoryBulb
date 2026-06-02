@@ -204,6 +204,29 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic parameter-space and visual-contract helpers now live under neuroinfra.contracts; next reduce the remaining HFO-specific coupling by separating concrete plot families from the shared manifest schema.",
     ),
     ExtractionCandidate(
+        key="analysis_signal_registry",
+        title="Named result-signal registry",
+        target_module="neuroinfra.analysis",
+        source_paths=(
+            "neuroinfra/analysis/signals.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "ordered named-signal providers",
+            "dynamic signal enumeration",
+            "provider-based signal resolution",
+            "decoupled analysis-signal catalogs from notebook facades",
+        ),
+        repo_specific_couplings=(
+            "concrete OBGPU signal families like lfp and gc_output_rate still live in obgpu_experiment_helpers.py",
+            "signal semantics still assume this repository's saved result structure",
+        ),
+        extraction_confidence="medium",
+        proposed_phase=3,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic named-signal provider registry now lives under neuroinfra.analysis; next move more concrete signal families and result-overview presentation rules out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+    ),
+    ExtractionCandidate(
         key="dashboard_and_packets",
         title="Dashboard and packet runtime",
         target_module="neuroinfra.dashboard",

@@ -1970,6 +1970,9 @@ with tempfile.TemporaryDirectory() as tmp:
     assert len(npz_loaded["soma_vs"]) == 2
     assert npz_loaded["soma_vs"][0][1].dtype == np.float32
     assert npz_loaded["soma_vs"][0][2].dtype == np.float32
+    assert "MC0" in hlp.list_available_named_signals(npz_loaded, include_soma_labels=True)
+    signal_t, signal_v = hlp.get_named_signal(npz_loaded, signal="MC0")
+    assert len(signal_t) == len(signal_v) == 2
     print("load_result NPZ soma trace path: OK")
 
     # --- Recovered local runs may have no remote dict in run_info ---

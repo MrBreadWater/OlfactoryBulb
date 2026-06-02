@@ -248,6 +248,11 @@ from neuroinfra.artifacts.result_view import (
     attach_lazy_artifact_loaders as _neuroinfra_attach_lazy_artifact_loaders,
     plan_result_view as _neuroinfra_plan_result_view,
 )
+from neuroinfra.analysis.signals import (
+    ResultSignalProvider as _NeuroinfraResultSignalProvider,
+    list_available_result_signals as _neuroinfra_list_available_result_signals,
+    resolve_result_signal as _neuroinfra_resolve_result_signal,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -7059,38 +7064,179 @@ def list_available_soma_labels(result: dict[str, Any]) -> list[str]:
     return labels
 
 
+def _lfp_signal_provider() -> _NeuroinfraResultSignalProvider:
+    """Provide the standard LFP named signal when it is present."""
+
+    def _list_names(result: dict[str, Any], _context: dict[str, Any]) -> list[str]:
+        lfp_t = result.get("lfp_t")
+        lfp = result.get("lfp")
+        if lfp_t is None or lfp is None:
+            return []
+        try:
+            if len(lfp_t) > 0 and len(lfp) > 0:
+                return ["lfp"]
+        except TypeError:
+            return []
+        return []
+
+    def _resolve(result: dict[str, Any], signal: str, context: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+        if signal != "lfp":
+            raise KeyError(signal)
+        return uniform_trace(result["lfp_t"], result["lfp"], dt_ms=context.get("dt_ms"))
+
+    return _NeuroinfraResultSignalProvider(
+        list_names_fn=_list_names,
+        matches_fn=lambda signal: signal == "lfp",
+        resolve_fn=_resolve,
+    )
+
+
+def _gc_output_rate_signal_provider() -> _NeuroinfraResultSignalProvider:
+    """Provide named GC inhibitory-output rate signals."""
+
+    def _list_names(result: dict[str, Any], _context: dict[str, Any]) -> list[str]:
+        events = result.get("gc_output_events") or []
+        return ["gc_output_rate", "gc_output_rate_MC", "gc_output_rate_TC"] if len(events) > 0 else []
+
+    def _resolve(result: dict[str, Any], signal: str, context: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+        if signal not in {"gc_output_rate", "gc_output_rate_MC", "gc_output_rate_TC"}:
+            raise KeyError(signal)
+        target_types = None
+        if signal.endswith("_MC"):
+            target_types = ["MC"]
+        elif signal.endswith("_TC"):
+            target_types = ["TC"]
+        bin_ms = 5.0 if context.get("dt_ms") is None else float(context["dt_ms"])
+        return compute_gc_output_rate(
+            result,
+            bin_ms=bin_ms,
+            smooth_sigma_ms=max(2.0 * bin_ms, 5.0),
+            target_types=target_types,
+            normalization="per_target_cell",
+        )
+
+    return _NeuroinfraResultSignalProvider(
+        list_names_fn=_list_names,
+        matches_fn=lambda signal: signal in {"gc_output_rate", "gc_output_rate_MC", "gc_output_rate_TC"},
+        resolve_fn=_resolve,
+    )
+
+
+def _input_rate_signal_provider() -> _NeuroinfraResultSignalProvider:
+    """Provide named odor-input rate signals."""
+
+    def _list_names(result: dict[str, Any], _context: dict[str, Any]) -> list[str]:
+        input_times = result.get("input_times") or []
+        return ["input_rate", "input_rate_MC", "input_rate_TC"] if len(input_times) > 0 else []
+
+    def _resolve(result: dict[str, Any], signal: str, context: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+        if signal not in {"input_rate", "input_rate_MC", "input_rate_TC"}:
+            raise KeyError(signal)
+        target_types = None
+        if signal.endswith("_MC"):
+            target_types = ["MC"]
+        elif signal.endswith("_TC"):
+            target_types = ["TC"]
+        bin_ms = 5.0 if context.get("dt_ms") is None else float(context["dt_ms"])
+        return compute_input_rate(
+            result,
+            bin_ms=bin_ms,
+            smooth_sigma_ms=max(2.0 * bin_ms, 5.0),
+            target_types=target_types,
+            normalization="per_target_cell",
+        )
+
+    return _NeuroinfraResultSignalProvider(
+        list_names_fn=_list_names,
+        matches_fn=lambda signal: signal in {"input_rate", "input_rate_MC", "input_rate_TC"},
+        resolve_fn=_resolve,
+    )
+
+
+def _mean_voltage_signal_provider() -> _NeuroinfraResultSignalProvider:
+    """Provide dynamic per-cell-type mean-voltage signals."""
+
+    def _list_names(result: dict[str, Any], _context: dict[str, Any]) -> list[str]:
+        return [f"mean_{cell_type}_voltage" for cell_type in list_available_cell_types(result)]
+
+    def _resolve(result: dict[str, Any], signal: str, context: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+        mean_voltage_match = re.fullmatch(r"mean_([A-Z]+)_voltage", signal)
+        if mean_voltage_match is None:
+            raise KeyError(signal)
+        cell_type = mean_voltage_match.group(1)
+        saved_signal = _saved_voltage_summary_signal(
+            result,
+            cell_type=cell_type,
+            moment="mean",
+            dt_ms=context.get("dt_ms"),
+        )
+        if saved_signal is not None:
+            return saved_signal
+        grouped = split_traces_by_type(result)
+        traces = grouped.get(cell_type, [])
+        if not traces:
+            raise KeyError(f"No soma traces found for {cell_type}")
+        first_t, _first_v = uniform_trace(traces[0][1], traces[0][2], dt_ms=context.get("dt_ms"))
+        aligned = []
+        for _label, t, v in traces:
+            interp_t, interp_v = uniform_trace(
+                t,
+                v,
+                dt_ms=float(np.median(np.diff(first_t))) if len(first_t) > 1 else context.get("dt_ms"),
+            )
+            n = min(len(first_t), len(interp_t))
+            aligned.append(interp_v[:n])
+        n = min(len(values) for values in aligned)
+        return first_t[:n], np.mean(np.vstack([values[:n] for values in aligned]), axis=0)
+
+    return _NeuroinfraResultSignalProvider(
+        list_names_fn=_list_names,
+        matches_fn=lambda signal: re.fullmatch(r"mean_([A-Z]+)_voltage", signal) is not None,
+        resolve_fn=_resolve,
+    )
+
+
+def _soma_label_signal_provider() -> _NeuroinfraResultSignalProvider:
+    """Provide direct per-soma trace signals by saved label."""
+
+    def _list_names(result: dict[str, Any], context: dict[str, Any]) -> list[str]:
+        if not bool(context.get("include_soma_labels", False)):
+            return []
+        return list_available_soma_labels(result)
+
+    def _resolve(result: dict[str, Any], signal: str, context: dict[str, Any]) -> tuple[np.ndarray, np.ndarray]:
+        for label, t, v in result["soma_vs"]:
+            if label == signal:
+                return uniform_trace(t, v, dt_ms=context.get("dt_ms"))
+        raise KeyError(signal)
+
+    return _NeuroinfraResultSignalProvider(
+        list_names_fn=_list_names,
+        matches_fn=lambda _signal: True,
+        resolve_fn=_resolve,
+    )
+
+
+_OBGPU_RESULT_SIGNAL_PROVIDERS: tuple[_NeuroinfraResultSignalProvider, ...] = (
+    _lfp_signal_provider(),
+    _gc_output_rate_signal_provider(),
+    _input_rate_signal_provider(),
+    _mean_voltage_signal_provider(),
+    _soma_label_signal_provider(),
+)
+
+
 def list_available_named_signals(
     result: dict[str, Any],
     *,
     include_soma_labels: bool = False,
 ) -> list[str]:
     """List named analysis signals currently resolvable for one loaded result."""
-    signals: list[str] = []
-
-    lfp_t = result.get("lfp_t")
-    lfp = result.get("lfp")
-    if lfp_t is not None and lfp is not None:
-        try:
-            if len(lfp_t) > 0 and len(lfp) > 0:
-                signals.append("lfp")
-        except TypeError:
-            pass
-
-    input_times = result.get("input_times") or []
-    if len(input_times) > 0:
-        signals.extend(["input_rate", "input_rate_MC", "input_rate_TC"])
-
-    gc_output_events = result.get("gc_output_events") or []
-    if len(gc_output_events) > 0:
-        signals.extend(["gc_output_rate", "gc_output_rate_MC", "gc_output_rate_TC"])
-
-    for cell_type in list_available_cell_types(result):
-        signals.append(f"mean_{cell_type}_voltage")
-
-    if include_soma_labels:
-        signals.extend(list_available_soma_labels(result))
-
-    return signals
+    return _neuroinfra_list_available_result_signals(
+        result,
+        _OBGPU_RESULT_SIGNAL_PROVIDERS,
+        include_soma_labels=include_soma_labels,
+    )
 
 
 def filter_gc_output_events(
@@ -7522,68 +7668,12 @@ def get_named_signal(
     dt_ms: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Resolve one named analysis signal into a uniform time/value trace."""
-    if signal == "lfp":
-        return uniform_trace(result["lfp_t"], result["lfp"], dt_ms=dt_ms)
-
-    if signal in {"gc_output_rate", "gc_output_rate_MC", "gc_output_rate_TC"}:
-        target_types = None
-        if signal.endswith("_MC"):
-            target_types = ["MC"]
-        elif signal.endswith("_TC"):
-            target_types = ["TC"]
-        bin_ms = 5.0 if dt_ms is None else float(dt_ms)
-        return compute_gc_output_rate(
-            result,
-            bin_ms=bin_ms,
-            smooth_sigma_ms=max(2.0 * bin_ms, 5.0),
-            target_types=target_types,
-            normalization="per_target_cell",
-        )
-
-    if signal in {"input_rate", "input_rate_MC", "input_rate_TC"}:
-        target_types = None
-        if signal.endswith("_MC"):
-            target_types = ["MC"]
-        elif signal.endswith("_TC"):
-            target_types = ["TC"]
-        bin_ms = 5.0 if dt_ms is None else float(dt_ms)
-        return compute_input_rate(
-            result,
-            bin_ms=bin_ms,
-            smooth_sigma_ms=max(2.0 * bin_ms, 5.0),
-            target_types=target_types,
-            normalization="per_target_cell",
-        )
-
-    mean_voltage_match = re.fullmatch(r"mean_([A-Z]+)_voltage", signal)
-    if mean_voltage_match is not None:
-        cell_type = mean_voltage_match.group(1)
-        saved_signal = _saved_voltage_summary_signal(
-            result,
-            cell_type=cell_type,
-            moment="mean",
-            dt_ms=dt_ms,
-        )
-        if saved_signal is not None:
-            return saved_signal
-        grouped = split_traces_by_type(result)
-        traces = grouped.get(cell_type, [])
-        if not traces:
-            raise KeyError(f"No soma traces found for {cell_type}")
-        first_t, _first_v = uniform_trace(traces[0][1], traces[0][2], dt_ms=dt_ms)
-        aligned = []
-        for _label, t, v in traces:
-            interp_t, interp_v = uniform_trace(t, v, dt_ms=float(np.median(np.diff(first_t))) if len(first_t) > 1 else dt_ms)
-            n = min(len(first_t), len(interp_t))
-            aligned.append(interp_v[:n])
-        n = min(len(values) for values in aligned)
-        return first_t[:n], np.mean(np.vstack([values[:n] for values in aligned]), axis=0)
-
-    for label, t, v in result["soma_vs"]:
-        if label == signal:
-            return uniform_trace(t, v, dt_ms=dt_ms)
-
-    raise KeyError(f"Unsupported signal {signal!r}")
+    return _neuroinfra_resolve_result_signal(
+        result,
+        signal,
+        _OBGPU_RESULT_SIGNAL_PROVIDERS,
+        dt_ms=dt_ms,
+    )
 
 
 def _recommended_raster_fontsize(n_rows: int, *, default: float = 7.0) -> float:

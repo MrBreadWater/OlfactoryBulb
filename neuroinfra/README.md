@@ -24,6 +24,7 @@ The first live internal extraction is now also present:
 
 The next standardized seam is also in place:
 
+- `neuroinfra.analysis.signals`
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
 - `neuroinfra.remote.command_launch`
@@ -105,6 +106,11 @@ attaches lazy local/remote loaders now also lives under
 result-schema machinery for default fields, artifact application behavior, and
 lazy-path bookkeeping, while the concrete OBGPU signal names and higher-level
 presentation policy still remain in `obgpu_experiment_helpers.py`.
+
+The generic named-signal provider registry that lists and resolves analysis
+signals in a stable ordered way now also lives under `neuroinfra.analysis.signals`,
+while the concrete OBGPU signal families and overview/presentation rules still
+remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

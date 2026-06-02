@@ -21,6 +21,7 @@ The strongest extraction candidates are:
 3. remote Slurm execution helpers
 4. campaign/archive machinery for long-running batch optimization
 5. metadata registries and contract-driven rendering patterns
+6. named result-signal registry helpers
 
 The main things preventing clean extraction today are:
 
@@ -115,6 +116,30 @@ Current progress:
   default fields, artifact application behavior, and lazy-path bookkeeping
 - the remaining concrete OBGPU signal names and field mapping still live in
   `obgpu_experiment_helpers.py`
+
+### 2b. Named result-signal registry
+
+Current files:
+
+- `neuroinfra/analysis/signals.py`
+- `obgpu_experiment_helpers.py`
+
+What is already generic:
+
+- ordered named-signal providers
+- dynamic signal enumeration
+- provider-based signal resolution
+- separation between signal registry mechanics and concrete signal families
+
+What is domain-specific:
+
+- concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
+  `mean_MC_voltage`
+- result-overview and signal-presentation conventions
+
+Extraction confidence:
+
+- **Medium**
 
 ### 3. Remote Slurm execution layer
 
