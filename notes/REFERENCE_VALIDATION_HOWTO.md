@@ -1,5 +1,12 @@
 # Reference Validation How-To
 
+If you want the shortest explanation first, start with:
+[REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md](/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md)
+
+If you are trying to contribute missing literature values by hand rather than
+add new validation logic, use:
+[manual_reference_templates/README.md](/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md)
+
 This guide explains how to add a simulation-backed, literature-driven
 validation audit using the declarative validation layer.
 

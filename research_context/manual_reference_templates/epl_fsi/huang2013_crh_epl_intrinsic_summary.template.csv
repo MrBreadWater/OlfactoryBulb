@@ -1,0 +1,5 @@
+source,source_file,source_url,source_location,cell_type,marker_profile,metric,mean,spread,spread_type,n,unit,condition,temperature_C,notes,reported_text
+Huang et al. (2013),Huang EPLI.pdf,https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf,Figure 4A,CRH+ EPL-IN,"CRH+; PV_overlap_population",Input Resistance,,,,MOhm,,,,EXACT WORDING FROM PAPER
+Huang et al. (2013),Huang EPLI.pdf,https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf,Figure 4B,CRH+ EPL-IN,"CRH+; PV_overlap_population",Capacitance,,,,pF,,,,EXACT WORDING FROM PAPER
+Huang et al. (2013),Huang EPLI.pdf,https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf,Figure 4C,CRH+ EPL-IN,"CRH+; PV_overlap_population",Membrane Resting Voltage,,,,mV,,,,EXACT WORDING FROM PAPER
+Huang et al. (2013),Huang EPLI.pdf,https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2013.00032/pdf,Figure 4D,CRH+ EPL-IN,"CRH+; PV_overlap_population",AP Threshold,,,,mV,,,,EXACT WORDING FROM PAPER

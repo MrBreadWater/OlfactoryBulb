@@ -1,0 +1,2 @@
+source,source_file,source_url,source_location,cell_type,marker_profile,metric,mean,spread,spread_type,n,unit,condition,data_kind,notes,reported_text
+Liu et al. (2019),liu_et_al_2019_article.pdf,https://www.nature.com/articles/s41467-019-11354-y.pdf,EVIDENCE LOCATION,EPL interneuron,,,,,,,identity_or_network_constraint,,ONLY FILL IF A CLEAR NUMERIC CONSTRAINT EXISTS

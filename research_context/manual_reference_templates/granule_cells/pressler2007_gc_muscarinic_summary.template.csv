@@ -1,0 +1,3 @@
+source,source_file,source_url,source_location,cell_type,gc_subtype,metric,mean,spread,spread_type,n,unit,condition,comparison_group,temperature_C,notes,reported_text
+"Pressler, Inoue & Strowbridge (2007)",pressler_inoue_strowbridge_2007_article.html,https://pmc.ncbi.nlm.nih.gov/articles/PMC6672850/,FIGURE LOCATION,GC,generic_or_unspecified,Muscimic or Muscarinic Modulation Effect,,,,,,,,EXACT WORDING FROM PAPER
+"Pressler, Inoue & Strowbridge (2007)",pressler_inoue_strowbridge_2007_article.html,https://pmc.ncbi.nlm.nih.gov/articles/PMC6672850/,FIGURE LOCATION,GC,generic_or_unspecified,Control Baseline Metric,,,,,,,,EXACT WORDING FROM PAPER

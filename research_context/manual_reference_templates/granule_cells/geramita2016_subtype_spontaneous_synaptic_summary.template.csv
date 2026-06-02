@@ -1,0 +1,5 @@
+source,source_file,source_url,source_location,cell_type,gc_subtype,metric,mean,spread,spread_type,n,unit,condition,temperature_C,notes,reported_text
+Geramita, Burton & Urban (2016),elife-16039-fig4-data1-v2.docx,https://doi.org/10.7554/eLife.16039.012,Supplementary Table 5,sGC,Spontaneous EPSC Rate,,,,Hz,,,,EXACT WORDING FROM PAPER
+Geramita, Burton & Urban (2016),elife-16039-fig4-data1-v2.docx,https://doi.org/10.7554/eLife.16039.012,Supplementary Table 5,dGC,Spontaneous EPSC Rate,,,,Hz,,,,EXACT WORDING FROM PAPER
+Geramita, Burton & Urban (2016),elife-16039-fig4-data1-v2.docx,https://doi.org/10.7554/eLife.16039.012,Supplementary Table 5,sGC,Spontaneous IPSC Rate,,,,Hz,,,,EXACT WORDING FROM PAPER
+Geramita, Burton & Urban (2016),elife-16039-fig4-data1-v2.docx,https://doi.org/10.7554/eLife.16039.012,Supplementary Table 5,dGC,Spontaneous IPSC Rate,,,,Hz,,,,EXACT WORDING FROM PAPER

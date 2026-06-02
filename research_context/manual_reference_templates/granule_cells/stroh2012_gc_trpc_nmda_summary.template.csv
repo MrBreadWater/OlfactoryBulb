@@ -1,0 +1,3 @@
+source,source_file,source_url,source_location,cell_type,gc_subtype,metric,mean,spread,spread_type,n,unit,condition,comparison_group,temperature_C,notes,reported_text
+Stroh et al. (2012),stroh_et_al_2012_article.html,https://www.jneurosci.org/content/32/17/5737,SLOW DEPOLARIZATION FIGURE LOCATION,GC,generic_or_unspecified,Slow Depolarization Amplitude,,,,mV,,,,,EXACT WORDING FROM PAPER
+Stroh et al. (2012),stroh_et_al_2012_article.html,https://www.jneurosci.org/content/32/17/5737,PHARMACOLOGY FIGURE LOCATION,GC,generic_or_unspecified,TRPC/NMDA Pharmacology Effect Size,,,,,,,,EXACT WORDING FROM PAPER
