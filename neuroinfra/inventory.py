@@ -208,6 +208,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Result analysis and signal registry",
         target_module="neuroinfra.analysis",
         source_paths=(
+            "neuroinfra/analysis/events.py",
             "neuroinfra/analysis/catalog.py",
             "neuroinfra/analysis/overview.py",
             "neuroinfra/analysis/plotting.py",
@@ -222,6 +223,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "shared plotting primitives for traces, time-frequency maps, and band-power summaries",
             "uniform-trace interpolation and modulus folding",
             "shared spectrogram, wavelet, and band-power analysis",
+            "event-frequency conversion, binned event-rate analysis, and raster-plot primitives",
             "sweep plot specification and placeholder rendering",
             "sweep metadata persistence and reload",
             "streamed and in-memory GIF rendering for sweep frames",
@@ -237,7 +239,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, spectral analysis core, sweep plot protocol, sweep persistence and animation pipeline, and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+        recommended_action="The generic result-catalog helpers, result-overview builders, shared plotting primitives, event-rate and raster-analysis helpers, spectral analysis core, sweep plot protocol, sweep persistence and animation pipeline, and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and notebook presentation and domain-specific plot composition out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",

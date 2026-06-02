@@ -257,6 +257,18 @@ from neuroinfra.analysis.overview import (
     first_result_file_metadata as _neuroinfra_first_result_file_metadata,
     metadata_value_or_result_length as _neuroinfra_metadata_value_or_result_length,
 )
+from neuroinfra.analysis.events import (
+    binned_event_rate as _neuroinfra_binned_event_rate,
+    calculate_event_frequency as _neuroinfra_calculate_event_frequency,
+    ensure_raster_axis as _neuroinfra_ensure_raster_axis,
+    fit_raster_labels as _neuroinfra_fit_raster_labels,
+    plot_event_raster_rows as _neuroinfra_plot_event_raster_rows,
+    rate_series_label as _neuroinfra_rate_series_label,
+    recommended_raster_fontsize as _neuroinfra_recommended_raster_fontsize,
+    recommended_raster_height as _neuroinfra_recommended_raster_height,
+    smooth_rate_series as _neuroinfra_smooth_rate_series,
+    style_raster_axis as _neuroinfra_style_raster_axis,
+)
 from neuroinfra.analysis.plotting import (
     plot_band_power_summary as _neuroinfra_plot_band_power_summary,
     plot_named_time_series as _neuroinfra_plot_named_time_series,
@@ -6281,12 +6293,7 @@ def calculate_instantaneous_frequency(
 
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
     """Convert event times into midpoint/frequency samples."""
-    times = np.asarray(times, dtype=float)
-    if len(times) < 2:
-        return np.array([]), np.array([])
-    t_freq = (times[:-1] + times[1:]) / 2.0
-    event_hz = 1000.0 / np.diff(times)
-    return t_freq, event_hz
+    return _neuroinfra_calculate_event_frequency(times)
 
 
 def _saved_soma_spikes_match_threshold(result: dict[str, Any], threshold: float | None) -> bool:
@@ -7144,14 +7151,11 @@ def _resolve_event_tstop(result: dict[str, Any], event_series: list[np.ndarray])
 
 def _smooth_rate(rate_hz: np.ndarray, *, bin_ms: float, smooth_sigma_ms: float) -> np.ndarray:
     """Gaussian-smooth a binned rate trace."""
-    if smooth_sigma_ms and smooth_sigma_ms > 0:
-        sigma_bins = float(smooth_sigma_ms) / float(bin_ms)
-        radius = max(1, int(round(4.0 * sigma_bins)))
-        x = np.arange(-radius, radius + 1, dtype=float)
-        kernel = np.exp(-0.5 * (x / sigma_bins) ** 2)
-        kernel /= np.sum(kernel)
-        rate_hz = np.convolve(rate_hz, kernel, mode="same")
-    return rate_hz
+    return _neuroinfra_smooth_rate_series(
+        rate_hz,
+        bin_ms=bin_ms,
+        smooth_sigma_ms=smooth_sigma_ms,
+    )
 
 
 def _event_rate_from_series(
@@ -7163,30 +7167,13 @@ def _event_rate_from_series(
     denominator: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Bin one or more event series into a smoothed population-rate trace."""
-    if t_stop <= 0.0:
-        return np.array([]), np.array([])
-
-    edges = np.arange(0.0, t_stop + float(bin_ms), float(bin_ms))
-    if edges.size < 2:
-        edges = np.array([0.0, float(bin_ms)], dtype=float)
-
-    flat_times = []
-    for times in event_series:
-        times = np.asarray(times, dtype=float)
-        if times.size:
-            flat_times.append(times)
-
-    if flat_times:
-        counts, _edges = np.histogram(np.concatenate(flat_times), bins=edges)
-    else:
-        counts = np.zeros(len(edges) - 1, dtype=float)
-
-    rate_hz = counts.astype(float) / (float(bin_ms) / 1000.0)
-    denom = max(float(denominator), 1.0)
-    rate_hz /= denom
-    rate_hz = _smooth_rate(rate_hz, bin_ms=bin_ms, smooth_sigma_ms=smooth_sigma_ms)
-    centers = edges[:-1] + float(bin_ms) / 2.0
-    return centers, rate_hz
+    return _neuroinfra_binned_event_rate(
+        event_series,
+        t_stop=t_stop,
+        bin_ms=bin_ms,
+        smooth_sigma_ms=smooth_sigma_ms,
+        denominator=denominator,
+    )
 
 
 def _gc_rate_normalizer(events: list[dict[str, Any]], normalization: str) -> tuple[float, str]:
@@ -7301,18 +7288,7 @@ def compute_input_rate(
 
 def _rate_series_label(base_label: str, metadata: dict[str, Any]) -> str:
     """Append denominator information to a plotted rate-series label."""
-    normalization = str(metadata.get("normalization", ""))
-    if normalization == "per_target_cell":
-        return f"{base_label} (n={metadata.get('n_target_cells', 0)} cells)"
-    if normalization == "per_source_cell":
-        return f"{base_label} (n={metadata.get('n_source_cells', 0)} GCs)"
-    if normalization == "per_connection":
-        return f"{base_label} (n={metadata.get('n_connections', 0)} connections)"
-    if normalization == "per_cell":
-        return f"{base_label} (n={metadata.get('n_target_cells', 0)} cells)"
-    if normalization in {"per_segment", "per_input_segment"}:
-        return f"{base_label} (n={metadata.get('n_segments', 0)} segments)"
-    return base_label
+    return _neuroinfra_rate_series_label(base_label, metadata)
 
 
 def get_named_signal(
@@ -7331,18 +7307,12 @@ def get_named_signal(
 
 def _recommended_raster_fontsize(n_rows: int, *, default: float = 7.0) -> float:
     """Choose a compact but readable y-label font size for dense rasters."""
-    if n_rows >= 140:
-        return 5.0
-    if n_rows >= 80:
-        return 6.0
-    return float(default)
+    return _neuroinfra_recommended_raster_fontsize(n_rows, default=default)
 
 
 def _recommended_raster_height(n_rows: int, *, min_height: float = 4.0) -> float:
     """Estimate a reasonable figure height for a raster plot."""
-    if n_rows <= 0:
-        return float(min_height)
-    return max(float(min_height), 0.06 * float(n_rows) + 1.5)
+    return _neuroinfra_recommended_raster_height(n_rows, min_height=min_height)
 
 
 def _ensure_raster_axis(
@@ -7354,10 +7324,13 @@ def _ensure_raster_axis(
     per_row_height: float = 0.22,
 ) -> Any:
     """Create a raster axis sized to the current row count when needed."""
-    if ax is None:
-        height = max(min_height, per_row_height * max(int(n_rows), 1) + 1.0)
-        _fig, ax = plt.subplots(figsize=(width, height))
-    return ax
+    return _neuroinfra_ensure_raster_axis(
+        ax,
+        n_rows,
+        width=width,
+        min_height=min_height,
+        per_row_height=per_row_height,
+    )
 
 
 def _style_raster_axis(
@@ -7370,17 +7343,14 @@ def _style_raster_axis(
     line_spacing: float = 1.4,
 ) -> np.ndarray:
     """Apply shared styling and row offsets to a raster axis."""
-    n_rows = len(labels)
-    offsets = np.arange(n_rows, dtype=float) * float(line_spacing)
-    ax.set_yticks(offsets)
-    ax.set_yticklabels(labels, fontsize=fontsize)
-    if n_rows:
-        pad = max(0.7, line_spacing)
-        ax.set_ylim(offsets[0] - pad, offsets[-1] + pad)
-    ax.set_xlabel("Time (ms)")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-    return offsets
+    return _neuroinfra_style_raster_axis(
+        ax,
+        labels,
+        ylabel=ylabel,
+        title=title,
+        fontsize=fontsize,
+        line_spacing=line_spacing,
+    )
 
 
 def _fit_raster_labels(
@@ -7393,57 +7363,14 @@ def _fit_raster_labels(
     max_iter: int = 8,
 ) -> Any:
     """Shrink labels or grow the figure until label height fits the row spacing."""
-    if len(offsets) < 2:
-        return ax
-
-    fig = ax.figure
-    labels = [label for label in ax.get_yticklabels() if label.get_text()]
-    if not labels:
-        return ax
-
-    for _ in range(max_iter):
-        fig.canvas.draw()
-        labels = [label for label in ax.get_yticklabels() if label.get_text()]
-        if not labels:
-            return ax
-
-        renderer = fig.canvas.get_renderer()
-        max_label_height_px = max(label.get_window_extent(renderer=renderer).height for label in labels)
-        p0 = ax.transData.transform((0.0, float(offsets[0])))[1]
-        p1 = ax.transData.transform((0.0, float(offsets[1])))[1]
-        spacing_px = abs(float(p1 - p0))
-        if spacing_px <= 0:
-            return ax
-
-        ratio = max_label_height_px / spacing_px
-        if ratio > target_ratio:
-            current_font = labels[0].get_fontsize()
-            if current_font > min_fontsize + 0.05:
-                scale = max(target_ratio / ratio * 0.98, min_fontsize / current_font)
-                new_font = max(min_fontsize, current_font * scale)
-                for label in labels:
-                    label.set_fontsize(new_font)
-                continue
-
-            width, height = fig.get_size_inches()
-            new_height = max(float(min_height), height * (ratio / target_ratio) * 1.02)
-            if abs(new_height - height) < 0.05:
-                break
-            fig.set_size_inches(width, new_height, forward=True)
-            continue
-
-        if ratio < target_ratio * 0.65:
-            width, height = fig.get_size_inches()
-            shrink = max(ratio / target_ratio, 0.75)
-            new_height = max(float(min_height), height * shrink)
-            if abs(new_height - height) < 0.05:
-                break
-            fig.set_size_inches(width, new_height, forward=True)
-            continue
-
-        break
-
-    return ax
+    return _neuroinfra_fit_raster_labels(
+        ax,
+        offsets,
+        min_fontsize=min_fontsize,
+        target_ratio=target_ratio,
+        min_height=min_height,
+        max_iter=max_iter,
+    )
 
 
 def plot_input_raster(
@@ -7454,23 +7381,20 @@ def plot_input_raster(
 ) -> Any:
     """Plot the saved odor-input event raster."""
     rows = sorted(filter_input_events(result, target_types=target_types), key=lambda row: row[0])[:max_segments]
-    ax = _ensure_raster_axis(ax, len(rows), width=14.0, min_height=4.0, per_row_height=0.10)
-    if not rows:
-        ax.set_title("No input events saved")
-        return ax
-    times = [row[1] for row in rows]
-    labels = [row[0].replace("h.", "") for row in rows]
-    offsets = _style_raster_axis(
-        ax,
-        labels,
+    display_rows = [(row[0].replace("h.", ""), row[1]) for row in rows]
+    return _neuroinfra_plot_event_raster_rows(
+        display_rows,
+        ax=ax,
         ylabel="Input Segment",
         title="Odor Input Raster",
+        width=14.0,
+        min_height=4.0,
+        per_row_height=0.10,
         fontsize=_recommended_raster_fontsize(len(rows)),
         line_spacing=1.4,
+        colors="black",
+        no_data_message="No input events saved",
     )
-    ax.eventplot(times, colors="black", lineoffsets=offsets, linelengths=1.0)
-    _fit_raster_labels(ax, offsets, min_height=4.0)
-    return ax
 
 
 def plot_input_rate(
@@ -7611,33 +7535,24 @@ def plot_spike_raster(
         rows = [(label, detect_spikes(t, v, threshold=threshold)) for label, t, v in raw_rows]
     else:
         rows = saved_rows
-    ax = _ensure_raster_axis(ax, len(rows), width=14.0, min_height=4.5, per_row_height=0.10)
-    if not rows:
-        ax.set_title("No soma spikes saved")
-        return ax
-    modulus_value = _normalize_time_modulus(modulus)
-    spike_times = [
-        np.mod(spikes, modulus_value) if modulus_value is not None else spikes
-        for _label, spikes in rows
-    ]
     colors = [
         _cell_color(cell_type_of(label) if re.match(r"([A-Z]+)", normalize_cell_name(label)) else "other")
         for label, _spikes in rows
     ]
-    offsets = _style_raster_axis(
-        ax,
-        [label for label, _spikes in rows],
+    return _neuroinfra_plot_event_raster_rows(
+        rows,
+        ax=ax,
         ylabel="Cell",
         title="Detected Soma Spike Raster" + (" (MT grouped)" if combine_mt else ""),
+        width=14.0,
+        min_height=4.5,
+        per_row_height=0.10,
         fontsize=_recommended_raster_fontsize(len(rows)),
         line_spacing=1.3,
+        modulus=modulus,
+        colors=colors,
+        no_data_message="No soma spikes saved",
     )
-    ax.eventplot(spike_times, colors=colors, lineoffsets=offsets, linelengths=1.0)
-    if modulus_value is not None:
-        ax.set_xlim(0.0, modulus_value)
-        ax.set_xlabel(f"Time modulo {modulus_value:g} ms")
-    _fit_raster_labels(ax, offsets, min_height=4.5)
-    return ax
 
 
 def plot_gc_output_event_raster(
@@ -7652,36 +7567,28 @@ def plot_gc_output_event_raster(
 ) -> Any:
     """Plot the saved reciprocal GC inhibitory-output event raster."""
     rows = filter_gc_output_events(result, target_types=target_types)[:max_connections]
-    ax = _ensure_raster_axis(ax, len(rows), width=16.0, min_height=4.5, per_row_height=0.10)
-    if not rows:
-        ax.set_title("No GC inhibitory-output events saved")
-        return ax
-
-    modulus_value = _normalize_time_modulus(modulus)
-    times = [
-        np.mod(np.asarray(row.get("times", []), dtype=float), modulus_value)
-        if modulus_value is not None
-        else np.asarray(row.get("times", []), dtype=float)
-        for row in rows
-    ]
-    labels = [
+    display_rows = [
         f"{normalize_cell_name(row.get('source_section', 'GC'))}->{normalize_cell_name(row.get('dest_section', 'cell'))}"
         for row in rows
     ]
-    offsets = _style_raster_axis(
-        ax,
-        labels,
+    prepared_rows = [
+        (label, np.asarray(row.get("times", []), dtype=float))
+        for label, row in zip(display_rows, rows)
+    ]
+    return _neuroinfra_plot_event_raster_rows(
+        prepared_rows,
+        ax=ax,
         ylabel="Reciprocal GABA Connection",
         title="GC Inhibitory Output Events",
+        width=16.0,
+        min_height=4.5,
+        per_row_height=0.10,
         fontsize=min(float(fontsize), _recommended_raster_fontsize(len(rows), default=float(fontsize))),
         line_spacing=line_spacing,
+        modulus=modulus,
+        colors="black",
+        no_data_message="No GC inhibitory-output events saved",
     )
-    ax.eventplot(times, lineoffsets=offsets, linelengths=1.0, colors="black")
-    if modulus_value is not None:
-        ax.set_xlim(0.0, modulus_value)
-        ax.set_xlabel(f"Time modulo {modulus_value:g} ms")
-    _fit_raster_labels(ax, offsets, min_height=4.5)
-    return ax
 
 
 def plot_gc_output_rate(

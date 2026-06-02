@@ -136,6 +136,7 @@ What is already generic:
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
 - uniform-trace interpolation and time-modulus folding
 - spectrogram, wavelet, and band-power analysis on plain time/value arrays
+- event-frequency conversion, event-rate binning, and reusable raster-plot primitives
 - sweep plot specification, placeholder rendering, per-frame rendering, and GIF assembly
 - sweep metadata persistence, reload, and saved-sweep discovery
 - ordered named-signal providers
