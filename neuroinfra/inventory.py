@@ -693,6 +693,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.notebooks",
         source_paths=(
             "neuroinfra/notebooks/runs.py",
+            "olfactorybulb/notebook_adapter_hooks.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -709,7 +710,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="low",
         proposed_phase=2,
         current_status="blocked_by_refactor",
-        recommended_action="The generic notebook run catalog/metadata layer now lives under neuroinfra.notebooks.runs, but the rest of this helper still mixes config defaults, remote execution, result loading, and presentation; keep splitting it by responsibility because it remains the main architectural blocker.",
+        recommended_action="The generic notebook run catalog/metadata layer now lives under neuroinfra.notebooks.runs, and the concrete domain hook assembly now lives under olfactorybulb.notebook_adapter_hooks, but the rest of this helper still mixes config defaults, remote execution, result loading, and presentation; keep splitting it by responsibility because it remains the main architectural blocker.",
     ),
 )
 

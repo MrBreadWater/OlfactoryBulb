@@ -479,6 +479,9 @@ Current progress:
   `neuroinfra.notebooks.dispatch`
 - the concrete olfactory-bulb entrypoint adapters now also live under
   `olfactorybulb/notebook_dispatch.py`
+- the remaining concrete hook-object assembly that wires dispatch, result,
+  presentation, local-run, and remote run/sweep adapters together now lives
+  under `olfactorybulb/notebook_adapter_hooks.py`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
   `run_simulation`, and the parameter/grid sweep entrypoints through those
   domain adapters while still owning notebook-facing progress messages and a

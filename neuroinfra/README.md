@@ -230,6 +230,12 @@ hook assembly now lives under `olfactorybulb.notebook_workflows`. The notebook
 helper still owns notebook-facing progress messages and a narrower layer of
 presentation-oriented entrypoint glue.
 
+The remaining concrete hook-object assembly that binds dispatch, result,
+presentation, local-run, and remote-run/sweep adapters together now lives in
+`olfactorybulb.notebook_adapter_hooks`, which leaves
+`obgpu_experiment_helpers.py` closer to thin compatibility wrappers over the
+explicit domain modules.
+
 The generic notebook remote session lifecycle that publishes one git ref, runs
 preflight, warms helper cache state, prepares reusable allocations, and
 captures one JSON submit response now also lives under

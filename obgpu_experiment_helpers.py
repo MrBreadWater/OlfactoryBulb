@@ -114,6 +114,20 @@ from olfactorybulb.notebook_configs import (
     load_config as _ob_load_config,
     save_config as _ob_save_config,
 )
+from olfactorybulb.notebook_adapter_hooks import (
+    build_local_run_hook_builder_hooks as _ob_build_local_run_adapter_hook_builder_hooks,
+    build_local_run_payload_hooks as _ob_build_local_run_adapter_payload_hooks,
+    build_notebook_presentation_hooks as _ob_build_notebook_presentation_adapter_hooks,
+    build_notebook_result_hooks as _ob_build_notebook_result_adapter_hooks,
+    build_notebook_run_dispatch_hooks as _ob_build_notebook_run_dispatch_adapter_hooks,
+    build_notebook_sweep_dispatch_hooks as _ob_build_notebook_sweep_dispatch_adapter_hooks,
+    build_notebook_sweep_hooks as _ob_build_notebook_sweep_adapter_hooks,
+    build_notebook_workflow_adapter_hooks as _ob_build_notebook_workflow_adapter_hooks,
+    build_remote_run_payload_hooks as _ob_build_remote_run_adapter_payload_hooks,
+    build_remote_run_workflow_builder_hooks as _ob_build_remote_run_workflow_adapter_builder_hooks,
+    build_remote_sweep_payload_hooks as _ob_build_remote_sweep_adapter_payload_hooks,
+    build_remote_sweep_workflow_builder_hooks as _ob_build_remote_sweep_workflow_adapter_builder_hooks,
+)
 from olfactorybulb.notebook_local_runs import (
     NotebookLocalRunHookBuilderHooks as _OlfactoryBulbNotebookLocalRunHookBuilderHooks,
     LocalRunPayloadHooks as _OlfactoryBulbLocalRunPayloadHooks,
@@ -2302,7 +2316,7 @@ def _remote_job_submit_hooks(
 
 def _ob_remote_sweep_payload_hooks() -> _OlfactoryBulbRemoteSweepPayloadHooks:
     """Build the concrete olfactory-bulb hooks for remote sweep payload assembly."""
-    return _OlfactoryBulbRemoteSweepPayloadHooks(
+    return _ob_build_remote_sweep_adapter_payload_hooks(
         json_ready_fn=_json_ready,
         benchmark_param_overrides_payload_fn=_benchmark_param_overrides_payload,
         build_run_command_fn=build_run_command,
@@ -2314,7 +2328,7 @@ def _ob_remote_sweep_payload_hooks() -> _OlfactoryBulbRemoteSweepPayloadHooks:
 
 def _ob_remote_run_payload_hooks() -> _OlfactoryBulbRemoteRunPayloadHooks:
     """Build the concrete olfactory-bulb hooks for remote single-run payload assembly."""
-    return _OlfactoryBulbRemoteRunPayloadHooks(
+    return _ob_build_remote_run_adapter_payload_hooks(
         build_run_command_fn=build_run_command,
         build_remote_submit_command_fn=_build_remote_submit_command,
         require_remote_host_fn=_require_remote_host,
@@ -2324,7 +2338,7 @@ def _ob_remote_run_payload_hooks() -> _OlfactoryBulbRemoteRunPayloadHooks:
 
 def _ob_remote_run_workflow_builder_hooks() -> _OlfactoryBulbNotebookRemoteRunWorkflowBuilderHooks:
     """Build the concrete olfactory-bulb hooks for remote single-run notebook workflows."""
-    return _OlfactoryBulbNotebookRemoteRunWorkflowBuilderHooks(
+    return _ob_build_remote_run_workflow_adapter_builder_hooks(
         remote_job_session_hooks_fn=_remote_job_session_hooks,
         remote_job_submit_hooks_fn=_remote_job_submit_hooks,
         remote_run_monitor_hooks_fn=_remote_run_monitor_hooks,
@@ -2370,7 +2384,7 @@ def _ob_remote_run_workflow_builder_hooks() -> _OlfactoryBulbNotebookRemoteRunWo
 
 def _ob_remote_sweep_workflow_builder_hooks() -> _OlfactoryBulbNotebookRemoteSweepWorkflowBuilderHooks:
     """Build the concrete olfactory-bulb hooks for remote sweep notebook workflows."""
-    return _OlfactoryBulbNotebookRemoteSweepWorkflowBuilderHooks(
+    return _ob_build_remote_sweep_workflow_adapter_builder_hooks(
         remote_job_session_hooks_fn=_remote_job_session_hooks,
         remote_job_submit_hooks_fn=_remote_job_submit_hooks,
         remote_sweep_monitor_hooks_fn=_remote_sweep_monitor_hooks,
@@ -2402,7 +2416,7 @@ def _ob_remote_sweep_workflow_builder_hooks() -> _OlfactoryBulbNotebookRemoteSwe
 
 def _ob_local_run_payload_hooks() -> _OlfactoryBulbLocalRunPayloadHooks:
     """Build the concrete olfactory-bulb hooks for local run payload assembly."""
-    return _OlfactoryBulbLocalRunPayloadHooks(
+    return _ob_build_local_run_adapter_payload_hooks(
         benchmark_param_overrides_payload_fn=_benchmark_param_overrides_payload,
         write_benchmark_overrides_file_fn=_write_benchmark_overrides_file,
         build_run_command_fn=build_run_command,
@@ -2411,7 +2425,7 @@ def _ob_local_run_payload_hooks() -> _OlfactoryBulbLocalRunPayloadHooks:
 
 def _ob_local_run_hook_builder_hooks() -> _OlfactoryBulbNotebookLocalRunHookBuilderHooks:
     """Build the concrete olfactory-bulb hooks for local notebook run execution."""
-    return _OlfactoryBulbNotebookLocalRunHookBuilderHooks(
+    return _ob_build_local_run_adapter_hook_builder_hooks(
         read_summary_fn=lambda path: json.loads(Path(path).read_text()),
         write_run_info_fn=_write_notebook_run_info,
         build_param_overrides_fn=build_param_overrides,
@@ -2421,7 +2435,7 @@ def _ob_local_run_hook_builder_hooks() -> _OlfactoryBulbNotebookLocalRunHookBuil
 
 def _ob_notebook_workflow_adapter_hooks() -> _OlfactoryBulbNotebookWorkflowAdapterHooks:
     """Build the concrete olfactory-bulb hooks for generic notebook workflows."""
-    return _OlfactoryBulbNotebookWorkflowAdapterHooks(
+    return _ob_build_notebook_workflow_adapter_hooks(
         load_run_record_fn=load_run_record,
         load_result_fn=load_result,
         run_simulation_fn=run_simulation,
@@ -2434,7 +2448,7 @@ def _ob_notebook_workflow_adapter_hooks() -> _OlfactoryBulbNotebookWorkflowAdapt
 
 def _ob_notebook_run_dispatch_hooks() -> _OlfactoryBulbNotebookRunDispatchAdapterHooks:
     """Build the concrete olfactory-bulb hooks for notebook run entrypoint dispatch."""
-    return _OlfactoryBulbNotebookRunDispatchAdapterHooks(
+    return _ob_build_notebook_run_dispatch_adapter_hooks(
         normalize_config_fn=lambda config: build_run_config(**(config or {})),
         make_timestamp_fn=make_timestamp,
         make_label_fn=lambda config, timestamp: make_label(config, timestamp=timestamp),
@@ -2450,7 +2464,7 @@ def _ob_notebook_run_dispatch_hooks() -> _OlfactoryBulbNotebookRunDispatchAdapte
 
 def _ob_notebook_sweep_dispatch_hooks() -> _OlfactoryBulbNotebookSweepDispatchAdapterHooks:
     """Build the concrete olfactory-bulb hooks for notebook sweep entrypoint dispatch."""
-    return _OlfactoryBulbNotebookSweepDispatchAdapterHooks(
+    return _ob_build_notebook_sweep_dispatch_adapter_hooks(
         prepare_sweep_plan_fn=_prepare_sweep_plan,
         uses_remote_batch_engine_fn=_sweep_uses_remote_batch_engine,
         build_local_sweep_hooks_fn=_ob_build_local_sweep_hooks,
@@ -2462,7 +2476,7 @@ def _ob_notebook_sweep_dispatch_hooks() -> _OlfactoryBulbNotebookSweepDispatchAd
 
 def _ob_notebook_result_hooks() -> _OlfactoryBulbNotebookResultHooks:
     """Build the concrete olfactory-bulb hooks for notebook result loading."""
-    return _OlfactoryBulbNotebookResultHooks(
+    return _ob_build_notebook_result_adapter_hooks(
         find_soma_trace_artifact_fn=find_soma_trace_artifact,
         preferred_soma_trace_artifact_name_fn=preferred_soma_trace_artifact_name,
         soma_trace_artifact_candidates_fn=soma_trace_artifact_candidates,
@@ -2473,7 +2487,7 @@ def _ob_notebook_result_hooks() -> _OlfactoryBulbNotebookResultHooks:
 
 def _ob_notebook_sweep_hooks() -> _OlfactoryBulbNotebookSweepHooks:
     """Build the concrete olfactory-bulb hooks for notebook sweep persistence/output helpers."""
-    return _OlfactoryBulbNotebookSweepHooks(
+    return _ob_build_notebook_sweep_adapter_hooks(
         sweeps_base=SWEEPS_BASE,
         default_results_base=DEFAULT_RESULTS_BASE,
         make_timestamp_fn=make_timestamp,
@@ -2506,7 +2520,7 @@ def _ob_notebook_sweep_hooks() -> _OlfactoryBulbNotebookSweepHooks:
 
 def _ob_notebook_presentation_hooks() -> _OlfactoryBulbNotebookPresentationHooks:
     """Build the concrete olfactory-bulb hooks for notebook presentation adapters."""
-    return _OlfactoryBulbNotebookPresentationHooks(
+    return _ob_build_notebook_presentation_adapter_hooks(
         default_results_base=DEFAULT_RESULTS_BASE,
         make_timestamp_fn=make_timestamp,
         safe_name_fn=_safe_name,

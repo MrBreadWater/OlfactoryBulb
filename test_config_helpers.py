@@ -185,6 +185,24 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._ob_run_notebook_simulation = original_run_dispatch
     print("local run wrapper delegation: OK")
 
+    # --- notebook presentation hook wrapper delegates through adapter assembly ---
+    original_presentation_hook_builder = hlp._ob_build_notebook_presentation_adapter_hooks
+    presentation_hook_calls = []
+    try:
+        def _fake_presentation_hook_builder(**kwargs):
+            presentation_hook_calls.append(dict(kwargs))
+            return "PRESENTATION-HOOKS"
+
+        hlp._ob_build_notebook_presentation_adapter_hooks = _fake_presentation_hook_builder
+        delegated_hooks = hlp._ob_notebook_presentation_hooks()
+        assert delegated_hooks == "PRESENTATION-HOOKS"
+        assert presentation_hook_calls
+        assert presentation_hook_calls[0]["default_results_base"] == hlp.DEFAULT_RESULTS_BASE
+        assert presentation_hook_calls[0]["build_run_config_fn"] is hlp.build_run_config
+    finally:
+        hlp._ob_build_notebook_presentation_adapter_hooks = original_presentation_hook_builder
+    print("notebook presentation hook wrapper delegation: OK")
+
     # --- remote run wrapper delegates through notebook remote session layer ---
     original_remote_session = ob_remote_runs.prepare_remote_job_session
     original_write_run_info = hlp._write_notebook_run_info
