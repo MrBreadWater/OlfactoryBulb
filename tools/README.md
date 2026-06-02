@@ -43,6 +43,16 @@ surface, use:
 - `python tools/run_audit.py test_suite_status --list-suites`
 - `python tools/run_audit.py test_suite_status --suite maintained_core`
 
+For the maintained unified web shell that combines:
+
+- audit results
+- HFO optimization review
+- current docs
+
+use:
+
+- `python -m olfactorybulb.dashboard.control_center serve <campaign_dir>`
+
 For a local docs portal that points at the maintained markdown docs first and
 historical generated pages second, open:
 

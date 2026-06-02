@@ -85,6 +85,12 @@ assert [row["candidate_id"] for row in _recent_rows(recent_state_fixture_rows, l
     "C02000",
     "C01000",
 ]
+server_root, server_url = _dashboard_server_root_and_url(
+    Path("/tmp/outside_dashboard_root/visual_dashboard"),
+    Path("/home/example/campaign"),
+)
+assert server_root == Path("/tmp/outside_dashboard_root/visual_dashboard")
+assert server_url == "/"
 
 window_t = np.arange(0.0, 1000.0, 0.1, dtype=float)
 windowed = {

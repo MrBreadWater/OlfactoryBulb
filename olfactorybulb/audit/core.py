@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
@@ -84,6 +85,9 @@ class AuditItem:
     human_review_status: str = ""
     human_review_note: str = ""
     human_review_reviewer: str = ""
+    group_id: str = ""
+    group_title: str = ""
+    detail_level: str = "detail"
 
 
 @dataclass
@@ -113,6 +117,7 @@ class AuditReport:
             "title": self.title,
             "summary": self.summary,
             "worst_status": self.worst_status,
+            "groups": report_groups(self),
             "items": [asdict(item) for item in self.items],
         }
 
@@ -212,6 +217,47 @@ def _summary_chunks(summary: dict[str, int], *, enabled: bool) -> list[str]:
     return parts
 
 
+def _items_summary(items: Iterable[AuditItem]) -> dict[str, int]:
+    counts: dict[str, int] = {"PASS": 0, "WARN": 0, "FAIL": 0}
+    for item in items:
+        counts[item.status] = counts.get(item.status, 0) + 1
+    return counts
+
+
+def _worst_status_for_items(items: Iterable[AuditItem]) -> str:
+    return max((item.status for item in items), key=lambda status: STATUS_RANK.get(status, 0), default="PASS")
+
+
+def report_groups(report: AuditReport) -> list[dict[str, Any]]:
+    grouped: "OrderedDict[str, dict[str, Any]]" = OrderedDict()
+    for item in report.items:
+        group_id = str(item.group_id or report.audit_id)
+        group_title = item.group_title or report.title
+        group = grouped.setdefault(
+            group_id,
+            {
+                "group_id": group_id,
+                "title": group_title,
+                "items": [],
+            },
+        )
+        group["items"].append(asdict(item))
+    results: list[dict[str, Any]] = []
+    for group in grouped.values():
+        raw_items = [AuditItem(**item_payload) for item_payload in group["items"]]
+        results.append(
+            {
+                "group_id": group["group_id"],
+                "title": group["title"],
+                "summary": _items_summary(raw_items),
+                "worst_status": _worst_status_for_items(raw_items),
+                "item_count": len(raw_items),
+                "items": group["items"],
+            }
+        )
+    return results
+
+
 def _default_description(item: AuditItem) -> str:
     title = _expand_terms(item.title).rstrip(".")
     return (
@@ -234,7 +280,56 @@ def _default_acceptable_basis(item: AuditItem) -> str:
     )
 
 
-def format_report(report: AuditReport, *, color: bool | None = None) -> str:
+def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
+    lines: list[str] = []
+    status_tag = _paint(f"[{item.status}]", STATUS_COLOR.get(item.status, "37"), "1", enabled=enabled)
+    check_id = _paint(item.check_id, "1", enabled=enabled)
+    lines.append(f"{status_tag} {check_id}")
+    lines.append(f"  {_paint(_expand_terms(item.title, sentence_case=True), '1', enabled=enabled)}")
+    lines.append(f"  {_paint('Criterion', LABEL_COLOR, enabled=enabled)}  {_expand_terms(item.criterion, sentence_case=True)}")
+    lines.append(
+        f"  {_paint('Description', LABEL_COLOR, enabled=enabled)}  "
+        f"{_expand_terms(item.description or _default_description(item), sentence_case=True)}"
+    )
+    lines.append(
+        f"  {_paint('Acceptable result', LABEL_COLOR, enabled=enabled)}  "
+        f"{_expand_terms(item.acceptable or _default_acceptable(item), sentence_case=True)}"
+    )
+    lines.append(
+        f"  {_paint('How Acceptable Result Was Determined', LABEL_COLOR, enabled=enabled)}  "
+        f"{_expand_terms(item.acceptable_basis or _default_acceptable_basis(item), sentence_case=True)}"
+    )
+    if item.human_review_status or item.human_review_note or item.human_review_reviewer:
+        review_parts = []
+        if item.human_review_status:
+            review_parts.append(_expand_terms(item.human_review_status.replace("_", " "), sentence_case=True))
+        if item.human_review_reviewer:
+            review_parts.append(f"reviewer: {item.human_review_reviewer}")
+        if item.human_review_note:
+            review_parts.append(_expand_terms(item.human_review_note, sentence_case=True))
+        lines.append(
+            f"  {_paint('Human Review', LABEL_COLOR, enabled=enabled)}  " + " | ".join(review_parts)
+        )
+    if item.evidence:
+        lines.append(f"  {_paint('Evidence', LABEL_COLOR, enabled=enabled)}")
+        for evidence_line in _pretty_evidence_lines(item.evidence):
+            lines.append(f"    {evidence_line}")
+    if item.note:
+        lines.append(
+            f"  {_paint('Note', NOTE_COLOR, enabled=enabled)}  "
+            f"{_paint(_expand_terms(item.note, sentence_case=True), DIM, enabled=enabled)}"
+        )
+    lines.append("")
+    return lines
+
+
+def format_report(
+    report: AuditReport,
+    *,
+    color: bool | None = None,
+    expand: bool = False,
+    failures_only: bool = False,
+) -> str:
     enabled = _color_enabled(color)
     lines: list[str] = []
     title = _paint(_expand_terms(report.title, sentence_case=True), "1", TITLE_COLOR, enabled=enabled)
@@ -249,45 +344,70 @@ def format_report(report: AuditReport, *, color: bool | None = None) -> str:
     )
     lines.append("")
 
-    for item in report.items:
-        status_tag = _paint(f"[{item.status}]", STATUS_COLOR.get(item.status, "37"), "1", enabled=enabled)
-        check_id = _paint(item.check_id, "1", enabled=enabled)
-        lines.append(f"{status_tag} {check_id}")
-        lines.append(f"  {_paint(_expand_terms(item.title, sentence_case=True), '1', enabled=enabled)}")
-        lines.append(f"  {_paint('Criterion', LABEL_COLOR, enabled=enabled)}  {_expand_terms(item.criterion, sentence_case=True)}")
-        lines.append(
-            f"  {_paint('Description', LABEL_COLOR, enabled=enabled)}  "
-            f"{_expand_terms(item.description or _default_description(item), sentence_case=True)}"
-        )
-        lines.append(
-            f"  {_paint('Acceptable result', LABEL_COLOR, enabled=enabled)}  "
-            f"{_expand_terms(item.acceptable or _default_acceptable(item), sentence_case=True)}"
-        )
-        lines.append(
-            f"  {_paint('How Acceptable Result Was Determined', LABEL_COLOR, enabled=enabled)}  "
-            f"{_expand_terms(item.acceptable_basis or _default_acceptable_basis(item), sentence_case=True)}"
-        )
-        if item.human_review_status or item.human_review_note or item.human_review_reviewer:
-            review_parts = []
-            if item.human_review_status:
-                review_parts.append(_expand_terms(item.human_review_status.replace("_", " "), sentence_case=True))
-            if item.human_review_reviewer:
-                review_parts.append(f"reviewer: {item.human_review_reviewer}")
-            if item.human_review_note:
-                review_parts.append(_expand_terms(item.human_review_note, sentence_case=True))
-            lines.append(
-                f"  {_paint('Human Review', LABEL_COLOR, enabled=enabled)}  " + " | ".join(review_parts)
+    groups = report_groups(report)
+    multi_group = len(groups) > 1
+    if multi_group:
+        lines.append(_paint("Audit Groups", "1", LABEL_COLOR, enabled=enabled))
+        for group in groups:
+            status_tag = _paint(
+                f"[{group['worst_status']}]",
+                STATUS_COLOR.get(str(group["worst_status"]), "37"),
+                "1",
+                enabled=enabled,
             )
-        if item.evidence:
-            lines.append(f"  {_paint('Evidence', LABEL_COLOR, enabled=enabled)}")
-            for evidence_line in _pretty_evidence_lines(item.evidence):
-                lines.append(f"    {evidence_line}")
-        if item.note:
+            group_id = _paint(str(group["group_id"]), "1", enabled=enabled)
+            summary = group["summary"]
+            title_text = _expand_terms(str(group["title"]), sentence_case=True)
             lines.append(
-                f"  {_paint('Note', NOTE_COLOR, enabled=enabled)}  "
-                f"{_paint(_expand_terms(item.note, sentence_case=True), DIM, enabled=enabled)}"
+                f"  {status_tag} {group_id}  "
+                + "  ".join(_summary_chunks(summary, enabled=enabled))
+                + f"  {_paint('-', DIM, enabled=enabled)}  {title_text}"
             )
         lines.append("")
+
+    detail_groups = groups if expand else [group for group in groups if str(group["worst_status"]) != "PASS"]
+    if failures_only:
+        detail_groups = [group for group in detail_groups if any(item["status"] != "PASS" for item in group["items"])]
+
+    if multi_group and not expand and not detail_groups:
+        lines.append(
+            _paint(
+                "All grouped audits passed; rerun with --expand for full item-by-item detail.",
+                DIM,
+                enabled=enabled,
+            )
+        )
+        lines.append("")
+
+    for group in detail_groups:
+        group_items = [AuditItem(**item_payload) for item_payload in group["items"]]
+        if failures_only:
+            group_items = [item for item in group_items if item.status != "PASS"]
+        elif multi_group and not expand:
+            group_items = [item for item in group_items if item.status != "PASS"]
+
+        if not group_items:
+            continue
+
+        if multi_group:
+            heading = _paint(_expand_terms(str(group["title"]), sentence_case=True), "1", enabled=enabled)
+            lines.append(heading)
+            lines.append(_paint(f"group_id={group['group_id']}", DIM, enabled=enabled))
+            lines.append(
+                _paint(
+                    "=" * max(len(str(group["title"])), len(f"group_id={group['group_id']}")),
+                    DIM,
+                    enabled=enabled,
+                )
+            )
+            lines.append(
+                f"{_paint('Group Summary', '1', LABEL_COLOR, enabled=enabled)}  "
+                + "  ".join(_summary_chunks(_items_summary(group_items), enabled=enabled))
+            )
+            lines.append("")
+
+        for item in group_items:
+            lines.extend(_render_item_lines(item, enabled=enabled))
 
     return "\n".join(lines).rstrip() + "\n"
 

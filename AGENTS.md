@@ -310,9 +310,21 @@ contract for future sessions.
 
 ## 4. Dashboard/runtime expectations
 
-- If touching the HFO dashboard/runtime:
+- The maintained dashboard surface is now layered:
+  - shared shell renderer:
+    - `neuroinfra.dashboard.shell`
+  - audit HTML renderer:
+    - `olfactorybulb.audit.dashboard`
+  - repo-level unified shell:
+    - `olfactorybulb.dashboard.control_center`
+  - HFO packet/optimization module:
+    - `tools/analysis/hfo_visual_dashboard.py`
+
+- If touching dashboard/runtime code:
   - verify the served result, not just static HTML generation
-  - if relevant, check:
+  - prefer the unified shell when checking end-user behavior:
+    - `python -m olfactorybulb.dashboard.control_center serve <campaign_dir>`
+  - if relevant, also check the optimization module directly:
     - `http://127.0.0.1:6006/`
     - `http://127.0.0.1:6006/visual_dashboard/`
 
@@ -323,6 +335,12 @@ contract for future sessions.
   - check both:
     - pre-render behavior
     - manual/queued packet refresh behavior
+
+- Do not create a second standalone dashboard stack when the existing shell can
+  mount the new surface as a tab.
+  - Keep the generic shell generic.
+  - Put repo-specific routing or refresh endpoints in the repo-level control
+    center, not in `neuroinfra.dashboard.shell`.
 
 ## 5. Audit system: current architecture
 
@@ -346,11 +364,22 @@ contract for future sessions.
   - `python tools/run_audit.py --list`
   - `python tools/run_audit.py <audit_id>`
   - `python tools/run_audit.py test_suite_status --list-suites`
+  - For large grouped output, the default text mode may collapse fully passing
+    groups.
+  - Use:
+    - `python tools/run_audit.py --expand`
+    - `python tools/run_audit.py --failures-only`
+    when you need the full or narrowed text view.
 
 - Generic literature-validation CLI:
   - `python tools/run_reference_validation.py --list-validations`
   - `python tools/run_reference_validation.py --list-protocols`
   - `python tools/run_reference_validation.py --validation-id <id>`
+
+- Audit web presentation:
+  - `python -m olfactorybulb.audit.dashboard <audit_id> --output-dir <dir> [-- <audit args>]`
+  - The audit dashboard should be driven from `AuditReport.to_dict()` rather
+    than a separate ad hoc report schema.
 
 - Do not hardcode the current audit roster here.
   - Audit IDs change over time.
@@ -370,6 +399,8 @@ contract for future sessions.
   - `How Acceptable Result Was Determined`
   - visible `Human Review` line when review metadata exists
   - evidence blocks readable in plain text
+  - grouped summaries should collapse cleanly in large multi-audit reports
+    without hiding warning/failure detail
 
 ## 5a. Contract and registry discipline
 
@@ -394,6 +425,8 @@ contract for future sessions.
     from the same contract layer
   - run the contract audit after changes:
     - `python tools/run_audit.py hfo_feature_contracts`
+  - if a new maintained dashboard surface is added, wire it through the shared
+    shell and keep its visual style aligned with the other maintained tabs
 
 - For literature validation:
   - dataset membership belongs in dataset configs
@@ -690,6 +723,12 @@ contract for future sessions.
 
 - Open the maintained local docs portal:
   - `docs/index.html`
+
+- Export an audit dashboard:
+  - `python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron`
+
+- Serve the unified docs/audits/optimization shell:
+  - `python -m olfactorybulb.dashboard.control_center serve <campaign_dir>`
 
 - Run all audits:
   - `python tools/run_audit.py`

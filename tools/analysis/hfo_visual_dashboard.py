@@ -2306,6 +2306,8 @@ def _dashboard_server_root_and_url(output_path: Path, campaign_path: Path) -> tu
         root = Path(os.path.commonpath([str(output_path), str(campaign_path)]))
     except ValueError:
         root = output_path
+    if root == Path(root.anchor):
+        root = output_path
     if root == output_path:
         return root, "/"
     relative = output_path.relative_to(root).as_posix()

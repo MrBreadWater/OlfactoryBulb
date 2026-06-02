@@ -54,12 +54,15 @@ SUITES: dict[str, TestSuiteSpec] = {
     ),
     "audit_surface": TestSuiteSpec(
         suite_id="audit_surface",
-        title="Audit surface smoke-test suite",
-        description="CLI, style-contract, and meta-audit smoke tests for the maintained audit surface.",
+        title="Audit and dashboard surface smoke-test suite",
+        description="CLI, grouped-output, audit-dashboard, and control-center smoke tests for the maintained presentation surface.",
         modules=(
             TestModuleSpec("tests.audit.test_repo_health", "Repo-health audit profile smoke tests"),
             TestModuleSpec("tests.audit.test_audit_cli_output", "Audit CLI output smoke tests"),
+            TestModuleSpec("tests.audit.test_audit_dashboard", "Audit HTML dashboard smoke tests"),
             TestModuleSpec("tests.audit.test_audit_style_contracts", "Audit metadata/style smoke tests"),
+            TestModuleSpec("tests.neuroinfra.dashboard.test_neuroinfra_dashboard_shell", "Shared dashboard shell smoke tests"),
+            TestModuleSpec("tests.integration.test_control_center_dashboard", "Unified control-center dashboard smoke tests"),
         ),
     ),
 }
@@ -107,6 +110,9 @@ def _item(
     acceptable_basis: str,
     evidence: dict[str, object] | None = None,
     note: str = "",
+    group_id: str = "",
+    group_title: str = "",
+    detail_level: str = "detail",
 ) -> AuditItem:
     return AuditItem(
         check_id=check_id,
@@ -119,6 +125,9 @@ def _item(
         evidence=evidence or {},
         note=note,
         human_review_status="not_applicable",
+        group_id=group_id,
+        group_title=group_title,
+        detail_level=detail_level,
     )
 
 
@@ -188,6 +197,9 @@ def run(args: argparse.Namespace) -> AuditReport:
                 "passed_modules": passed,
                 "failed_modules": failed,
             },
+            group_id=suite.suite_id,
+            group_title=suite.title,
+            detail_level="summary",
         )
     ]
 
@@ -211,6 +223,8 @@ def run(args: argparse.Namespace) -> AuditReport:
                         "stdout_tail": stdout[-4000:],
                         "stderr_tail": stderr[-4000:],
                     },
+                    group_id=suite.suite_id,
+                    group_title=suite.title,
                 )
             )
 

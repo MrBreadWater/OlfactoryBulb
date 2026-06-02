@@ -79,6 +79,10 @@ The same framework now also drives:
   [olfactorybulb/audit/reference_validation_rules.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_rules.py)
 - Generic CLI:
   [tools/run_reference_validation.py](/home/michael/OlfactoryBulb/tools/run_reference_validation.py)
+- Audit HTML dashboard renderer:
+  [olfactorybulb/audit/dashboard.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/dashboard.py)
+- Unified dashboard shell HOWTO:
+  [DASHBOARD_SHELL_HOWTO.md](/home/michael/OlfactoryBulb/notes/DASHBOARD_SHELL_HOWTO.md)
 
 ## Quick start
 
@@ -118,6 +122,13 @@ registry checks:
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
 python tools/run_audit.py burton_urban_fi
+```
+
+### Render audit results as maintained HTML
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron
 ```
 
 ## Minimal validation config

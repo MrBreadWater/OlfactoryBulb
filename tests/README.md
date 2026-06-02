@@ -39,7 +39,16 @@ python -m tests.audit.test_repo_health
 source tools/setup/activate_obgpu.sh OBGPU
 python tools/run_audit.py test_suite_status --list-suites
 python tools/run_audit.py test_suite_status --suite maintained_core
+python tools/run_audit.py test_suite_status --suite audit_surface
 python tools/run_audit.py test_suite_status --suite reference_bundles --details
+```
+
+- The broader maintained web presentation layer lives above the raw tests:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron
+python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
 ```
 
 - `repo_health` should call grouped suite audits for maintained test categories.

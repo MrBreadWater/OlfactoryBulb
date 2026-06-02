@@ -18,6 +18,7 @@ maintained_ids = {check.check_id for check in maintained_checks}
 assert "human_review_status" in maintained_ids
 assert "hfo_feature_contracts" in maintained_ids
 assert "maintained_test_suite" in maintained_ids
+assert "audit_dashboard_test_suite" in maintained_ids
 assert "maintained_docs_integrity" in maintained_ids
 assert "scratch_boundary" in maintained_ids
 

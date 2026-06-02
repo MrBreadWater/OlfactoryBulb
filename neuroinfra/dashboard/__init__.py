@@ -21,6 +21,7 @@ from .runtime import (
     terminate_process,
     write_json_atomic,
 )
+from .shell import ShellTabSpec, render_dashboard_shell
 
 __all__ = [
     "PacketInfo",
@@ -37,7 +38,9 @@ __all__ = [
     "read_runtime_process_info",
     "runtime_dir",
     "runtime_process_paths",
+    "ShellTabSpec",
     "spawn_detached_process",
     "terminate_process",
+    "render_dashboard_shell",
     "write_json_atomic",
 ]

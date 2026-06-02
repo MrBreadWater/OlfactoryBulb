@@ -138,6 +138,14 @@ multiple places and to decide where a doc change should land first.
   - Owns:
     - the concise conceptual overview only
 
+- `notes/DASHBOARD_SHELL_HOWTO.md`
+  - Purpose: maintained dashboard-shell architecture and entrypoints.
+  - Owns:
+    - the unified docs/audits/optimization shell
+    - the boundary between generic `neuroinfra.dashboard` shell code and
+      repo-specific dashboard modules
+    - canonical control-center commands
+
 - `research_context/README.md`
   - Purpose: boundaries inside `research_context/`.
   - Owns:

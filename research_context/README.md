@@ -98,3 +98,11 @@ python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi
 python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
 ```
+
+View the resulting audits and optimization outputs together in the maintained
+web shell:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
+```

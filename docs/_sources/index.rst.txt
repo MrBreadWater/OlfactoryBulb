@@ -16,6 +16,7 @@ Maintained workflow docs
 - `Tooling map <../tools/README.md>`_
 - `Tests and suite-audit guide <../tests/README.md>`_
 - `Documentation ownership map <../notes/DOCS_OWNERSHIP_MAP.md>`_
+- `Dashboard shell HOWTO <../notes/DASHBOARD_SHELL_HOWTO.md>`_
 - `Reference dataset HOWTO <../notes/REFERENCE_DATASET_HOWTO.md>`_
 - `Reference validation HOWTO <../notes/REFERENCE_VALIDATION_HOWTO.md>`_
 - `Reference validation overview <../notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md>`_

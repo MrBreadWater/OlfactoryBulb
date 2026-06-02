@@ -56,6 +56,11 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
             command=_py("tools/run_audit.py", "test_suite_status", "--suite", "maintained_core"),
         ),
         RepoHealthCheck(
+            check_id="audit_dashboard_test_suite",
+            title="Audit and dashboard presentation smoke-test suite",
+            command=_py("tools/run_audit.py", "test_suite_status", "--suite", "audit_surface"),
+        ),
+        RepoHealthCheck(
             check_id="maintained_docs_integrity",
             title="Maintained docs integrity audit",
             command=_py("tools/run_audit.py", "maintained_docs_integrity"),

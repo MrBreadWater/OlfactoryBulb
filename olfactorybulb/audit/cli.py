@@ -23,6 +23,16 @@ def _build_root_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list", action="store_true", help="List available audits and exit.")
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument("--no-color", action="store_true", help="Disable ANSI color output for text reports.")
+    parser.add_argument(
+        "--expand",
+        action="store_true",
+        help="Expand grouped output instead of collapsing passing groups in multi-audit reports.",
+    )
+    parser.add_argument(
+        "--failures-only",
+        action="store_true",
+        help="Render only warning/failure items in text output.",
+    )
     return parser
 
 
@@ -74,6 +84,9 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
             human_review_status=item.human_review_status,
             human_review_note=item.human_review_note,
             human_review_reviewer=item.human_review_reviewer,
+            group_id=report.audit_id,
+            group_title=report.title,
+            detail_level=item.detail_level,
         )
         for item in report.items
     ]
@@ -89,6 +102,13 @@ def run_new_sweep(argv: list[str]) -> AuditReport:
     )
 
 
+def run_audit_by_id(audit_id: str | None, argv: list[str]) -> AuditReport:
+    if not audit_id or audit_id in {"new_sweep", "new-sweep", "all"}:
+        return run_new_sweep(argv)
+    spec = get_audit_spec(audit_id)
+    return _run_one_audit(spec, argv)
+
+
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     root_parser = _build_root_parser()
@@ -98,20 +118,19 @@ def main(argv: list[str] | None = None) -> int:
     if root_args.list:
         return list_audits(color=use_color)
 
-    if not root_args.audit_id or root_args.audit_id in {"new_sweep", "new-sweep", "all"}:
-        report = run_new_sweep(remainder)
-        if root_args.json:
-            print(report.to_json())
-        else:
-            print(format_report(report, color=use_color), end="")
-        return report.exit_code
-
-    spec = get_audit_spec(root_args.audit_id)
-    report = _run_one_audit(spec, remainder)
+    report = run_audit_by_id(root_args.audit_id, remainder)
     if root_args.json:
         print(report.to_json())
     else:
-        print(format_report(report, color=use_color), end="")
+        print(
+            format_report(
+                report,
+                color=use_color,
+                expand=bool(root_args.expand),
+                failures_only=bool(root_args.failures_only),
+            ),
+            end="",
+        )
     return report.exit_code
 
 

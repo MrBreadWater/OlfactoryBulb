@@ -45,6 +45,13 @@ source tools/setup/activate_obgpu.sh OBGPU
 python tools/run_audit.py repo_health --profile maintained
 ```
 
+For the maintained web shell that combines audits, optimization, and docs:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
+```
+
 ## Maintained Runtime
 
 The modern workflow is:

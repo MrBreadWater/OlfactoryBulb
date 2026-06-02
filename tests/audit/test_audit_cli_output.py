@@ -39,6 +39,35 @@ sample_report = AuditReport(
     ],
 )
 
+grouped_report = AuditReport(
+    audit_id="new_sweep",
+    title="New sweep",
+    items=[
+        AuditItem(
+            check_id="audit_alpha.alpha_pass",
+            status="PASS",
+            title="Alpha pass",
+            criterion="Alpha should pass.",
+            description="Grouped pass item.",
+            acceptable="Pass.",
+            acceptable_basis="Configured.",
+            group_id="audit_alpha",
+            group_title="Audit alpha",
+        ),
+        AuditItem(
+            check_id="audit_beta.beta_warn",
+            status="WARN",
+            title="Beta warn",
+            criterion="Beta should warn.",
+            description="Grouped warning item.",
+            acceptable="Warn.",
+            acceptable_basis="Configured.",
+            group_id="audit_beta",
+            group_title="Audit beta",
+        ),
+    ],
+)
+
 plain = format_report(sample_report, color=False)
 assert "\033[" not in plain
 assert "Summary" in plain
@@ -82,5 +111,16 @@ assert "How Acceptable Result Was Determined" in text_report.stdout
 
 sample_fi_report = format_report(sample_report, color=False)
 assert "Acceptable result" in sample_fi_report
+
+collapsed_grouped = format_report(grouped_report, color=False)
+assert "Audit Groups" in collapsed_grouped
+assert "[PASS] audit_alpha" in collapsed_grouped
+assert "[WARN] audit_beta" in collapsed_grouped
+assert "audit_alpha.alpha_pass" not in collapsed_grouped
+assert "audit_beta.beta_warn" in collapsed_grouped
+
+expanded_grouped = format_report(grouped_report, color=False, expand=True)
+assert "audit_alpha.alpha_pass" in expanded_grouped
+assert "audit_beta.beta_warn" in expanded_grouped
 
 print("audit_cli_output: OK")

@@ -10,6 +10,10 @@ If you need the boundary between raw sources, configs, manual intake, and
 generated canonical outputs, see:
 [research_context/README.md](/home/michael/OlfactoryBulb/research_context/README.md)
 
+If you want the maintained web shell that combines docs, audits, and
+optimization surfaces, see:
+[DASHBOARD_SHELL_HOWTO.md](/home/michael/OlfactoryBulb/notes/DASHBOARD_SHELL_HOWTO.md)
+
 This guide explains how to add and maintain a declarative reference-data
 dataset in this repository.
 
