@@ -18,6 +18,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import obgpu_experiment_helpers as hlp
+from neuroinfra.remote.deferred_artifacts import DeferredArtifactSyncHooks
 from neuroinfra.remote.helper_bundle import helper_bundle_manifest
 from neuroinfra.remote.result_sync import RemoteResultSyncHooks
 
@@ -1642,7 +1643,7 @@ with tempfile.TemporaryDirectory() as tmp:
 
     # --- Deferred soma traces should bypass SFTP with direct file streaming when selected sync fails ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
-    original_direct_deferred = hlp._sync_deferred_remote_artifact_direct
+    original_deferred_artifact_sync_hooks = hlp._deferred_remote_artifact_sync_hooks
     try:
         deferred_direct_dir = tmp / "deferred-direct-result"
         deferred_direct_dir.mkdir(parents=True, exist_ok=True)
@@ -1672,16 +1673,30 @@ with tempfile.TemporaryDirectory() as tmp:
             sync_calls.append((remote_result_dir, expected_files, include_files))
             return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="selected sync failed")
 
-        def _fake_direct_deferred(_config, *, remote_result_dir, local_result_dir, filename):
-            direct_calls.append((remote_result_dir, filename))
-            local_result_dir = Path(local_result_dir)
-            with open(local_result_dir / filename, "wb") as handle:
+        def _fake_direct_stream(_config, *, remote_file_path, local_path, expected_bytes):
+            direct_calls.append((remote_file_path.parent, remote_file_path.name))
+            local_path = Path(local_path)
+            with open(local_path, "wb") as handle:
                 import pickle
                 pickle.dump([("MC0", [0.0, 0.1], [-65.0, -64.0])], handle)
             return subprocess.CompletedProcess(args=["direct"], returncode=0, stdout="", stderr="")
 
         hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
-        hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
+        hlp._deferred_remote_artifact_sync_hooks = lambda: DeferredArtifactSyncHooks(
+            local_sync_artifact_is_usable_fn=hlp._local_sync_artifact_is_usable,
+            sync_remote_result_dir_fn=hlp._sync_remote_result_dir,
+            progress_write=lambda _message: None,
+            format_bytes_fn=lambda num_bytes: f"{num_bytes} B",
+            direct_stream_supported_fn=lambda filename: filename == "soma_vs.pkl",
+            run_paramiko_shell_fn=lambda _config, _command: subprocess.CompletedProcess(
+                args=["probe"],
+                returncode=0,
+                stdout="67\n",
+                stderr="",
+            ),
+            stream_file_to_local_path_fn=_fake_direct_stream,
+            perf_counter_fn=lambda: 0.0,
+        )
         result = hlp.load_result(deferred_direct_dir)
         assert result["soma_vs"][0][0] == "MC0"
         assert sync_calls == [
@@ -1697,11 +1712,11 @@ with tempfile.TemporaryDirectory() as tmp:
         print("Deferred soma direct-stream fallback: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
-        hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
+        hlp._deferred_remote_artifact_sync_hooks = original_deferred_artifact_sync_hooks
 
     # --- Deferred soma traces should fall back to full-dir sync if selected and direct sync fail ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
-    original_direct_deferred = hlp._sync_deferred_remote_artifact_direct
+    original_deferred_artifact_sync_hooks = hlp._deferred_remote_artifact_sync_hooks
     try:
         deferred_fallback_dir = tmp / "deferred-fallback-result"
         deferred_fallback_dir.mkdir(parents=True, exist_ok=True)
@@ -1738,12 +1753,26 @@ with tempfile.TemporaryDirectory() as tmp:
                 pickle.dump([("MC0", [0.0, 0.1], [-65.0, -64.0])], handle)
             return subprocess.CompletedProcess(args=["sync"], returncode=0, stdout="", stderr="")
 
-        def _fake_direct_deferred(_config, *, remote_result_dir, local_result_dir, filename):
-            direct_calls.append((remote_result_dir, filename))
+        def _fake_direct_stream(_config, *, remote_file_path, local_path, expected_bytes):
+            direct_calls.append((remote_file_path.parent, remote_file_path.name))
             return subprocess.CompletedProcess(args=["direct"], returncode=1, stdout="", stderr="direct sync failed")
 
         hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
-        hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
+        hlp._deferred_remote_artifact_sync_hooks = lambda: DeferredArtifactSyncHooks(
+            local_sync_artifact_is_usable_fn=hlp._local_sync_artifact_is_usable,
+            sync_remote_result_dir_fn=hlp._sync_remote_result_dir,
+            progress_write=lambda _message: None,
+            format_bytes_fn=lambda num_bytes: f"{num_bytes} B",
+            direct_stream_supported_fn=lambda filename: filename == "soma_vs.pkl",
+            run_paramiko_shell_fn=lambda _config, _command: subprocess.CompletedProcess(
+                args=["probe"],
+                returncode=0,
+                stdout="67\n",
+                stderr="",
+            ),
+            stream_file_to_local_path_fn=_fake_direct_stream,
+            perf_counter_fn=lambda: 0.0,
+        )
         result = hlp.load_result(deferred_fallback_dir)
         assert result["soma_vs"][0][0] == "MC0"
         assert sync_calls[0][2] == ("soma_vs.pkl",)
@@ -1754,11 +1783,11 @@ with tempfile.TemporaryDirectory() as tmp:
         print("Deferred soma fallback to full-dir sync: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
-        hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
+        hlp._deferred_remote_artifact_sync_hooks = original_deferred_artifact_sync_hooks
 
     # --- Deferred soma failures should retain all retry diagnostics ---
     original_sync_remote_result_dir = hlp._sync_remote_result_dir
-    original_direct_deferred = hlp._sync_deferred_remote_artifact_direct
+    original_deferred_artifact_sync_hooks = hlp._deferred_remote_artifact_sync_hooks
     try:
         deferred_error_dir = tmp / "deferred-error-result"
         deferred_error_dir.mkdir(parents=True, exist_ok=True)
@@ -1786,11 +1815,25 @@ with tempfile.TemporaryDirectory() as tmp:
                 return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="selected failed")
             return subprocess.CompletedProcess(args=["sync"], returncode=1, stdout="", stderr="Failure")
 
-        def _fake_direct_deferred(_config, *, remote_result_dir, local_result_dir, filename):
+        def _fake_direct_stream(_config, *, remote_file_path, local_path, expected_bytes):
             return subprocess.CompletedProcess(args=["direct"], returncode=1, stdout="", stderr="direct failed")
 
         hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
-        hlp._sync_deferred_remote_artifact_direct = _fake_direct_deferred
+        hlp._deferred_remote_artifact_sync_hooks = lambda: DeferredArtifactSyncHooks(
+            local_sync_artifact_is_usable_fn=hlp._local_sync_artifact_is_usable,
+            sync_remote_result_dir_fn=hlp._sync_remote_result_dir,
+            progress_write=lambda _message: None,
+            format_bytes_fn=lambda num_bytes: f"{num_bytes} B",
+            direct_stream_supported_fn=lambda filename: filename == "soma_vs.pkl",
+            run_paramiko_shell_fn=lambda _config, _command: subprocess.CompletedProcess(
+                args=["probe"],
+                returncode=0,
+                stdout="67\n",
+                stderr="",
+            ),
+            stream_file_to_local_path_fn=_fake_direct_stream,
+            perf_counter_fn=lambda: 0.0,
+        )
         try:
             _ = hlp.load_result(deferred_error_dir)
             raise AssertionError("Expected deferred soma sync failure")
@@ -1803,7 +1846,7 @@ with tempfile.TemporaryDirectory() as tmp:
         print("Deferred soma failure diagnostics: OK")
     finally:
         hlp._sync_remote_result_dir = original_sync_remote_result_dir
-        hlp._sync_deferred_remote_artifact_direct = original_direct_deferred
+        hlp._deferred_remote_artifact_sync_hooks = original_deferred_artifact_sync_hooks
 
     # --- LazyResult should keep loaders available after transient failures ---
     lazy_attempts = []

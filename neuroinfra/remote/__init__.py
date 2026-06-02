@@ -73,6 +73,11 @@ from .result_sync import (
     sync_remote_result_dir,
     sync_remote_result_dir_resilient,
 )
+from .deferred_artifacts import (
+    DeferredArtifactSyncHooks,
+    sync_deferred_remote_artifact,
+    sync_deferred_remote_artifact_direct,
+)
 from .helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -234,4 +239,7 @@ __all__ = [
     "combine_sync_attempt_stderr",
     "sync_remote_result_dir",
     "sync_remote_result_dir_resilient",
+    "DeferredArtifactSyncHooks",
+    "sync_deferred_remote_artifact",
+    "sync_deferred_remote_artifact_direct",
 ]

@@ -204,6 +204,12 @@ Current progress:
   `neuroinfra.remote.result_sync`, while deferred-artifact sync policy and the
   larger notebook load/orchestration flow still remain in
   `obgpu_experiment_helpers.py`
+- the deferred remote-artifact sync layer that parses notebook `run_info`,
+  retries selected-file sync for one payload, optionally falls back to direct
+  file streaming for preferred artifact classes, and then escalates to full
+  result-dir sync now lives under `neuroinfra.remote.deferred_artifacts`,
+  while the surrounding result-loading and lazy-loader policy still remains in
+  `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

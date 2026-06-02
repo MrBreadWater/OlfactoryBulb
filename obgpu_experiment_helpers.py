@@ -188,6 +188,11 @@ from neuroinfra.remote.result_sync import (
     sync_remote_result_dir as _neuroinfra_sync_remote_result_dir,
     sync_remote_result_dir_resilient as _neuroinfra_sync_remote_result_dir_resilient,
 )
+from neuroinfra.remote.deferred_artifacts import (
+    DeferredArtifactSyncHooks as _NeuroinfraDeferredArtifactSyncHooks,
+    sync_deferred_remote_artifact as _neuroinfra_sync_deferred_remote_artifact,
+    sync_deferred_remote_artifact_direct as _neuroinfra_sync_deferred_remote_artifact_direct,
+)
 from neuroinfra.remote.slurm_launch import (
     build_allocation_discovery_command as _neuroinfra_build_allocation_discovery_command,
     build_cleanup_stale_allocations_argv as _neuroinfra_build_cleanup_stale_allocations_argv,
@@ -2302,6 +2307,20 @@ def _remote_result_sync_hooks() -> _NeuroinfraRemoteResultSyncHooks:
         ),
         local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
         sleep_fn=time.sleep,
+    )
+
+
+def _deferred_remote_artifact_sync_hooks() -> _NeuroinfraDeferredArtifactSyncHooks:
+    """Build reusable hooks for deferred remote artifact sync policy."""
+    return _NeuroinfraDeferredArtifactSyncHooks(
+        local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
+        sync_remote_result_dir_fn=_sync_remote_result_dir,
+        progress_write=_progress_write,
+        format_bytes_fn=_format_bytes,
+        direct_stream_supported_fn=lambda filename: filename in soma_trace_artifact_candidates(),
+        run_paramiko_shell_fn=_run_paramiko_shell,
+        stream_file_to_local_path_fn=_stream_paramiko_file_to_local_path,
+        perf_counter_fn=time.perf_counter,
     )
 
 
@@ -5653,84 +5672,12 @@ def _sync_deferred_remote_artifact(
     filename: str,
 ) -> Path:
     """Fetch one deferred remote artifact into the local result directory and return its path."""
-    result_dir = Path(result_dir)
-    local_path = result_dir / filename
-    if _local_sync_artifact_is_usable(local_path):
-        return local_path
-    if not isinstance(run_info, dict):
-        raise FileNotFoundError(f"Deferred remote artifact {filename} is not available locally.")
-    remote_payload = run_info.get("remote") or {}
-    remote_result_dir_value = remote_payload.get("remote_result_dir")
-    config = deepcopy(run_info.get("config") or {})
-    if not remote_result_dir_value or not isinstance(config, dict):
-        raise FileNotFoundError(f"Deferred remote artifact {filename} is not available locally.")
-
-    _progress_write(f"[OBGPU load] Fetching deferred remote artifact {filename}...")
-    started = time.perf_counter()
-    remote_result_dir = PurePosixPath(str(remote_result_dir_value))
-    attempt_errors: list[tuple[str, str]] = []
-    completed = _sync_remote_result_dir(
-        config,
-        remote_result_dir=remote_result_dir,
-        local_result_dir=result_dir,
-        expected_files=(filename,),
-        include_files=(filename,),
+    return _neuroinfra_sync_deferred_remote_artifact(
+        result_dir,
+        run_info=run_info,
+        filename=filename,
+        hooks=_deferred_remote_artifact_sync_hooks(),
     )
-    if not _local_sync_artifact_is_usable(local_path):
-        attempt_errors.append(("selected-file sync", completed.stderr or ""))
-    if (
-        not _local_sync_artifact_is_usable(local_path)
-        and filename in soma_trace_artifact_candidates()
-    ):
-        _progress_write(
-            "[OBGPU load] Deferred soma selected-file sync failed; "
-            "retrying with direct SSH-channel file streaming..."
-        )
-        direct_completed = _sync_deferred_remote_artifact_direct(
-            config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=result_dir,
-            filename=filename,
-        )
-        if direct_completed.returncode == 0 and _local_sync_artifact_is_usable(local_path):
-            completed = direct_completed
-        else:
-            attempt_errors.append(("direct file stream", direct_completed.stderr or ""))
-    if (
-        not _local_sync_artifact_is_usable(local_path)
-        and filename in soma_trace_artifact_candidates()
-    ):
-        _progress_write(
-            "[OBGPU load] Deferred soma trace sync fell back from direct-file mode; "
-            "retrying by syncing the full remote result directory..."
-        )
-        completed = _sync_remote_result_dir(
-            config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=result_dir,
-            expected_files=(filename,),
-        )
-        if not _local_sync_artifact_is_usable(local_path):
-            attempt_errors.append(("full result-dir sync", completed.stderr or ""))
-    if not _local_sync_artifact_is_usable(local_path):
-        stderr = completed.stderr or ""
-        if attempt_errors:
-            stderr = "\n".join(
-                f"[{label}]\n{detail.strip() or '<no stderr>'}"
-                for label, detail in attempt_errors
-            )
-        raise RuntimeError(
-            "Deferred remote artifact sync failed.\n"
-            f"Result dir: {result_dir}\n"
-            f"Artifact: {filename}\n"
-            f"Stderr:\n{stderr}"
-        )
-    elapsed_s = time.perf_counter() - started
-    _progress_write(
-        f"[OBGPU load] Deferred remote artifact {filename} synced in {elapsed_s:.1f}s "
-        f"({_format_bytes(local_path.stat().st_size)})."
-    )
-    return local_path
 
 
 def _sync_deferred_remote_artifact_direct(
@@ -5741,48 +5688,13 @@ def _sync_deferred_remote_artifact_direct(
     filename: str,
 ) -> subprocess.CompletedProcess[str]:
     """Fetch one deferred artifact via a direct SSH-channel byte stream."""
-    remote_file_path = remote_result_dir / filename
-    local_path = local_result_dir / filename
-    probe_command = (
-        "set -euo pipefail && "
-        f"remote_file={shlex.quote(remote_file_path.as_posix())} && "
-        "test -f \"$remote_file\" && wc -c < \"$remote_file\""
-    )
-    try:
-        probe_completed = _run_paramiko_shell(config, probe_command)
-    except Exception as exc:
-        return subprocess.CompletedProcess(
-            args=["paramiko-direct-file-probe", remote_file_path.as_posix(), str(local_path)],
-            returncode=1,
-            stdout="",
-            stderr=str(exc),
-        )
-    if probe_completed.returncode != 0:
-        return subprocess.CompletedProcess(
-            args=["paramiko-direct-file-probe", remote_file_path.as_posix(), str(local_path)],
-            returncode=1,
-            stdout=probe_completed.stdout or "",
-            stderr=probe_completed.stderr or "Remote deferred artifact probe failed.",
-        )
-    try:
-        expected_bytes = int((probe_completed.stdout or "").strip().splitlines()[-1])
-    except (IndexError, ValueError):
-        expected_bytes = None
-    completed = _stream_paramiko_file_to_local_path(
+    return _neuroinfra_sync_deferred_remote_artifact_direct(
         config,
-        remote_file_path=remote_file_path,
-        local_path=local_path,
-        expected_bytes=expected_bytes,
+        remote_result_dir=remote_result_dir,
+        local_result_dir=local_result_dir,
+        filename=filename,
+        hooks=_deferred_remote_artifact_sync_hooks(),
     )
-    if completed.returncode == 0 and not _local_sync_artifact_is_usable(local_path):
-        return subprocess.CompletedProcess(
-            args=completed.args,
-            returncode=1,
-            stdout=completed.stdout or "",
-            stderr=(completed.stderr or "")
-            + f"\n[OBGPU load] Direct file stream did not produce usable local artifact: {filename}\n",
-        )
-    return completed
 
 
 class LazyResult(dict):

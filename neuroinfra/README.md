@@ -42,6 +42,7 @@ The next standardized seam is also in place:
 - `neuroinfra.remote.allocation_runtime`
 - `neuroinfra.remote.stream_sync`
 - `neuroinfra.remote.result_sync`
+- `neuroinfra.remote.deferred_artifacts`
 - `neuroinfra.models.registry`
 - `neuroinfra.campaigns.store`
 - `neuroinfra.contracts.parameters`
@@ -175,6 +176,13 @@ The higher-level Paramiko result-sync retry/fallback policy that sits above
 those low-level stream helpers now also lives under
 `neuroinfra.remote.result_sync`, while deferred-artifact sync policy and the
 larger notebook load/orchestration flow still remain in
+`obgpu_experiment_helpers.py`.
+
+The deferred remote-artifact sync layer that parses notebook `run_info`,
+retrieves one named payload, retries selected-file sync, optionally falls back
+to direct file streaming for preferred artifact classes, and then escalates to
+full result-dir sync now also lives under `neuroinfra.remote.deferred_artifacts`,
+while the surrounding result-loading policy still remains in
 `obgpu_experiment_helpers.py`.
 
 The generic parameter-space and contract helpers that back the HFO optimizer's
