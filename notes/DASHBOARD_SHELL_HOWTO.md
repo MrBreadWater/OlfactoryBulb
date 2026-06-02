@@ -57,6 +57,8 @@ That command:
   views are rendering in the background
 - shows loading placeholders in the audit/optimization tabs until those views
   are ready
+- exposes an on-page audit runner so you can switch to any registered audit and
+  pass explicit arguments without restarting the shell
 - does not regenerate missing optimization packets during default startup; use
   explicit controls/flags when you want packet generation work
 - if `6006` is already in use, it automatically picks the next available local
@@ -97,6 +99,22 @@ python -m olfactorybulb.dashboard.control_center serve \
   --audit-id repo_health
 ```
 
+Once the shell is open:
+
+- use the `Audit id` selector to choose any registered audit
+- use `Audit arguments` for audit-specific flags such as:
+  - `--profile maintained`
+  - `--suite reference_bundles --details`
+  - `--dataset-id granule_cells`
+- the shell state endpoint keeps the audit/optimization/doc badges in sync with
+  the real rendered content
+- the audit page itself now provides display controls for:
+  - search
+  - failures/warnings-only filtering
+  - hiding fully passing groups
+  - hiding detail items
+  - expanding/collapsing groups
+
 Serve a specific campaign explicitly:
 
 ```bash
@@ -126,3 +144,9 @@ python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -
 - The optimization tab reuses the existing HFO visual dashboard export path.
 - The audit tab uses grouped audit JSON from `AuditReport.to_dict()`.
 - The docs tab serves the maintained docs portal under `docs/`.
+- The served control center exposes maintained live endpoints:
+  - `GET /__control_center_state__`
+  - `POST /__audit_run__`
+  - `POST /__audit_refresh__`
+  - use those when diagnosing stale badges, permanent loading states, or rerun
+    failures.

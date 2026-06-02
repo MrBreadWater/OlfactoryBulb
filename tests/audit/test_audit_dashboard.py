@@ -45,6 +45,7 @@ with TemporaryDirectory() as tmp:
     output_dir = Path(tmp)
     manifest = export_audit_dashboard(sample_report, output_dir, refresh_endpoint="/__audit_refresh__")
     assert manifest["audit_id"] == "new_sweep"
+    assert "manifest_revision" in manifest
     report_payload = json.loads((output_dir / "report.json").read_text())
     assert report_payload["audit_id"] == "new_sweep"
     assert len(report_payload["groups"]) == 2
@@ -54,5 +55,9 @@ with TemporaryDirectory() as tmp:
     assert "Audit alpha" in html
     assert "Audit beta" in html
     assert "/__audit_refresh__" in html
+    assert "Display controls" in html
+    assert "Failures and warnings only" in html
+    assert "Collapse all groups" in html
+    assert "data-item-card" in html
 
 print("audit_dashboard: OK")

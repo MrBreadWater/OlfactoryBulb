@@ -343,6 +343,14 @@ contract for future sessions.
   - a bare `HTTP 200` on `/` is not enough for control-center verification;
     wait for the background startup render to either replace the loading
     placeholders with real content or surface a concrete startup error frame/log
+  - for shell/UI changes, verify at least these live behaviors:
+    - `GET /__control_center_state__` reflects startup, running, ready, and
+      error transitions
+    - a real audit rerun through the maintained UI/backend path updates both the
+      tab badge state and `/audits/index.html`
+    - the root shell DOM reflects post-JavaScript state, not just the static
+      pre-hydration HTML; use a headless browser or equivalent DOM-capable
+      check when badge/toolbar behavior changed
   - when you start a local server during validation, shut it down before
     finishing the task unless the user explicitly asked you to leave it running
   - if relevant, also check the optimization module directly:

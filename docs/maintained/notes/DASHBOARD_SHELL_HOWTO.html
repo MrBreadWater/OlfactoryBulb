@@ -184,6 +184,8 @@ python -m olfactorybulb.dashboard.control_center
   views are rendering in the background</li>
 <li>shows loading placeholders in the audit/optimization tabs until those views
   are ready</li>
+<li>exposes an on-page audit runner so you can switch to any registered audit and
+  pass explicit arguments without restarting the shell</li>
 <li>does not regenerate missing optimization packets during default startup; use
   explicit controls/flags when you want packet generation work</li>
 <li>if <code>6006</code> is already in use, it automatically picks the next available local
@@ -209,6 +211,22 @@ python -m olfactorybulb.dashboard.control_center serve
 python -m olfactorybulb.dashboard.control_center serve \
   --audit-id repo_health
 </code></pre>
+<p>Once the shell is open:</p>
+<ul>
+<li>use the <code>Audit id</code> selector to choose any registered audit</li>
+<li>use <code>Audit arguments</code> for audit-specific flags such as:</li>
+<li><code>--profile maintained</code></li>
+<li><code>--suite reference_bundles --details</code></li>
+<li><code>--dataset-id granule_cells</code></li>
+<li>the shell state endpoint keeps the audit/optimization/doc badges in sync with
+  the real rendered content</li>
+<li>the audit page itself now provides display controls for:</li>
+<li>search</li>
+<li>failures/warnings-only filtering</li>
+<li>hiding fully passing groups</li>
+<li>hiding detail items</li>
+<li>expanding/collapsing groups</li>
+</ul>
 <p>Serve a specific campaign explicitly:</p>
 <pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.dashboard.control_center serve \
@@ -232,6 +250,12 @@ python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -
 <li>The optimization tab reuses the existing HFO visual dashboard export path.</li>
 <li>The audit tab uses grouped audit JSON from <code>AuditReport.to_dict()</code>.</li>
 <li>The docs tab serves the maintained docs portal under <code>docs/</code>.</li>
+<li>The served control center exposes maintained live endpoints:</li>
+<li><code>GET /__control_center_state__</code></li>
+<li><code>POST /__audit_run__</code></li>
+<li><code>POST /__audit_refresh__</code></li>
+<li>use those when diagnosing stale badges, permanent loading states, or rerun
+    failures.</li>
 </ul>
     </article>
     <aside>

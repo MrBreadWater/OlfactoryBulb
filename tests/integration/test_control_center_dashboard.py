@@ -1,50 +1,62 @@
-"""Smoke tests for unified control-center dashboard export."""
+"""Integration tests for unified control-center dashboard export and serve flows."""
 
 from __future__ import annotations
 
 import http.server
 import json
 from pathlib import Path
-import socket
 from tempfile import TemporaryDirectory
+import socket
 import threading
 import time
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from unittest.mock import patch
 
 from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.dashboard.control_center import export_control_center, resolve_control_center_campaign, serve_control_center
 
 
-def _sample_report() -> AuditReport:
+def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> AuditReport:
     return AuditReport(
-        audit_id="new_sweep",
-        title="New sweep",
+        audit_id=audit_id,
+        title=title,
         items=[
             AuditItem(
-                check_id="audit_alpha.alpha_pass",
+                check_id=f"{audit_id}.alpha_pass",
                 status="PASS",
                 title="Alpha pass",
                 criterion="Alpha should pass.",
                 description="Description",
                 acceptable="Acceptable",
                 acceptable_basis="Configured",
-                group_id="audit_alpha",
-                group_title="Audit alpha",
+                group_id=audit_id,
+                group_title=title,
+                detail_level="summary",
             )
         ],
     )
 
 
 _export_call_kwargs: dict[str, object] = {}
+_run_audit_calls: list[tuple[str, list[str]]] = []
 
 
-def _fake_export_visual_dashboard(campaign_dir: Path, *, output_dir: Path, **_kwargs):
+def _fake_export_visual_dashboard(campaign_dir: Path, *, output_dir: Path, **kwargs):
     _export_call_kwargs.clear()
-    _export_call_kwargs.update(_kwargs)
+    _export_call_kwargs.update(kwargs)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text("<html><body>optimization</body></html>")
-    (output_dir / "manifest.json").write_text(json.dumps({"packet_count": 7, "output_dir": str(output_dir)}))
+    (output_dir / "manifest.json").write_text(
+        json.dumps(
+            {
+                "packet_count": 7,
+                "candidate_rows": 3,
+                "generated_at": "now",
+                "manifest_revision": 1,
+                "output_dir": str(output_dir),
+            }
+        )
+    )
     return {
         "campaign_dir": str(campaign_dir),
         "output_dir": str(output_dir),
@@ -57,28 +69,57 @@ def _fake_export_visual_dashboard(campaign_dir: Path, *, output_dir: Path, **_kw
     }
 
 
+def _json_post(url: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
+    request = Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urlopen(request, timeout=3) as response:
+        return response.status, json.loads(response.read().decode("utf-8"))
+
+
+def _capture_run_audit_by_id(audit_id: str, audit_args: list[str]):
+    _run_audit_calls.append((audit_id, list(audit_args)))
+    return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
+
+
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
     campaign_dir = root / "campaign"
     campaign_dir.mkdir()
     with (
         patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
-        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report()),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", side_effect=_capture_run_audit_by_id),
     ):
         manifest = export_control_center(campaign_dir, output_dir=root / "control_center")
     output_dir = Path(manifest["output_dir"])
     assert (output_dir / "index.html").exists()
     assert (output_dir / "manifest.json").exists()
+    assert (output_dir / "state.json").exists()
     assert (output_dir / "audits" / "index.html").exists()
     assert (output_dir / "audits" / "report.json").exists()
     assert (output_dir / "optimization" / "index.html").exists()
     html = (output_dir / "index.html").read_text()
     assert "OlfactoryBulb Control Center" in html
-    assert "/audits/index.html" in html
-    assert "/optimization/index.html" in html
-    assert "/docs/index.html" in html
+    assert "Run selected audit" in html
+    assert "/__control_center_state__" in html
     assert _export_call_kwargs["generate_packets_top_n"] == 0
     assert _export_call_kwargs["cleanup_stale_packets_before_render"] is False
+    assert _run_audit_calls[-1] == ("repo_health", ["--profile", "maintained"])
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    campaign_dir = root / "campaign"
+    campaign_dir.mkdir()
+    _run_audit_calls.clear()
+    with (
+        patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", side_effect=_capture_run_audit_by_id),
+    ):
+        export_control_center(campaign_dir, output_dir=root / "control_center_custom", audit_id="human_review_status")
+    assert _run_audit_calls[-1] == ("human_review_status", [])
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -102,12 +143,38 @@ with TemporaryDirectory() as tmp:
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
     assert placeholder["placeholder"] is True
 
-print("control_center_dashboard: OK")
+print("control_center_dashboard_export: OK")
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
     campaign_dir = root / "campaign"
     campaign_dir.mkdir()
+    stale_root = root / "control_center"
+    (stale_root / "audits").mkdir(parents=True, exist_ok=True)
+    (stale_root / "optimization").mkdir(parents=True, exist_ok=True)
+    (stale_root / "audits" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "audit_id": "stale_audit",
+                "title": "Stale audit",
+                "summary": {"FAIL": 9, "WARN": 0, "PASS": 0},
+                "worst_status": "FAIL",
+                "generated_at": "stale",
+                "manifest_revision": "stale-audit",
+            }
+        )
+    )
+    (stale_root / "optimization" / "manifest.json").write_text(
+        json.dumps(
+            {
+                "packet_count": 999,
+                "candidate_rows": 999,
+                "generated_at": "stale",
+                "manifest_revision": "stale-optimization",
+                "placeholder": False,
+            }
+        )
+    )
     server_holder: dict[str, http.server.ThreadingHTTPServer] = {}
 
     class CapturingServer(http.server.ThreadingHTTPServer):
@@ -115,40 +182,42 @@ with TemporaryDirectory() as tmp:
             super().__init__(*args, **kwargs)
             server_holder["server"] = self
 
-    def _fake_delayed_export(campaign_dir_arg, *, output_dir: Path, **_kwargs):
-        time.sleep(1.0)
+    def _slow_export_visual_dashboard(campaign_dir_arg: Path, *, output_dir: Path, **_kwargs):
+        time.sleep(0.5)
         output_dir.mkdir(parents=True, exist_ok=True)
-        (output_dir / "index.html").write_text("<html><body>ready</body></html>")
-        audits_dir = output_dir / "audits"
-        optimization_dir = output_dir / "optimization"
-        audits_dir.mkdir(parents=True, exist_ok=True)
-        optimization_dir.mkdir(parents=True, exist_ok=True)
-        (audits_dir / "index.html").write_text("<html><body>audit ready</body></html>")
-        (optimization_dir / "index.html").write_text("<html><body>optimization ready</body></html>")
-        return {
+        (output_dir / "index.html").write_text("<html><body>optimization ready</body></html>")
+        manifest = {
             "campaign_dir": str(campaign_dir_arg),
             "output_dir": str(output_dir),
-            "generated_at": "now",
-            "audit_id": "repo_health",
-            "audit_args": ["--profile", "maintained"],
-            "audits": {"output_dir": str(audits_dir)},
-            "optimization": {"output_dir": str(optimization_dir), "placeholder": False},
-            "docs_root": str(root),
+            "index_html": str(output_dir / "index.html"),
+            "entrypoint_html": str(output_dir / "index.html"),
+            "packet_count": 5,
+            "candidate_rows": 9,
+            "generated_at": "later",
+            "manifest_revision": 22,
+            "placeholder": False,
         }
+        (output_dir / "manifest.json").write_text(json.dumps(manifest))
+        return manifest
+
+    def _slow_run_audit_by_id(audit_id: str, audit_args: list[str]):
+        time.sleep(0.5)
+        return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
 
     thread = threading.Thread(
         target=serve_control_center,
         kwargs={
             "campaign_dir": campaign_dir,
-            "output_dir": root / "control_center",
+            "output_dir": stale_root,
             "port": 0,
             "watch_optimization": False,
         },
         daemon=True,
     )
-    with patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer), patch(
-        "olfactorybulb.dashboard.control_center.export_control_center",
-        side_effect=_fake_delayed_export,
+    with (
+        patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer),
+        patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_slow_export_visual_dashboard),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", side_effect=_slow_run_audit_by_id),
     ):
         thread.start()
         deadline = time.time() + 5.0
@@ -157,16 +226,60 @@ with TemporaryDirectory() as tmp:
         assert "server" in server_holder
         server = server_holder["server"]
         base_url = f"http://127.0.0.1:{server.server_port}"
-        root_html = urlopen(f"{base_url}/", timeout=2).read().decode("utf-8")
-        audits_html = urlopen(f"{base_url}/audits/index.html", timeout=2).read().decode("utf-8")
-        docs_html = urlopen(f"{base_url}/docs/index.html", timeout=2).read().decode("utf-8")
-        rendered_doc_html = urlopen(f"{base_url}/docs/maintained/readme.html", timeout=2).read().decode("utf-8")
-        assert "OlfactoryBulb Control Center" in root_html
-        assert "Audit starting" in audits_html
+
+        root_html = urlopen(f"{base_url}/", timeout=3).read().decode("utf-8")
+        initial_audit_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+        docs_html = urlopen(f"{base_url}/docs/index.html", timeout=3).read().decode("utf-8")
+        rendered_doc_html = urlopen(f"{base_url}/docs/maintained/readme.html", timeout=3).read().decode("utf-8")
+        initial_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+        assert "Run selected audit" in root_html
+        assert "__control_center_state__" in root_html
+        assert "Audit running" in initial_audit_html or "Audit starting" in initial_audit_html
         assert "maintained/readme.html" in docs_html
         assert "View source markdown" in rendered_doc_html
+        assert initial_state["audit"]["status"] in {"starting", "running"}
+        assert initial_state["optimization"]["status"] in {"loading", "ready"}
+
+        ready_deadline = time.time() + 6.0
+        ready_state = initial_state
+        while time.time() < ready_deadline:
+            ready_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+            if ready_state["audit"]["status"] == "ready" and ready_state["optimization"]["status"] == "ready":
+                break
+            time.sleep(0.1)
+        assert ready_state["audit"]["status"] == "ready"
+        assert ready_state["optimization"]["status"] == "ready"
+        assert ready_state["optimization"]["badge"] == "5 packets"
+
+        audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+        assert "Display controls" in audits_html
+        assert "Collapse all groups" in audits_html
+        assert "repo_health report" in audits_html
+
+        run_status, run_payload = _json_post(
+            f"{base_url}/__audit_run__",
+            {"audit_id": "test_suite_status", "audit_args_text": "--suite maintained_core --details"},
+        )
+        assert run_status == 202
+        assert run_payload["ok"] is True
+        rerun_deadline = time.time() + 6.0
+        rerun_state = ready_state
+        while time.time() < rerun_deadline:
+            rerun_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+            if rerun_state["audit"]["status"] == "ready" and rerun_state["audit"]["audit_id"] == "test_suite_status":
+                break
+            time.sleep(0.1)
+        assert rerun_state["audit"]["audit_id"] == "test_suite_status"
+        assert rerun_state["audit"]["audit_args"] == ["--suite", "maintained_core", "--details"]
+        rerun_audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+        assert "test_suite_status report" in rerun_audits_html
+
+        refresh_status, refresh_payload = _json_post(f"{base_url}/__audit_refresh__", {})
+        assert refresh_status == 202
+        assert refresh_payload["ok"] is True
+
         server.shutdown()
-        thread.join(timeout=5.0)
+        thread.join(timeout=6.0)
         assert not thread.is_alive()
 
 print("control_center_dashboard_serve: OK")
@@ -187,26 +300,6 @@ with TemporaryDirectory() as tmp:
     blocker.listen(1)
     blocked_port = blocker.getsockname()[1]
 
-    def _fake_fast_export(campaign_dir_arg, *, output_dir: Path, **_kwargs):
-        output_dir.mkdir(parents=True, exist_ok=True)
-        audits_dir = output_dir / "audits"
-        optimization_dir = output_dir / "optimization"
-        audits_dir.mkdir(parents=True, exist_ok=True)
-        optimization_dir.mkdir(parents=True, exist_ok=True)
-        (audits_dir / "index.html").write_text("<html><body>audit ready</body></html>")
-        (optimization_dir / "index.html").write_text("<html><body>optimization ready</body></html>")
-        (output_dir / "index.html").write_text("<html><body>ready</body></html>")
-        return {
-            "campaign_dir": str(campaign_dir_arg),
-            "output_dir": str(output_dir),
-            "generated_at": "now",
-            "audit_id": "repo_health",
-            "audit_args": ["--profile", "maintained"],
-            "audits": {"output_dir": str(audits_dir)},
-            "optimization": {"output_dir": str(optimization_dir), "placeholder": False},
-            "docs_root": str(root),
-        }
-
     thread = threading.Thread(
         target=serve_control_center,
         kwargs={
@@ -217,9 +310,10 @@ with TemporaryDirectory() as tmp:
         },
         daemon=True,
     )
-    with patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer), patch(
-        "olfactorybulb.dashboard.control_center.export_control_center",
-        side_effect=_fake_fast_export,
+    with (
+        patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer),
+        patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report("repo_health", "repo_health report")),
     ):
         thread.start()
         deadline = time.time() + 5.0

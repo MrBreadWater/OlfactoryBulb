@@ -57,6 +57,8 @@ That command now:
 - auto-detects the active maintained optimization campaign when possible
 - serves immediately at `http://127.0.0.1:6006/` by default
 - runs the default maintained audit into the page in the background
+- lets you choose any registered audit and explicit audit arguments from the
+  page itself without restarting the shell
 - skips missing-packet regeneration during default startup so the shell comes
   up reliably before heavier optimization work
 - opens with the audit tab first
