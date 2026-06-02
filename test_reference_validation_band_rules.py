@@ -50,6 +50,17 @@ assert quantile_band.high == 15.0
 assert quantile_band.standard_label == "reported quantile interval"
 assert "25th percentile" in quantile_band.description
 
+binary_band = compute_reference_acceptance_band(
+    reference_mean=1.0,
+    reference_sd=1.0,
+    sigma_multiplier=2.0,
+    band_mode="binary_indicator",
+)
+assert binary_band.low == 1.0
+assert binary_band.high == 1.0
+assert binary_band.standard_label == "exact binary indicator"
+assert "categorical rather than a continuous dispersion measure" in binary_band.description
+
 clipped_band = compute_reference_acceptance_band(
     reference_mean=0.4,
     reference_sd=0.5,
@@ -152,5 +163,63 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert quantile_item.evidence["accepted_low"] == 7.0
     assert quantile_item.evidence["accepted_high"] == 15.0
     assert "25th percentile" in quantile_item.acceptable_basis
+
+    binary_rule = {
+        "kind": "reference_band_rows",
+        "loader": f"csv:{csv_path}",
+        "reference_source": "Example et al. (2026)",
+        "group_field": "cell_type",
+        "sigma_arg_name": "reference_sigma_multiplier",
+        "property_metric_map": {"Firing Probability": "firing_probability"},
+        "property_band_modes": {"Firing Probability": "binary_indicator"},
+        "check_id": "placeholder",
+        "title": "placeholder",
+        "criterion": "placeholder",
+        "description": "placeholder",
+        "acceptable": "placeholder",
+        "acceptable_basis": "placeholder",
+    }
+    binary_context = ValidationRuleContext(
+        metrics=[],
+        summary={"MC": {"firing_probability": 1.0}},
+        args=Namespace(reference_sigma_multiplier=2.0),
+        config={},
+        protocol_result=None,
+    )
+    binary_csv_path = Path(tmpdir) / "binary_reference_rows.csv"
+    binary_csv_path.write_text(
+        "\n".join(
+            [
+                "Property,Source,cell_type,mean,sd,unit",
+                "Firing Probability,Example et al. (2026),MC,1.0,1.0,",
+            ]
+        )
+    )
+    binary_rule["loader"] = f"csv:{binary_csv_path}"
+    binary_item = build_rule_items([binary_rule], binary_context)[0]
+    assert binary_item.evidence["accepted_interval_mode"] == "binary_indicator"
+    assert binary_item.evidence["accepted_interval_standard"] == "exact binary indicator"
+    assert "binary reference indicator exactly" in binary_item.criterion
+
+    missing_mode_rule = {
+        "kind": "reference_band_rows",
+        "loader": f"csv:{csv_path}",
+        "reference_source": "Burton & Urban (2014)",
+        "group_field": "cell_type",
+        "sigma_arg_name": "reference_sigma_multiplier",
+        "property_metric_map": {"ISI Coefficient of Variation": "cv_isi"},
+        "property_band_modes": {},
+        "check_id": "placeholder",
+        "title": "placeholder",
+        "criterion": "placeholder",
+        "description": "placeholder",
+        "acceptable": "placeholder",
+        "acceptable_basis": "placeholder",
+    }
+    try:
+        build_rule_items([missing_mode_rule], context)
+        raise AssertionError("Expected explicit property-band mode enforcement to fail")
+    except ValueError as exc:
+        assert "explicit band mode for every property" in str(exc)
 
 print("reference_validation_band_rules: OK")

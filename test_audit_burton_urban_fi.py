@@ -95,6 +95,10 @@ assert "two standard deviations" in item_by_id["mc_membrane_time_constant_ms_wit
 assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_low"] > 0.0
 assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].evidence["accepted_interval_standard"] == "lognormal-reconstructed dispersion band"
 assert "not a formal confidence interval" in item_by_id["mc_cv_isi_within_uploaded_reference_band"].acceptable_basis
+assert item_by_id["mc_rebound_potential_presence_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "binary_indicator"
+assert "binary reference indicator exactly" in item_by_id["mc_rebound_potential_presence_within_uploaded_reference_band"].criterion
+assert item_by_id["mc_sag_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_interval_mode"] == "symmetric_sd"
+assert item_by_id["mc_sag_amplitude_mv_within_uploaded_reference_band"].evidence["accepted_low"] < 0.0
 assert "N_FI_PROTOCOL_DIFFERENCE" in item_by_id["fi_protocol_caveats"].evidence["note_ids"]
 assert callable(find_spike_times_milliseconds)
 assert _resolved_jobs(10, 0, use_gpu=False) >= 1

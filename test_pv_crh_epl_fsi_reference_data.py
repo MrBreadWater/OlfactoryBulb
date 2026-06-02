@@ -136,9 +136,16 @@ assert (s15_rows["Source"] == "Burton, Malyshko & Urban (2024)").all()
 assert (s15_rows["source_url"] == stable_source_url(BURTON2024_S15_DATA_SOURCE_ID)).all()
 
 quantile_properties = {
+    "Membrane Resting Voltage",
     "Input Resistance",
     "Membrane Time Constant",
+    "Capacitance",
     "Spontaneous Firing Rate",
+    "AP Amplitude",
+    "AP Half-Width",
+    "AP Threshold",
+    "AHP Amplitude",
+    "AHP Duration",
     "Rheobase Current",
     "FI Curve Slope",
     "Max FI Rate",

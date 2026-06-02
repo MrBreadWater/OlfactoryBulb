@@ -177,7 +177,22 @@ BURTON_PROPERTY_LABELS = {
     "spike_accommodation_time_constant_ms": "spiking-rate accommodation time constant",
 }
 BURTON_REFERENCE_BAND_MODES = {
+    "AHP_amplitude_mV": "lognormal_sd",
+    "T_AHP50_ms": "lognormal_sd",
+    "Amplitude_mV": "lognormal_sd",
+    "AP_onset_mV": "symmetric_sd",
+    "FWHM_ms": "lognormal_sd",
+    "cell_capacitance_pF": "lognormal_sd",
+    "fi_gain_Hz_per_50pA": "lognormal_sd",
     "cv_isi": "lognormal_sd",
+    "input_resistance_MOhm": "lognormal_sd",
+    "resting_potential_mV": "symmetric_sd",
+    "membrane_time_constant_ms": "lognormal_sd",
+    "rebound_potential_presence": "binary_indicator",
+    "rheobase_pA": "lognormal_sd",
+    "sag_amplitude_mV": "symmetric_sd",
+    "spike_accommodation_hz": "symmetric_sd",
+    "spike_accommodation_time_constant_ms": "lognormal_sd",
 }
 BURTON_REFERENCE_LOWER_BOUNDS = {
     "AHP_amplitude_mV": 0.0,
@@ -191,7 +206,6 @@ BURTON_REFERENCE_LOWER_BOUNDS = {
     "membrane_time_constant_ms": 0.0,
     "rebound_potential_presence": 0.0,
     "rheobase_pA": 0.0,
-    "sag_amplitude_mV": 0.0,
     "spike_accommodation_time_constant_ms": 0.0,
 }
 BURTON_REFERENCE_UPPER_BOUNDS = {
@@ -862,6 +876,32 @@ def _sigma_phrase(sigma_multiplier: float) -> str:
     return f"{rounded(float(sigma_multiplier), 3)} standard deviations"
 
 
+def _criterion_text_for_band(cell_type: str, metric_label: str, mode: str, sigma_phrase: str) -> str:
+    label = _cell_label(cell_type)
+    if mode == "quantile_interval":
+        return f"The {label} mean {metric_label} should remain within the uploaded reported quantile interval."
+    if mode == "beta_sd":
+        return f"The {label} mean {metric_label} should remain within the uploaded beta-reconstructed bounded probability interval."
+    if mode == "binary_indicator":
+        return f"The {label} mean {metric_label} should match the uploaded binary reference indicator exactly."
+    if mode == "lognormal_sd":
+        return (
+            f"The {label} mean {metric_label} should remain within {sigma_phrase} "
+            f"of the uploaded Burton and Urban 2014 reference value under a lognormal reconstruction."
+        )
+    return (
+        f"The {label} mean {metric_label} should remain within {sigma_phrase} "
+        f"of the uploaded Burton and Urban 2014 reference value."
+    )
+
+
+def _title_text_for_band(cell_type: str, metric_label: str, mode: str) -> str:
+    prefix = _cell_label(cell_type).capitalize()
+    if mode == "binary_indicator":
+        return f"{prefix} {metric_label} matches the uploaded Burton and Urban 2014 binary reference indicator"
+    return f"{prefix} {metric_label} stays within the uploaded Burton and Urban 2014 reference band"
+
+
 def _build_burton_reference_fit_items(
     summary: dict[str, dict[str, float]],
     *,
@@ -889,11 +929,8 @@ def _build_burton_reference_fit_items(
                 AuditItem(
                     check_id=f"{cell_type.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
                     status="PASS" if in_range else "FAIL",
-                    title=f"{_cell_label(cell_type).capitalize()} {metric_label} stays within the uploaded Burton and Urban 2014 reference band",
-                    criterion=(
-                        f"The {_cell_label(cell_type)} mean {metric_label} should remain within {sigma_phrase} "
-                        f"of the uploaded Burton and Urban 2014 reference value."
-                    ),
+                    title=_title_text_for_band(cell_type, metric_label, band.mode),
+                    criterion=_criterion_text_for_band(cell_type, metric_label, band.mode, sigma_phrase),
                     description=(
                         f"This is the direct single-cell-type reference check derived from the uploaded Burton and Urban 2014 "
                         f"reference tables rather than from a cross-cell-type ordering heuristic."

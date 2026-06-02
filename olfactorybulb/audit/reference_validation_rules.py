@@ -308,10 +308,22 @@ def compute_reference_acceptance_band(
         description = (
             f"the explicitly reported quantile interval from {low_label} to {high_label}"
         )
+    elif mode == "binary_indicator":
+        if not np.isclose(reference_mean, round(reference_mean)) or int(round(reference_mean)) not in (0, 1):
+            raise ValueError(
+                "binary_indicator acceptance bands require the reference mean to encode an exact binary indicator of 0 or 1"
+            )
+        raw_low = float(int(round(reference_mean)))
+        raw_high = float(int(round(reference_mean)))
+        standard_label = "exact binary indicator"
+        description = (
+            "the exact binary indicator encoded by the uploaded reference row; the reported standard deviation is ignored "
+            "because this metric is categorical rather than a continuous dispersion measure"
+        )
     else:
         raise ValueError(
             f"Unknown reference-band mode {mode!r}. Supported modes: "
-            "'symmetric_sd', 'lognormal_sd', 'beta_sd', 'quantile_interval'."
+            "'symmetric_sd', 'lognormal_sd', 'beta_sd', 'quantile_interval', 'binary_indicator'."
         )
 
     low = raw_low
@@ -441,6 +453,68 @@ def _property_override(
     if not isinstance(overrides, dict):
         return default
     return overrides.get(property_name, default)
+
+
+def _property_band_modes(rule: dict[str, Any], property_metric_map: dict[str, str]) -> dict[str, str]:
+    if "default_band_mode" in rule:
+        raise ValueError(
+            "reference_band_rows no longer supports 'default_band_mode'; "
+            "choose 'property_band_modes' explicitly for every property"
+        )
+    raw_modes = rule.get("property_band_modes")
+    if not isinstance(raw_modes, dict):
+        raise ValueError(
+            "reference_band_rows requires a 'property_band_modes' table that selects a band mode for every property"
+        )
+    normalized_modes = {
+        str(property_name).strip(): str(mode).strip()
+        for property_name, mode in raw_modes.items()
+        if str(property_name).strip()
+    }
+    expected = set(property_metric_map)
+    actual = set(normalized_modes)
+    missing = sorted(expected - actual)
+    extra = sorted(actual - expected)
+    if missing or extra:
+        parts: list[str] = []
+        if missing:
+            parts.append(f"missing explicit modes for: {', '.join(missing)}")
+        if extra:
+            parts.append(f"unexpected mode entries for: {', '.join(extra)}")
+        raise ValueError(
+            "reference_band_rows requires an explicit band mode for every property in property_metric_map; "
+            + "; ".join(parts)
+        )
+    return normalized_modes
+
+
+def _criterion_text_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand, sigma_phrase: str) -> str:
+    if band.mode == "quantile_interval":
+        return (
+            f"The {group} mean {property_name.lower()} should remain within the uploaded reported quantile interval."
+        )
+    if band.mode == "beta_sd":
+        return (
+            f"The {group} mean {property_name.lower()} should remain within the uploaded beta-reconstructed bounded probability interval."
+        )
+    if band.mode == "binary_indicator":
+        return (
+            f"The {group} mean {property_name.lower()} should match the uploaded binary reference indicator exactly."
+        )
+    if band.mode == "lognormal_sd":
+        return (
+            f"The {group} mean {property_name.lower()} should remain within {sigma_phrase} of the uploaded reference value "
+            f"under a lognormal reconstruction."
+        )
+    return (
+        f"The {group} mean {property_name.lower()} should remain within {sigma_phrase} of the uploaded reference value."
+    )
+
+
+def _title_text_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand) -> str:
+    if band.mode == "binary_indicator":
+        return f"{group} {property_name.lower()} matches the uploaded binary reference indicator"
+    return f"{group} {property_name.lower()} stays within the uploaded reference band"
 
 
 def _row_field_name(
@@ -704,10 +778,10 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
     reference_source = str(rule.get("reference_source", "")).strip()
     group_field = str(rule.get("group_field", "cell_type"))
     property_metric_map = {str(key): str(value) for key, value in dict(rule.get("property_metric_map", {})).items()}
+    property_band_modes = _property_band_modes(rule, property_metric_map)
     sigma_arg_name = str(rule.get("sigma_arg_name", "reference_sigma_multiplier"))
     sigma_multiplier = float(getattr(context.args, sigma_arg_name, rule.get("sigma_multiplier", 2.0)))
     sigma_phrase = _sigma_phrase(sigma_multiplier)
-    default_band_mode = str(rule.get("default_band_mode", "symmetric_sd") or "symmetric_sd").strip()
     default_lower_bound = _optional_float(rule.get("default_lower_bound"))
     default_upper_bound = _optional_float(rule.get("default_upper_bound"))
     rows = _filter_rows(_load_rows(loader), rule, args=context.args)
@@ -727,9 +801,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
             continue
         reference_mean = float(row["mean"])
         reference_sd = float(row["sd"])
-        band_mode = str(
-            _property_override(rule, "property_band_modes", property_name, default_band_mode) or default_band_mode
-        ).strip()
+        band_mode = property_band_modes[property_name]
         lower_bound = _optional_float(
             _property_override(rule, "property_lower_bounds", property_name, default_lower_bound)
         )
@@ -817,11 +889,8 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                 rule,
                 check_id=item_id,
                 status=_rule_status(rule, passed),
-                title=f"{group} {property_name.lower()} stays within the uploaded reference band",
-                criterion=(
-                    f"The {group} mean {property_name.lower()} should remain within {sigma_phrase} "
-                    f"of the uploaded reference value."
-                ),
+                title=_title_text_for_band(group, property_name, band),
+                criterion=_criterion_text_for_band(group, property_name, band, sigma_phrase),
                 description=(
                     f"This is the direct single-cell-type reference check derived from uploaded literature rows for "
                     f"{property_name} rather than from a cross-group ordering heuristic."

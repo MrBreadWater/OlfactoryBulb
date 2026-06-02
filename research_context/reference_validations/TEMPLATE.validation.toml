@@ -177,10 +177,18 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # reference_source = "Example et al. (2026)"
 # group_field = "cell_type"
 # sigma_arg_name = "reference_sigma_multiplier"
-# property_metric_map = { "Membrane Resting Voltage" = "resting_potential_mV", "Input Resistance" = "input_resistance_MOhm" }
+# property_metric_map = {
+#   "Membrane Resting Voltage" = "resting_potential_mV",
+#   "ISI Coefficient of Variation" = "cv_isi",
+#   "Firing Probability" = "firing_probability",
+#   "Binary Response Class" = "binary_response_class",
+#   "Skewed Latency" = "skewed_latency_ms",
+# }
 # property_band_modes = {
+#   "Membrane Resting Voltage" = "symmetric_sd",
 #   "ISI Coefficient of Variation" = "lognormal_sd",
 #   "Firing Probability" = "beta_sd",
+#   "Binary Response Class" = "binary_indicator",
 #   "Skewed Latency" = "quantile_interval",
 # }
 # property_lower_bounds = { "Input Resistance" = 0.0, "ISI Coefficient of Variation" = 0.0 }
@@ -195,12 +203,17 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # acceptable = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 # acceptable_basis = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 
-# `reference_band_rows` supports two built-in band shapes:
+# `reference_band_rows` requires `property_band_modes` to select one mode for
+# every property in `property_metric_map`. There is no default fallback.
+#
+# Supported band modes:
 # - symmetric_sd: arithmetic mean +/- sigma * standard deviation
 # - lognormal_sd: reconstruct a positive-only band in log space from the
 #   uploaded arithmetic mean and standard deviation
 # - beta_sd: reconstruct a bounded probability/fraction interval on [0, 1]
 #   from the uploaded arithmetic mean and standard deviation
+# - binary_indicator: treat the uploaded row as an exact binary class label
+#   rather than as a continuous dispersion metric
 # - quantile_interval: use explicitly reported row quantiles such as
 #   q_low/q_high instead of reconstructing a band from mean and standard deviation
 #

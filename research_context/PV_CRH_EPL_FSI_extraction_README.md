@@ -12,7 +12,7 @@ This directory contains a protocol-aware reference-data set for a PV/CRH-overlap
 ## Suitable now
 
 - Burton 2024 S15-derived intrinsic-property rows
-- Burton 2024 S15-derived empirical 5th-to-95th percentile bands for skew-sensitive intrinsic metrics
+- Burton 2024 S15-derived empirical 5th-to-95th percentile bands for all S15-derived intrinsic validation metrics
 - Burton 2024 S8-derived example-cell current-rate rows
 - Burton 2024 S16-derived morphology rows
 - Huang 2013 spontaneous-firing and maximum current-evoked firing summary rows
@@ -22,7 +22,7 @@ This directory contains a protocol-aware reference-data set for a PV/CRH-overlap
 ## Caveats
 
 - Burton 2024 S8 rows are tagged sample_scope = example_cell; they are not population-average firing-rate curves.
-- For selected Burton 2024 S15-derived intrinsic metrics, the extracted rows now carry empirical 5th and 95th percentile fields in addition to mean and standard deviation so validation can use quantile-based intervals when that is more defensible than symmetric dispersion bands.
+- For Burton 2024 S15-derived intrinsic metrics, the extracted rows now carry empirical 5th and 95th percentile fields in addition to mean and standard deviation so validation can use reported quantile intervals instead of forcing a symmetric standard-deviation band.
 - Burton 2014 MC/TC and Burton/Malyshko/Urban 2024 EPL-FSI firing-rate validation remain protocol-non-equivalent. N_FI_PROTOCOL_DIFFERENCE must remain visible in combined outputs.
 - The pipeline does not perform built-in figure digitization. Figure-only gaps stay in needs_manual_extraction.csv.
 

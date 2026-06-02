@@ -207,6 +207,11 @@ Use config alone whenever one of these can express the paper cleanly.
 `reference_band_rows` no longer assumes that every metric should use the same
 arithmetic `mean +/- sigma * sd` interval.
 
+It also no longer permits a silent fallback. Every property listed in
+`property_metric_map` must appear in `property_band_modes`. If one is missing,
+the validation fails immediately instead of quietly defaulting to a symmetric
+band.
+
 Use these config knobs deliberately:
 
 - `property_band_modes`
@@ -215,6 +220,7 @@ Use these config knobs deliberately:
     - `symmetric_sd`
     - `lognormal_sd`
     - `beta_sd`
+    - `binary_indicator`
     - `quantile_interval`
 - `property_lower_bounds`
   - clip naturally non-negative metrics at zero
@@ -234,11 +240,14 @@ property_metric_map = {
   "Membrane Resting Voltage" = "resting_potential_mV",
   "ISI Coefficient of Variation" = "cv_isi",
   "Firing Probability" = "firing_probability",
+  "Rebound Potential Presence" = "rebound_potential_presence",
   "Skewed Latency" = "skewed_latency_ms",
 }
 property_band_modes = {
+  "Membrane Resting Voltage" = "symmetric_sd",
   "ISI Coefficient of Variation" = "lognormal_sd",
   "Firing Probability" = "beta_sd",
+  "Rebound Potential Presence" = "binary_indicator",
   "Skewed Latency" = "quantile_interval",
 }
 property_lower_bounds = {
@@ -256,6 +265,24 @@ description = "Unused placeholder text; this rule auto-generates one item per ma
 acceptable = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 acceptable_basis = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 ```
+
+Use this decision tree explicitly, one property at a time:
+
+1. If the source row encodes an exact binary class label such as present vs not
+   present, use `binary_indicator`.
+2. Else if the source or extracted row already provides an explicit empirical
+   interval such as 5th-to-95th percentile or Q1-to-Q3, use
+   `quantile_interval`.
+3. Else if the metric is a true probability or fraction on `[0, 1]`, use
+   `beta_sd`.
+4. Else if the metric can meaningfully cross zero or is naturally signed, use
+   `symmetric_sd`.
+5. Else if the metric is positive-only continuous and only mean plus standard
+   deviation are available, use `lognormal_sd`.
+
+That is the default manual policy in this repo. If a paper clearly requires a
+different assumption, encode it explicitly in config and explain why in the row
+notes or validation notes.
 
 Use `lognormal_sd` when all of the following are true:
 
@@ -285,6 +312,11 @@ In that case, add row fields such as:
 - `q_high`
 - `q_low_label`
 - `q_high_label`
+
+- `binary_indicator` is for categorical rows such as a presence/absence class
+  that were historically squeezed into a mean-plus-or-minus-spread column.
+  These are not treated as continuous dispersion rows at all. The accepted
+  interval becomes the exact binary target.
 
 Use `property_lower_bounds` / `property_upper_bounds` when the metric has a
 hard physical or definitional bound even if you still want a symmetric band in
