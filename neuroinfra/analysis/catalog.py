@@ -124,3 +124,29 @@ def round_robin_limit_by_subgroup(
         if not added:
             break
     return selected
+
+
+def ordered_group_rows(
+    rows: Sequence[Any],
+    *,
+    bucket_fn: Callable[[Any], str],
+    order_buckets_fn: Callable[[Iterable[str]], list[str]],
+    limit_bucket_rows_fn: Callable[[str, list[Any]], Sequence[Any]] | None = None,
+    unknown_bucket: str = "other",
+) -> list[Any]:
+    """Bucket rows, order the buckets, and flatten them with optional per-bucket limiting."""
+    grouped: dict[str, list[Any]] = {}
+    for row in rows:
+        try:
+            bucket = str(bucket_fn(row))
+        except Exception:
+            bucket = str(unknown_bucket)
+        grouped.setdefault(bucket, []).append(row)
+
+    ordered_rows: list[Any] = []
+    for bucket in order_buckets_fn(grouped.keys()):
+        bucket_rows = list(grouped.get(str(bucket), []))
+        if limit_bucket_rows_fn is not None:
+            bucket_rows = list(limit_bucket_rows_fn(str(bucket), bucket_rows))
+        ordered_rows.extend(bucket_rows)
+    return ordered_rows

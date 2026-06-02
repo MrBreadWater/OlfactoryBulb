@@ -252,6 +252,7 @@ from neuroinfra.analysis.catalog import (
     group_rows_by_category as _neuroinfra_group_rows_by_category,
     list_available_categories as _neuroinfra_list_available_categories,
     list_unique_labels as _neuroinfra_list_unique_labels,
+    ordered_group_rows as _neuroinfra_ordered_group_rows,
     ordered_names as _neuroinfra_ordered_names,
     round_robin_limit_by_subgroup as _neuroinfra_round_robin_limit_by_subgroup,
 )
@@ -6328,27 +6329,18 @@ def _saved_soma_spike_rows_by_type(
     rows = _saved_soma_spike_rows(result, threshold=threshold)
     if rows is None:
         return None
-
-    grouped: dict[str, list[tuple[str, np.ndarray]]] = {}
-    for label, spikes in rows:
-        try:
-            bucket = cell_type_of(label)
-        except ValueError:
-            bucket = "other"
-        bucket = _display_group_for_cell_type(bucket, combine_mt=combine_mt)
-        grouped.setdefault(bucket, []).append((label, spikes))
-
-    ordered = []
-    for cell_type in _ordered_display_groups(grouped.keys(), combine_mt=combine_mt):
-        ordered.extend(
-            _truncate_display_rows_for_group(
-                grouped.get(cell_type, []),
-                max_cells_per_type,
-                combine_mt=combine_mt,
-                display_group=cell_type,
-            )
-        )
-    return ordered
+    return _neuroinfra_ordered_group_rows(
+        rows,
+        bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
+        order_buckets_fn=lambda buckets: _ordered_display_groups(buckets, combine_mt=combine_mt),
+        limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
+            list(bucket_rows),
+            max_cells_per_type,
+            combine_mt=combine_mt,
+            display_group=bucket,
+        ),
+        unknown_bucket="other",
+    )
 
 
 def _saved_voltage_summary_signal(
@@ -7170,23 +7162,18 @@ def plot_voltage_traces(
         ],
         combine_mt=combine_mt,
     )
-    buckets = {cell_type: [] for cell_type in ordered_cell_types}
-    for label, t, v in result["soma_vs"]:
-        try:
-            group = _display_group_for_cell_type(cell_type_of(label), combine_mt=combine_mt)
-        except ValueError:
-            group = "other"
-        if group in buckets:
-            buckets[group].append((label, t, v))
-    rows: list[tuple[str, Any, Any]] = []
-    for display_group in ordered_cell_types:
-        traces = _truncate_display_rows_for_group(
-            buckets.get(display_group, []),
+    rows = _neuroinfra_ordered_group_rows(
+        list(result["soma_vs"]),
+        bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
+        order_buckets_fn=lambda buckets: ordered_cell_types,
+        limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
+            list(bucket_rows),
             max_per_type,
             combine_mt=combine_mt,
-            display_group=display_group,
-        )
-        rows.extend(traces)
+            display_group=bucket,
+        ),
+        unknown_bucket="other",
+    )
 
     def _line_kwargs(row: tuple[str, Any, Any]) -> dict[str, Any]:
         label = row[0]
@@ -7235,26 +7222,23 @@ def plot_spike_raster(
     )
     if saved_rows is None:
         grouped = split_traces_by_type(result)
-        raw_bucketed: dict[str, list[tuple[str, Any]]] = {}
-        for cell_type in _ordered_cell_types(grouped.keys()):
-            display_group = _display_group_for_cell_type(cell_type, combine_mt=combine_mt)
-            raw_bucketed.setdefault(display_group, [])
-            for trace in grouped[cell_type][:max_cells_per_type]:
-                if isinstance(trace, tuple) and len(trace) == 3:
-                    raw_bucketed[display_group].append(trace)
-        grouped_rows = []
-        for display_group in _ordered_display_groups(raw_bucketed.keys(), combine_mt=combine_mt):
-            grouped_rows.extend(
-                _truncate_display_rows_for_group(
-                    raw_bucketed.get(display_group, []),
-                    max_cells_per_type,
-                    combine_mt=combine_mt,
-                    display_group=display_group,
-                )
-            )
-
-        raw_rows = []
-        raw_rows.extend(grouped_rows)
+        raw_rows = _neuroinfra_ordered_group_rows(
+            [
+                trace
+                for cell_type in _ordered_cell_types(grouped.keys())
+                for trace in grouped[cell_type][:max_cells_per_type]
+                if isinstance(trace, tuple) and len(trace) == 3
+            ],
+            bucket_fn=lambda row: _display_group_for_cell_type(cell_type_of(row[0]), combine_mt=combine_mt),
+            order_buckets_fn=lambda buckets: _ordered_display_groups(buckets, combine_mt=combine_mt),
+            limit_bucket_rows_fn=lambda bucket, bucket_rows: _truncate_display_rows_for_group(
+                list(bucket_rows),
+                max_cells_per_type,
+                combine_mt=combine_mt,
+                display_group=bucket,
+            ),
+            unknown_bucket="other",
+        )
         rows = [(label, detect_spikes(t, v, threshold=threshold)) for label, t, v in raw_rows]
     else:
         rows = saved_rows

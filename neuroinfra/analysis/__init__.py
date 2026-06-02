@@ -112,6 +112,7 @@ from .catalog import (
     group_rows_by_category,
     list_available_categories,
     list_unique_labels,
+    ordered_group_rows,
     ordered_names,
     round_robin_limit_by_subgroup,
 )
@@ -212,6 +213,7 @@ __all__ = [
     "metadata_value_or_result_length",
     "mean_aligned_row_trace",
     "normalize_sweep_plot_spec",
+    "ordered_group_rows",
     "ordered_names",
     "pattern_result_signal_provider",
     "render_sweep_frame",

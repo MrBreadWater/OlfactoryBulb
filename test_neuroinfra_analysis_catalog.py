@@ -7,6 +7,7 @@ from neuroinfra.analysis.catalog import (
     group_rows_by_category,
     list_available_categories,
     list_unique_labels,
+    ordered_group_rows,
     ordered_names,
     round_robin_limit_by_subgroup,
 )
@@ -63,6 +64,23 @@ def main() -> None:
         max_rows=4,
     )
     assert [row[0] for row in fair_rows] == ["MC0", "TC0", "MC1", "TC1"]
+
+    ordered_rows = ordered_group_rows(
+        [
+            ("MC0", 0),
+            ("MC1", 1),
+            ("TC0", 2),
+            ("GC0", 3),
+        ],
+        bucket_fn=lambda row: "MT" if row[0].startswith(("MC", "TC")) else "GC",
+        order_buckets_fn=lambda buckets: ordered_names(buckets, preferred_order=("MT", "GC"), unknown_name="other"),
+        limit_bucket_rows_fn=lambda bucket, bucket_rows: round_robin_limit_by_subgroup(
+            bucket_rows,
+            subgroup_fn=lambda row: row[0][:2],
+            max_rows=2 if bucket == "MT" else 1,
+        ),
+    )
+    assert [row[0] for row in ordered_rows] == ["MC0", "TC0", "GC0"]
     print("analysis catalog helpers: OK")
 
 

@@ -138,6 +138,7 @@ What is already generic:
 - stable category and label cataloging
 - stable ordered-name helpers with preferred ordering and unknown-last handling
 - fair round-robin subgroup truncation for merged display buckets
+- ordered group-row flattening across display buckets with per-bucket limits
 - result-overview context and summary builders
 - stacked labeled trace plotting with configurable offsets and styling
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
