@@ -117,12 +117,13 @@ Current progress:
 - the remaining concrete OBGPU signal names and field mapping still live in
   `obgpu_experiment_helpers.py`
 
-### 2b. Named result-signal registry
+### 2b. Result analysis and signal registry
 
 Current files:
 
 - `neuroinfra/analysis/catalog.py`
 - `neuroinfra/analysis/overview.py`
+- `neuroinfra/analysis/spectral.py`
 - `neuroinfra/analysis/signals.py`
 - `obgpu_experiment_helpers.py`
 
@@ -130,6 +131,8 @@ What is already generic:
 
 - stable category and label cataloging
 - result-overview context and summary builders
+- uniform-trace interpolation and time-modulus folding
+- spectrogram, wavelet, and band-power analysis on plain time/value arrays
 - ordered named-signal providers
 - dynamic signal enumeration
 - provider-based signal resolution
@@ -139,7 +142,7 @@ What is domain-specific:
 
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- notebook-specific signal-presentation conventions
+- notebook-specific signal-presentation and plotting conventions
 
 Extraction confidence:
 
