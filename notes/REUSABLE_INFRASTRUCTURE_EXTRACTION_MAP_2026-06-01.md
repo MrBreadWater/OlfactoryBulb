@@ -121,11 +121,13 @@ Current progress:
 
 Current files:
 
+- `neuroinfra/analysis/catalog.py`
 - `neuroinfra/analysis/signals.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
 
+- stable category and label cataloging
 - ordered named-signal providers
 - dynamic signal enumeration
 - provider-based signal resolution

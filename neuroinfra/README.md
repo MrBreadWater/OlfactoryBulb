@@ -107,10 +107,10 @@ result-schema machinery for default fields, artifact application behavior, and
 lazy-path bookkeeping, while the concrete OBGPU signal names and higher-level
 presentation policy still remain in `obgpu_experiment_helpers.py`.
 
-The generic named-signal provider registry that lists and resolves analysis
-signals in a stable ordered way now also lives under `neuroinfra.analysis.signals`,
-while the concrete OBGPU signal families and overview/presentation rules still
-remain in `obgpu_experiment_helpers.py`.
+The generic result-catalog helpers plus the named-signal provider registry that
+list, group, and resolve analysis signals in a stable ordered way now also live
+under `neuroinfra.analysis`, while the concrete OBGPU signal families and
+overview/presentation rules still remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

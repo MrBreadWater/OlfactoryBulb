@@ -253,6 +253,12 @@ from neuroinfra.analysis.signals import (
     list_available_result_signals as _neuroinfra_list_available_result_signals,
     resolve_result_signal as _neuroinfra_resolve_result_signal,
 )
+from neuroinfra.analysis.catalog import (
+    CategoryCatalogHooks as _NeuroinfraCategoryCatalogHooks,
+    group_rows_by_category as _neuroinfra_group_rows_by_category,
+    list_available_categories as _neuroinfra_list_available_categories,
+    list_unique_labels as _neuroinfra_list_unique_labels,
+)
 
 REPO_ROOT = Path(__file__).resolve().parent
 BENCHMARK_SCRIPT = REPO_ROOT / "tools" / "benchmarks" / "benchmark_ob.py"
@@ -5549,6 +5555,13 @@ def _ordered_cell_types(cell_types: list[str] | tuple[str, ...] | set[str]) -> l
     return ordered
 
 
+_OBGPU_CATEGORY_CATALOG_HOOKS = _NeuroinfraCategoryCatalogHooks(
+    categorize_label_fn=lambda label: cell_type_of(label),
+    order_categories_fn=lambda cell_types: _ordered_cell_types(set(cell_types)),
+    unknown_category="other",
+)
+
+
 def _display_group_for_cell_type(cell_type: str, *, combine_mt: bool = True) -> str:
     """Map notebook cell-family labels to a small display bucket."""
     cell_type = str(cell_type)
@@ -7009,59 +7022,39 @@ def _plot_frequency_time_binned_from_samples(
 
 def split_traces_by_type(result: dict[str, Any]) -> dict[str, list[tuple[str, np.ndarray, np.ndarray]]]:
     """Group saved soma traces by cell family prefix."""
-    grouped: dict[str, list[tuple[str, np.ndarray, np.ndarray]]] = {}
-    for label, t, v in result["soma_vs"]:
-        try:
-            bucket = cell_type_of(label)
-        except ValueError:
-            bucket = "other"
-        grouped.setdefault(bucket, []).append((label, np.asarray(t, dtype=float), np.asarray(v, dtype=float)))
-    return grouped
+    return _neuroinfra_group_rows_by_category(
+        list(result["soma_vs"]),
+        label_fn=lambda row: row[0],
+        transform_row_fn=lambda row: (
+            row[0],
+            np.asarray(row[1], dtype=float),
+            np.asarray(row[2], dtype=float),
+        ),
+        hooks=_OBGPU_CATEGORY_CATALOG_HOOKS,
+    )
 
 
 def list_available_cell_types(result: dict[str, Any]) -> list[str]:
     """List saved cell families available for analysis in stable display order."""
-    inferred: list[str] = []
-
-    for label, _t, _v in result.get("soma_vs", []):
-        try:
-            inferred.append(cell_type_of(label))
-        except ValueError:
-            inferred.append("other")
-
     voltage_summary = dict.get(result, "voltage_summary") or {}
-    for cell_type in voltage_summary.get("cell_types", []) or []:
-        inferred.append(str(cell_type))
-
     soma_spikes = dict.get(result, "soma_spikes") or {}
-    for label in soma_spikes.get("labels", []) or []:
-        try:
-            inferred.append(cell_type_of(label))
-        except ValueError:
-            inferred.append("other")
-
-    return _ordered_cell_types(inferred)
+    return _neuroinfra_list_available_categories(
+        label_sources=(
+            (label for label, _t, _v in result.get("soma_vs", [])),
+            (str(cell_type) for cell_type in voltage_summary.get("cell_types", []) or []),
+            (label for label in soma_spikes.get("labels", []) or []),
+        ),
+        hooks=_OBGPU_CATEGORY_CATALOG_HOOKS,
+    )
 
 
 def list_available_soma_labels(result: dict[str, Any]) -> list[str]:
     """List saved soma labels from raw traces or compact spike artifacts."""
-    labels: list[str] = []
-    seen: set[str] = set()
-
-    for label, _t, _v in result.get("soma_vs", []):
-        label = str(label)
-        if label not in seen:
-            seen.add(label)
-            labels.append(label)
-
     soma_spikes = dict.get(result, "soma_spikes") or {}
-    for label in soma_spikes.get("labels", []) or []:
-        label = str(label)
-        if label not in seen:
-            seen.add(label)
-            labels.append(label)
-
-    return labels
+    return _neuroinfra_list_unique_labels(
+        (label for label, _t, _v in result.get("soma_vs", [])),
+        (label for label in soma_spikes.get("labels", []) or []),
+    )
 
 
 def _lfp_signal_provider() -> _NeuroinfraResultSignalProvider:

@@ -208,10 +208,12 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Named result-signal registry",
         target_module="neuroinfra.analysis",
         source_paths=(
+            "neuroinfra/analysis/catalog.py",
             "neuroinfra/analysis/signals.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
+            "stable category and label cataloging",
             "ordered named-signal providers",
             "dynamic signal enumeration",
             "provider-based signal resolution",
@@ -224,7 +226,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic named-signal provider registry now lives under neuroinfra.analysis; next move more concrete signal families and result-overview presentation rules out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
+        recommended_action="The generic result-catalog helpers and named-signal provider registry now live under neuroinfra.analysis; next move more concrete signal families and result-overview presentation rules out of obgpu_experiment_helpers.py and behind provider-style interfaces.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",
