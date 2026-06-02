@@ -22,6 +22,17 @@ from olfactorybulb.audit.reference_data import (
     load_pv_crh_epl_fsi_protocol_rows,
 )
 from olfactorybulb.audit.reference_notes import notes_for_rows
+from olfactorybulb.audit.reference_validation_config import load_reference_validation_config
+from olfactorybulb.audit.reference_validation_engine import (
+    add_reference_validation_common_args,
+    add_reference_validation_protocol_args,
+    build_reference_validation_items,
+    run_reference_validation,
+)
+from olfactorybulb.audit.reference_validation_protocols import (
+    BurtonUrbanProtocol as RegisteredBurtonUrbanProtocol,
+    ProtocolRunResult,
+)
 from olfactorybulb.slice_connectivity_optimizer import load_slice_geometry, observed_metrics_for_synapse_set, resolve_slice_dir
 from prev_ob_models.cell_registry import get_cell_model_spec
 
@@ -126,6 +137,7 @@ TABLE5_REFERENCE = {
 }
 
 BURTON_REFERENCE_SOURCE = "Burton & Urban (2014)"
+BURTON_VALIDATION_ID = "burton_urban_fi"
 BURTON_CSV_PROPERTY_MAP = {
     "AHP Amplitude": ("AHP_amplitude_mV", "millivolts", lambda value: value),
     "AHP Duration": ("T_AHP50_ms", "milliseconds", lambda value: value),
@@ -1438,29 +1450,33 @@ def run_burton_urban_protocol(
     return sorted(metrics, key=lambda metric: metric["cell_name"])
 
 
-def configure_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--skip-neuron", action="store_true", help="Skip expensive NEURON-backed f-I validation.")
-    parser.add_argument("--cell-count", type=int, default=5, help="Run models 1..N for each requested cell type.")
-    parser.add_argument("--cell-types", default="MC,TC", help="Comma-separated cell type prefixes to audit.")
-    parser.add_argument("--candidate-slice", default=None, help="Optional exported slice name or path to check for MC/TC/GC context alongside the physiology audit.")
-    parser.add_argument("--use-coreneuron", action="store_true", help="Run current-clamp sweeps with CoreNEURON.")
-    parser.add_argument("--use-gpu", action="store_true", help="Enable GPU mode when --use-coreneuron is set.")
-    parser.add_argument("--dt-ms", type=float, default=0.1, help="Fixed integration time step in ms.")
-    parser.add_argument("--bias-max-iterations", type=int, default=24, help="Binary-search iterations for -58 mV bias current.")
-    parser.add_argument("--jobs", type=int, default=0, help="Worker processes. 0 uses all local CPU cores unless --use-gpu is set.")
-    parser.add_argument(
-        "--reference-sigma-multiplier",
-        type=float,
-        default=2.0,
-        help="Width of the Burton reference acceptance band in standard deviations. Default: 2.0.",
+def build_validation_items(
+    metrics: list[dict[str, Any]],
+    protocol: BurtonUrbanProtocol,
+    *,
+    reference_sigma_multiplier: float = 2.0,
+) -> list[AuditItem]:
+    del protocol
+    config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
+    args = argparse.Namespace(reference_sigma_multiplier=reference_sigma_multiplier)
+    protocol_result = ProtocolRunResult(metrics=metrics, protocol_evidence={}, group_field="cell_type")
+    return [_build_uploaded_reference_coverage_item()] + build_reference_validation_items(
+        metrics=metrics,
+        args=args,
+        config=config,
+        protocol_result=protocol_result,
     )
+
+
+def configure_parser(parser: argparse.ArgumentParser) -> None:
+    config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
+    add_reference_validation_common_args(parser)
+    add_reference_validation_protocol_args(parser, config=config)
+    parser.add_argument("--candidate-slice", default=None, help="Optional exported slice name or path to check for MC/TC/GC context alongside the physiology audit.")
 
 
 def run(args: argparse.Namespace) -> AuditReport:
-    protocol = BurtonUrbanProtocol(
-        dt_ms=float(getattr(args, "dt_ms", 0.1)),
-        bias_max_iterations=int(getattr(args, "bias_max_iterations", 24)),
-    )
+    config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
     cell_types = [
         cell_type.strip().upper()
         for cell_type in str(getattr(args, "cell_types", "MC,TC")).split(",")
@@ -1476,50 +1492,34 @@ def run(args: argparse.Namespace) -> AuditReport:
         audit_birgiolas_model_morphology(cell_types, cell_count, skip_neuron=bool(getattr(args, "skip_neuron", False))),
         audit_candidate_slice(candidate_slice),
     )
+    items.append(_build_uploaded_reference_coverage_item())
 
+    skip_item = None
     if bool(getattr(args, "skip_neuron", False)):
-        items.append(
-            AuditItem(
-                    check_id="burton_urban_fi_skipped",
-                    status="WARN",
-                    title="Burton and Urban firing-rate-versus-current validation skipped",
-                    criterion="Run this audit without --skip-neuron to execute the mitral-cell and tufted-cell current-clamp validation.",
-                    description="This item reports that the computationally expensive electrophysiology validation was intentionally skipped, so no conclusions should be drawn about whether the current mitral-cell and tufted-cell models match the Burton and Urban firing phenotypes.",
-                    acceptable="This is an informational warning only. It clears once the audit is rerun without the skip flag.",
-                    acceptable_basis="This item is generated by command-line control flow rather than by scientific data. Its purpose is to explain why there are no measured validation results in the current report.",
-                    evidence={
-                        "cell_count": cell_count,
-                        "cell_types": getattr(args, "cell_types", "MC,TC"),
-                        "jobs": int(getattr(args, "jobs", 0)),
-                        "reference_sigma_multiplier": reference_sigma_multiplier,
-                        "candidate_slice": candidate_slice,
-                    },
-                )
+        skip_item = AuditItem(
+            check_id="burton_urban_fi_skipped",
+            status="WARN",
+            title="Burton and Urban firing-rate-versus-current validation skipped",
+            criterion="Run this audit without --skip-neuron to execute the mitral-cell and tufted-cell current-clamp validation.",
+            description="This item reports that the computationally expensive electrophysiology validation was intentionally skipped, so no conclusions should be drawn about whether the current mitral-cell and tufted-cell models match the Burton and Urban firing phenotypes.",
+            acceptable="This is an informational warning only. It clears once the audit is rerun without the skip flag.",
+            acceptable_basis="This item is generated by command-line control flow rather than by scientific data. Its purpose is to explain why there are no measured validation results in the current report.",
+            evidence={
+                "cell_count": cell_count,
+                "cell_types": getattr(args, "cell_types", "MC,TC"),
+                "jobs": int(getattr(args, "jobs", 0)),
+                "reference_sigma_multiplier": reference_sigma_multiplier,
+                "candidate_slice": candidate_slice,
+            },
         )
-        return AuditReport(
-            audit_id="burton_urban_fi",
-            title="Burton & Urban f-I validation audit",
-            items=items,
-        )
-
-    metrics = run_burton_urban_protocol(
-        cell_types=cell_types,
-        cell_count=cell_count,
-        protocol=protocol,
-        use_coreneuron=bool(getattr(args, "use_coreneuron", False)),
-        use_gpu=bool(getattr(args, "use_gpu", False)),
-        jobs=int(getattr(args, "jobs", 0)),
-    )
-    items.extend(
-        build_validation_items(
-            metrics,
-            protocol,
-            reference_sigma_multiplier=reference_sigma_multiplier,
-        )
-    )
-
-    return AuditReport(
-        audit_id="burton_urban_fi",
+    return run_reference_validation(
+        args=args,
+        config=config,
+        audit_id=BURTON_VALIDATION_ID,
         title="Burton & Urban f-I validation audit",
-        items=items,
+        pre_items=items,
+        skip_item=skip_item,
     )
+
+
+BurtonUrbanProtocol = RegisteredBurtonUrbanProtocol

@@ -3,6 +3,10 @@
 This guide explains how to add and maintain a declarative reference-data
 dataset in this repository.
 
+If you also need to run model-side literature validation against those
+normalized rows, use the companion guide:
+[REFERENCE_VALIDATION_HOWTO.md](/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_HOWTO.md).
+
 The system is meant for structured, protocol-aware validation targets such as:
 
 - intrinsic electrophysiology summary tables
