@@ -27,6 +27,7 @@ The next standardized seam is also in place:
 - `neuroinfra.analysis.overview`
 - `neuroinfra.analysis.plotting`
 - `neuroinfra.analysis.spectral`
+- `neuroinfra.analysis.sweeps`
 - `neuroinfra.analysis.signals`
 - `neuroinfra.remote.config`
 - `neuroinfra.remote.helper_bundle`
@@ -111,11 +112,12 @@ lazy-path bookkeeping, while the concrete OBGPU signal names and higher-level
 presentation policy still remain in `obgpu_experiment_helpers.py`.
 
 The generic result-catalog helpers, result-overview builders, shared plotting
-primitives, spectral-analysis core, and named-signal provider registry that
-list, summarize, transform, plot, and resolve analysis signals in a stable
-ordered way now also live under `neuroinfra.analysis`, while the concrete
-OBGPU signal families and notebook-specific presentation and higher-level plot
-composition still remain in `obgpu_experiment_helpers.py`.
+primitives, spectral-analysis core, sweep plot protocol, and named-signal
+provider registry that list, summarize, transform, plot, animate, and resolve
+analysis signals in a stable ordered way now also live under
+`neuroinfra.analysis`, while the concrete OBGPU signal families and
+notebook-specific presentation and higher-level plot composition still remain
+in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

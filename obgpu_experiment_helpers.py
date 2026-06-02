@@ -266,6 +266,18 @@ from neuroinfra.analysis.plotting import (
     plot_time_frequency_map as _neuroinfra_plot_time_frequency_map,
     plot_time_series as _neuroinfra_plot_time_series,
 )
+from neuroinfra.analysis.sweeps import (
+    SweepPlotSpec,
+    build_sweep_plot_callable as _neuroinfra_build_sweep_plot_callable,
+    describe_unavailable_sweep_item as _neuroinfra_describe_unavailable_sweep_item,
+    extract_figure_from_plot_result as _neuroinfra_extract_figure_from_plot_result,
+    format_sweep_frame_title as _neuroinfra_format_sweep_frame_title,
+    is_deprecated_sweep_animation_spec as _neuroinfra_is_deprecated_sweep_animation_spec,
+    make_sweep_placeholder_figure as _neuroinfra_make_sweep_placeholder_figure,
+    make_sweep_plot_spec as _neuroinfra_make_sweep_plot_spec,
+    normalize_sweep_plot_spec as _neuroinfra_normalize_sweep_plot_spec,
+    render_sweep_frame as _neuroinfra_render_sweep_frame,
+)
 from neuroinfra.analysis.spectral import (
     DEFAULT_HFO_BANDS,
     butter_bandpass_filter,
@@ -440,19 +452,6 @@ class FrequencyPlotConfig:
     strip_plot: bool = True
     guide_line_spacing_ms: float = 0.0
 
-
-@dataclass
-class SweepPlotSpec:
-    """One sweep-animation artifact generated from an existing sweep."""
-
-    name: str
-    plot: str | Any
-    plot_kwargs: dict[str, Any] | None = None
-    filename: str | None = None
-    figsize: tuple[float, float] = (12.0, 5.0)
-    interval: int = 100
-    fps: int = 10
-    title_fn: Any = None
 
 def _format_bytes(num_bytes: int | float) -> str:
     """Return a compact human-readable byte count."""
@@ -8048,19 +8047,7 @@ def plot_wavelet_band_power(
 
 def _extract_figure_from_plot_result(plot_result: Any) -> Any:
     """Best-effort extraction of a Matplotlib figure from a plot return value."""
-    if plot_result is None:
-        return plt.gcf()
-    if hasattr(plot_result, "savefig"):
-        return plot_result
-    if hasattr(plot_result, "figure"):
-        return plot_result.figure
-    if isinstance(plot_result, tuple):
-        for item in plot_result:
-            if hasattr(item, "savefig"):
-                return item
-            if hasattr(item, "figure"):
-                return item.figure
-    return plt.gcf()
+    return _neuroinfra_extract_figure_from_plot_result(plot_result)
 
 
 _DEPRECATED_SWEEP_ANIMATION_PLOTS = {
@@ -8131,19 +8118,14 @@ def make_sweep_plot_spec(
     title_fn: Any = None,
 ) -> SweepPlotSpec:
     """Build a sweep-plot spec from a built-in plot name or custom callable."""
-    if name is None:
-        if isinstance(plot, str):
-            name = plot
-        else:
-            name = getattr(plot, "__name__", "custom_plot")
-    return SweepPlotSpec(
-        name=str(name),
-        plot=plot,
-        plot_kwargs=dict(plot_kwargs or {}),
+    return _neuroinfra_make_sweep_plot_spec(
+        plot,
+        name=name,
+        plot_kwargs=plot_kwargs,
         filename=filename,
         figsize=figsize,
-        interval=int(interval),
-        fps=int(fps),
+        interval=interval,
+        fps=fps,
         title_fn=title_fn,
     )
 
@@ -8214,118 +8196,48 @@ def make_sweep_time_variant_specs(
 
 def _normalize_sweep_plot_spec(plot_spec: SweepPlotSpec | str | Any | dict[str, Any]) -> SweepPlotSpec:
     """Accept ergonomic plot-spec forms and normalize them."""
-    if isinstance(plot_spec, SweepPlotSpec):
-        return make_sweep_plot_spec(
-            plot_spec.plot,
-            name=plot_spec.name,
-            plot_kwargs=plot_spec.plot_kwargs,
-            filename=plot_spec.filename,
-            figsize=plot_spec.figsize,
-            interval=plot_spec.interval,
-            fps=plot_spec.fps,
-            title_fn=plot_spec.title_fn,
-        )
-    if isinstance(plot_spec, str) or callable(plot_spec):
-        return make_sweep_plot_spec(plot_spec)
-    if isinstance(plot_spec, dict):
-        plot = plot_spec.get("plot")
-        if plot is None:
-            if "plot_fn" in plot_spec:
-                plot = plot_spec["plot_fn"]
-            elif "name" in plot_spec:
-                plot = plot_spec["name"]
-            else:
-                raise ValueError("Plot-spec dict must include 'plot', 'plot_fn', or 'name'")
-        return make_sweep_plot_spec(
-            plot,
-            name=plot_spec.get("name"),
-            plot_kwargs=plot_spec.get("plot_kwargs"),
-            filename=plot_spec.get("filename"),
-            figsize=tuple(plot_spec.get("figsize", (12.0, 5.0))),
-            interval=int(plot_spec.get("interval", 100)),
-            fps=int(plot_spec.get("fps", 10)),
-            title_fn=plot_spec.get("title_fn"),
-        )
-    raise TypeError(f"Unsupported sweep-plot spec type {type(plot_spec)!r}")
+    return _neuroinfra_normalize_sweep_plot_spec(plot_spec)
 
 
 def _build_sweep_plot_callable(spec: SweepPlotSpec) -> tuple[Any, str]:
     """Resolve a plot spec into a figure-producing callable and filename stem."""
-    plot_kwargs = dict(spec.plot_kwargs or {})
-    if isinstance(spec.plot, str):
-        plot_fn = _get_builtin_sweep_plot(spec.plot)
-    else:
-        plot_fn = spec.plot
-
-    def _wrapped(result: dict[str, Any]) -> Any:
-        return _extract_figure_from_plot_result(plot_fn(result, **plot_kwargs))
-
-    return _wrapped, _sweep_plot_artifact_stem(spec)
+    return (
+        _neuroinfra_build_sweep_plot_callable(spec, plot_resolver=_get_builtin_sweep_plot),
+        _sweep_plot_artifact_stem(spec),
+    )
 
 
 def _is_deprecated_sweep_animation_spec(spec: SweepPlotSpec) -> bool:
     """Return True for retired sweep GIF specs that should be skipped."""
-    names = {
-        str(spec.name or ""),
-        str(spec.filename or ""),
-    }
-    if isinstance(spec.plot, str):
-        names.add(spec.plot)
-    return any(name in _DEPRECATED_SWEEP_ANIMATION_PLOTS for name in names)
+    return _neuroinfra_is_deprecated_sweep_animation_spec(
+        spec,
+        deprecated_names=_DEPRECATED_SWEEP_ANIMATION_PLOTS,
+    )
 
 
 def _format_sweep_value(value: Any) -> str:
     """Format a sweep value compactly for figure titles."""
-    if isinstance(value, float):
-        return f"{value:.4g}"
-    return str(value)
+    return _neuroinfra_format_sweep_value(value)
 
 
 def _format_sweep_value_label(sweep: dict[str, Any], value: Any) -> str:
     """Format one sweep-path/value label for animation titles."""
-    path = sweep.get("path", "")
-    if isinstance(path, dict):
-        if isinstance(value, dict):
-            return ", ".join(f"{key}={_format_sweep_value(val)}" for key, val in value.items())
-        return ", ".join(f"{key}={_format_sweep_value(path_value)}" for key, path_value in path.items())
-    if isinstance(path, (list, tuple)):
-        if isinstance(value, (list, tuple)):
-            pairs = zip(path, value)
-            return ", ".join(f"{key}={_format_sweep_value(val)}" for key, val in pairs)
-        return ", ".join(str(key) for key in path)
-    return f"{path} = {_format_sweep_value(value)}"
+    return _neuroinfra_format_sweep_value_label(sweep, value)
 
 
 def _format_sweep_progress_label(frame_index: int, total_frames: int, *, width: int = 12) -> str:
     """Format one compact sweep-progress label without ASCII bar glyphs."""
-    total = max(int(total_frames), 1)
-    current = max(1, min(int(frame_index) + 1, total))
-    percent = (current / total) * 100.0
-    return f"{current}/{total} ({percent:.1f}%)"
+    return _neuroinfra_format_sweep_progress_label(frame_index, total_frames, width=width)
 
 
 def _format_sweep_frame_title(sweep: dict[str, Any], value: Any, frame_index: int, total_frames: int) -> str:
     """Build one default animation title with value and sweep progress."""
-    return (
-        f"{_format_sweep_value_label(sweep, value)}"
-        f" | {_format_sweep_progress_label(frame_index, total_frames)}"
-    )
+    return _neuroinfra_format_sweep_frame_title(sweep, value, frame_index, total_frames)
 
 
 def _describe_unavailable_sweep_item(item: dict[str, Any]) -> str:
     """Return a compact reason for a missing/unrenderable sweep frame."""
-    load_error = item.get("load_error")
-    if load_error:
-        return f"Load failed: {load_error}"
-    status = item.get("status")
-    if isinstance(status, dict):
-        for key in ("error", "reason", "state"):
-            value = status.get(key)
-            if value not in (None, ""):
-                return f"{key}: {value}"
-        if status.get("ok") is False:
-            return "Run did not produce a usable local result payload."
-    return "No local result payload was recovered for this sweep item."
+    return _neuroinfra_describe_unavailable_sweep_item(item)
 
 
 def _make_sweep_placeholder_figure(
@@ -8338,43 +8250,14 @@ def _make_sweep_placeholder_figure(
     figsize: tuple[float, float],
 ) -> Any:
     """Render an explicit placeholder frame instead of aborting partial sweeps."""
-    fig, ax = plt.subplots(figsize=figsize)
-    ax.axis("off")
-    value = item.get("value")
-    label = str(item.get("label") or f"item_{frame_index:03d}")
-    title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
-    ax.text(
-        0.5,
-        0.62,
-        "Sweep item unavailable",
-        ha="center",
-        va="center",
-        fontsize=16,
-        fontweight="bold",
-        transform=ax.transAxes,
+    return _neuroinfra_make_sweep_placeholder_figure(
+        sweep,
+        item,
+        frame_index,
+        total_frames,
+        reason=str(reason)[:500],
+        figsize=figsize,
     )
-    ax.text(
-        0.5,
-        0.46,
-        f"{label}\n{title}",
-        ha="center",
-        va="center",
-        fontsize=11,
-        transform=ax.transAxes,
-    )
-    ax.text(
-        0.5,
-        0.27,
-        str(reason)[:500],
-        ha="center",
-        va="center",
-        fontsize=9,
-        color="tab:red",
-        wrap=True,
-        transform=ax.transAxes,
-    )
-    fig.subplots_adjust(left=0.04, right=0.96, top=0.94, bottom=0.06)
-    return fig
 
 
 def _safe_name(name: Any) -> str:
@@ -8522,54 +8405,16 @@ def _render_sweep_frame(
     close_frames: bool = True,
 ) -> tuple[np.ndarray, str]:
     """Render one sweep item to a frame array and title."""
-    result = item.get("result") if isinstance(item, dict) else None
-    value = item.get("value") if isinstance(item, dict) else None
-    if title_fn is not None:
-        try:
-            title = title_fn(
-                value,
-                frame_index=frame_index,
-                total_frames=total_frames,
-                sweep=sweep,
-            )
-        except TypeError:
-            title = title_fn(value)
-    else:
-        title = _format_sweep_frame_title(sweep, value, frame_index, total_frames)
-
-    if result is None:
-        fig = _make_sweep_placeholder_figure(
-            sweep,
-            item,
-            frame_index,
-            total_frames,
-            reason=_describe_unavailable_sweep_item(item),
-            figsize=figsize,
-        )
-    else:
-        before_figs = set(plt.get_fignums())
-        try:
-            returned = plot_fn(result)
-            fig = _extract_figure_from_plot_result(returned)
-        except Exception as exc:
-            if close_frames:
-                for fignum in set(plt.get_fignums()) - before_figs:
-                    plt.close(fignum)
-            fig = _make_sweep_placeholder_figure(
-                sweep,
-                item,
-                frame_index,
-                total_frames,
-                reason=f"Plot failed: {type(exc).__name__}: {exc}",
-                figsize=figsize,
-            )
-
-    frame_rgb = _fig_to_rgb_array(fig)
-
-    if close_frames:
-        plt.close(fig)
-
-    return frame_rgb, str(title)
+    return _neuroinfra_render_sweep_frame(
+        sweep,
+        item,
+        frame_index,
+        total_frames,
+        plot_fn,
+        figsize=figsize,
+        title_fn=title_fn,
+        close_frames=close_frames,
+    )
 
 
 def _compose_sweep_display_frame(

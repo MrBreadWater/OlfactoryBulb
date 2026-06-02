@@ -125,6 +125,7 @@ Current files:
 - `neuroinfra/analysis/overview.py`
 - `neuroinfra/analysis/plotting.py`
 - `neuroinfra/analysis/spectral.py`
+- `neuroinfra/analysis/sweeps.py`
 - `neuroinfra/analysis/signals.py`
 - `obgpu_experiment_helpers.py`
 
@@ -135,6 +136,7 @@ What is already generic:
 - shared plotting primitives for traces, time-frequency maps, and band-power summaries
 - uniform-trace interpolation and time-modulus folding
 - spectrogram, wavelet, and band-power analysis on plain time/value arrays
+- sweep plot specification, placeholder rendering, and per-frame rendering
 - ordered named-signal providers
 - dynamic signal enumeration
 - provider-based signal resolution
@@ -144,7 +146,7 @@ What is domain-specific:
 
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
-- notebook-specific signal-presentation and higher-level plot composition
+- notebook-specific signal-presentation, plot composition, and built-in sweep plot registry
 
 Extraction confidence:
 
