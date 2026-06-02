@@ -345,6 +345,10 @@ contract for future sessions.
   - if relevant, also check the optimization module directly:
     - `http://127.0.0.1:6006/`
     - `http://127.0.0.1:6006/visual_dashboard/`
+  - if `6006` is unexpectedly reoccupied after killing a visible
+    `serve-static` child, check for an older HFO dashboard watchdog/runtime
+    process that is respawning the server and stop it via the maintained HFO
+    runtime stop command rather than killing only the child PID
 
 - Do not assume a watcher/server is healthy because a status file says so.
   - Verify the listener and the rendered page.
