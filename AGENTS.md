@@ -194,6 +194,9 @@ contract for future sessions.
     the generator.
   - For notebook-facing defaults, verify the actual notebook/runtime paths that
     consume them.
+  - If a user reports that a just-delivered change failed, reproduce that exact
+    command or launch path before changing code again, then add or tighten a
+    regression for the missed path when practical.
 
 - When changing a notebook-facing default, verify the actual user paths that
   should observe it:

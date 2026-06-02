@@ -108,3 +108,34 @@ def test_action_potential_ahp_amplitude_is_positive():
     )
 
     assert props["ahp_amplitude_millivolts"] > 0
+
+
+def test_action_potential_properties_ignore_step_onset_charging_transient():
+    t = np.arange(0.0, 60.1, 0.1)
+    v = np.full_like(t, -65.0)
+
+    # Passive step-onset charging transient with large dV/dt but no spike.
+    transient_mask = (t >= 10.0) & (t < 10.5)
+    v[transient_mask] = np.linspace(-65.0, -40.0, np.count_nonzero(transient_mask))
+    relax_mask = (t >= 10.5) & (t < 12.0)
+    v[relax_mask] = np.linspace(-40.0, -52.0, np.count_nonzero(relax_mask))
+
+    # First real spike later in the step.
+    spike_rise = (t >= 30.0) & (t < 30.3)
+    v[spike_rise] = np.linspace(-45.0, 30.0, np.count_nonzero(spike_rise))
+    spike_fall = (t >= 30.3) & (t < 30.9)
+    v[spike_fall] = np.linspace(30.0, -75.0, np.count_nonzero(spike_fall))
+    recover = (t >= 30.9) & (t < 33.0)
+    v[recover] = np.linspace(-75.0, -45.0, np.count_nonzero(recover))
+
+    props = compute_action_potential_properties(
+        {"t": t, "v_soma": v},
+        voltage_derivative_threshold_millivolts_per_millisecond=20.0,
+        step_onset_milliseconds=10.0,
+        spike_threshold_millivolts=-20.0,
+    )
+
+    assert np.isfinite(props["ap_onset_millivolts"])
+    assert props["ap_onset_millivolts"] > -50.0
+    assert np.isfinite(props["ap_amplitude_millivolts"])
+    assert props["ap_amplitude_millivolts"] > 40.0

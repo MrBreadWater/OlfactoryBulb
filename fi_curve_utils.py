@@ -811,6 +811,7 @@ def compute_action_potential_properties(
     trace_dict: dict,
     voltage_derivative_threshold_millivolts_per_millisecond: float = 20.0,
     step_onset_milliseconds: float = 0.0,
+    spike_threshold_millivolts: float = -20.0,
 ) -> dict:
     """Characterize the shape of the first action potential in a voltage trace.
 
@@ -832,6 +833,9 @@ def compute_action_potential_properties(
         dV/dt threshold that defines AP onset (mV/ms). Paper value is 20.0.
     step_onset_milliseconds : float
         Only analyze APs that begin at or after this time (ms). Default 0.0.
+    spike_threshold_millivolts : float
+        Voltage threshold used to identify the first actual spike so passive
+        step-onset transients are not mistaken for AP onset.
 
     Returns
     -------
@@ -876,15 +880,25 @@ def compute_action_potential_properties(
         np.diff(voltage_post_onset) / timestep_milliseconds
     )
 
-    # AP onset: first index where dV/dt exceeds the threshold
-    above_derivative_threshold = (
-        voltage_derivative_millivolts_per_millisecond
-        > voltage_derivative_threshold_millivolts_per_millisecond
-    )
-    if not above_derivative_threshold.any():
+    # Identify the first actual spike before measuring derivative-defined onset.
+    # This avoids treating passive charging transients at step onset as APs.
+    above_spike_threshold = voltage_post_onset > spike_threshold_millivolts
+    spike_threshold_crossings = np.where(np.diff(above_spike_threshold.astype(int)) == 1)[0]
+    if len(spike_threshold_crossings) == 0:
         return nan_result
-
-    ap_onset_index = int(np.argmax(above_derivative_threshold))
+    first_spike_crossing_index = int(spike_threshold_crossings[0] + 1)
+    derivative_hits = np.where(
+        voltage_derivative_millivolts_per_millisecond[: first_spike_crossing_index + 1]
+        > voltage_derivative_threshold_millivolts_per_millisecond
+    )[0]
+    if len(derivative_hits) == 0:
+        return nan_result
+    discontinuities = np.where(np.diff(derivative_hits) > 1)[0]
+    ap_onset_index = int(
+        derivative_hits[int(discontinuities[-1]) + 1]
+        if len(discontinuities) > 0
+        else derivative_hits[0]
+    )
     ap_onset_voltage_millivolts = float(voltage_post_onset[ap_onset_index])
     ap_onset_time_milliseconds = float(time_post_onset[ap_onset_index])
 
