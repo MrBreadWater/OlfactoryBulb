@@ -31,6 +31,10 @@ DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 6006
 DEFAULT_AUDIT_ID = "repo_health"
 DEFAULT_AUDIT_ARGS = ["--profile", "maintained"]
+DEFAULT_CONTROL_CENTER_TOP_N = hfo_dashboard.DEFAULT_TOP_N
+DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N = 0
+DEFAULT_CONTROL_CENTER_GENERATE_PACKET_WORKERS = hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS
+DEFAULT_CONTROL_CENTER_CLEANUP_STALE_PACKETS = False
 
 
 def _progress(message: str) -> None:
@@ -281,11 +285,11 @@ def export_control_center(
     output_dir: str | Path | None = None,
     audit_id: str = DEFAULT_AUDIT_ID,
     audit_args: list[str] | None = None,
-    top_n: int = hfo_dashboard.DEFAULT_TOP_N,
+    top_n: int = DEFAULT_CONTROL_CENTER_TOP_N,
     refresh_s: float = hfo_dashboard.DEFAULT_REFRESH_S,
-    generate_packets_top_n: int = hfo_dashboard.DEFAULT_GENERATE_PACKETS_TOP_N,
-    generate_packet_workers: int = hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS,
-    cleanup_stale_packets_before_render: bool = hfo_dashboard.DEFAULT_CLEANUP_STALE_PACKETS,
+    generate_packets_top_n: int = DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N,
+    generate_packet_workers: int = DEFAULT_CONTROL_CENTER_GENERATE_PACKET_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CONTROL_CENTER_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
     progress: bool = False,
 ) -> dict[str, Any]:
@@ -393,11 +397,11 @@ def serve_control_center(
     output_dir: str | Path | None = None,
     audit_id: str = DEFAULT_AUDIT_ID,
     audit_args: list[str] | None = None,
-    top_n: int = hfo_dashboard.DEFAULT_TOP_N,
+    top_n: int = DEFAULT_CONTROL_CENTER_TOP_N,
     refresh_s: float = hfo_dashboard.DEFAULT_REFRESH_S,
-    generate_packets_top_n: int = hfo_dashboard.DEFAULT_GENERATE_PACKETS_TOP_N,
-    generate_packet_workers: int = hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS,
-    cleanup_stale_packets_before_render: bool = hfo_dashboard.DEFAULT_CLEANUP_STALE_PACKETS,
+    generate_packets_top_n: int = DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N,
+    generate_packet_workers: int = DEFAULT_CONTROL_CENTER_GENERATE_PACKET_WORKERS,
+    cleanup_stale_packets_before_render: bool = DEFAULT_CONTROL_CENTER_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
     host: str = DEFAULT_HOST,
     port: int = DEFAULT_PORT,
@@ -588,6 +592,11 @@ def serve_control_center(
                 title="Audit startup failed",
                 message=str(exc),
             )
+            _write_error_frame(
+                optimization_dir,
+                title="Optimization startup failed",
+                message=str(exc),
+            )
 
     render_thread = threading.Thread(
         target=_render_initial_content,
@@ -623,10 +632,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Control-center output directory.")
     parser.add_argument("--audit-id", default=DEFAULT_AUDIT_ID, help="Audit id to render inside the audit dashboard.")
-    parser.add_argument("--top-n", type=int, default=hfo_dashboard.DEFAULT_TOP_N)
+    parser.add_argument("--top-n", type=int, default=DEFAULT_CONTROL_CENTER_TOP_N)
     parser.add_argument("--refresh-s", type=float, default=hfo_dashboard.DEFAULT_REFRESH_S)
-    parser.add_argument("--generate-packets-top-n", type=int, default=hfo_dashboard.DEFAULT_GENERATE_PACKETS_TOP_N)
-    parser.add_argument("--generate-packet-workers", type=int, default=hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS)
+    parser.add_argument("--generate-packets-top-n", type=int, default=DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N)
+    parser.add_argument("--generate-packet-workers", type=int, default=DEFAULT_CONTROL_CENTER_GENERATE_PACKET_WORKERS)
     parser.add_argument("--no-cleanup-stale-packets", action="store_true")
     parser.add_argument("--status-json", default="")
     parser.add_argument("--host", default=DEFAULT_HOST)

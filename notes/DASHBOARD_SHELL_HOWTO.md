@@ -57,6 +57,8 @@ That command:
   views are rendering in the background
 - shows loading placeholders in the audit/optimization tabs until those views
   are ready
+- does not regenerate missing optimization packets during default startup; use
+  explicit controls/flags when you want packet generation work
 - if `6006` is already in use, it automatically picks the next available local
   port and prints the actual URL
 

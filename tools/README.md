@@ -56,7 +56,8 @@ use:
 That maintained command auto-detects the active optimization campaign when it
 can, serves immediately at `http://127.0.0.1:6006/` by default, falls forward
 to the next available local port if `6006` is already occupied, and renders
-the default maintained audit into the page in the background. Use
+the default maintained audit into the page in the background. It does not
+regenerate missing optimization packets during default startup. Use
 `--open-browser` if you want it to launch a local browser automatically.
 
 For a local docs portal that points at the maintained markdown docs first and

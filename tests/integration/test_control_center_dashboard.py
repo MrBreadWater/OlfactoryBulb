@@ -36,7 +36,12 @@ def _sample_report() -> AuditReport:
     )
 
 
+_export_call_kwargs: dict[str, object] = {}
+
+
 def _fake_export_visual_dashboard(campaign_dir: Path, *, output_dir: Path, **_kwargs):
+    _export_call_kwargs.clear()
+    _export_call_kwargs.update(_kwargs)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text("<html><body>optimization</body></html>")
     (output_dir / "manifest.json").write_text(json.dumps({"packet_count": 7, "output_dir": str(output_dir)}))
@@ -72,6 +77,8 @@ with TemporaryDirectory() as tmp:
     assert "/audits/index.html" in html
     assert "/optimization/index.html" in html
     assert "/docs/index.html" in html
+    assert _export_call_kwargs["generate_packets_top_n"] == 0
+    assert _export_call_kwargs["cleanup_stale_packets_before_render"] is False
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)

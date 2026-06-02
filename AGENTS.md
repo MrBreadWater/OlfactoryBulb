@@ -340,6 +340,9 @@ contract for future sessions.
   - do not treat export-only coverage as sufficient for dashboard launch
     changes; verify the actual zero-argument serve path and confirm the shell
     is reachable before the heavy audit render finishes
+  - a bare `HTTP 200` on `/` is not enough for control-center verification;
+    wait for the background startup render to either replace the loading
+    placeholders with real content or surface a concrete startup error frame/log
   - when you start a local server during validation, shut it down before
     finishing the task unless the user explicitly asked you to leave it running
   - if relevant, also check the optimization module directly:
@@ -357,6 +360,10 @@ contract for future sessions.
   - check both:
     - pre-render behavior
     - manual/queued packet refresh behavior
+  - zero-argument control-center startup should prefer reliable shell launch
+    over eager regeneration of missing optimization packets
+  - if packet regeneration is needed, request it explicitly through supported
+    controls/flags rather than making default startup block on heavy packet work
 
 - Do not create a second standalone dashboard stack when the existing shell can
   mount the new surface as a tab.

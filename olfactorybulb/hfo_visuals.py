@@ -20,6 +20,7 @@ from neuroinfra.contracts.visuals import (
     FrequencyGroupSpec,
     build_visual_contract_snapshot,
 )
+from neuroinfra.analysis import fold_time_series_by_modulus
 import obgpu_experiment_helpers as hlp
 import olfactorybulb.hfo_optimizer as hfo
 
@@ -404,7 +405,7 @@ def save_lfp_zoom(result: dict[str, Any], windows: dict[str, tuple[float, float]
         ax.set_xlabel("Time (ms)")
         ax.set_title("LFP trace and scoring windows")
     else:
-        folded_t, folded_values = hlp._fold_time_series_by_modulus(  # type: ignore[attr-defined]
+        folded_t, folded_values = fold_time_series_by_modulus(
             t_ms,
             values,
             modulus_ms,

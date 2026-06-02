@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import numpy as np
 
 from olfactorybulb.audit.hfo_feature_contracts import run
 from olfactorybulb.hfo_features import (
@@ -36,3 +40,17 @@ assert packet_script.SPECTROGRAM_FILE_KETAMINE == hfo_visuals.SPECTROGRAM_FILE_B
 assert psd_script.PSD_PACKET_RENDER_VERSION == hfo_visuals.PSD_PACKET_RENDER_VERSION
 assert dashboard.EXPECTED_SPECTROGRAM_FILES == dict(hfo_visuals.SPECTROGRAM_FILE_BY_CONDITION)
 assert tuple(dashboard.PRIMARY_PSD_NAME_ORDER) == tuple(hfo_visuals.PRIMARY_PSD_NAME_ORDER)
+
+with TemporaryDirectory() as tmp:
+    output_path = Path(tmp) / "lfp_mod_zoom.png"
+    t_ms = np.arange(0.0, 1000.0, 0.1, dtype=float)
+    result = {
+        "lfp_t": t_ms,
+        "lfp": np.sin(2.0 * np.pi * 180.0 * t_ms / 1000.0),
+    }
+    windows = {"control": (0.0, 200.0), "ketamine": (200.0, 400.0)}
+    hfo_visuals.save_lfp_zoom(result, windows, output_path, modulus_ms=200.0)
+    assert output_path.exists()
+    assert output_path.stat().st_size > 0
+
+print("hfo_feature_contracts: OK")
