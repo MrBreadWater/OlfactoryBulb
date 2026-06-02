@@ -162,6 +162,7 @@ Current files:
 
 - `neuroinfra/notebooks/config_store.py`
 - `olfactorybulb/notebook_configs.py`
+- `olfactorybulb/notebook_run_configs.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
@@ -175,6 +176,9 @@ What is domain-specific:
 - odor-schedule normalization after reload
 - the built-in paramset catalog
 - effective-param diffing against paramset defaults
+- concrete notebook run-config defaults and results layout
+- execution-mode summaries for OBGPU local vs remote backends
+- notebook-facing remote preset builders for Sol and generic Slurm paths
 
 Extraction confidence:
 
@@ -190,6 +194,9 @@ Current progress:
   `neuroinfra.notebooks.config_store`
 - the olfactory-bulb-specific normalization, built-in paramset catalog, and
   config diff logic now live in `olfactorybulb/notebook_configs.py`
+- the concrete notebook run-config defaults, execution-mode summaries,
+  effective-param snapshot resolution, and notebook-facing remote preset
+  builders now live in `olfactorybulb/notebook_run_configs.py`
 - `obgpu_experiment_helpers.py` now delegates that config layer instead of
   owning it inline
 

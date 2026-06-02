@@ -148,6 +148,31 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic config persistence helpers now live under neuroinfra.notebooks.config_store, while the olfactory-bulb-specific normalization and paramset catalog live in olfactorybulb.notebook_configs; next separate the remaining simulation/result wiring from the notebook helper.",
     ),
     ExtractionCandidate(
+        key="notebook_run_config_model",
+        title="Notebook run config model and remote presets",
+        target_module="neuroinfra.notebooks",
+        source_paths=(
+            "olfactorybulb/notebook_run_configs.py",
+            "neuroinfra/remote/config.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "timestamped notebook label construction",
+            "execution-mode inference and runtime-control snapshot formatting",
+            "notebook-facing remote Slurm preset builders on top of generic remote normalization",
+            "paramset default and effective-parameter snapshot resolution",
+        ),
+        repo_specific_couplings=(
+            "the concrete run-config key set and HFO controls are olfactory-bulb-specific",
+            "param override translation still depends on the olfactory-bulb model and input spec semantics",
+            "default notebook results layout still comes from this repo",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic config persistence helpers now live under neuroinfra.notebooks.config_store and the generic remote normalization lives under neuroinfra.remote.config, while the concrete notebook run-config defaults, execution-mode summaries, effective-param resolution, and remote preset builders now live in olfactorybulb.notebook_run_configs; next keep shrinking obgpu_experiment_helpers.py by separating the remaining benchmark command assembly and notebook glue from the config model.",
+    ),
+    ExtractionCandidate(
         key="notebook_reporting",
         title="Notebook reporting and figure output",
         target_module="neuroinfra.notebooks",

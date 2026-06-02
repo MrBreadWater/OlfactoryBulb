@@ -180,7 +180,10 @@ while the concrete config normalization and simulation/result wiring remain in
 The generic JSON-ready conversion plus notebook-config save/load/list helpers
 now also live under `neuroinfra.notebooks.config_store`, while the
 olfactory-bulb-specific odor normalization, built-in paramset catalog, and
-effective-param diff logic now live in `olfactorybulb.notebook_configs`.
+effective-param diff logic now live in `olfactorybulb.notebook_configs`, and
+the concrete notebook run-config defaults, runtime-control snapshots,
+effective-param resolution, and remote preset builders now live in
+`olfactorybulb.notebook_run_configs`.
 
 The generic nested-diff, human-readable reporting, and figure-output helpers
 now also live under `neuroinfra.notebooks.reporting`, while the

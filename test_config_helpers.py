@@ -89,6 +89,22 @@ with tempfile.TemporaryDirectory() as tmp:
     assert loaded2["input_odors"][0]["name"] == "Apple"
     print("odor key normalization: OK")
 
+    # --- build_run_config wrapper delegates through notebook run-config adapters ---
+    original_build_run_config = hlp._ob_build_run_config
+    build_run_config_calls = []
+    try:
+        def _fake_build_run_config(**overrides):
+            build_run_config_calls.append(dict(overrides))
+            return {"delegated": True, **overrides}
+
+        hlp._ob_build_run_config = _fake_build_run_config
+        delegated_cfg = hlp.build_run_config(paramset="GammaSignature", gap_mc=32.0)
+        assert delegated_cfg["delegated"] is True
+        assert build_run_config_calls == [{"paramset": "GammaSignature", "gap_mc": 32.0}]
+    finally:
+        hlp._ob_build_run_config = original_build_run_config
+    print("build_run_config wrapper delegation: OK")
+
     # --- list_saved_configs ---
     results = list_saved_configs(tmp)
     assert len(results) == 2
