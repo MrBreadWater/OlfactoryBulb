@@ -42,12 +42,22 @@ validation that uses one registered protocol runner:
 - protocol runner:
   `burton_urban_mctc_current_clamp`
 
+The same framework now also drives:
+
+- [gc_intrinsic_validation.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/gc_intrinsic_validation.validation.toml)
+- [epl_fsi_intrinsic_validation.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/epl_fsi_intrinsic_validation.validation.toml)
+- [epli_correctness.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/epli_correctness.validation.toml)
+
 ## Where the pieces live
 
 - Validation config template:
   [research_context/reference_validations/TEMPLATE.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/TEMPLATE.validation.toml)
 - Current built-in validation config:
   [research_context/reference_validations/burton_urban_fi.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/burton_urban_fi.validation.toml)
+- Additional built-in validation configs:
+  - [gc_intrinsic_validation.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/gc_intrinsic_validation.validation.toml)
+  - [epl_fsi_intrinsic_validation.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/epl_fsi_intrinsic_validation.validation.toml)
+  - [epli_correctness.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/epli_correctness.validation.toml)
 - Validation config loader:
   [olfactorybulb/audit/reference_validation_config.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_config.py)
 - Validation engine:
@@ -123,6 +133,8 @@ Optional but useful:
 - `[defaults]`
 - `[protocol]`
 - `[skip_item]`
+- `notes_path`
+- `skip_neuron_mode`
 
 ## How a validation is evaluated
 
@@ -145,6 +157,18 @@ That boundary matters.
 If you need a new measured quantity, add it to the protocol runner output.
 If you need a new decision rule, add a new rule kind.
 
+The framework now supports two skip behaviors:
+
+- `short_circuit`
+  - `--skip-neuron` returns only the configured `[skip_item]`
+  - best for purely simulation-backed validations such as current-clamp sweeps
+- `protocol_handles_skip`
+  - the protocol runner still executes cheap checks and emits warning-state
+    metrics for the expensive skipped parts
+  - best for mixed audits such as `epli_correctness`, where source-code and
+    slice-export checks should still run when NEURON-backed morphology or
+    behavior checks are skipped
+
 ## Built-in rule kinds
 
 The built-in rule layer already covers common cases:
@@ -155,7 +179,12 @@ The built-in rule layer already covers common cases:
 - `group_ordering`
 - `group_abs_diff_max`
 - `group_positive`
+- `summary_metric_min`
+- `summary_metric_max`
+- `summary_metric_range`
+- `summary_metric_status_map`
 - `reference_band_rows`
+- `reference_curve_match`
 - `note_presence`
 
 Use config alone whenever one of these can express the paper cleanly.
@@ -232,6 +261,15 @@ Key point:
 
 - the protocol runner can emit any measurement keys you want
 - those keys become available to rule checks
+- protocol runners are not limited to current clamp
+
+They can just as easily emit:
+
+- slice export counts
+- source-code default status codes
+- morphology measurements
+- network-readiness booleans
+- protocol-backed trace measurements
 
 ## Adding custom measurements
 
@@ -254,6 +292,13 @@ Once the metric exists, you have two options:
 
 1. express the judgment using a built-in rule, if possible
 2. register a new rule kind if the logic is new
+
+When a paper needs a brand-new **protocol family**, write a new registered
+protocol runner.
+
+When a paper only needs a brand-new **measurement** inside an already-matching
+protocol family, extend that runner’s emitted metrics instead of creating a
+second near-duplicate runner.
 
 ## Registering a new rule kind
 
@@ -311,6 +356,16 @@ Add a **new protocol runner** when the paper changes:
 - trace-processing pipeline
 - measured quantities
 
+Also add a new protocol runner when the paper is not really a current-clamp
+paper at all, for example:
+
+- structural or morphology audits
+- slice-export readiness audits
+- synaptic latency protocols
+- modulation protocols
+- mixed audits that combine cheap static checks with optional NEURON-backed
+  measurements
+
 Add a **new rule kind** when the paper changes:
 
 - comparison logic
@@ -325,7 +380,11 @@ ordering check or tolerance band. That belongs in config or a rule.
 ## Skip behavior
 
 Use `[skip_item]` in the validation config so `--skip-neuron` still produces a
-useful report.
+useful report when the validation is `short_circuit`.
+
+Use `skip_neuron_mode = "protocol_handles_skip"` when the validation should
+still execute cheap source-code, dataset, or slice checks while reporting the
+NEURON-backed parts as skipped warnings.
 
 Example:
 
@@ -346,6 +405,16 @@ evidence_arg_keys = ["reference_sigma_multiplier", "cell_count"]
 If the validation involves protocol-dependent comparisons, add a `note_presence`
 check so caveats remain visible.
 
+Important implementation details:
+
+- set `notes_path` when the dataset uses a dataset-local notes table instead of
+  the shared default
+- use `row_contexts` when the caveat should be resolved from real extracted rows
+- use `synthetic_contexts` when the caveat is driven by config state or by an
+  intentionally empty extracted file
+- use `filter_value_arg` or `filter_values_arg` when the relevant note context
+  comes from CLI-selected targets such as `--reference-gc-subtypes`
+
 That is what keeps differences such as:
 
 - MC/TC protocol versus EPL fast-spiking interneuron protocol
@@ -362,9 +431,16 @@ from being buried in raw CSV text.
 4. if no runner matches, write an extension module and register a new protocol
 5. add checks using built-in rule kinds first
 6. add a new rule kind only when config cannot express the comparison
-7. add a `[skip_item]` so smoke runs stay readable
-8. run the generic validation CLI
-9. add a dedicated audit wrapper only if you also need repo-specific structural
+7. decide whether `--skip-neuron` should short-circuit or whether the protocol
+   should keep running cheap checks
+8. add a `[skip_item]` so smoke runs stay readable
+9. if the paper uses dataset-local caveats, set `notes_path` and add
+   `note_presence` checks
+10. when one config should cover multiple related targets, gate checks with
+   `enabled_when_arg_truthy`, `enabled_when_arg_falsey`, or
+   `enabled_when_arg_in`
+11. run the generic validation CLI
+12. add a dedicated audit wrapper only if you also need repo-specific structural
    or context checks beyond the literature comparison itself
 
 ## Practical boundary

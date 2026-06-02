@@ -1,0 +1,314 @@
+validation_id = "epli_correctness"
+title = "External plexiform layer interneuron correctness audit"
+description = "Audit the provisional external plexiform layer interneuron path for baseline slice context, default wiring assumptions, surrogate morphology, fast-spiking behavior, and exported slice readiness."
+protocol_runner = "epli_correctness_structural"
+metric_group_field = "validation_group"
+skip_neuron_mode = "protocol_handles_skip"
+
+[[checks]]
+kind = "summary_metric_min"
+check_id = "baseline_slice_population_counts"
+metric_key = "baseline_population_min_count"
+minimum = 1.0
+title = "Baseline dorsal slice contains nonzero principal and granule populations"
+criterion = "Canonical maintained slice should contain mitral-cell, tufted-cell, and granule-cell populations with exported geometry."
+description = "This check verifies that the maintained baseline dorsal slice exports nonempty mitral-cell, tufted-cell, and granule-cell populations before any external plexiform layer interneuron additions are considered."
+acceptable = "All three baseline population counts are greater than zero."
+acceptable_basis = "The rule is a direct nonzero-count check on the exported DorsalColumnSlice geometry groups because a missing baseline population invalidates downstream connectivity interpretation."
+evidence_metric_keys = ["baseline_MCs_count", "baseline_TCs_count", "baseline_GCs_count"]
+
+[[checks]]
+kind = "summary_metric_min"
+check_id = "baseline_GCs__MCs"
+metric_key = "GCs__MCs_entry_count"
+minimum = 1.0
+title = "Canonical GCs__MCs set is populated"
+criterion = "Maintained baseline slice should export nonzero reciprocal granule-cell connectivity onto mitral cells."
+description = "This check confirms that the maintained baseline slice already contains nonzero reciprocal granule-cell connectivity for the GCs__MCs synapse-set export."
+acceptable = "The exported synapse set contains at least one entry."
+acceptable_basis = "The rule is a direct entry-count check because the baseline slice must already provide explicit reciprocal granule-cell connectivity before external plexiform layer interneuron additions can be evaluated meaningfully."
+
+[[checks]]
+kind = "summary_metric_min"
+check_id = "baseline_GCs__TCs"
+metric_key = "GCs__TCs_entry_count"
+minimum = 1.0
+title = "Canonical GCs__TCs set is populated"
+criterion = "Maintained baseline slice should export nonzero reciprocal granule-cell connectivity onto tufted cells."
+description = "This check confirms that the maintained baseline slice already contains nonzero reciprocal granule-cell connectivity for the GCs__TCs synapse-set export."
+acceptable = "The exported synapse set contains at least one entry."
+acceptable_basis = "The rule is a direct entry-count check because the baseline slice must already provide explicit reciprocal granule-cell connectivity before external plexiform layer interneuron additions can be evaluated meaningfully."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "epli_reciprocal_architecture"
+metric_key = "epli_reciprocal_architecture_code"
+pass_values = [2]
+fail_values = [0]
+title = "External plexiform layer interneuron default architecture is reciprocal excitatory-inhibitory"
+criterion = "Default external plexiform layer interneuron integration should preserve principal-cell to external plexiform layer interneuron excitation and external plexiform layer interneuron to principal-cell inhibition."
+description = "This check verifies that the default synapse blueprints encode the intended reciprocal architecture: excitatory principal-cell input onto external plexiform layer interneurons and inhibitory output back onto principal cells."
+acceptable = "Every external plexiform layer interneuron-origin blueprint is reciprocal and uses excitatory principal-cell input with inhibitory return synapses."
+acceptable_basis = "The rule comes from the maintained high-level network hypothesis for external plexiform layer interneuron integration, where reciprocal principal-cell microcircuits are the intended default architecture."
+evidence_metric_keys = ["epli_blueprint_count"]
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "epli_target_pattern_specificity"
+metric_key = "epli_target_pattern_specificity_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "Default external plexiform layer interneuron target pattern encodes perisomatic principal territory"
+criterion = "Perisomatic inhibition in the literature includes soma, proximal apical dendrite, and axon-hillock territory; the default selector should encode that broader territory instead of soma-only."
+description = "This check evaluates whether the default target selector expresses a broader perisomatic contact class rather than collapsing inhibition to soma-only sections."
+acceptable = "The preferred result is the semantic principal perisomatic selector. A soma-only selector is a failure because it is too narrow; any other placeholder pattern is a warning."
+acceptable_basis = "The rule is based on the literature interpretation that perisomatic inhibition spans soma-adjacent principal-cell territory, not only literal soma sections, so the selector must encode that broader contact class."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "epli_default_contact_radius"
+metric_key = "epli_default_contact_radius_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "Default external plexiform layer interneuron contact radius is heuristic"
+criterion = "Default contact radii should be justified by recovered slice geometry or direct anatomical data."
+description = "This check warns when the default contact radius remains a heuristic placeholder instead of a value grounded in recovered slice geometry or direct anatomical evidence."
+acceptable = "The ideal result is a literature- or geometry-supported contact radius. The current placeholder value is treated as a warning rather than a hard failure."
+acceptable_basis = "The rule reflects current project status: a heuristic radius is permitted for provisional integration work, but it is flagged because it is not yet evidence-backed."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "epli_particle_cloud_source"
+metric_key = "epli_particle_cloud_source_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "External plexiform layer interneuron soma candidates do not rely on a tufted-cell fallback particle cloud"
+criterion = "A biologically grounded external plexiform layer interneuron distribution should be based on an explicit interneuron density model rather than a tufted-cell fallback cloud."
+description = "This check inspects the slice-builder source for whether external plexiform layer interneuron somata are currently seeded from a dedicated external plexiform layer interneuron population model or from a tufted-cell or outer-plexiform-layer fallback cloud."
+acceptable = "The preferred result is that no tufted-cell fallback cloud is used. A detected fallback is reported as a warning because it is a known provisional implementation choice."
+acceptable_basis = "The rule is a source-code scan of the slice-builder defaults because those defaults determine the actual soma-candidate distribution used when external plexiform layer interneuron assets are generated."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "epli_selection_strategy_default"
+metric_key = "epli_selection_strategy_default_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "Default external plexiform layer interneuron candidate ranking is not raw order-based"
+criterion = "Placement selection should not depend on raw particle ordering when used for biological inference."
+description = "This check inspects whether the default candidate-selection strategy depends on raw particle ordering instead of a biologically justified density or proximity model."
+acceptable = "The preferred result is that the default strategy is not slice_order. A slice_order default is a warning because it is deterministic but biologically weak."
+acceptable_basis = "The rule comes from source-level inspection of the maintained slice-builder default arguments, which control the actual candidate-ranking behavior during asset generation."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "synthetic_cell_geometry_runtime"
+metric_key = "synthetic_cell_geometry_status_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "Synthetic external plexiform layer interneuron geometry check completed"
+criterion = "The audit should either measure surrogate geometry, report that the geometry check was intentionally skipped, or fail clearly if the surrogate cannot be instantiated."
+description = "This item reports the runtime status of the synthetic surrogate geometry path before the individual morphology constraints are interpreted."
+acceptable = "The geometry path either completes successfully, reports an intentional skip as a warning, or fails clearly if the surrogate cannot be instantiated."
+acceptable_basis = "This is a runtime status check for the surrogate-geometry path rather than a literature-derived numeric bound."
+
+[[checks]]
+kind = "summary_metric_range"
+check_id = "synthetic_soma_diameter"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "soma_diameter_um"
+minimum = 8.9
+maximum = 10.3
+title = "Synthetic external plexiform layer interneuron soma diameter matches the Huang 2013 target"
+criterion = "Target soma diameter is 9.6 plus or minus 0.7 micrometers."
+description = "This check compares the instantiated surrogate soma diameter against the literature-derived target band used for this provisional scaffold."
+acceptable = "The observed soma diameter falls within 8.9 to 10.3 micrometers."
+acceptable_basis = "The acceptance range comes from the Huang 2013 target and tolerance encoded in the maintained external plexiform layer interneuron reference constants."
+
+[[checks]]
+kind = "summary_metric_range"
+check_id = "synthetic_primary_process_count"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "primary_process_count"
+minimum = 3.0
+maximum = 4.0
+title = "Synthetic external plexiform layer interneuron primary-process count matches the target regime"
+criterion = "Target primary-process count is 3.5 plus or minus 0.5."
+description = "This check compares the number of primary dendritic processes on the instantiated surrogate against the target regime encoded in the maintained external plexiform layer interneuron reference constants."
+acceptable = "The observed primary-process count falls within 3.0 to 4.0."
+acceptable_basis = "The acceptance range comes from the provisional target mean and tolerance used by the audit reference constants."
+
+[[checks]]
+kind = "summary_metric_range"
+check_id = "synthetic_planar_span"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "planar_span_um"
+minimum = 66.5
+maximum = 75.5
+title = "Synthetic external plexiform layer interneuron planar span matches the Huang 2013 target"
+criterion = "Target neurite planar span is 71.0 plus or minus 4.5 micrometers."
+description = "This check compares the surrogate neurite planar span against the target band encoded in the maintained external plexiform layer interneuron reference constants."
+acceptable = "The observed planar span falls within 66.5 to 75.5 micrometers."
+acceptable_basis = "The acceptance range comes from the current literature-constrained target and tolerance used by the audit reference constants."
+
+[[checks]]
+kind = "summary_metric_range"
+check_id = "synthetic_branching_zone"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "max_branch_origin_um"
+maximum = 30.0
+title = "Synthetic external plexiform layer interneuron branching occurs within proximal external plexiform layer territory"
+criterion = "Highest branching should occur within roughly thirty micrometers of the soma."
+description = "This check measures where branch-origin sections begin relative to the soma and flags a morphology that branches too far from the soma for the intended proximal external plexiform layer scaffold."
+acceptable = "The most distal branch-origin distance is less than or equal to thirty micrometers."
+acceptable_basis = "The threshold comes from the maintained external plexiform layer interneuron reference constant that encodes the intended proximal branching territory."
+evidence_metric_keys = ["synthetic_branching_zone_limit_um"]
+
+[[checks]]
+kind = "summary_metric_max"
+check_id = "synthetic_axonless_topology"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "has_axon_sections"
+maximum = 0.0
+title = "Synthetic external plexiform layer interneuron topology is axonless"
+criterion = "Current target class is implemented as an axonless or anaxonic surrogate."
+description = "This check reports whether the current synthetic scaffold exposes explicit axon sections, which would contradict the present axonless surrogate assumption."
+acceptable = "The scaffold remains axonless. Any explicit axon sections would require revisiting the surrogate class definition."
+acceptable_basis = "The rule follows the current design assumption for this provisional surrogate, which is intentionally implemented without a separate axonal arbor."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "synthetic_cell_behavior_runtime"
+metric_key = "synthetic_cell_behavior_status_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "Synthetic external plexiform layer interneuron behavior check completed"
+criterion = "The audit should either measure surrogate behavior, report that the behavior check was intentionally skipped, or fail clearly if the surrogate cannot be instantiated."
+description = "This item reports the runtime status of the synthetic surrogate behavior path before the individual fast-spiking constraints are interpreted."
+acceptable = "The behavior path either completes successfully, reports an intentional skip as a warning, or fails clearly if the surrogate cannot be instantiated."
+acceptable_basis = "This is a runtime status check for the surrogate-behavior path rather than a literature-derived numeric bound."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "synthetic_rest_stability"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "synthetic_rest_stability_code"
+pass_values = [2]
+fail_values = [0]
+title = "Synthetic external plexiform layer interneuron remains numerically stable at rest"
+criterion = "The surrogate should not generate not-a-number values or spontaneous spikes during a resting fixed-step audit run."
+description = "This check evaluates whether the surrogate remains numerically stable and quiescent during a zero-current baseline simulation."
+acceptable = "The resting simulation has no not-a-number values and produces zero spikes."
+acceptable_basis = "The rule is a direct stability sanity check on the resting sweep response before interpreting any driven spiking behavior."
+evidence_metric_keys = ["synthetic_rest_spike_count", "synthetic_rest_final_v_mV"]
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "synthetic_moderate_current_spiking"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "synthetic_moderate_current_spiking_code"
+pass_values = [2]
+fail_values = [0]
+title = "Synthetic external plexiform layer interneuron spikes under moderate current injection"
+criterion = "The surrogate should fire repetitively under a moderate somatic current step without numerical instability."
+description = "This check evaluates whether the surrogate transitions into repetitive firing under a moderate positive somatic current step without producing numerical instability."
+acceptable = "The moderate-current response has no not-a-number values and produces at least one spike."
+acceptable_basis = "The rule is a direct threshold sanity check on the moderate-current sweep because the scaffold is expected to be excitable under moderate drive."
+evidence_metric_keys = ["synthetic_moderate_step_rate_hz"]
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "synthetic_fast_spiking_capability"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "synthetic_fast_spiking_capability_code"
+pass_values = [2]
+fail_values = [0]
+title = "Synthetic external plexiform layer interneuron reaches a literature-consistent fast-spiking regime"
+criterion = "The audit sweep should reach at least sixty hertz by the configured upper current step, consistent with the Huang 2013 fast-spiking regime."
+description = "This check evaluates whether the surrogate can reach the provisional fast-spiking regime encoded by the maintained reference object within the configured current range."
+acceptable = "The maximum observed firing rate reaches at least sixty hertz by the configured upper current step."
+acceptable_basis = "The threshold comes from the maintained fast-spiking reference object, which encodes the current audit's literature-backed minimum fast-spiking target."
+evidence_metric_keys = ["synthetic_fast_reference_min_rate_hz", "synthetic_fast_max_rate_hz", "synthetic_fast_rate_at_max_current_hz"]
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "synthetic_fi_monotonicity"
+enabled_when_arg_falsey = "skip_neuron"
+metric_key = "synthetic_fi_monotonicity_code"
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = "Synthetic external plexiform layer interneuron firing rate increases monotonically across the audit step sweep"
+criterion = "A first-pass fast-spiking scaffold should exhibit a nondecreasing firing-rate-versus-current curve over the audit current range."
+description = "This check reports whether the surrogate's firing rate rises monotonically as the somatic current step increases across the audit sweep."
+acceptable = "The preferred result is a nondecreasing firing-rate-versus-current sequence across the tested positive current steps. Non-monotonicity is a warning, not a hard failure."
+acceptable_basis = "The rule is a heuristic scaffold-quality check rather than a strict literature numeric bound."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "canonical_epli_assets_present"
+enabled_when_arg_falsey = "candidate_slice"
+metric_key = "canonical_epli_assets_present_code"
+pass_values = [2]
+fail_values = [0]
+title = "Canonical maintained slice does not yet ship external plexiform layer interneuron assets"
+criterion = "A network-ready external plexiform layer interneuron claim requires an exported slice with external plexiform layer interneuron group geometry and populated synapse sets."
+description = "This check asks whether the canonical maintained slice already includes exported external plexiform layer interneuron geometry assets, which is a prerequisite for claiming that external plexiform layer interneurons are network-ready in the maintained slice path."
+acceptable = "The canonical slice contains EPLIs.json and the other required external plexiform layer interneuron assets. Its absence is a hard failure for network-readiness claims."
+acceptable_basis = "The rule is a direct file-presence check on the canonical slice export because network-readiness requires concrete exported external plexiform layer interneuron assets, not only code hooks."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "candidate_slice_exists"
+enabled_when_arg_truthy = "candidate_slice"
+metric_key = "candidate_slice_exists_code"
+pass_values = [2]
+fail_values = [0]
+title = "Candidate external plexiform layer interneuron slice exists on disk"
+criterion = "The audit can only validate exported connectivity if the candidate slice assets exist."
+description = "This check confirms that the requested candidate external plexiform layer interneuron slice path exists on disk before inspecting its exported groups and synapse sets."
+acceptable = "The candidate slice directory exists."
+acceptable_basis = "The rule is a prerequisite path-existence check because none of the downstream exported-asset checks are meaningful if the slice directory does not exist."
+
+[[checks]]
+kind = "summary_metric_status_map"
+check_id = "candidate_slice_group_presence"
+enabled_when_arg_truthy = "candidate_slice"
+metric_key = "candidate_slice_group_presence_code"
+pass_values = [2]
+fail_values = [0]
+title = "Candidate slice includes all expected cell-group exports"
+criterion = "A candidate external plexiform layer interneuron slice should export mitral-cell, tufted-cell, granule-cell, and external plexiform layer interneuron geometry."
+description = "This check verifies that the candidate slice exports all four expected group-geometry files needed for a full principal-cell, granule-cell, and external plexiform layer interneuron network slice."
+acceptable = "MCs.json, TCs.json, GCs.json, and EPLIs.json are all present."
+acceptable_basis = "The rule is a direct file-presence check on the exported slice contents because all four populations must be present for a network-ready external plexiform layer interneuron slice."
+
+[[checks]]
+kind = "summary_metric_min"
+check_id = "candidate_EPLIs__MCs"
+enabled_when_arg_truthy = "candidate_slice"
+metric_key = "candidate_EPLIs__MCs_entry_count"
+minimum = 1.0
+title = "Candidate slice exports nonzero EPLIs__MCs entries"
+criterion = "Network-ready external plexiform layer interneuron connectivity requires nonzero explicit synapse-set entries onto mitral cells."
+description = "This check verifies that the candidate slice contains nonzero exported connectivity entries for the EPLIs__MCs synapse set."
+acceptable = "The exported synapse set exists and contains at least one entry."
+acceptable_basis = "The rule is a direct entry-count check on the exported synapse-set JSON file because nonzero explicit entries are the minimal evidence of network-ready external plexiform layer interneuron connectivity."
+
+[[checks]]
+kind = "summary_metric_min"
+check_id = "candidate_EPLIs__TCs"
+enabled_when_arg_truthy = "candidate_slice"
+metric_key = "candidate_EPLIs__TCs_entry_count"
+minimum = 1.0
+title = "Candidate slice exports nonzero EPLIs__TCs entries"
+criterion = "Network-ready external plexiform layer interneuron connectivity requires nonzero explicit synapse-set entries onto tufted cells."
+description = "This check verifies that the candidate slice contains nonzero exported connectivity entries for the EPLIs__TCs synapse set."
+acceptable = "The exported synapse set exists and contains at least one entry."
+acceptable_basis = "The rule is a direct entry-count check on the exported synapse-set JSON file because nonzero explicit entries are the minimal evidence of network-ready external plexiform layer interneuron connectivity."

@@ -6,8 +6,10 @@ import argparse
 
 from olfactorybulb.audit.burton_urban_fi import run as run_burton_urban
 from olfactorybulb.audit.cli import run_new_sweep
+from olfactorybulb.audit.epl_fsi_intrinsic_validation import run as run_epl_fsi_intrinsic_validation
 from olfactorybulb.audit.env_install import run as run_env_install
 from olfactorybulb.audit.epli_correctness import run as run_epli_correctness
+from olfactorybulb.audit.gc_intrinsic_validation import run as run_gc_intrinsic_validation
 from olfactorybulb.audit.hfo_feature_contracts import run as run_hfo_feature_contracts
 
 
@@ -51,9 +53,39 @@ epli_report = run_epli_correctness(
     argparse.Namespace(
         candidate_slice=None,
         skip_neuron=True,
+        reference_sigma_multiplier=2.0,
     )
 )
 _assert_human_metadata(epli_report)
+
+gc_report = run_gc_intrinsic_validation(
+    argparse.Namespace(
+        skip_neuron=True,
+        cell_models="GC1",
+        use_coreneuron=False,
+        use_gpu=False,
+        dt_ms=0.1,
+        bias_max_iterations=1,
+        jobs=1,
+        reference_gc_subtypes="generic_or_unspecified",
+        reference_sigma_multiplier=2.0,
+    )
+)
+_assert_human_metadata(gc_report)
+
+epl_fsi_report = run_epl_fsi_intrinsic_validation(
+    argparse.Namespace(
+        skip_neuron=True,
+        cell_models="SyntheticEPL2026.PVCRH_FSI1",
+        use_coreneuron=False,
+        use_gpu=False,
+        dt_ms=0.1,
+        bias_max_iterations=1,
+        jobs=1,
+        reference_sigma_multiplier=2.0,
+    )
+)
+_assert_human_metadata(epl_fsi_report)
 
 hfo_report = run_hfo_feature_contracts(argparse.Namespace())
 _assert_human_metadata(hfo_report)

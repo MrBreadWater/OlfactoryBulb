@@ -14,6 +14,7 @@ from olfactorybulb.audit.reference_validation_config import (
     validation_protocol_runner_id,
     validation_rule_specs,
     validation_skip_item,
+    validation_skip_neuron_mode,
     validation_title,
 )
 from olfactorybulb.audit.reference_validation_protocols import get_validation_protocol_spec
@@ -110,7 +111,7 @@ def run_reference_validation(
 ) -> AuditReport:
     args = apply_validation_defaults(args, config=config)
     items = list(pre_items or [])
-    if bool(getattr(args, "skip_neuron", False)):
+    if bool(getattr(args, "skip_neuron", False)) and validation_skip_neuron_mode(config) != "protocol_handles_skip":
         configured_skip_item = build_configured_skip_item(args=args, config=config)
         if skip_item is not None:
             items.append(skip_item)

@@ -49,6 +49,24 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
             ),
         ),
         (
+            "gc_intrinsic_validation",
+            AuditSpec(
+                audit_id="gc_intrinsic_validation",
+                title="Granule-cell intrinsic validation audit",
+                description="Audit maintained granule-cell models against generic and subtype-aware literature references.",
+                module_path="olfactorybulb.audit.gc_intrinsic_validation",
+            ),
+        ),
+        (
+            "epl_fsi_intrinsic_validation",
+            AuditSpec(
+                audit_id="epl_fsi_intrinsic_validation",
+                title="External plexiform layer fast-spiking interneuron intrinsic validation audit",
+                description="Audit the maintained synthetic EPL fast-spiking interneuron surrogate against the Burton, Malyshko, and Urban 2024 reference bundle.",
+                module_path="olfactorybulb.audit.epl_fsi_intrinsic_validation",
+            ),
+        ),
+        (
             "hfo_feature_contracts",
             AuditSpec(
                 audit_id="hfo_feature_contracts",

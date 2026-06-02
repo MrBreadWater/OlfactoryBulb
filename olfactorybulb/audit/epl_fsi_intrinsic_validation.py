@@ -1,4 +1,4 @@
-"""Declarative audit for the provisional external plexiform layer interneuron path."""
+"""Declarative intrinsic validation audit for the maintained EPL fast-spiking interneuron surrogate."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from olfactorybulb.audit.reference_validation_engine import (
 )
 
 
-VALIDATION_ID = "epli_correctness"
+VALIDATION_ID = "epl_fsi_intrinsic_validation"
 
 
 def _config():

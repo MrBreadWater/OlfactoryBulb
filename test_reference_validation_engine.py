@@ -21,6 +21,10 @@ from olfactorybulb.audit.reference_validation_protocols import get_validation_pr
 
 
 assert "burton_urban_fi" in list_reference_validation_ids()
+assert "gc_intrinsic_validation" in list_reference_validation_ids()
+assert "epl_fsi_intrinsic_validation" in list_reference_validation_ids()
+assert "epli_correctness" in list_reference_validation_ids()
+assert "TEMPLATE" not in list_reference_validation_ids()
 
 burton_config = load_reference_validation_config(validation_id="burton_urban_fi")
 load_validation_extensions(burton_config)
@@ -36,6 +40,10 @@ listed_validations = subprocess.run(
 )
 assert listed_validations.returncode == 0, listed_validations
 assert "burton_urban_fi" in listed_validations.stdout
+assert "gc_intrinsic_validation" in listed_validations.stdout
+assert "epl_fsi_intrinsic_validation" in listed_validations.stdout
+assert "epli_correctness" in listed_validations.stdout
+assert "TEMPLATE" not in listed_validations.stdout
 
 listed_protocols = subprocess.run(
     [sys.executable, "tools/run_reference_validation.py", "--validation-id", "burton_urban_fi", "--list-protocols"],
@@ -45,6 +53,9 @@ listed_protocols = subprocess.run(
 )
 assert listed_protocols.returncode == 0, listed_protocols
 assert "burton_urban_mctc_current_clamp" in listed_protocols.stdout
+assert "gc_intrinsic_current_clamp" in listed_protocols.stdout
+assert "epl_fsi_current_clamp" in listed_protocols.stdout
+assert "epli_correctness_structural" in listed_protocols.stdout
 
 skip = subprocess.run(
     [sys.executable, "tools/run_reference_validation.py", "--validation-id", "burton_urban_fi", "--skip-neuron", "--jobs", "4", "--json"],

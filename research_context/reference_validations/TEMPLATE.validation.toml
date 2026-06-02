@@ -4,6 +4,8 @@ title = "Example literature validation audit"
 description = "One-line summary of what this validation compares."
 protocol_runner = "replace_with_registered_protocol_id"
 metric_group_field = "cell_type"
+# notes_path = "research_context/EXAMPLE_validation_notes.csv"
+# skip_neuron_mode = "short_circuit"
 
 # Optional extension modules. Use these when a paper needs a brand-new protocol
 # runner or a brand-new rule kind without editing the core registry files.
@@ -20,6 +22,8 @@ reference_sigma_multiplier = 2.0
 [protocol]
 # target_vm_mV = -58.0
 # step_duration_ms = 2000.0
+# # Leave target_vm_mV blank when a paper explicitly uses zero holding current:
+# # target_vm_mV = ""
 
 # Optional skip item for --skip-neuron on the generic validation CLI.
 # [skip_item]
@@ -57,6 +61,9 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # row_contexts = [
 #   { loader = "csv:research_context/EXAMPLE_protocols.csv", filter_field = "protocol_id", filter_values = ["EXAMPLE_PROTOCOL"], as_protocol_context = true, property_name = "FI Protocol" },
 # ]
+# # synthetic_contexts = [
+# #   { source = "EXAMPLE_fI_curve.csv", protocol_id = "EXAMPLE_PROTOCOL", cell_type = "Example Cell" },
+# # ]
 
 # Optional finite-value check.
 # [[checks]]
@@ -123,6 +130,46 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # acceptable = "All configured group means are strictly greater than zero."
 # acceptable_basis = "The current implementation treats positivity as the required condition."
 
+# Optional one-group threshold/range/status checks. These are useful for
+# structural/readiness validations whose protocol runner emits summary values or
+# explicit status codes rather than many trace-derived groups.
+# [[checks]]
+# kind = "summary_metric_min"
+# check_id = "example_entry_count_present"
+# metric_key = "candidate_entry_count"
+# minimum = 1.0
+# title = "Candidate export contains at least one entry"
+# criterion = "Explain the required lower bound."
+# description = "Use this when a single summary measurement should exceed a lower limit."
+# acceptable = "The observed value is at least the configured minimum."
+# acceptable_basis = "The threshold is declared directly in the validation config."
+# evidence_metric_keys = ["candidate_entry_count", "candidate_group_count"]
+
+# [[checks]]
+# kind = "summary_metric_range"
+# check_id = "example_soma_diameter_range"
+# metric_key = "soma_diameter_um"
+# minimum = 8.0
+# maximum = 12.0
+# title = "Soma diameter stays inside the accepted range"
+# criterion = "Explain the accepted numeric band."
+# description = "Use this for direct one-group range checks."
+# acceptable = "The observed value stays inside the configured minimum and maximum."
+# acceptable_basis = "The accepted interval is declared directly in the validation config."
+
+# [[checks]]
+# kind = "summary_metric_status_map"
+# check_id = "example_runtime_state"
+# metric_key = "geometry_status_code"
+# pass_values = [2]
+# warn_values = [1]
+# fail_values = [0]
+# title = "Geometry path completed"
+# criterion = "Explain what the status code means."
+# description = "Use this when the protocol runner emits explicit PASS/WARN/FAIL codes as measurements."
+# acceptable = "The configured PASS code means the path completed; WARN and FAIL codes remain visible as such."
+# acceptable_basis = "The status mapping is declared directly in the validation config."
+
 # Optional automatic reference-band checks sourced from extracted reference rows.
 # [[checks]]
 # kind = "reference_band_rows"
@@ -137,8 +184,43 @@ acceptable_basis = "This is an execution sanity check rather than a literature t
 # acceptable = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 # acceptable_basis = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 
+# Optional direct curve-match check for extracted point sets.
+# [[checks]]
+# kind = "reference_curve_match"
+# check_id = "example_curve_match"
+# loader = "csv:research_context/EXAMPLE_fI_curve.csv"
+# filter_field = "protocol_id"
+# filter_value = "EXAMPLE_PROTOCOL"
+# protocol_evidence_key = "fi_curve_rows"
+# reference_current_key = "current_pA"
+# reference_value_key = "firing_rate_Hz"
+# model_current_key = "current_pA"
+# model_value_key = "firing_rate_Hz"
+# maximum_mae = 20.0
+# maximum_rmse = 30.0
+# minimum_point_count = 5
+# title = "Model curve stays near the extracted reference curve"
+# criterion = "Explain the accepted curve mismatch threshold."
+# description = "Use this when both the model protocol and the extracted reference bundle provide current-versus-rate point sets."
+# acceptable = "The matched current points satisfy the configured error thresholds."
+# acceptable_basis = "The current thresholds are declared directly in the validation config."
+
 # Optional extension point: if a paper needs a brand-new stimulus family,
 # implement and register a new protocol runner in an extension module, then set
 # protocol_runner above to that registered id. If a paper needs a comparison
 # rule that the built-ins cannot express, add a new rule kind in the same
 # extension module and reference it here.
+#
+# Rule-level gating lets one config cover multiple related targets cleanly:
+# enabled_when_arg_truthy = "candidate_slice"
+# enabled_when_arg_falsey = "skip_neuron"
+# enabled_when_arg_in = "reference_gc_subtypes"
+# enabled_values = ["sGC", "dGC"]
+#
+# Row filters can also pull values from CLI args instead of hardcoding them:
+# filter_field = "gc_subtype"
+# filter_values_arg = "reference_gc_subtypes"
+#
+# And non-equivalent but still informative comparisons can soften PASS to WARN:
+# pass_status = "WARN"
+# fail_status = "FAIL"

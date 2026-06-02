@@ -43,6 +43,8 @@ def list_reference_validation_ids() -> list[str]:
     if not REFERENCE_VALIDATION_CONFIG_DIR.exists():
         return ids
     for path in sorted(REFERENCE_VALIDATION_CONFIG_DIR.glob("*.validation.toml")):
+        if path.name.startswith("TEMPLATE."):
+            continue
         ids.append(path.name[: -len(".validation.toml")])
     return ids
 
@@ -112,6 +114,16 @@ def validation_skip_item(config: dict[str, Any]) -> dict[str, Any] | None:
     return dict(skip_item)
 
 
+def validation_skip_neuron_mode(config: dict[str, Any]) -> str:
+    mode = str(config.get("skip_neuron_mode", "short_circuit") or "short_circuit").strip()
+    if mode not in {"short_circuit", "protocol_handles_skip"}:
+        raise ValueError(
+            "Reference validation config 'skip_neuron_mode' must be "
+            "'short_circuit' or 'protocol_handles_skip'"
+        )
+    return mode
+
+
 __all__ = [
     "DEFAULT_REFERENCE_VALIDATION_ID",
     "REFERENCE_VALIDATION_CONFIG_DIR",
@@ -124,5 +136,6 @@ __all__ = [
     "validation_protocol_runner_id",
     "validation_rule_specs",
     "validation_skip_item",
+    "validation_skip_neuron_mode",
     "validation_title",
 ]
