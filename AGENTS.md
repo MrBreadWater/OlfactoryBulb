@@ -357,6 +357,10 @@ contract for future sessions.
     - when the selected audit is `all` / new sweep, the rendered audit page
       should preserve the individual constituent audit groups rather than
       collapsing the whole run into one giant group
+    - the shell progress bar is only acceptable if it reflects real live audit
+      progress; for `all` / new sweep that means determinate
+      `progress_current/progress_total` updates as constituent audits complete,
+      not a permanent indeterminate running state
     - editing the audit-runner form must preserve the local draft across
       background state polling; changing the audit id should not snap back to
       the previous state-selected audit, and default-only audit arguments
@@ -369,6 +373,9 @@ contract for future sessions.
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed
+    - for progress-bar changes, verify the live `GET /__control_center_state__`
+      payload during an active run and confirm the served page is consuming
+      those changing values, not only the final ready state
   - when you start a local server during validation, shut it down before
     finishing the task unless the user explicitly asked you to leave it running
   - if relevant, also check the optimization module directly:

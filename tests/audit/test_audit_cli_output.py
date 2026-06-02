@@ -108,8 +108,32 @@ with patch("olfactorybulb.audit.cli._run_one_audit", return_value=sample_report)
 
 with patch("olfactorybulb.audit.cli.run_new_sweep", return_value=grouped_report) as sweep_mock:
     report = run_audit_by_id("all", ["--skip-neuron"])
-    sweep_mock.assert_called_once_with(["--skip-neuron"])
+    sweep_mock.assert_called_once_with(["--skip-neuron"], progress_callback=None)
     assert report.audit_id == "new_sweep"
+
+progress_updates: list[dict[str, object]] = []
+
+
+def _capture_progress(update: dict[str, object]) -> None:
+    progress_updates.append(dict(update))
+
+
+with patch("olfactorybulb.audit.cli._run_one_audit", return_value=sample_report) as run_one_mock, patch(
+    "olfactorybulb.audit.cli.iter_new_sweep_audit_specs",
+    return_value=[
+        type("Spec", (), {"audit_id": "alpha", "title": "Alpha audit", "description": "", "module_path": ""})(),
+        type("Spec", (), {"audit_id": "beta", "title": "Beta audit", "description": "", "module_path": ""})(),
+    ],
+):
+    progress_updates.clear()
+    _ = run_audit_by_id("all", ["--skip-neuron"], progress_callback=_capture_progress)
+    assert run_one_mock.call_count == 2
+    assert progress_updates[0]["total"] == 2
+    assert progress_updates[0]["current"] == 0
+    assert progress_updates[1]["current_audit_id"] == "alpha"
+    assert progress_updates[2]["current"] == 1
+    assert progress_updates[-1]["phase"] == "done"
+    assert progress_updates[-1]["current"] == 2
 
 text_report = subprocess.run(
     [sys.executable, "tools/run_audit.py", "burton_urban_fi", "--skip-neuron", "--no-color"],

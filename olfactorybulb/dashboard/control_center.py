@@ -46,6 +46,7 @@ def _progress(message: str) -> None:
 
 
 def _write_text_atomic(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_name(f".{path.name}.tmp")
     tmp.write_text(text)
     os.replace(tmp, path)
@@ -1112,6 +1113,29 @@ def serve_control_center(
 
     def _run_audit_render(audit_id_to_run: str, audit_args_to_run: list[str]) -> None:
         run_token = time.time_ns()
+
+        def _handle_audit_progress(update: dict[str, Any]) -> None:
+            total = int(update.get("total") or 0)
+            current = int(update.get("current") or 0)
+            message = str(update.get("message") or f"Running {audit_id_to_run}").strip()
+            _update_base_state(
+                audit_patch={
+                    "status": "running",
+                    "badge": "running",
+                    "badge_tone": "running",
+                    "audit_id": audit_id_to_run,
+                    "audit_args": list(audit_args_to_run),
+                    "message": message,
+                    "progress_active": True,
+                    "progress_label": message,
+                    "progress_current": current,
+                    "progress_total": total,
+                    "progress_value_text": f"{current}/{total}" if total > 0 else "",
+                    "progress_indeterminate": total <= 0,
+                    "revision": str(time.time_ns()),
+                }
+            )
+
         _update_base_state(
             audit_patch={
                 "status": "running",
@@ -1133,7 +1157,11 @@ def serve_control_center(
             }
         )
         try:
-            report = run_audit_by_id(audit_id_to_run, audit_args_to_run)
+            report = run_audit_by_id(
+                audit_id_to_run,
+                audit_args_to_run,
+                progress_callback=_handle_audit_progress,
+            )
             history_entries = _append_or_replace_audit_history_entry(
                 audits_dir,
                 audit_id=audit_id_to_run,

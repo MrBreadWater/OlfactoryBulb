@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Any
+from typing import Any, Callable
 
 from olfactorybulb.audit import AuditItem, AuditReport, format_report, get_audit_spec, iter_audit_specs
 from olfactorybulb.audit.core import _expand_terms
@@ -14,6 +14,7 @@ DEFAULT_AUDIT_ALIAS = "default"
 DEFAULT_AUDIT_TARGET = "repo_health"
 DEFAULT_AUDIT_TARGET_ARGS = ["--profile", "maintained"]
 ALL_AUDIT_ALIASES = {"new_sweep", "new-sweep", "all"}
+AuditProgressCallback = Callable[[dict[str, Any]], None]
 
 
 def _build_root_parser() -> argparse.ArgumentParser:
@@ -133,9 +134,62 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
     ]
 
 
-def run_new_sweep(argv: list[str]) -> AuditReport:
-    reports = [_run_one_audit(spec, argv, allow_unknown=True) for spec in iter_new_sweep_audit_specs()]
+def run_new_sweep(argv: list[str], *, progress_callback: AuditProgressCallback | None = None) -> AuditReport:
+    specs = list(iter_new_sweep_audit_specs())
+    total = len(specs)
+    reports: list[AuditReport] = []
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "phase": "starting",
+                "audit_id": "all",
+                "current": 0,
+                "total": total,
+                "current_audit_id": "",
+                "current_audit_title": "",
+                "message": f"Running all ({total} audits)",
+            }
+        )
+    for index, spec in enumerate(specs, start=1):
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "phase": "running",
+                    "audit_id": "all",
+                    "current": index - 1,
+                    "total": total,
+                    "current_audit_id": spec.audit_id,
+                    "current_audit_title": spec.title,
+                    "message": f"Running {spec.title} ({index}/{total})",
+                }
+            )
+        report = _run_one_audit(spec, argv, allow_unknown=True)
+        reports.append(report)
+        if progress_callback is not None:
+            progress_callback(
+                {
+                    "phase": "running",
+                    "audit_id": "all",
+                    "current": index,
+                    "total": total,
+                    "current_audit_id": spec.audit_id,
+                    "current_audit_title": spec.title,
+                    "message": f"Completed {spec.title} ({index}/{total})",
+                }
+            )
     items = [item for report in reports for item in _prefixed_items(report)]
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "phase": "done",
+                "audit_id": "all",
+                "current": total,
+                "total": total,
+                "current_audit_id": "",
+                "current_audit_title": "",
+                "message": f"Completed all ({total}/{total})",
+            }
+        )
     return AuditReport(
         audit_id="new_sweep",
         title="New sweep",
@@ -153,12 +207,42 @@ def _resolve_audit_request(audit_id: str | None, argv: list[str]) -> tuple[str |
     return normalized, args
 
 
-def run_audit_by_id(audit_id: str | None, argv: list[str]) -> AuditReport:
+def run_audit_by_id(
+    audit_id: str | None,
+    argv: list[str],
+    *,
+    progress_callback: AuditProgressCallback | None = None,
+) -> AuditReport:
     resolved_audit_id, resolved_args = _resolve_audit_request(audit_id, argv)
     if resolved_audit_id is None:
-        return run_new_sweep(resolved_args)
+        return run_new_sweep(resolved_args, progress_callback=progress_callback)
     spec = get_audit_spec(resolved_audit_id)
-    return _run_one_audit(spec, resolved_args)
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "phase": "running",
+                "audit_id": resolved_audit_id,
+                "current": 0,
+                "total": 1,
+                "current_audit_id": resolved_audit_id,
+                "current_audit_title": spec.title,
+                "message": f"Running {spec.title}",
+            }
+        )
+    report = _run_one_audit(spec, resolved_args)
+    if progress_callback is not None:
+        progress_callback(
+            {
+                "phase": "done",
+                "audit_id": resolved_audit_id,
+                "current": 1,
+                "total": 1,
+                "current_audit_id": resolved_audit_id,
+                "current_audit_title": spec.title,
+                "message": f"Completed {spec.title}",
+            }
+        )
+    return report
 
 
 def main(argv: list[str] | None = None) -> int:

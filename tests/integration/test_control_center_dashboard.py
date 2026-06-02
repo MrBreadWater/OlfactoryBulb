@@ -84,7 +84,7 @@ def _json_post(url: str, payload: dict[str, object]) -> tuple[int, dict[str, obj
         return response.status, json.loads(response.read().decode("utf-8"))
 
 
-def _capture_run_audit_by_id(audit_id: str, audit_args: list[str]):
+def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_callback=None):
     _run_audit_calls.append((audit_id, list(audit_args)))
     if audit_id == "all":
         return AuditReport(
@@ -329,8 +329,46 @@ with TemporaryDirectory() as tmp:
         (output_dir / "manifest.json").write_text(json.dumps(manifest))
         return manifest
 
-    def _slow_run_audit_by_id(audit_id: str, audit_args: list[str]):
-        time.sleep(0.5)
+    def _slow_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_callback=None):
+        if progress_callback is not None and audit_id == "all":
+            progress_callback(
+                {
+                    "phase": "starting",
+                    "audit_id": "all",
+                    "current": 0,
+                    "total": 2,
+                    "current_audit_id": "",
+                    "current_audit_title": "",
+                    "message": "Running all (2 audits)",
+                }
+            )
+            time.sleep(0.15)
+            progress_callback(
+                {
+                    "phase": "running",
+                    "audit_id": "all",
+                    "current": 0,
+                    "total": 2,
+                    "current_audit_id": "env_install",
+                    "current_audit_title": "Environment/install audit",
+                    "message": "Running Environment/install audit (1/2)",
+                }
+            )
+            time.sleep(0.15)
+            progress_callback(
+                {
+                    "phase": "running",
+                    "audit_id": "all",
+                    "current": 1,
+                    "total": 2,
+                    "current_audit_id": "scratch_boundary",
+                    "current_audit_title": "Scratch boundary audit",
+                    "message": "Running Scratch boundary audit (2/2)",
+                }
+            )
+            time.sleep(0.25)
+        else:
+            time.sleep(0.5)
         return _capture_run_audit_by_id(audit_id, audit_args)
 
     thread = threading.Thread(
@@ -391,6 +429,21 @@ with TemporaryDirectory() as tmp:
         )
         assert run_status == 202
         assert run_payload["ok"] is True
+        running_deadline = time.time() + 3.0
+        running_state = ready_state
+        while time.time() < running_deadline:
+            running_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+            if (
+                running_state["audit"]["status"] == "running"
+                and running_state["audit"].get("progress_total") == 2
+                and running_state["audit"].get("progress_indeterminate") is False
+            ):
+                break
+            time.sleep(0.05)
+        assert running_state["audit"]["status"] == "running"
+        assert running_state["audit"]["progress_total"] == 2
+        assert running_state["audit"]["progress_indeterminate"] is False
+        assert "2" in str(running_state["progress"].get("value_text") or "")
         first_run_deadline = time.time() + 6.0
         first_run_state = ready_state
         while time.time() < first_run_deadline:
