@@ -51,7 +51,10 @@ For the maintained unified web shell that combines:
 
 use:
 
-- `python -m olfactorybulb.dashboard.control_center serve <campaign_dir>`
+- `python -m olfactorybulb.dashboard.control_center`
+
+That maintained command auto-detects the active optimization campaign when it
+can and renders the default maintained audit into the page on startup.
 
 For a local docs portal that points at the maintained markdown docs first and
 historical generated pages second, open:

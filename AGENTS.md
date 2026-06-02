@@ -323,7 +323,12 @@ contract for future sessions.
 - If touching dashboard/runtime code:
   - verify the served result, not just static HTML generation
   - prefer the unified shell when checking end-user behavior:
-    - `python -m olfactorybulb.dashboard.control_center serve <campaign_dir>`
+    - `python -m olfactorybulb.dashboard.control_center`
+  - That bare control-center command is now the fastest maintained launch path:
+    - default mode: `serve`
+    - default audit: `repo_health --profile maintained`
+    - campaign auto-detection from the maintained optimization status path or
+      optimization results tree
   - if relevant, also check the optimization module directly:
     - `http://127.0.0.1:6006/`
     - `http://127.0.0.1:6006/visual_dashboard/`
@@ -728,7 +733,7 @@ contract for future sessions.
   - `python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron`
 
 - Serve the unified docs/audits/optimization shell:
-  - `python -m olfactorybulb.dashboard.control_center serve <campaign_dir>`
+  - `python -m olfactorybulb.dashboard.control_center`
 
 - Run all audits:
   - `python tools/run_audit.py`

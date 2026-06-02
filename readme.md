@@ -49,8 +49,14 @@ For the maintained web shell that combines audits, optimization, and docs:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
-python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
+python -m olfactorybulb.dashboard.control_center
 ```
+
+That command now:
+
+- auto-detects the active maintained optimization campaign when possible
+- runs the default maintained audit into the page on startup
+- opens with the audit tab first
 
 ## Maintained Runtime
 

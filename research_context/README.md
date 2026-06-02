@@ -104,5 +104,5 @@ web shell:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
-python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
+python -m olfactorybulb.dashboard.control_center
 ```

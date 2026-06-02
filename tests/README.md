@@ -48,7 +48,7 @@ python tools/run_audit.py test_suite_status --suite reference_bundles --details
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron
-python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
+python -m olfactorybulb.dashboard.control_center
 ```
 
 - `repo_health` should call grouped suite audits for maintained test categories.

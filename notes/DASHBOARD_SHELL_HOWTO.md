@@ -38,18 +38,33 @@ The shell is implemented in two layers:
 
 Use the OBGPU environment.
 
+Fastest maintained launch:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center
+```
+
+That command:
+
+- defaults to `serve`
+- auto-detects the active optimization campaign from the maintained status file
+  or optimization results tree
+- runs the default maintained audit (`repo_health --profile maintained`)
+- opens on the audit tab first
+
 Export the unified shell:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
-python -m olfactorybulb.dashboard.control_center export results/notebook_runs/optimization/codex_big_hfo_logs
+python -m olfactorybulb.dashboard.control_center export
 ```
 
 Serve the unified shell locally:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
-python -m olfactorybulb.dashboard.control_center serve results/notebook_runs/optimization/codex_big_hfo_logs
+python -m olfactorybulb.dashboard.control_center serve
 ```
 
 Serve with a lighter audit target:
@@ -57,8 +72,15 @@ Serve with a lighter audit target:
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.dashboard.control_center serve \
-  results/notebook_runs/optimization/codex_big_hfo_logs \
   --audit-id repo_health
+```
+
+Serve a specific campaign explicitly:
+
+```bash
+source tools/setup/activate_obgpu.sh OBGPU
+python -m olfactorybulb.dashboard.control_center serve \
+  results/notebook_runs/optimization/codex_big_hfo_logs
 ```
 
 Render only the audit dashboard:

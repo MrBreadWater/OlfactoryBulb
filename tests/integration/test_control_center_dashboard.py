@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from olfactorybulb.audit.core import AuditItem, AuditReport
-from olfactorybulb.dashboard.control_center import export_control_center
+from olfactorybulb.dashboard.control_center import export_control_center, resolve_control_center_campaign
 
 
 def _sample_report() -> AuditReport:
@@ -67,5 +67,27 @@ with TemporaryDirectory() as tmp:
     assert "/audits/index.html" in html
     assert "/optimization/index.html" in html
     assert "/docs/index.html" in html
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    campaign_dir = root / "campaign"
+    campaign_dir.mkdir()
+    status_path = root / "status.json"
+    status_path.write_text(json.dumps({"campaign_dir": str(campaign_dir)}))
+    assert resolve_control_center_campaign(status_json=status_path) == campaign_dir.resolve()
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    with patch("olfactorybulb.dashboard.control_center.DEFAULT_STATUS_JSON", root / "missing.json"), patch(
+        "olfactorybulb.dashboard.control_center.DEFAULT_OPTIMIZATION_ROOT",
+        root,
+    ), patch("olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report()):
+        manifest = export_control_center(None, output_dir=root / "control_center")
+    output_dir = Path(manifest["output_dir"])
+    assert manifest["campaign_dir"] is None
+    assert manifest["audit_id"] == "repo_health"
+    assert manifest["audit_args"] == ["--profile", "maintained"]
+    placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
+    assert placeholder["placeholder"] is True
 
 print("control_center_dashboard: OK")

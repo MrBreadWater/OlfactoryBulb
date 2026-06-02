@@ -133,13 +133,13 @@ def render_audit_dashboard_html(
     refresh_button = ""
     refresh_script = ""
     if refresh_endpoint:
-        refresh_button = "<button id='refresh-audit-button' class='action-button' type='button'>Refresh audit</button>"
+        refresh_button = "<button id='refresh-audit-button' class='action-button' type='button'>Run audit</button>"
         refresh_script = f"""
       const button = document.getElementById("refresh-audit-button");
       if (button) {{
         button.addEventListener("click", async () => {{
           button.disabled = true;
-          button.textContent = "Refreshing...";
+          button.textContent = "Running...";
           try {{
             const response = await fetch("{_esc(refresh_endpoint)}", {{ method: "POST", cache: "no-store" }});
             const payload = await response.json().catch(() => ({{}}));
@@ -150,7 +150,7 @@ def render_audit_dashboard_html(
           }} catch (error) {{
             console.warn("Audit refresh failed", error);
             button.disabled = false;
-            button.textContent = "Refresh audit";
+            button.textContent = "Run audit";
           }}
         }});
       }}
