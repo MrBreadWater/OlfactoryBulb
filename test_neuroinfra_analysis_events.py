@@ -11,13 +11,17 @@ import numpy as np
 
 from neuroinfra.analysis.events import (
     EventRateTrace,
+    EventRateSeriesSpec,
     EventRateNormalizationRule,
     FrequencySampleCollection,
     binned_event_rate,
     build_event_overview_layout,
+    build_event_rate_trace_series,
     calculate_event_frequency,
+    calculate_trace_event_frequency,
     compute_event_rate_from_rows,
     collect_frequency_samples_from_rows,
+    collect_frequency_samples_from_trace_rows,
     ensure_raster_axis,
     filter_rows_by_label_prefix,
     fit_raster_labels,
@@ -55,6 +59,31 @@ def main() -> None:
     assert len(freq_samples.rows) == 2
     assert np.allclose(freq_samples.times_ms, [25.0, 15.0, 25.0, 55.0])
     assert np.allclose(freq_samples.freqs_hz, [20.0, 20.0, 33.3333333333, 33.3333333333])
+
+    trace_t_freq, trace_event_hz = calculate_trace_event_frequency(
+        [0.0, 10.0, 20.0, 30.0, 40.0],
+        [0.0, 1.0, 0.0, 1.0, 0.0],
+        event_times_fn=lambda t, values: t[np.asarray(values) > 0.5],
+    )
+    assert np.allclose(trace_t_freq, [20.0])
+    assert np.allclose(trace_event_hz, [50.0])
+
+    trace_freq_samples = collect_frequency_samples_from_trace_rows(
+        [
+            ("MC0", np.array([0.0, 10.0, 20.0, 30.0, 40.0]), np.array([0.0, 1.0, 0.0, 1.0, 0.0])),
+            ("TC0", np.array([0.0, 10.0, 20.0]), np.array([0.0, 0.0, 0.0])),
+            ("MC1", np.array([0.0, 15.0, 30.0, 45.0]), np.array([0.0, 1.0, 0.0, 1.0])),
+        ],
+        label_fn=lambda row: row[0],
+        time_fn=lambda row: row[1],
+        value_fn=lambda row: row[2],
+        event_times_fn=lambda t, values: t[np.asarray(values) > 0.5],
+        include_prefixes=("MC",),
+        modulus=35.0,
+    )
+    assert trace_freq_samples.labels == ("MC0", "MC1")
+    assert np.allclose(trace_freq_samples.times_ms, [20.0, 30.0])
+    assert np.allclose(trace_freq_samples.freqs_hz, [50.0, 33.3333333333])
 
     filtered_rows = filter_rows_by_label_prefix(
         [("MC0", [0.0]), ("TC0", [1.0]), ("MC1", [2.0])],
@@ -94,6 +123,29 @@ def main() -> None:
     assert metadata["unit"] == "events/s per cell"
     assert metadata["denominator"] == 2.0
     assert metadata["n_rows"] == 2
+
+    traces = build_event_rate_trace_series(
+        {"tag": "demo"},
+        [
+            EventRateSeriesSpec("All rows", None, "black"),
+            EventRateSeriesSpec("Subset", ["MC"], "tab:blue"),
+        ],
+        compute_rate_fn=lambda _result, *, return_metadata, target_types, **_kwargs: (
+            np.array([5.0, 15.0]),
+            np.array([1.0, 2.0]) if target_types is None else np.array([0.5, 1.5]),
+            {
+                "normalization": "per_target_cell",
+                "n_target_cells": 3 if target_types is None else 1,
+                "unit": "events/s per cell",
+            },
+        ),
+        selection_kwarg="target_types",
+        compute_rate_kwargs={"bin_ms": 10.0, "smooth_sigma_ms": 0.0, "normalization": "per_target_cell"},
+    )
+    assert [trace.base_label for trace in traces] == ["All rows", "Subset"]
+    assert np.allclose(traces[0].rate_hz, [1.0, 2.0])
+    assert np.allclose(traces[1].rate_hz, [0.5, 1.5])
+    assert traces[1].metadata["n_target_cells"] == 1
 
     raw_rate = np.array([0.0, 0.0, 10.0, 0.0, 0.0], dtype=float)
     smoothed = smooth_rate_series(raw_rate, bin_ms=5.0, smooth_sigma_ms=10.0)

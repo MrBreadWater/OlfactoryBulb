@@ -23,6 +23,15 @@ class EventRateTrace:
 
 
 @dataclass(frozen=True)
+class EventRateSeriesSpec:
+    """One requested event-rate subset to compute and render."""
+
+    base_label: str
+    selection: Any = None
+    color: Any = "black"
+
+
+@dataclass(frozen=True)
 class EventOverviewLayout:
     """Layout hints for a raster-plus-rate overview figure."""
 
@@ -122,6 +131,45 @@ def collect_frequency_samples_from_rows(
     )
 
 
+def calculate_trace_event_frequency(
+    t: np.ndarray | list[float],
+    values: np.ndarray | list[float],
+    *,
+    event_times_fn: Callable[[np.ndarray, np.ndarray], np.ndarray | list[float]],
+) -> tuple[np.ndarray, np.ndarray]:
+    """Derive event times from one continuous trace and convert them to frequency samples."""
+    event_times = event_times_fn(np.asarray(t, dtype=float), np.asarray(values, dtype=float))
+    return calculate_event_frequency(event_times)
+
+
+def collect_frequency_samples_from_trace_rows(
+    rows: Sequence[Any],
+    *,
+    label_fn: Callable[[Any], str],
+    time_fn: Callable[[Any], np.ndarray | list[float]],
+    value_fn: Callable[[Any], np.ndarray | list[float]],
+    event_times_fn: Callable[[np.ndarray, np.ndarray], np.ndarray | list[float]],
+    indices: Sequence[int] | range | None = None,
+    include_prefixes: Sequence[str] | None = None,
+    modulus: float | int | None = None,
+) -> FrequencySampleCollection:
+    """Collect instantaneous frequency samples from labeled continuous-trace rows."""
+
+    def _row_event_times(row: Any) -> np.ndarray:
+        times = np.asarray(time_fn(row), dtype=float)
+        values = np.asarray(value_fn(row), dtype=float)
+        return np.asarray(event_times_fn(times, values), dtype=float)
+
+    return collect_frequency_samples_from_rows(
+        rows,
+        label_fn=label_fn,
+        times_fn=_row_event_times,
+        indices=indices,
+        include_prefixes=include_prefixes,
+        modulus=modulus,
+    )
+
+
 def filter_rows_by_label_prefix(
     rows: Sequence[Any],
     *,
@@ -194,6 +242,40 @@ def compute_event_rate_from_rows(
         }
     )
     return centers, rate_hz, metadata
+
+
+def build_event_rate_trace_series(
+    result: dict[str, Any],
+    series_specs: Sequence[EventRateSeriesSpec],
+    *,
+    compute_rate_fn: Callable[..., tuple[np.ndarray, np.ndarray, dict[str, Any]]],
+    selection_kwarg: str = "target_types",
+    compute_rate_kwargs: Mapping[str, Any] | None = None,
+) -> list[EventRateTrace]:
+    """Build plotted event-rate traces for a family of named subsets."""
+    shared_kwargs = dict(compute_rate_kwargs or {})
+    shared_kwargs.pop("return_metadata", None)
+
+    traces: list[EventRateTrace] = []
+    for spec in series_specs:
+        current_kwargs = dict(shared_kwargs)
+        if selection_kwarg:
+            current_kwargs[selection_kwarg] = spec.selection
+        times_ms, rate_hz, metadata = compute_rate_fn(
+            result,
+            return_metadata=True,
+            **current_kwargs,
+        )
+        traces.append(
+            EventRateTrace(
+                base_label=str(spec.base_label),
+                times_ms=times_ms,
+                rate_hz=rate_hz,
+                metadata=dict(metadata),
+                color=spec.color,
+            )
+        )
+    return traces
 
 
 def smooth_rate_series(

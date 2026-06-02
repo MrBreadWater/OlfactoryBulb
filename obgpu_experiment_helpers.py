@@ -263,13 +263,16 @@ from neuroinfra.analysis.overview import (
     metadata_value_or_result_length as _neuroinfra_metadata_value_or_result_length,
 )
 from neuroinfra.analysis.events import (
-    EventRateTrace as _NeuroinfraEventRateTrace,
     EventRateNormalizationRule as _NeuroinfraEventRateNormalizationRule,
+    EventRateSeriesSpec as _NeuroinfraEventRateSeriesSpec,
     binned_event_rate as _neuroinfra_binned_event_rate,
     build_event_overview_layout as _neuroinfra_build_event_overview_layout,
+    build_event_rate_trace_series as _neuroinfra_build_event_rate_trace_series,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
+    calculate_trace_event_frequency as _neuroinfra_calculate_trace_event_frequency,
     compute_event_rate_from_rows as _neuroinfra_compute_event_rate_from_rows,
     collect_frequency_samples_from_rows as _neuroinfra_collect_frequency_samples_from_rows,
+    collect_frequency_samples_from_trace_rows as _neuroinfra_collect_frequency_samples_from_trace_rows,
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
     filter_rows_by_label_prefix as _neuroinfra_filter_rows_by_label_prefix,
@@ -6265,12 +6268,11 @@ def calculate_instantaneous_frequency(
     threshold: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Convert spike times from one trace into instantaneous frequency samples."""
-    spikes = detect_spikes(t, v, threshold=threshold)
-    if len(spikes) < 2:
-        return np.array([]), np.array([])
-    t_freq = (spikes[:-1] + spikes[1:]) / 2.0
-    spiking_hz = 1000.0 / np.diff(spikes)
-    return t_freq, spiking_hz
+    return _neuroinfra_calculate_trace_event_frequency(
+        t,
+        v,
+        event_times_fn=lambda trace_t, trace_v: detect_spikes(trace_t, trace_v, threshold=threshold),
+    )
 
 
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
@@ -6379,16 +6381,23 @@ def collect_spike_frequency_samples(
         trace_rows = [(label, spike_times) for label, spike_times in saved_rows]
     else:
         soma_vs = list(result.get("soma_vs", []))
-        if indices is None:
-            indices = range(len(soma_vs))
-        trace_rows = []
-        for i in indices:
-            if i >= len(soma_vs):
-                break
-            label, t, mp = soma_vs[i]
-            if prefixes is not None and not any(label.startswith(prefix) for prefix in prefixes):
-                continue
-            trace_rows.append((str(label), detect_spikes(t, mp, threshold=threshold)))
+        sample_collection = _neuroinfra_collect_frequency_samples_from_trace_rows(
+            soma_vs,
+            label_fn=lambda row: row[0],
+            time_fn=lambda row: row[1],
+            value_fn=lambda row: row[2],
+            event_times_fn=lambda trace_t, trace_v: detect_spikes(trace_t, trace_v, threshold=threshold),
+            indices=indices,
+            include_prefixes=prefixes,
+            modulus=modulus,
+        )
+        return {
+            "times": sample_collection.times_ms,
+            "freqs": sample_collection.freqs_hz,
+            "labels": list(sample_collection.labels),
+            "n_traces": len(sample_collection.labels),
+            "cell_types": list(prefixes) if prefixes is not None else None,
+        }
 
     sample_collection = _neuroinfra_collect_frequency_samples_from_rows(
         trace_rows,
@@ -7113,31 +7122,21 @@ def plot_input_rate(
     ax: Any = None,
 ) -> Any:
     """Plot normalized odor-input event-rate traces over time."""
-    trace_specs = [
-        ("All inputs", None, "black"),
-        ("To MCs", ["MC"], "tab:blue"),
-        ("To TCs", ["TC"], "tab:red"),
-    ]
-    traces: list[_NeuroinfraEventRateTrace] = []
-    for base_label, target_types, color in trace_specs:
-        t, rate_hz, meta = compute_input_rate(
-            result,
-            bin_ms=bin_ms,
-            smooth_sigma_ms=smooth_sigma_ms,
-            target_types=target_types,
-            normalization=normalization,
-            return_metadata=True,
-        )
-        traces.append(
-            _NeuroinfraEventRateTrace(
-                base_label=base_label,
-                times_ms=t,
-                rate_hz=rate_hz,
-                metadata=meta,
-                color=color,
-            )
-        )
-
+    traces = _neuroinfra_build_event_rate_trace_series(
+        result,
+        [
+            _NeuroinfraEventRateSeriesSpec("All inputs", None, "black"),
+            _NeuroinfraEventRateSeriesSpec("To MCs", ["MC"], "tab:blue"),
+            _NeuroinfraEventRateSeriesSpec("To TCs", ["TC"], "tab:red"),
+        ],
+        compute_rate_fn=compute_input_rate,
+        selection_kwarg="target_types",
+        compute_rate_kwargs={
+            "bin_ms": bin_ms,
+            "smooth_sigma_ms": smooth_sigma_ms,
+            "normalization": normalization,
+        },
+    )
     return _neuroinfra_plot_event_rate_traces(
         traces,
         ax=ax,
@@ -7306,30 +7305,21 @@ def plot_gc_output_rate(
     ax: Any = None,
 ) -> Any:
     """Plot normalized GC inhibitory-output rate traces over time."""
-    trace_specs = [
-        ("All targets", None, "black"),
-        ("To MCs", ["MC"], "tab:blue"),
-        ("To TCs", ["TC"], "tab:red"),
-    ]
-    traces: list[_NeuroinfraEventRateTrace] = []
-    for base_label, target_types, color in trace_specs:
-        t, rate_hz, meta = compute_gc_output_rate(
-            result,
-            bin_ms=bin_ms,
-            smooth_sigma_ms=smooth_sigma_ms,
-            target_types=target_types,
-            normalization=normalization,
-            return_metadata=True,
-        )
-        traces.append(
-            _NeuroinfraEventRateTrace(
-                base_label=base_label,
-                times_ms=t,
-                rate_hz=rate_hz,
-                metadata=meta,
-                color=color,
-            )
-        )
+    traces = _neuroinfra_build_event_rate_trace_series(
+        result,
+        [
+            _NeuroinfraEventRateSeriesSpec("All targets", None, "black"),
+            _NeuroinfraEventRateSeriesSpec("To MCs", ["MC"], "tab:blue"),
+            _NeuroinfraEventRateSeriesSpec("To TCs", ["TC"], "tab:red"),
+        ],
+        compute_rate_fn=compute_gc_output_rate,
+        selection_kwarg="target_types",
+        compute_rate_kwargs={
+            "bin_ms": bin_ms,
+            "smooth_sigma_ms": smooth_sigma_ms,
+            "normalization": normalization,
+        },
+    )
     return _neuroinfra_plot_event_rate_traces(
         traces,
         ax=ax,
