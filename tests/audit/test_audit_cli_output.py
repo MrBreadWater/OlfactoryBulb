@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from unittest.mock import patch
 
+from olfactorybulb.audit.cli import run_audit_by_id
 from olfactorybulb.audit.core import AuditItem, AuditReport, format_report
 
 
@@ -95,7 +97,19 @@ listed = subprocess.run(
 assert listed.returncode == 0, listed
 assert "\033[" not in listed.stdout
 assert "Available audits" in listed.stdout
+assert "default" in listed.stdout
+assert "all" in listed.stdout
 assert "burton_urban_fi" in listed.stdout
+
+with patch("olfactorybulb.audit.cli._run_one_audit", return_value=sample_report) as run_one_mock:
+    _ = run_audit_by_id("default", [])
+    assert run_one_mock.call_args[0][0].audit_id == "repo_health"
+    assert run_one_mock.call_args[0][1] == ["--profile", "maintained"]
+
+with patch("olfactorybulb.audit.cli.run_new_sweep", return_value=grouped_report) as sweep_mock:
+    report = run_audit_by_id("all", ["--skip-neuron"])
+    sweep_mock.assert_called_once_with(["--skip-neuron"])
+    assert report.audit_id == "new_sweep"
 
 text_report = subprocess.run(
     [sys.executable, "tools/run_audit.py", "burton_urban_fi", "--skip-neuron", "--no-color"],

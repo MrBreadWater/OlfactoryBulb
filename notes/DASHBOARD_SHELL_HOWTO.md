@@ -102,6 +102,9 @@ python -m olfactorybulb.dashboard.control_center serve \
 Once the shell is open:
 
 - use the `Audit id` selector to choose any registered audit
+- the selector also exposes:
+  - `default` -> maintained repo-health profile
+  - `all` -> full registered audit sweep
 - use `Audit arguments` for audit-specific flags such as:
   - `--profile maintained`
   - `--suite reference_bundles --details`

@@ -114,6 +114,26 @@ def _esc(value: Any) -> str:
 def _relpath(path: Path, *, from_dir: Path) -> str:
     return os.path.relpath(path.resolve(), from_dir.resolve()).replace(os.sep, "/")
 
+
+def _repo_asset_href(path: Path, *, url_prefix: str) -> str | None:
+    prefix = str(url_prefix or "").strip().rstrip("/")
+    if not prefix:
+        return None
+    try:
+        relative = path.resolve().relative_to(REPO_ROOT.resolve())
+    except ValueError:
+        return None
+    quoted = "/".join(quote(part) for part in relative.parts)
+    return f"{prefix}/{quoted}" if quoted else prefix or "/"
+
+
+def _asset_href(path: Path, *, output_dir: Path, asset_url_prefix: str | None = None) -> str:
+    if asset_url_prefix:
+        repo_href = _repo_asset_href(path, url_prefix=asset_url_prefix)
+        if repo_href:
+            return repo_href
+    return _relpath(path, from_dir=output_dir)
+
 def _wait_with_stop(delay_s: float, stop_event: threading.Event | None) -> None:
     if stop_event is None:
         time.sleep(max(float(delay_s), 0.0))
@@ -603,6 +623,7 @@ def _generate_dashboard_packet(
     generate_packet_workers: int,
     cleanup_stale_packets_before_render: bool,
     status_json: str | Path | None,
+    asset_url_prefix: str | None = None,
     export_generate_packets_top_n: int | None = None,
     export_cleanup_stale_packets_before_render: bool | None = None,
     reload_modules: bool = True,
@@ -636,6 +657,7 @@ def _generate_dashboard_packet(
         generate_packet_workers=generate_packet_workers,
         cleanup_stale_packets_before_render=export_cleanup_stale_packets,
         status_json=status_json,
+        asset_url_prefix=asset_url_prefix,
     )
     return {
         "ok": True,
@@ -657,6 +679,7 @@ def _queue_dashboard_packet_generation(
     generate_packet_workers: int,
     cleanup_stale_packets_before_render: bool,
     status_json: str | Path | None,
+    asset_url_prefix: str | None = None,
     reload_modules: bool = True,
 ) -> dict[str, Any]:
     campaign_path = Path(campaign_dir).expanduser().resolve()
@@ -680,6 +703,7 @@ def _queue_dashboard_packet_generation(
                 generate_packet_workers=generate_packet_workers,
                 cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
                 status_json=status_json,
+                asset_url_prefix=asset_url_prefix,
                 export_generate_packets_top_n=generate_packets_top_n,
                 export_cleanup_stale_packets_before_render=False,
                 reload_modules=reload_modules,
@@ -762,8 +786,15 @@ def _parameter_chips(parameters: dict[str, Any], *, packet: PacketInfo | None = 
     return "\n".join(chunks)
 
 
-def _image_figure(image_path: Path, *, output_dir: Path, css_class: str = "", caption: str | None = None) -> str:
-    href = _relpath(image_path, from_dir=output_dir)
+def _image_figure(
+    image_path: Path,
+    *,
+    output_dir: Path,
+    css_class: str = "",
+    caption: str | None = None,
+    asset_url_prefix: str | None = None,
+) -> str:
+    href = _asset_href(image_path, output_dir=output_dir, asset_url_prefix=asset_url_prefix)
     label = caption or image_path.stem.replace("_", " ")
     class_attr = f" class='{_esc(css_class)}'" if css_class else ""
     return (
@@ -792,12 +823,21 @@ def _psd_images(images: tuple[Path, ...]) -> list[Path]:
     return sorted(selected, key=lambda image: (order.get(image.name, 100), image.name))
 
 
-def _gallery_html(images: list[Path], *, output_dir: Path, css_class: str = "gallery") -> str:
+def _gallery_html(
+    images: list[Path],
+    *,
+    output_dir: Path,
+    css_class: str = "gallery",
+    asset_url_prefix: str | None = None,
+) -> str:
     if not images:
         return ""
     return "<div class='{css_class}'>{items}</div>".format(
         css_class=_esc(css_class),
-        items="\n".join(_image_figure(image, output_dir=output_dir) for image in images),
+        items="\n".join(
+            _image_figure(image, output_dir=output_dir, asset_url_prefix=asset_url_prefix)
+            for image in images
+        ),
     )
 
 
@@ -808,6 +848,7 @@ def _details_gallery(
     output_dir: Path,
     open_by_default: bool = False,
     dom_id: str | None = None,
+    asset_url_prefix: str | None = None,
 ) -> str:
     if not images:
         return ""
@@ -816,7 +857,7 @@ def _details_gallery(
     return (
         f"<details class='figure-group'{id_attr}{open_attr}>"
         f"<summary>{_esc(title)} <span>{len(images)} plots</span></summary>"
-        f"{_gallery_html(images, output_dir=output_dir)}"
+        f"{_gallery_html(images, output_dir=output_dir, asset_url_prefix=asset_url_prefix)}"
         "</details>"
     )
 
@@ -833,6 +874,7 @@ def _condition_pair_html(
     output_dir: Path,
     dom_id: str,
     open_by_default: bool = False,
+    asset_url_prefix: str | None = None,
 ) -> str:
     if control_image is None and ketamine_image is None:
         return ""
@@ -842,7 +884,12 @@ def _condition_pair_html(
         if image is None:
             body = "<div class='missing'>No plot generated.</div>"
         else:
-            body = _image_figure(image, output_dir=output_dir, caption=condition)
+            body = _image_figure(
+                image,
+                output_dir=output_dir,
+                caption=condition,
+                asset_url_prefix=asset_url_prefix,
+            )
         return f"<div class='condition-column {condition.lower()}'><h3>{_esc(condition)}</h3>{body}</div>"
 
     return (
@@ -871,6 +918,7 @@ def _condition_comparison_sections(
     *,
     output_dir: Path,
     rank: int,
+    asset_url_prefix: str | None = None,
 ) -> tuple[str, set[Path]]:
     by_name = _image_by_name(packet.images)
     used: set[Path] = set()
@@ -888,6 +936,7 @@ def _condition_comparison_sections(
                 output_dir=output_dir,
                 dom_id=f"{packet.candidate_id}-{pair_spec.dom_id_suffix}",
                 open_by_default=pair_spec.open_by_default and rank == 1,
+                asset_url_prefix=asset_url_prefix,
             )
         )
 
@@ -909,6 +958,7 @@ def _condition_comparison_sections(
                     output_dir=output_dir,
                     dom_id=f"{packet.candidate_id}-kde-{kind}-{group}{'-' + variant if variant else ''}",
                     open_by_default=kind == "1d" and variant is None and rank == 1,
+                    asset_url_prefix=asset_url_prefix,
                 )
             )
 
@@ -1059,6 +1109,7 @@ def _render_packet_card(
     output_dir: Path,
     rank: int,
     dom_prefix: str = "best",
+    asset_url_prefix: str | None = None,
 ) -> str:
     s = _metric_summary(row)
     candidate_id = str(s["candidate_id"] or "")
@@ -1099,6 +1150,7 @@ def _render_packet_card(
                 output_dir=output_dir,
                 css_class="primary-psd",
                 caption="Live PSD scoring diagnostics",
+                asset_url_prefix=asset_url_prefix,
             )
         psd_images = _psd_images(packet.images)
         supporting_psd = [image for image in psd_images if image != primary_psd]
@@ -1108,9 +1160,15 @@ def _render_packet_card(
             output_dir=output_dir,
             open_by_default=rank == 1,
             dom_id=f"{candidate_dom_id}-psd-details",
+            asset_url_prefix=asset_url_prefix,
         )
         excluded = set(psd_images)
-        comparison_html, comparison_images = _condition_comparison_sections(packet, output_dir=output_dir, rank=rank)
+        comparison_html, comparison_images = _condition_comparison_sections(
+            packet,
+            output_dir=output_dir,
+            rank=rank,
+            asset_url_prefix=asset_url_prefix,
+        )
         excluded.update(comparison_images)
         other_images = [image for image in packet.images if image not in excluded]
         other_gallery_html = _details_gallery(
@@ -1119,6 +1177,7 @@ def _render_packet_card(
             output_dir=output_dir,
             open_by_default=False,
             dom_id=f"{candidate_dom_id}-additional",
+            asset_url_prefix=asset_url_prefix,
         )
         if packet.contact_sheet is not None:
             contact_html = (
@@ -1127,7 +1186,7 @@ def _render_packet_card(
                 "<a class='contact' href='{href}' target='_blank'>"
                 "<img loading='lazy' src='{href}' alt='{alt}'></a></details>"
             ).format(
-                href=_esc(_relpath(packet.contact_sheet, from_dir=output_dir)),
+                href=_esc(_asset_href(packet.contact_sheet, output_dir=output_dir, asset_url_prefix=asset_url_prefix)),
                 alt=_esc(f"{candidate_id} contact sheet"),
             )
 
@@ -1180,6 +1239,7 @@ def _render_html(
     generated_at: str,
     manifest_revision: int | str,
     recent_batch_name: str | None = None,
+    asset_url_prefix: str | None = None,
 ) -> str:
     tab_specs = hfo_visuals.dashboard_tabs()
     best_rows = rows[: int(top_n)]
@@ -1195,6 +1255,7 @@ def _render_html(
             output_dir=output_dir,
             rank=index,
             dom_prefix="best",
+            asset_url_prefix=asset_url_prefix,
         )
         for index, row in enumerate(best_rows, start=1)
     )
@@ -1205,6 +1266,7 @@ def _render_html(
             output_dir=output_dir,
             rank=index,
             dom_prefix="recent",
+            asset_url_prefix=asset_url_prefix,
         )
         for index, row in enumerate(recent_rows, start=1)
     )
@@ -1753,6 +1815,7 @@ def export_visual_dashboard(
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
+    asset_url_prefix: str | None = None,
 ) -> dict[str, Any]:
     """Write ``index.html`` for one campaign and return a small manifest."""
     _reload_visual_packet_modules_if_needed()
@@ -1807,6 +1870,7 @@ def export_visual_dashboard(
             generated_at=generated_at,
             manifest_revision=manifest_revision,
             recent_batch_name=recent_batch_name,
+            asset_url_prefix=asset_url_prefix,
         )
         index_path = output_path / "index.html"
         index_tmp = index_path.with_name(f".{index_path.name}.tmp")
@@ -1832,6 +1896,7 @@ def export_visual_dashboard(
             if int(generate_packets_top_n) > 0
             else 0,
             "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
+            "asset_url_prefix": asset_url_prefix or "",
             "top_candidate_id": rows[0].get("candidate_id") if rows else None,
             "top_score": rows[0].get("pair_score") if rows else None,
         }
@@ -1852,6 +1917,7 @@ def watch_visual_dashboard(
     generate_packet_workers: int = DEFAULT_PACKET_GENERATION_WORKERS,
     cleanup_stale_packets_before_render: bool = DEFAULT_CLEANUP_STALE_PACKETS,
     status_json: str | Path | None = None,
+    asset_url_prefix: str | None = None,
     stop_event: threading.Event | None = None,
 ) -> None:
     campaign_path = Path(campaign_dir).expanduser().resolve()
@@ -1877,6 +1943,7 @@ def watch_visual_dashboard(
                     generate_packet_workers=generate_packet_workers,
                     cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
                     status_json=status_path,
+                    asset_url_prefix=asset_url_prefix,
                 )
                 print(
                     "Wrote visual dashboard for {candidate_rows} candidates "

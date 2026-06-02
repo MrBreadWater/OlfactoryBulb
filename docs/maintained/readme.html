@@ -168,6 +168,11 @@ maintained docs, open:</p>
 <pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
 python tools/run_audit.py repo_health --profile maintained
 </code></pre>
+<p>Useful audit aliases:</p>
+<ul>
+<li><code>python tools/run_audit.py default</code> -&gt; maintained repo-health profile</li>
+<li><code>python tools/run_audit.py all</code> -&gt; full registered audit sweep</li>
+</ul>
 <p>For the maintained web shell that combines audits, optimization, and docs:</p>
 <pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.dashboard.control_center

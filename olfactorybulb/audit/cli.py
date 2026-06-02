@@ -4,10 +4,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+from typing import Any
 
 from olfactorybulb.audit import AuditItem, AuditReport, format_report, get_audit_spec, iter_audit_specs
 from olfactorybulb.audit.core import _expand_terms
 from olfactorybulb.audit.registry import iter_new_sweep_audit_specs
+
+DEFAULT_AUDIT_ALIAS = "default"
+DEFAULT_AUDIT_TARGET = "repo_health"
+DEFAULT_AUDIT_TARGET_ARGS = ["--profile", "maintained"]
+ALL_AUDIT_ALIASES = {"new_sweep", "new-sweep", "all"}
 
 
 def _build_root_parser() -> argparse.ArgumentParser:
@@ -16,8 +22,9 @@ def _build_root_parser() -> argparse.ArgumentParser:
         "audit_id",
         nargs="?",
         help=(
-            "Audit id to run. Omit, or pass 'new_sweep', to start a new sweep "
-            "across every registered audit. Use --list to inspect available audits."
+            "Audit id to run. Omit, or pass 'all', to start a new sweep "
+            "across every registered audit. Pass 'default' for the maintained "
+            "repo-health profile. Use --list to inspect available audits."
         ),
     )
     parser.add_argument("--list", action="store_true", help="List available audits and exit.")
@@ -42,16 +49,50 @@ def _paint(text: str, code: str, *, enabled: bool) -> str:
     return f"\033[{code}m{text}\033[0m"
 
 
+def audit_alias_entries() -> list[dict[str, Any]]:
+    return [
+        {
+            "audit_id": DEFAULT_AUDIT_ALIAS,
+            "title": "Default audit profile",
+            "description": (
+                "Run the maintained repo-health profile. If no explicit args are "
+                "provided, this resolves to repo_health --profile maintained."
+            ),
+            "default_args": list(DEFAULT_AUDIT_TARGET_ARGS),
+        },
+        {
+            "audit_id": "all",
+            "title": "All registered audits",
+            "description": "Run a new sweep across every registered audit.",
+            "default_args": [],
+        },
+    ]
+
+
+def available_audit_entries() -> list[dict[str, Any]]:
+    entries = list(audit_alias_entries())
+    entries.extend(
+        {
+            "audit_id": spec.audit_id,
+            "title": spec.title,
+            "description": spec.description,
+            "default_args": list(DEFAULT_AUDIT_TARGET_ARGS) if spec.audit_id == DEFAULT_AUDIT_TARGET else [],
+        }
+        for spec in iter_audit_specs()
+    )
+    return entries
+
+
 def list_audits(*, color: bool = True) -> int:
-    specs = list(iter_audit_specs())
-    id_width = max(len(spec.audit_id) for spec in specs)
-    title_width = max(len(spec.title) for spec in specs)
+    entries = available_audit_entries()
+    id_width = max(len(str(entry["audit_id"])) for entry in entries)
+    title_width = max(len(str(entry["title"])) for entry in entries)
     print(_paint("Available audits", "1;96", enabled=color))
     print(_paint("=" * (id_width + title_width + 5), "2", enabled=color))
-    for spec in specs:
-        audit_id = _paint(spec.audit_id.ljust(id_width), "1;36", enabled=color)
-        title = _paint(_expand_terms(spec.title, sentence_case=True).ljust(title_width), "1", enabled=color)
-        print(f"{audit_id}  {title}  {_expand_terms(spec.description, sentence_case=True)}")
+    for entry in entries:
+        audit_id = _paint(str(entry["audit_id"]).ljust(id_width), "1;36", enabled=color)
+        title = _paint(_expand_terms(str(entry["title"]), sentence_case=True).ljust(title_width), "1", enabled=color)
+        print(f"{audit_id}  {title}  {_expand_terms(str(entry['description']), sentence_case=True)}")
     return 0
 
 
@@ -102,11 +143,22 @@ def run_new_sweep(argv: list[str]) -> AuditReport:
     )
 
 
+def _resolve_audit_request(audit_id: str | None, argv: list[str]) -> tuple[str | None, list[str]]:
+    normalized = str(audit_id or "").strip()
+    args = list(argv)
+    if not normalized or normalized in ALL_AUDIT_ALIASES:
+        return None, args
+    if normalized == DEFAULT_AUDIT_ALIAS:
+        return DEFAULT_AUDIT_TARGET, (args if args else list(DEFAULT_AUDIT_TARGET_ARGS))
+    return normalized, args
+
+
 def run_audit_by_id(audit_id: str | None, argv: list[str]) -> AuditReport:
-    if not audit_id or audit_id in {"new_sweep", "new-sweep", "all"}:
-        return run_new_sweep(argv)
-    spec = get_audit_spec(audit_id)
-    return _run_one_audit(spec, argv)
+    resolved_audit_id, resolved_args = _resolve_audit_request(audit_id, argv)
+    if resolved_audit_id is None:
+        return run_new_sweep(resolved_args)
+    spec = get_audit_spec(resolved_audit_id)
+    return _run_one_audit(spec, resolved_args)
 
 
 def main(argv: list[str] | None = None) -> int:

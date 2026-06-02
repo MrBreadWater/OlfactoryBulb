@@ -19,9 +19,8 @@ from typing import Any
 from urllib.parse import unquote, urlparse
 
 from neuroinfra.dashboard import ShellTabSpec, render_dashboard_shell
-from olfactorybulb.audit.cli import run_audit_by_id
+from olfactorybulb.audit.cli import available_audit_entries, run_audit_by_id
 from olfactorybulb.audit.dashboard import export_audit_dashboard
-from olfactorybulb.audit.registry import iter_audit_specs
 import tools.analysis.hfo_visual_dashboard as hfo_dashboard
 
 
@@ -61,6 +60,9 @@ def _json_script_payload(payload: Any) -> str:
 
 def _default_audit_args_for(audit_id: str) -> list[str]:
     normalized = str(audit_id or "").strip() or DEFAULT_AUDIT_ID
+    for entry in available_audit_entries():
+        if str(entry.get("audit_id") or "") == normalized:
+            return list(entry.get("default_args") or [])
     if normalized == DEFAULT_AUDIT_ID:
         return list(DEFAULT_AUDIT_ARGS)
     return []
@@ -184,12 +186,12 @@ def _module_tabs() -> tuple[ShellTabSpec, ...]:
 def _available_audit_entries() -> list[dict[str, str]]:
     return [
         {
-            "audit_id": spec.audit_id,
-            "title": spec.title,
-            "description": spec.description,
-            "default_args": _default_audit_args_for(spec.audit_id),
+            "audit_id": str(entry.get("audit_id") or ""),
+            "title": str(entry.get("title") or ""),
+            "description": str(entry.get("description") or ""),
+            "default_args": list(entry.get("default_args") or []),
         }
-        for spec in iter_audit_specs()
+        for entry in available_audit_entries()
     ]
 
 
@@ -715,6 +717,7 @@ def export_control_center(
             generate_packet_workers=generate_packet_workers,
             cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
             status_json=status_json,
+            asset_url_prefix="/repo",
         )
         campaign_label = str(campaign_path)
     log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
@@ -1031,6 +1034,7 @@ def serve_control_center(
                         generate_packet_workers=generate_packet_workers,
                         cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
                         status_json=status_json,
+                        asset_url_prefix="/repo",
                     )
                 except Exception as exc:  # pragma: no cover - exercised through integration, not unit tests
                     self._send_json(500, {"ok": False, "candidate_id": candidate_id, "error": str(exc)})
@@ -1117,6 +1121,7 @@ def serve_control_center(
                     generate_packet_workers=generate_packet_workers,
                     cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
                     status_json=status_json,
+                    asset_url_prefix="/repo",
                 )
                 packet_count = int(optimization_manifest.get("packet_count") or 0)
                 _update_base_state(
@@ -1142,6 +1147,7 @@ def serve_control_center(
                         "generate_packet_workers": generate_packet_workers,
                         "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
                         "status_json": status_json,
+                        "asset_url_prefix": "/repo",
                         "stop_event": stop_event,
                     },
                     name="control-center-optimization-watch",

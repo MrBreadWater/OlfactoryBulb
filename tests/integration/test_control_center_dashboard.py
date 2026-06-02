@@ -105,8 +105,11 @@ with TemporaryDirectory() as tmp:
     assert "OlfactoryBulb Control Center" in html
     assert "Run selected audit" in html
     assert "/__control_center_state__" in html
+    assert ">default<" in html
+    assert ">all<" in html
     assert _export_call_kwargs["generate_packets_top_n"] == 0
     assert _export_call_kwargs["cleanup_stale_packets_before_render"] is False
+    assert _export_call_kwargs["asset_url_prefix"] == "/repo"
     assert _run_audit_calls[-1] == ("repo_health", ["--profile", "maintained"])
 
 with TemporaryDirectory() as tmp:

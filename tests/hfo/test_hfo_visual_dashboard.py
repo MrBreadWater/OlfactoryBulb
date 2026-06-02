@@ -555,6 +555,38 @@ with TemporaryDirectory() as tmp:
     assert 'src="/visual_dashboard/"' in entrypoint_html
     assert "Directory listing" not in entrypoint_html
 
+with TemporaryDirectory(dir=hfo_vd.REPO_ROOT / "results") as tmp:
+    campaign = Path(tmp)
+    output_dir = campaign / "visual_dashboard"
+    packet_dir = campaign / "figures" / "packet_C00042"
+    packet_dir.mkdir(parents=True)
+    overlay = packet_dir / "03_psd_overlay.png"
+    overlay.write_bytes(b"png")
+    row = {"candidate_id": "C00042", "pair_score": 1.0}
+    packet = PacketInfo(
+        candidate_id="C00042",
+        packet_dir=packet_dir,
+        contact_sheet=None,
+        images=(overlay,),
+        manifest={},
+        mtime=1.0,
+    )
+    dashboard_html_repo_assets = _render_html(
+        campaign_dir=campaign,
+        output_dir=output_dir,
+        rows=[row],
+        packets={"C00042": packet},
+        top_n=1,
+        refresh_s=60.0,
+        generated_packets=[],
+        status_payload={},
+        generated_at="2026-05-28T01:23:45",
+        manifest_revision=987654322,
+        asset_url_prefix="/repo",
+    )
+    assert "/repo/results/" in dashboard_html_repo_assets
+    assert "03_psd_overlay.png" in dashboard_html_repo_assets
+
 with TemporaryDirectory() as tmp:
     campaign = Path(tmp)
     packet_dir = campaign / "figures" / "packet_C00042"

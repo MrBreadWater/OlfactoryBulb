@@ -36,6 +36,8 @@ For one maintained-surface health command that stays inside the official audit
 system, use:
 
 - `python tools/run_audit.py repo_health --profile maintained`
+- `python tools/run_audit.py default`
+- `python tools/run_audit.py all`
 
 For grouped developer-facing Python tests presented through the same audit
 surface, use:

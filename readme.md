@@ -45,6 +45,11 @@ source tools/setup/activate_obgpu.sh OBGPU
 python tools/run_audit.py repo_health --profile maintained
 ```
 
+Useful audit aliases:
+
+- `python tools/run_audit.py default` -> maintained repo-health profile
+- `python tools/run_audit.py all` -> full registered audit sweep
+
 For the maintained web shell that combines audits, optimization, and docs:
 
 ```bash

@@ -408,6 +408,9 @@ contract for future sessions.
 - Human-facing audit CLI:
   - `python tools/run_audit.py --list`
   - `python tools/run_audit.py <audit_id>`
+  - stable aliases:
+    - `python tools/run_audit.py default` -> maintained repo-health profile
+    - `python tools/run_audit.py all` -> full registered audit sweep
   - `python tools/run_audit.py test_suite_status --list-suites`
   - For large grouped output, the default text mode may collapse fully passing
     groups.
@@ -762,6 +765,7 @@ contract for future sessions.
 
 - Run maintained repo-health checks:
   - `python tools/run_audit.py repo_health --profile maintained`
+  - `python tools/run_audit.py default`
 
 - List grouped test suites:
   - `python tools/run_audit.py test_suite_status --list-suites`
@@ -780,6 +784,7 @@ contract for future sessions.
 
 - Run all audits:
   - `python tools/run_audit.py`
+  - `python tools/run_audit.py all`
 
 - Run human review coverage audit:
   - `python tools/run_audit.py human_review_status`
