@@ -17,6 +17,7 @@ import numpy as np
 from neuroinfra.analysis.frequency_plots import (
     FrequencyPlotConfig,
     ResultFrequencyPlotFamily,
+    ResultFrequencyPlotSuite,
     coerce_frequency_plot_config,
     frequency_plot_config_with_modulus,
     plot_frequency_kde_1d_from_samples,
@@ -97,12 +98,26 @@ def main() -> None:
         title_2d="Family 2D",
         title_time_binned="Family Binned",
     )
+    suite = ResultFrequencyPlotSuite(family)
 
     fig, ax = plt.subplots()
     try:
         plot_result_frequency_kde_1d(
             {"demo": True},
             family,
+            config={"max_freq_hz": 160.0, "modulus": 50.0},
+            ax=ax,
+            selection=("MC", "TC"),
+            collector_kwargs={"selection": ("MC", "TC")},
+        )
+        assert ax.get_title() == "Family 1D (MC+TC)"
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots()
+    try:
+        suite.plot_kde_1d(
+            {"demo": True},
             config={"max_freq_hz": 160.0, "modulus": 50.0},
             ax=ax,
             selection=("MC", "TC"),
@@ -128,9 +143,34 @@ def main() -> None:
 
     fig, ax = plt.subplots()
     try:
+        suite.plot_kde_2d(
+            {"demo": True},
+            config={"max_freq_hz": 160.0, "modulus": 50.0},
+            ax=ax,
+            selection=None,
+        )
+        assert ax.get_title() == "Family 2D (all)"
+        assert ax.get_xlabel() == "Time (ms)"
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots()
+    try:
         plot_result_frequency_time_binned(
             {"demo": True},
             family,
+            config={"max_freq_hz": 160.0, "num_time_bins": 8},
+            ax=ax,
+            selection=("MC",),
+        )
+        assert ax.get_title() == "Family Binned (MC)"
+    finally:
+        plt.close(fig)
+
+    fig, ax = plt.subplots()
+    try:
+        suite.plot_time_binned(
+            {"demo": True},
             config={"max_freq_hz": 160.0, "num_time_bins": 8},
             ax=ax,
             selection=("MC",),

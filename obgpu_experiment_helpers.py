@@ -269,14 +269,12 @@ from neuroinfra.analysis.events import (
     build_event_rate_trace_series as _neuroinfra_build_event_rate_trace_series,
     calculate_event_frequency as _neuroinfra_calculate_event_frequency,
     calculate_trace_event_frequency as _neuroinfra_calculate_trace_event_frequency,
-    compute_result_event_family_rate as _neuroinfra_compute_result_event_family_rate,
     collect_frequency_samples_from_rows as _neuroinfra_collect_frequency_samples_from_rows,
     collect_frequency_samples_from_trace_rows as _neuroinfra_collect_frequency_samples_from_trace_rows,
-    collect_result_event_family_samples as _neuroinfra_collect_result_event_family_samples,
     ensure_raster_axis as _neuroinfra_ensure_raster_axis,
     fit_raster_labels as _neuroinfra_fit_raster_labels,
+    ResultEventFamilySuite as _NeuroinfraResultEventFamilySuite,
     ResultEventFamilySpec as _NeuroinfraResultEventFamilySpec,
-    filter_result_event_family_rows as _neuroinfra_filter_result_event_family_rows,
     prepare_event_display_rows as _neuroinfra_prepare_event_display_rows,
     plot_event_overview as _neuroinfra_plot_event_overview,
     plot_event_rate_traces as _neuroinfra_plot_event_rate_traces,
@@ -301,10 +299,8 @@ from neuroinfra.analysis.plotting import (
 from neuroinfra.analysis.frequency_plots import (
     FrequencyPlotConfig,
     ResultFrequencyPlotFamily as _NeuroinfraResultFrequencyPlotFamily,
+    ResultFrequencyPlotSuite as _NeuroinfraResultFrequencyPlotSuite,
     frequency_plot_config_with_modulus,
-    plot_result_frequency_kde_1d as _neuroinfra_plot_result_frequency_kde_1d,
-    plot_result_frequency_kde_2d as _neuroinfra_plot_result_frequency_kde_2d,
-    plot_result_frequency_time_binned as _neuroinfra_plot_result_frequency_time_binned,
 )
 from neuroinfra.analysis.sweeps import (
     SweepPlotRegistry as _NeuroinfraSweepPlotRegistry,
@@ -6579,9 +6575,8 @@ def filter_gc_output_events(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     """Filter saved GC inhibitory-output events by destination cell family."""
-    return _neuroinfra_filter_result_event_family_rows(
+    return _OBGPU_GC_OUTPUT_EVENT_FAMILY.filter_rows(
         result,
-        _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
         include_prefixes=target_types,
     )
 
@@ -6593,9 +6588,8 @@ def collect_gc_output_frequency_samples(
     modulus: float | None = None,
 ) -> dict[str, Any]:
     """Collect instantaneous GC inhibitory-output frequency samples for KDE plots."""
-    sample_collection = _neuroinfra_collect_result_event_family_samples(
+    sample_collection = _OBGPU_GC_OUTPUT_EVENT_FAMILY.collect_samples(
         result,
-        _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
         indices=indices,
         include_prefixes=target_types,
         modulus=modulus,
@@ -6616,6 +6610,9 @@ _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY = _NeuroinfraResultFrequencyPlotFamily(
     title_2d="Soma Spike Time/Frequency KDE",
     title_time_binned="Soma Spike Frequency Distributions",
 )
+_OBGPU_SPIKE_FREQUENCY_PLOTS = _NeuroinfraResultFrequencyPlotSuite(
+    _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
+)
 
 
 _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY = _NeuroinfraResultFrequencyPlotFamily(
@@ -6624,6 +6621,9 @@ _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY = _NeuroinfraResultFrequencyPlotFamily(
     title_1d="GC Inhibitory Output Frequency Distribution",
     title_2d="GC Inhibitory Output Time/Frequency KDE",
     title_time_binned="GC Inhibitory Output Frequency Distributions",
+)
+_OBGPU_GC_OUTPUT_FREQUENCY_PLOTS = _NeuroinfraResultFrequencyPlotSuite(
+    _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
 )
 
 
@@ -6638,9 +6638,8 @@ def plot_spike_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of detected soma spike frequencies."""
-    return _neuroinfra_plot_result_frequency_kde_1d(
+    return _OBGPU_SPIKE_FREQUENCY_PLOTS.plot_kde_1d(
         result,
-        _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
         config=config,
         ax=ax,
         title=title,
@@ -6664,9 +6663,8 @@ def plot_spike_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of detected soma spike frequencies."""
-    return _neuroinfra_plot_result_frequency_kde_2d(
+    return _OBGPU_SPIKE_FREQUENCY_PLOTS.plot_kde_2d(
         result,
-        _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
         config=config,
         ax=ax,
         title=title,
@@ -6692,9 +6690,8 @@ def plot_spike_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned soma spike-frequency distributions."""
-    return _neuroinfra_plot_result_frequency_time_binned(
+    return _OBGPU_SPIKE_FREQUENCY_PLOTS.plot_time_binned(
         result,
-        _OBGPU_SPIKE_FREQUENCY_PLOT_FAMILY,
         config=config,
         ax=ax,
         title=title,
@@ -6719,9 +6716,8 @@ def plot_gc_output_frequency_kde_1d(
     title: str | None = None,
 ) -> Any:
     """Plot a 1D KDE of reciprocal GC inhibitory-output frequencies."""
-    return _neuroinfra_plot_result_frequency_kde_1d(
+    return _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS.plot_kde_1d(
         result,
-        _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
         config=config,
         ax=ax,
         title=title,
@@ -6743,9 +6739,8 @@ def plot_gc_output_frequency_kde_2d(
     title: str | None = None,
 ) -> Any:
     """Plot a 2D time/frequency KDE of reciprocal GC inhibitory-output frequencies."""
-    return _neuroinfra_plot_result_frequency_kde_2d(
+    return _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS.plot_kde_2d(
         result,
-        _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
         config=config,
         ax=ax,
         title=title,
@@ -6769,9 +6764,8 @@ def plot_gc_output_frequency_time_binned(
     show_ridgeline_kde: bool = False,
 ) -> Any:
     """Plot time-binned reciprocal GC inhibitory-output frequency distributions."""
-    return _neuroinfra_plot_result_frequency_time_binned(
+    return _OBGPU_GC_OUTPUT_FREQUENCY_PLOTS.plot_time_binned(
         result,
-        _OBGPU_GC_OUTPUT_FREQUENCY_PLOT_FAMILY,
         config=config,
         ax=ax,
         title=title,
@@ -6889,6 +6883,13 @@ _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC = _NeuroinfraResultEventFamilySpec(
     normalization_rules=_gc_output_rate_normalization_rules(),
     default_normalization="per_target_cell",
 )
+_OBGPU_GC_OUTPUT_EVENT_FAMILY = _NeuroinfraResultEventFamilySuite(
+    spec=_OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
+    infer_t_stop_fn=lambda result, rows: _resolve_event_tstop(
+        result,
+        [np.asarray(_OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC.times_fn(row), dtype=float) for row in rows],
+    ),
+)
 
 
 def compute_gc_output_rate(
@@ -6900,13 +6901,8 @@ def compute_gc_output_rate(
     return_metadata: bool = False,
 ) -> Any:
     """Compute a GC inhibitory-output rate trace with configurable normalization."""
-    events = filter_gc_output_events(result, target_types=target_types)
-    event_series = [np.asarray(entry.get("times", []), dtype=float) for entry in events]
-    t_stop = _resolve_event_tstop(result, event_series)
-    computed = _neuroinfra_compute_result_event_family_rate(
+    computed = _OBGPU_GC_OUTPUT_EVENT_FAMILY.compute_rate(
         result,
-        _OBGPU_GC_OUTPUT_EVENT_FAMILY_SPEC,
-        t_stop=t_stop,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
         include_prefixes=target_types,
@@ -6921,9 +6917,8 @@ def filter_input_events(
     target_types: list[str] | tuple[str, ...] | None = None,
 ) -> list[tuple[str, Any]]:
     """Filter odor-input event rows by destination cell family."""
-    return _neuroinfra_filter_result_event_family_rows(
+    return _OBGPU_INPUT_EVENT_FAMILY.filter_rows(
         result,
-        _OBGPU_INPUT_EVENT_FAMILY_SPEC,
         include_prefixes=target_types,
     )
 
@@ -6971,6 +6966,13 @@ _OBGPU_INPUT_EVENT_FAMILY_SPEC = _NeuroinfraResultEventFamilySpec(
     normalization_rules=_input_rate_normalization_rules(),
     default_normalization="per_target_cell",
 )
+_OBGPU_INPUT_EVENT_FAMILY = _NeuroinfraResultEventFamilySuite(
+    spec=_OBGPU_INPUT_EVENT_FAMILY_SPEC,
+    infer_t_stop_fn=lambda result, rows: _resolve_event_tstop(
+        result,
+        [np.asarray(_OBGPU_INPUT_EVENT_FAMILY_SPEC.times_fn(row), dtype=float) for row in rows],
+    ),
+)
 
 
 def compute_input_rate(
@@ -6982,13 +6984,8 @@ def compute_input_rate(
     return_metadata: bool = False,
 ) -> Any:
     """Compute an odor-input event-rate trace with configurable normalization."""
-    rows = filter_input_events(result, target_types=target_types)
-    event_series = [np.asarray(times, dtype=float) for _section_name, times in rows]
-    t_stop = _resolve_event_tstop(result, event_series)
-    computed = _neuroinfra_compute_result_event_family_rate(
+    computed = _OBGPU_INPUT_EVENT_FAMILY.compute_rate(
         result,
-        _OBGPU_INPUT_EVENT_FAMILY_SPEC,
-        t_stop=t_stop,
         bin_ms=bin_ms,
         smooth_sigma_ms=smooth_sigma_ms,
         include_prefixes=target_types,

@@ -16,6 +16,7 @@ from neuroinfra.analysis.events import (
     FrequencySampleCollection,
     PreparedEventRows,
     ResultEventFamilySpec,
+    ResultEventFamilySuite,
     binned_event_rate,
     build_event_overview_layout,
     build_event_overview_layout_for_rows,
@@ -210,6 +211,30 @@ def main() -> None:
     assert family_rate_meta["n_targets"] == 2
     np.testing.assert_allclose(family_rate_t, [5.0, 15.0, 25.0, 35.0, 45.0])
     np.testing.assert_allclose(family_rate_hz, [50.0, 50.0, 50.0, 50.0, 50.0])
+
+    family_suite = ResultEventFamilySuite(
+        spec=family_spec,
+        infer_t_stop_fn=lambda result, rows: max(
+            [50.0] + [float(np.asarray(row["times"], dtype=float)[-1]) for row in rows if len(row["times"]) > 0]
+        ),
+    )
+    assert len(family_suite.filter_rows(family_result, include_prefixes=("TC",))) == 1
+    suite_samples = family_suite.collect_samples(
+        family_result,
+        include_prefixes=("MC",),
+        modulus=25.0,
+    )
+    assert suite_samples.labels == ("GC0->MC0",)
+    suite_rate_t, suite_rate_hz, suite_meta = family_suite.compute_rate(
+        family_result,
+        bin_ms=10.0,
+        smooth_sigma_ms=0.0,
+        normalization="per_cell",
+        return_metadata=True,
+    )
+    assert suite_meta["normalization"] == "per_target_cell"
+    np.testing.assert_allclose(suite_rate_t, [5.0, 15.0, 25.0, 35.0, 45.0])
+    np.testing.assert_allclose(suite_rate_hz, [50.0, 50.0, 50.0, 50.0, 50.0])
 
     prepared_rows = prepare_event_display_rows(
         [

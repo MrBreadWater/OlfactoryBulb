@@ -85,6 +85,83 @@ class ResultEventFamilySpec:
     default_normalization: str = "total"
 
 
+@dataclass(frozen=True)
+class ResultEventFamilySuite:
+    """Behavioral wrapper around one reusable result-backed event family."""
+
+    spec: ResultEventFamilySpec
+    infer_t_stop_fn: Callable[[dict[str, Any], Sequence[Any]], float] | None = None
+
+    def filter_rows(
+        self,
+        result: dict[str, Any],
+        *,
+        include_prefixes: Sequence[str] | None = None,
+    ) -> list[Any]:
+        """Filter rows for this family by normalized label prefixes."""
+        return filter_result_event_family_rows(
+            result,
+            self.spec,
+            include_prefixes=include_prefixes,
+        )
+
+    def collect_samples(
+        self,
+        result: dict[str, Any],
+        *,
+        indices: Sequence[int] | range | None = None,
+        include_prefixes: Sequence[str] | None = None,
+        modulus: float | int | None = None,
+    ) -> FrequencySampleCollection:
+        """Collect instantaneous frequency samples for this family."""
+        return collect_result_event_family_samples(
+            result,
+            self.spec,
+            indices=indices,
+            include_prefixes=include_prefixes,
+            modulus=modulus,
+        )
+
+    def compute_rate(
+        self,
+        result: dict[str, Any],
+        *,
+        bin_ms: float,
+        smooth_sigma_ms: float,
+        include_prefixes: Sequence[str] | None = None,
+        normalization: str | None = None,
+        return_metadata: bool = False,
+        t_stop: float | None = None,
+    ) -> Any:
+        """Compute one normalized event-rate trace for this family."""
+        resolved_t_stop = float(t_stop) if t_stop is not None else self._infer_t_stop(
+            result,
+            include_prefixes=include_prefixes,
+        )
+        return compute_result_event_family_rate(
+            result,
+            self.spec,
+            t_stop=resolved_t_stop,
+            bin_ms=bin_ms,
+            smooth_sigma_ms=smooth_sigma_ms,
+            include_prefixes=include_prefixes,
+            normalization=normalization,
+            return_metadata=return_metadata,
+        )
+
+    def _infer_t_stop(
+        self,
+        result: dict[str, Any],
+        *,
+        include_prefixes: Sequence[str] | None = None,
+    ) -> float:
+        """Infer the event-family time span when no explicit t_stop is provided."""
+        if self.infer_t_stop_fn is None:
+            raise ValueError("Result event family suite does not define t_stop inference")
+        rows = self.filter_rows(result, include_prefixes=include_prefixes)
+        return float(self.infer_t_stop_fn(result, rows))
+
+
 def calculate_event_frequency(times: np.ndarray | list[float]) -> tuple[np.ndarray, np.ndarray]:
     """Convert event times into midpoint/frequency samples."""
     times = np.asarray(times, dtype=float)

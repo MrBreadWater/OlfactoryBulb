@@ -47,6 +47,80 @@ class ResultFrequencyPlotFamily:
     title_time_binned: str
 
 
+@dataclass(frozen=True)
+class ResultFrequencyPlotSuite:
+    """Behavioral wrapper around one reusable result-backed frequency family."""
+
+    family: ResultFrequencyPlotFamily
+
+    def plot_kde_1d(
+        self,
+        result: dict[str, Any],
+        *,
+        config: "FrequencyPlotConfig | dict[str, Any] | None" = None,
+        ax: Any = None,
+        title: str | None = None,
+        selection: Any = None,
+        collector_kwargs: Mapping[str, Any] | None = None,
+    ) -> Any:
+        """Render the 1D KDE view for this family."""
+        return plot_result_frequency_kde_1d(
+            result,
+            self.family,
+            config=config,
+            ax=ax,
+            title=title,
+            selection=selection,
+            collector_kwargs=collector_kwargs,
+        )
+
+    def plot_kde_2d(
+        self,
+        result: dict[str, Any],
+        *,
+        config: "FrequencyPlotConfig | dict[str, Any] | None" = None,
+        ax: Any = None,
+        title: str | None = None,
+        selection: Any = None,
+        collector_kwargs: Mapping[str, Any] | None = None,
+    ) -> Any:
+        """Render the 2D time/frequency KDE view for this family."""
+        return plot_result_frequency_kde_2d(
+            result,
+            self.family,
+            config=config,
+            ax=ax,
+            title=title,
+            selection=selection,
+            collector_kwargs=collector_kwargs,
+        )
+
+    def plot_time_binned(
+        self,
+        result: dict[str, Any],
+        *,
+        config: "FrequencyPlotConfig | dict[str, Any] | None" = None,
+        ax: Any = None,
+        title: str | None = None,
+        selection: Any = None,
+        collector_kwargs: Mapping[str, Any] | None = None,
+        show_dots: bool = True,
+        show_ridgeline_kde: bool = False,
+    ) -> Any:
+        """Render the time-binned distribution view for this family."""
+        return plot_result_frequency_time_binned(
+            result,
+            self.family,
+            config=config,
+            ax=ax,
+            title=title,
+            selection=selection,
+            collector_kwargs=collector_kwargs,
+            show_dots=show_dots,
+            show_ridgeline_kde=show_ridgeline_kde,
+        )
+
+
 def coerce_frequency_plot_config(
     config: FrequencyPlotConfig | dict[str, Any] | None = None,
     **overrides: Any,

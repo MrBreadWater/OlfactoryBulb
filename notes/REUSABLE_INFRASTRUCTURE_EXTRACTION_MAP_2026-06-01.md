@@ -148,11 +148,13 @@ What is already generic:
 - phase-locking summaries from resolved signals and labeled spike-time rows
 - frequency KDE and time-binned plotting from precomputed sample arrays
 - result-backed frequency plot families for 1D KDE, 2D KDE, and time-binned rendering
+- family-bound result-frequency plotting suites
 - instantaneous frequency sample collection from labeled event rows
 - trace-derived instantaneous frequency sample collection from labeled continuous-trace rows
 - row filtering by label-prefix families
 - normalization-driven event-rate computation from arbitrary event rows
 - result-backed event-family specs for filtering, frequency sample collection, and normalized rate computation
+- result-backed event family suites with reusable `t_stop` inference hooks
 - reusable event-rate series assembly for named subset plots
 - prepared labeled event display rows and overview-layout derivation from them
 - event-frequency conversion, event-rate binning, shared rate-plot helpers, and reusable raster-plot primitives

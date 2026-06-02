@@ -34,6 +34,7 @@ from .plotting import (
 )
 from .events import (
     EventOverviewLayout,
+    ResultEventFamilySuite,
     EventRateNormalizationRule,
     EventRateSeriesSpec,
     EventRateTrace,
@@ -86,6 +87,7 @@ from .phase_locking import (
 from .frequency_plots import (
     FrequencyPlotConfig,
     ResultFrequencyPlotFamily,
+    ResultFrequencyPlotSuite,
     coerce_frequency_plot_config,
     frequency_plot_config_with_modulus,
     plot_frequency_kde_1d_from_samples,
@@ -160,6 +162,7 @@ __all__ = [
     "FrequencySampleCollection",
     "PreparedEventRows",
     "ResultEventFamilySpec",
+    "ResultEventFamilySuite",
     "binned_event_rate",
     "build_event_overview_layout",
     "build_event_overview_layout_for_rows",
@@ -186,6 +189,7 @@ __all__ = [
     "fit_raster_labels",
     "FrequencyPlotConfig",
     "ResultFrequencyPlotFamily",
+    "ResultFrequencyPlotSuite",
     "fold_time_matrix_by_modulus",
     "fold_time_series_by_modulus",
     "frequency_plot_config_with_modulus",
