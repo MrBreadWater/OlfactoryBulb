@@ -122,6 +122,12 @@ from olfactorybulb.notebook_configs import (
     load_config as _ob_load_config,
     save_config as _ob_save_config,
 )
+from olfactorybulb.notebook_local_runs import (
+    NotebookLocalRunHookBuilderHooks as _OlfactoryBulbNotebookLocalRunHookBuilderHooks,
+    LocalRunPayloadHooks as _OlfactoryBulbLocalRunPayloadHooks,
+    build_local_run_hooks as _ob_build_local_run_hooks,
+    build_local_run_payload as _ob_build_local_run_payload,
+)
 from olfactorybulb.notebook_run_info import (
     NotebookRunInfoHooks as _OlfactoryBulbNotebookRunInfoHooks,
     merge_extra_run_info as _ob_merge_extra_run_info,
@@ -143,6 +149,12 @@ from olfactorybulb.notebook_reports import (
     NotebookReportHooks as _OlfactoryBulbNotebookReportHooks,
     print_run_summary as _ob_print_run_summary,
 )
+from olfactorybulb.notebook_workflows import (
+    NotebookWorkflowAdapterHooks as _OlfactoryBulbNotebookWorkflowAdapterHooks,
+    build_load_run_pair_hooks as _ob_build_load_run_pair_hooks,
+    build_run_and_load_hooks as _ob_build_run_and_load_hooks,
+    build_local_sweep_hooks as _ob_build_local_sweep_hooks,
+)
 from olfactorybulb.hfo_features import (
     apply_hfo_runtime_overrides,
     hfo_control_help,
@@ -150,7 +162,6 @@ from olfactorybulb.hfo_features import (
 )
 from neuroinfra.notebooks.config_store import json_ready as _neuroinfra_json_ready
 from neuroinfra.notebooks.local_runs import (
-    LocalRunHooks as _NeuroinfraLocalRunHooks,
     execute_local_run as _neuroinfra_execute_local_run,
 )
 from neuroinfra.notebooks.remote_jobs import (
@@ -177,9 +188,6 @@ from neuroinfra.notebooks.sweeps import (
     split_path_parts as _neuroinfra_split_path_parts,
 )
 from neuroinfra.notebooks.workflows import (
-    LoadRunPairHooks as _NeuroinfraLoadRunPairHooks,
-    LocalSweepHooks as _NeuroinfraLocalSweepHooks,
-    RunAndLoadHooks as _NeuroinfraRunAndLoadHooks,
     load_run_pair as _neuroinfra_load_run_pair,
     run_and_load as _neuroinfra_run_and_load_workflow,
     run_local_sweep_plan as _neuroinfra_run_local_sweep_plan,
@@ -2637,6 +2645,38 @@ def _ob_remote_sweep_workflow_builder_hooks() -> _OlfactoryBulbNotebookRemoteSwe
     )
 
 
+def _ob_local_run_payload_hooks() -> _OlfactoryBulbLocalRunPayloadHooks:
+    """Build the concrete olfactory-bulb hooks for local run payload assembly."""
+    return _OlfactoryBulbLocalRunPayloadHooks(
+        benchmark_param_overrides_payload_fn=_benchmark_param_overrides_payload,
+        write_benchmark_overrides_file_fn=_write_benchmark_overrides_file,
+        build_run_command_fn=build_run_command,
+    )
+
+
+def _ob_local_run_hook_builder_hooks() -> _OlfactoryBulbNotebookLocalRunHookBuilderHooks:
+    """Build the concrete olfactory-bulb hooks for local notebook run execution."""
+    return _OlfactoryBulbNotebookLocalRunHookBuilderHooks(
+        read_summary_fn=lambda path: json.loads(Path(path).read_text()),
+        write_run_info_fn=_write_notebook_run_info,
+        build_param_overrides_fn=build_param_overrides,
+        run_record_factory_fn=RunRecord,
+    )
+
+
+def _ob_notebook_workflow_adapter_hooks() -> _OlfactoryBulbNotebookWorkflowAdapterHooks:
+    """Build the concrete olfactory-bulb hooks for generic notebook workflows."""
+    return _OlfactoryBulbNotebookWorkflowAdapterHooks(
+        load_run_record_fn=load_run_record,
+        load_result_fn=load_result,
+        run_simulation_fn=run_simulation,
+        merge_run_info_payload_fn=_merge_run_info_payload,
+        save_sweep_fn=save_sweep,
+        sweep_item_runs_dir_fn=_sweep_item_runs_dir,
+        sweep_dir_fn=_sweep_dir,
+    )
+
+
 def _remote_run_artifact_hooks(
     notebook_timings: dict[str, float],
 ) -> _NeuroinfraRemoteRunArtifactHooks:
@@ -4298,53 +4338,23 @@ def run_simulation(
     if runner_backend != "local":
         raise ValueError(f"Unsupported runner_backend={runner_backend!r}")
 
-    env = os.environ.copy()
-    env["PYTHONPATH"] = f"{REPO_ROOT}:{env.get('PYTHONPATH', '')}".rstrip(":")
-    env["OB_RUN_TIMESTAMP"] = timestamp
-    env["OB_RESULT_LABEL"] = label
-    env["OB_RESULTS_BASE"] = str(config.get("results_base", DEFAULT_RESULTS_BASE))
-    env["OB_CORENRN_CELL_PERMUTE"] = str(int(config.get("cell_permute", 2)))
-
-    param_overrides, input_spec_file = _benchmark_param_overrides_payload(config)
-    overrides_path = result_dir.parent / ".obgpu-wrapper" / label / "overrides.json"
-    _write_benchmark_overrides_file(overrides_path, param_overrides)
-    command = build_run_command(
+    local_payload = _ob_build_local_run_payload(
+        _ob_local_run_payload_hooks(),
         config,
-        label,
-        overrides_file=overrides_path,
-        param_overrides=param_overrides,
-        input_spec_file=input_spec_file,
+        label=label,
+        timestamp=timestamp,
+        repo_root=REPO_ROOT,
+        default_results_base=DEFAULT_RESULTS_BASE,
     )
     return _neuroinfra_execute_local_run(
         config=config,
         label=label,
         timestamp=timestamp,
-        result_dir=result_dir,
-        env=env,
-        command=command,
+        result_dir=local_payload.result_dir,
+        env=local_payload.env,
+        command=local_payload.command,
         runner_name="obgpu_experiment_helpers.run_simulation",
-        hooks=_NeuroinfraLocalRunHooks(
-            read_summary_fn=lambda path: json.loads(Path(path).read_text()),
-            write_run_info_fn=_write_notebook_run_info,
-            build_return_value_fn=lambda *,
-            label,
-            timestamp,
-            result_dir,
-            summary,
-            config,
-            command,
-            completed: RunRecord(
-                label=label,
-                timestamp=timestamp,
-                result_dir=result_dir,
-                summary=summary,
-                config=config,
-                overrides=build_param_overrides(config),
-                command=command,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
-            ),
-        ),
+        hooks=_ob_build_local_run_hooks(_ob_local_run_hook_builder_hooks()),
         success_extra_payload={"remote": None},
     )
 
@@ -4545,12 +4555,7 @@ def run_parameter_sweep(
     if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
         return _run_remote_sweep(sweep_plan)
     return _neuroinfra_run_local_sweep_plan(
-        _NeuroinfraLocalSweepHooks(
-            run_and_load_fn=lambda config, label: run_and_load(config, label=label),
-            save_sweep_fn=save_sweep,
-            item_runs_dir_fn=lambda plan: _sweep_item_runs_dir(plan["base_config"], str(plan["sweep_label"])),
-            sweep_base_dir_fn=lambda plan: _sweep_dir(plan["base_config"], str(plan["sweep_label"])).parent,
-        ),
+        _ob_build_local_sweep_hooks(_ob_notebook_workflow_adapter_hooks()),
         sweep_plan,
     )
 
@@ -4573,12 +4578,7 @@ def run_grid_sweep(
     if _sweep_uses_remote_batch_engine(sweep_plan["base_config"]):
         return _run_remote_sweep(sweep_plan)
     return _neuroinfra_run_local_sweep_plan(
-        _NeuroinfraLocalSweepHooks(
-            run_and_load_fn=lambda config, label: run_and_load(config, label=label),
-            save_sweep_fn=save_sweep,
-            item_runs_dir_fn=lambda plan: _sweep_item_runs_dir(plan["base_config"], str(plan["sweep_label"])),
-            sweep_base_dir_fn=lambda plan: _sweep_dir(plan["base_config"], str(plan["sweep_label"])).parent,
-        ),
+        _ob_build_local_sweep_hooks(_ob_notebook_workflow_adapter_hooks()),
         sweep_plan,
     )
 
@@ -4745,10 +4745,7 @@ def load_run_pair(
 ) -> tuple[RunRecord, dict[str, Any]]:
     """Resolve a saved run and load its standard result payload."""
     return _neuroinfra_load_run_pair(
-        _NeuroinfraLoadRunPairHooks(
-            load_run_record_fn=load_run_record,
-            load_result_fn=load_result,
-        ),
+        _ob_build_load_run_pair_hooks(_ob_notebook_workflow_adapter_hooks()),
         run_or_dir=run_or_dir,
         prefix=prefix,
         index=index,
@@ -4764,16 +4761,7 @@ def run_and_load(
     """Run a simulation and immediately load its outputs from disk."""
     print("[OBGPU load] Starting simulation run...", flush=True)
     run, result = _neuroinfra_run_and_load_workflow(
-        _NeuroinfraRunAndLoadHooks(
-            run_simulation_fn=run_simulation,
-            load_result_fn=load_result,
-            merge_run_info_payload_fn=_merge_run_info_payload,
-            build_merge_payload_fn=lambda result: {
-                "artifact_sizes": result.get("artifact_sizes", {}),
-                "load_timing_seconds": result.get("load_timing_seconds", {}),
-                "load_total_seconds": result.get("load_total_seconds"),
-            },
-        ),
+        _ob_build_run_and_load_hooks(_ob_notebook_workflow_adapter_hooks()),
         config,
         label=label,
     )

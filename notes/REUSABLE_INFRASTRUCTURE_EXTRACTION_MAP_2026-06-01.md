@@ -302,9 +302,12 @@ Current progress:
 
 - the generic local notebook subprocess runner now lives under
   `neuroinfra.notebooks.local_runs`
+- the concrete olfactory-bulb local env setup, override-file payload
+  construction, and local run hook assembly now live under
+  `olfactorybulb/notebook_local_runs.py`
 - `obgpu_experiment_helpers.py` now delegates the local captured-command
-  execution path there while still owning env setup, command construction,
-  and remote dispatch
+  execution path through that domain adapter and is closer to runner
+  selection plus notebook-entrypoint glue for the local/remote branch
 
 ### 2g. Notebook run-info protocol
 
@@ -411,9 +414,12 @@ Current progress:
   shape inline
 - the generic notebook workflow layer now lives under
   `neuroinfra.notebooks.workflows`
+- the concrete olfactory-bulb workflow hook assembly now lives under
+  `olfactorybulb/notebook_workflows.py`
 - `obgpu_experiment_helpers.py` now delegates `load_run_pair`, `run_and_load`,
-  and the local branches of parameter/grid sweeps there while still owning the
-  higher-level remote branches and concrete path policy
+  and the local branches of parameter/grid sweeps through that domain adapter
+  while still owning notebook-facing progress messages and the higher-level
+  local/remote branch selection
 
 ### 2i. Result analysis and signal registry
 

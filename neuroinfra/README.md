@@ -185,9 +185,10 @@ execution still remain in `obgpu_experiment_helpers.py`.
 The generic local notebook subprocess runner that executes one command,
 captures stdout/stderr, persists command/capture artifacts, enforces summary
 file presence, and delegates run-info persistence now also lives under
-`neuroinfra.notebooks.local_runs`, while the concrete OBGPU env setup,
-command construction, and remote dispatch still remain in
-`obgpu_experiment_helpers.py`.
+`neuroinfra.notebooks.local_runs`, while the concrete olfactory-bulb local env
+setup, override-file payload construction, and local run hook assembly now live
+under `olfactorybulb.notebook_local_runs`. The notebook helper is now closer to
+runner selection and notebook-entrypoint glue for the local/remote branch.
 
 The generic notebook `run_info.json` protocol now also lives under
 `neuroinfra.notebooks.run_info`, while the olfactory-bulb-specific env keys,
@@ -196,8 +197,10 @@ now live in `olfactorybulb.notebook_run_info`.
 
 The generic notebook workflow layer that composes `run_and_load`,
 `load_run_pair`, and local sweep execution loops now also lives under
-`neuroinfra.notebooks.workflows`, while the helper still owns concrete path
-policy, progress messages, and the remote execution branches.
+`neuroinfra.notebooks.workflows`, while the concrete olfactory-bulb workflow
+hook assembly now lives under `olfactorybulb.notebook_workflows`. The notebook
+helper still owns notebook-facing progress messages and higher-level
+local/remote runner selection.
 
 The generic notebook remote session lifecycle that publishes one git ref, runs
 preflight, warms helper cache state, prepares reusable allocations, and

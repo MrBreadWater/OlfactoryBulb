@@ -202,6 +202,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.notebooks",
         source_paths=(
             "neuroinfra/notebooks/local_runs.py",
+            "olfactorybulb/notebook_local_runs.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -212,14 +213,14 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "hook-driven run metadata persistence and return-value construction",
         ),
         repo_specific_couplings=(
-            "command construction and environment preparation still come from the notebook helper",
-            "effective-param and run-info payload semantics still remain repo-specific",
-            "remote execution dispatch still remains outside this layer",
+            "local env, override-file payload, and return-value semantics still remain repo-specific",
+            "the concrete run-info and effective-param hooks still come from the olfactory-bulb notebook layer",
+            "higher-level local versus remote dispatch still remains outside this layer",
         ),
         extraction_confidence="high",
         proposed_phase=2,
         current_status="internal_shim_extracted",
-        recommended_action="The generic local notebook subprocess runner now lives under neuroinfra.notebooks.local_runs, while the notebook helper still owns concrete env setup, command construction, remote dispatch, and run-info semantics; next separate the remaining sweep and remote execution orchestration from the helper.",
+        recommended_action="The generic local notebook subprocess runner now lives under neuroinfra.notebooks.local_runs, while the concrete olfactory-bulb local payload and hook adapters now live in olfactorybulb.notebook_local_runs; next keep shrinking the notebook helper by separating the remaining higher-level runner selection and execution orchestration.",
     ),
     ExtractionCandidate(
         key="notebook_run_info_protocol",
@@ -252,6 +253,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.notebooks",
         source_paths=(
             "neuroinfra/notebooks/workflows.py",
+            "olfactorybulb/notebook_workflows.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -263,12 +265,13 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         repo_specific_couplings=(
             "progress messages still come from the notebook helper",
             "local sweep path policy still comes from the repo's results layout",
+            "concrete workflow hook assembly still remains repo-specific",
             "remote sweep and remote run orchestration remain outside this layer",
         ),
         extraction_confidence="high",
         proposed_phase=2,
         current_status="internal_shim_extracted",
-        recommended_action="The generic notebook workflow layer now lives under neuroinfra.notebooks.workflows, while the helper still owns the concrete path policy, progress messaging, and remote execution branches; next separate the remaining remote runner orchestration from the helper.",
+        recommended_action="The generic notebook workflow layer now lives under neuroinfra.notebooks.workflows, while the concrete olfactory-bulb hook assembly now lives in olfactorybulb.notebook_workflows; next separate the remaining remote runner orchestration from the notebook helper.",
     ),
     ExtractionCandidate(
         key="notebook_remote_jobs",
