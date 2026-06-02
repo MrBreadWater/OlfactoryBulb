@@ -60,6 +60,13 @@ from .sftp_sync import (
     sftp_copy_files,
     sftp_copy_tree,
 )
+from .stream_sync import (
+    ParamikoStreamSyncHooks,
+    probe_selected_sync_files,
+    stream_archive_to_local,
+    stream_archive_to_local_dir,
+    stream_file_to_local_path,
+)
 from .helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -212,4 +219,9 @@ __all__ = [
     "build_submit_sol_run_argv",
     "remote_helper_script_path",
     "remote_python_exec_prefix",
+    "ParamikoStreamSyncHooks",
+    "probe_selected_sync_files",
+    "stream_archive_to_local",
+    "stream_archive_to_local_dir",
+    "stream_file_to_local_path",
 ]

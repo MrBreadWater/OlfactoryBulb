@@ -175,6 +175,13 @@ from neuroinfra.remote.sftp_sync import (
     sftp_copy_files as _neuroinfra_sftp_copy_files,
     sftp_copy_tree as _neuroinfra_sftp_copy_tree,
 )
+from neuroinfra.remote.stream_sync import (
+    ParamikoStreamSyncHooks as _NeuroinfraParamikoStreamSyncHooks,
+    probe_selected_sync_files as _neuroinfra_probe_selected_sync_files,
+    stream_archive_to_local as _neuroinfra_stream_archive_to_local,
+    stream_archive_to_local_dir as _neuroinfra_stream_archive_to_local_dir,
+    stream_file_to_local_path as _neuroinfra_stream_file_to_local_path,
+)
 from neuroinfra.remote.slurm_launch import (
     build_allocation_discovery_command as _neuroinfra_build_allocation_discovery_command,
     build_cleanup_stale_allocations_argv as _neuroinfra_build_cleanup_stale_allocations_argv,
@@ -2214,6 +2221,32 @@ def _remote_allocation_runtime_context(config: dict[str, Any]) -> _NeuroinfraRem
     )
 
 
+def _paramiko_stream_sync_hooks() -> _NeuroinfraParamikoStreamSyncHooks:
+    """Build reusable hooks for Paramiko-driven archive and direct-file streaming."""
+    return _NeuroinfraParamikoStreamSyncHooks(
+        transport_for_config_fn=lambda cfg: _connect_paramiko(cfg)["transport"],
+        run_paramiko_shell_fn=_run_paramiko_shell,
+        build_remote_stream_archive_command_fn=lambda remote_result_dir, compressor: _build_remote_stream_archive_command(
+            remote_result_dir,
+            compressor=compressor,
+        ),
+        build_remote_selected_archive_probe_command_fn=lambda remote_result_dir, include_files: _build_remote_selected_archive_probe_command(
+            remote_result_dir,
+            include_files=include_files,
+        ),
+        local_archive_decompress_command_fn=_local_archive_decompress_command,
+        channel_stream_finished_fn=_paramiko_channel_stream_finished,
+        progress_factory_fn=lambda total, desc: _ProgressBar(
+            total=total,
+            desc=desc,
+            unit="B",
+            unit_scale=True,
+            display_step=10 * 1024 * 1024,
+        ),
+        sleep_fn=time.sleep,
+    )
+
+
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
     """Prompt the notebook user for one interactive SSH auth field."""
     cfg = {} if config is None else config
@@ -2437,33 +2470,12 @@ def _probe_remote_selected_sync_files(
     include_files: tuple[str, ...],
 ) -> tuple[str, int, tuple[str, ...]] | subprocess.CompletedProcess[str]:
     """Return one selected-file sync plan using only remote files that actually exist."""
-    probe_completed = _run_paramiko_shell(
+    return _neuroinfra_probe_selected_sync_files(
         config,
-        _build_remote_selected_archive_probe_command(
-            remote_result_dir,
-            include_files=tuple(include_files),
-        ),
+        remote_result_dir=remote_result_dir,
+        include_files=tuple(include_files),
+        hooks=_paramiko_stream_sync_hooks(),
     )
-    if probe_completed.returncode != 0:
-        return subprocess.CompletedProcess(
-            args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(include_files)],
-            returncode=1,
-            stdout=probe_completed.stdout or "",
-            stderr=probe_completed.stderr or "",
-        )
-    probe_lines = [line.strip() for line in (probe_completed.stdout or "").splitlines() if line.strip()]
-    if len(probe_lines) < 3:
-        return subprocess.CompletedProcess(
-            args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(include_files)],
-            returncode=1,
-            stdout=probe_completed.stdout or "",
-            stderr="Remote selected-file archive probe did not return the expected metadata",
-        )
-    compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
-    raw_bytes = int(raw_bytes_text or "0")
-    available_set = set(probe_lines[3:])
-    available_files = tuple(name for name in include_files if name in available_set)
-    return compressor, raw_bytes, available_files
 
 
 def _remove_remote_file(config: dict[str, Any], remote_path: str) -> None:
@@ -2661,71 +2673,14 @@ def _stream_paramiko_archive_to_local(
     raw_bytes: int,
 ) -> subprocess.CompletedProcess[str]:
     """Stream one remote compressed tar archive over Paramiko into a local file."""
-    connection = _connect_paramiko(config)
-    transport = connection["transport"]
-    channel = None
-    stderr_chunks: list[bytes] = []
-    bytes_written = 0
-    completed_ok = False
-    progress = _ProgressBar(
-        total=None,
-        desc="[OBGPU load] Download compressed stream",
-        unit="B",
-        unit_scale=True,
-        display_step=10 * 1024 * 1024,
-    )
-    stream_command = _build_remote_stream_archive_command(
+    return _neuroinfra_stream_archive_to_local(
+        config,
         remote_result_dir,
+        local_archive_path=local_archive_path,
         compressor=compressor,
+        raw_bytes=raw_bytes,
+        hooks=_paramiko_stream_sync_hooks(),
     )
-    local_archive_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_archive_path = local_archive_path.with_suffix(local_archive_path.suffix + ".part")
-    try:
-        channel = transport.open_session()
-        channel.exec_command(f"bash -lc {shlex.quote(stream_command)}")
-        with open(tmp_archive_path, "wb") as handle:
-            while True:
-                if channel.recv_ready():
-                    data = channel.recv(1024 * 1024)
-                    if data:
-                        handle.write(data)
-                        bytes_written += len(data)
-                        progress.update_to(bytes_written)
-                        continue
-                if channel.recv_stderr_ready():
-                    stderr_chunks.append(channel.recv_stderr(65536))
-                    continue
-                if _paramiko_channel_stream_finished(channel):
-                    break
-                time.sleep(0.05)
-        returncode = channel.recv_exit_status()
-        if bytes_written:
-            progress.update_to(bytes_written)
-        progress.close()
-        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-        if returncode == 0:
-            tmp_archive_path.replace(local_archive_path)
-            completed_ok = True
-        else:
-            try:
-                tmp_archive_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-        return subprocess.CompletedProcess(
-            args=["paramiko-stream", remote_result_dir.as_posix(), str(local_archive_path)],
-            returncode=returncode,
-            stdout="",
-            stderr=stderr_text,
-        )
-    finally:
-        progress.close()
-        if not completed_ok:
-            try:
-                tmp_archive_path.unlink(missing_ok=True)
-            except Exception:
-                pass
-        if channel is not None:
-            channel.close()
 
 
 def _stream_paramiko_archive_to_local_dir(
@@ -2738,113 +2693,15 @@ def _stream_paramiko_archive_to_local_dir(
     stream_command: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Stream one remote compressed tar archive over Paramiko directly into local extraction."""
-    connection = _connect_paramiko(config)
-    transport = connection["transport"]
-    channel = None
-    stderr_chunks: list[bytes] = []
-    bytes_written = 0
-    progress = _ProgressBar(
-        total=None,
-        desc="[OBGPU load] Stream download/extract",
-        unit="B",
-        unit_scale=True,
-        display_step=10 * 1024 * 1024,
+    return _neuroinfra_stream_archive_to_local_dir(
+        config,
+        remote_result_dir=remote_result_dir,
+        local_result_dir=local_result_dir,
+        compressor=compressor,
+        raw_bytes=raw_bytes,
+        hooks=_paramiko_stream_sync_hooks(),
+        stream_command=stream_command,
     )
-    local_result_dir.mkdir(parents=True, exist_ok=True)
-    if stream_command is None:
-        stream_command = _build_remote_stream_archive_command(
-            remote_result_dir,
-            compressor=compressor,
-        )
-    decompress_cmd = _local_archive_decompress_command(compressor)
-    decompress_stderr = tempfile.NamedTemporaryFile(prefix="obgpu-decompress-", suffix=".log", delete=False)
-    tar_stderr = tempfile.NamedTemporaryFile(prefix="obgpu-tar-", suffix=".log", delete=False)
-    decompress_proc = None
-    tar_proc = None
-    decompress_stderr_handle = None
-    tar_stderr_handle = None
-    try:
-        decompress_stderr.close()
-        tar_stderr.close()
-        decompress_stderr_handle = open(decompress_stderr.name, "wb")
-        tar_stderr_handle = open(tar_stderr.name, "wb")
-        decompress_proc = subprocess.Popen(
-            decompress_cmd,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=decompress_stderr_handle,
-        )
-        tar_proc = subprocess.Popen(
-            ["tar", "-xf", "-", "-C", str(local_result_dir)],
-            stdin=decompress_proc.stdout,
-            stdout=subprocess.DEVNULL,
-            stderr=tar_stderr_handle,
-        )
-        if decompress_proc.stdout is not None:
-            decompress_proc.stdout.close()
-        if decompress_proc.stdin is None:
-            raise RuntimeError("Could not open decompressor stdin for streaming extraction.")
-
-        channel = transport.open_session()
-        channel.exec_command(f"bash -lc {shlex.quote(stream_command)}")
-        while True:
-            if channel.recv_ready():
-                data = channel.recv(1024 * 1024)
-                if data:
-                    decompress_proc.stdin.write(data)
-                    bytes_written += len(data)
-                    progress.update_to(bytes_written)
-                    continue
-            if channel.recv_stderr_ready():
-                stderr_chunks.append(channel.recv_stderr(65536))
-                continue
-            if _paramiko_channel_stream_finished(channel):
-                break
-            time.sleep(0.05)
-
-        if decompress_proc.stdin is not None:
-            decompress_proc.stdin.close()
-        remote_returncode = channel.recv_exit_status()
-        decompress_returncode = decompress_proc.wait()
-        tar_returncode = tar_proc.wait()
-        progress.close()
-        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-        if Path(decompress_stderr.name).exists():
-            stderr_text += Path(decompress_stderr.name).read_text(errors="replace")
-        if Path(tar_stderr.name).exists():
-            stderr_text += Path(tar_stderr.name).read_text(errors="replace")
-        returncode = 0 if remote_returncode == 0 and decompress_returncode == 0 and tar_returncode == 0 else 1
-        return subprocess.CompletedProcess(
-            args=["paramiko-stream-extract", remote_result_dir.as_posix(), str(local_result_dir)],
-            returncode=returncode,
-            stdout="",
-            stderr=stderr_text,
-        )
-    finally:
-        progress.close()
-        if channel is not None:
-            channel.close()
-        for handle in (decompress_stderr_handle, tar_stderr_handle):
-            if handle is not None:
-                try:
-                    handle.close()
-                except Exception:
-                    pass
-        if decompress_proc is not None and decompress_proc.poll() is None:
-            try:
-                decompress_proc.kill()
-            except Exception:
-                pass
-        if tar_proc is not None and tar_proc.poll() is None:
-            try:
-                tar_proc.kill()
-            except Exception:
-                pass
-        for path in (decompress_stderr.name, tar_stderr.name):
-            try:
-                Path(path).unlink(missing_ok=True)
-            except Exception:
-                pass
 
 
 def _stream_paramiko_file_to_local_path(
@@ -2855,82 +2712,13 @@ def _stream_paramiko_file_to_local_path(
     expected_bytes: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Stream one remote file over the existing Paramiko session without using SFTP."""
-    connection = _connect_paramiko(config)
-    transport = connection["transport"]
-    channel = None
-    stderr_chunks: list[bytes] = []
-    bytes_written = 0
-    temp_path = local_path.with_name(f".{local_path.name}.obgpu-direct-{os.getpid()}")
-    progress = _ProgressBar(
-        total=expected_bytes,
-        desc=f"[OBGPU load] Direct sync {local_path.name}",
-        unit="B",
-        unit_scale=True,
-        display_step=10 * 1024 * 1024,
+    return _neuroinfra_stream_file_to_local_path(
+        config,
+        remote_file_path=remote_file_path,
+        local_path=local_path,
+        expected_bytes=expected_bytes,
+        hooks=_paramiko_stream_sync_hooks(),
     )
-    try:
-        local_path.parent.mkdir(parents=True, exist_ok=True)
-        temp_path.unlink(missing_ok=True)
-        channel = transport.open_session()
-        remote_command = (
-            "set -euo pipefail && "
-            f"remote_file={shlex.quote(remote_file_path.as_posix())} && "
-            "if [ ! -f \"$remote_file\" ]; then "
-            "  printf 'Remote artifact not found: %s\\n' \"$remote_file\" >&2; "
-            "  exit 2; "
-            "fi && "
-            "cat -- \"$remote_file\""
-        )
-        channel.exec_command(f"bash -lc {shlex.quote(remote_command)}")
-        with open(temp_path, "wb") as handle:
-            while True:
-                if channel.recv_ready():
-                    data = channel.recv(1024 * 1024)
-                    if data:
-                        handle.write(data)
-                        bytes_written += len(data)
-                        progress.update_to(bytes_written)
-                        continue
-                if channel.recv_stderr_ready():
-                    stderr_chunks.append(channel.recv_stderr(65536))
-                    continue
-                if _paramiko_channel_stream_finished(channel):
-                    break
-                time.sleep(0.05)
-        while channel.recv_stderr_ready():
-            stderr_chunks.append(channel.recv_stderr(65536))
-        remote_returncode = channel.recv_exit_status()
-        progress.close()
-        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
-        if remote_returncode == 0 and expected_bytes is not None and bytes_written != int(expected_bytes):
-            remote_returncode = 1
-            stderr_text += (
-                f"\n[OBGPU load] Direct file sync byte count mismatch for {remote_file_path}: "
-                f"expected {expected_bytes}, received {bytes_written}\n"
-            )
-        if remote_returncode == 0:
-            os.replace(temp_path, local_path)
-        return subprocess.CompletedProcess(
-            args=["paramiko-direct-file", remote_file_path.as_posix(), str(local_path)],
-            returncode=0 if remote_returncode == 0 else 1,
-            stdout="",
-            stderr=stderr_text,
-        )
-    except Exception as exc:
-        return subprocess.CompletedProcess(
-            args=["paramiko-direct-file", remote_file_path.as_posix(), str(local_path)],
-            returncode=1,
-            stdout="",
-            stderr=str(exc),
-        )
-    finally:
-        progress.close()
-        temp_path.unlink(missing_ok=True)
-        if channel is not None:
-            try:
-                channel.close()
-            except Exception:
-                pass
 
 
 def _sync_remote_result_dir(

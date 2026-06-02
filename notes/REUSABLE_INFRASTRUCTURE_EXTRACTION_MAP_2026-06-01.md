@@ -196,6 +196,10 @@ Current progress:
   submits new ones, and releases them now lives under
   `neuroinfra.remote.allocation_runtime`, while the notebook-facing wrappers
   remain in `obgpu_experiment_helpers.py`
+- the low-level Paramiko archive-stream, direct-file stream, and selected-file
+  probe helpers that power notebook result sync now live under
+  `neuroinfra.remote.stream_sync`, while the higher-level result-sync policy
+  still remains in `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

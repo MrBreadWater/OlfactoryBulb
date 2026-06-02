@@ -164,6 +164,11 @@ allocations, submit new ones, and release them now also lives under
 `neuroinfra.remote.allocation_runtime`, while the notebook-facing wrappers
 remain in `obgpu_experiment_helpers.py`.
 
+The low-level Paramiko archive-stream, direct-file stream, and selected-file
+probe helpers that power notebook result sync now also live under
+`neuroinfra.remote.stream_sync`, while the higher-level result-sync policy
+still remains in `obgpu_experiment_helpers.py`.
+
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
 the HFO-specific parameter catalog remains in `olfactorybulb.hfo_features`.
