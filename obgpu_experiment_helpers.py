@@ -106,11 +106,11 @@ from neuroinfra.remote.helper_cache import (
 )
 from neuroinfra.remote.allocation_cache import (
     allocation_cache_key as _neuroinfra_allocation_cache_key,
-    allocation_record as _neuroinfra_allocation_record,
     allocation_runtime_config as _neuroinfra_allocation_runtime_config,
     allocation_signature as _neuroinfra_allocation_signature,
-    disabled_allocation_record as _neuroinfra_disabled_allocation_record,
-    manual_allocation_record as _neuroinfra_manual_allocation_record,
+)
+from neuroinfra.remote.allocation_runtime import (
+    RemoteAllocationRuntimeContext as _NeuroinfraRemoteAllocationRuntimeContext,
 )
 from neuroinfra.remote.slurm_state import (
     REMOTE_SLURM_TERMINAL_FAIL as _NEUROINFRA_REMOTE_SLURM_TERMINAL_FAIL,
@@ -2175,6 +2175,45 @@ def _slurm_allocation_cache_key(config: dict[str, Any]) -> str:
     return _neuroinfra_allocation_cache_key(_slurm_allocation_signature(config))
 
 
+def _remote_allocation_runtime_context(config: dict[str, Any]) -> _NeuroinfraRemoteAllocationRuntimeContext:
+    """Build the reusable remote allocation runtime context for one config."""
+    return _NeuroinfraRemoteAllocationRuntimeContext(
+        config=config,
+        live_slurm_allocations=_LIVE_SLURM_ALLOCATIONS,
+        live_remote_stale_cleanups=_LIVE_REMOTE_STALE_CLEANUPS,
+        progress_write=_progress_write,
+        connection_key_fn=_paramiko_connection_key,
+        remote_results_root_fn=_remote_results_root,
+        poll_command_timeout_s_fn=_remote_poll_command_timeout_s,
+        heartbeat_timeout_s_fn=_remote_heartbeat_timeout_s,
+        allocation_cache_key_fn=_slurm_allocation_cache_key,
+        allocation_runtime_config_fn=_slurm_allocation_runtime_config,
+        build_remote_touch_command_fn=_build_remote_touch_command,
+        build_remote_cleanup_allocations_command_fn=lambda cfg, remote_helper_dir: _build_remote_cleanup_allocations_command(
+            cfg,
+            remote_helper_dir=remote_helper_dir,
+        ),
+        build_remote_allocation_discovery_command_fn=lambda cfg, remote_helper_dir: _build_remote_allocation_discovery_command(
+            cfg,
+            remote_helper_dir=remote_helper_dir,
+        ),
+        build_remote_allocation_submit_command_fn=lambda cfg, remote_helper_dir: _build_remote_allocation_submit_command(
+            cfg,
+            remote_helper_dir=remote_helper_dir,
+        ),
+        build_remote_cancel_command_fn=lambda job_id: _build_remote_cancel_command(job_id=job_id),
+        run_ssh_shell_fn=lambda cfg, command, check=False, timeout_s=None: _run_ssh_shell(
+            cfg,
+            command,
+            check=check,
+            timeout_s=timeout_s,
+        ),
+        query_remote_slurm_job_state_fn=_query_remote_slurm_job_state,
+        time_fn=time.time,
+        sleep_fn=time.sleep,
+    )
+
+
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
     """Prompt the notebook user for one interactive SSH auth field."""
     cfg = {} if config is None else config
@@ -3553,24 +3592,10 @@ def _refresh_remote_heartbeat(
     warn: bool = False,
 ) -> bool:
     """Best-effort refresh of a remote notebook heartbeat file."""
-    if heartbeat_path in (None, ""):
-        return False
-    try:
-        completed = _run_ssh_shell(
-            config,
-            _build_remote_touch_command(str(heartbeat_path)),
-            timeout_s=_remote_poll_command_timeout_s(config),
-        )
-    except Exception as exc:
-        if warn:
-            _progress_write(f"[Sol remote] Heartbeat refresh failed: {exc}")
-        return False
-    if completed.returncode != 0:
-        if warn:
-            stderr = (completed.stderr or "").strip()
-            _progress_write(f"[Sol remote] Heartbeat refresh failed: {stderr or 'unknown error'}")
-        return False
-    return True
+    return _remote_allocation_runtime_context(config).refresh_heartbeat(
+        heartbeat_path,
+        warn=warn,
+    )
 
 
 def _build_remote_cleanup_allocations_command(
@@ -3598,26 +3623,9 @@ def _cleanup_stale_remote_slurm_allocations(
     remote_helper_dir: PurePosixPath | None = None,
 ) -> list[dict[str, Any]]:
     """Cancel stale remote notebook-managed reusable allocations before a new run."""
-    completed = _run_ssh_shell(
-        config,
-        _build_remote_cleanup_allocations_command(config, remote_helper_dir=remote_helper_dir),
+    return _remote_allocation_runtime_context(config).cleanup_stale_allocations(
+        remote_helper_dir=remote_helper_dir,
     )
-    if completed.returncode != 0:
-        _progress_write(f"[Sol remote] Stale allocation cleanup failed: {(completed.stderr or '').strip()}")
-        return []
-    try:
-        actions = json.loads((completed.stdout or "").strip() or "[]")
-    except json.JSONDecodeError:
-        _progress_write("[Sol remote] Stale allocation cleanup returned invalid JSON.")
-        return []
-    if not isinstance(actions, list):
-        return []
-    cancelled = [action for action in actions if isinstance(action, dict) and action.get("action") == "cancel_requested"]
-    for action in cancelled:
-        job_id = action.get("job_id")
-        reason = action.get("reason")
-        _progress_write(f"[Sol remote] Cancelled stale reusable allocation {job_id} ({reason}).")
-    return [action for action in actions if isinstance(action, dict)]
 
 
 def _maybe_cleanup_stale_remote_slurm_allocations(
@@ -3626,22 +3634,9 @@ def _maybe_cleanup_stale_remote_slurm_allocations(
     remote_helper_dir: PurePosixPath | None = None,
 ) -> list[dict[str, Any]]:
     """Throttle stale-allocation cleanup so warm sessions do not repeat the same scan."""
-    if not bool(config.get("remote_cleanup_stale_allocations", True)):
-        return []
-    if not bool(config.get("slurm_reuse_allocation", False)):
-        return []
-    if config.get("slurm_allocation_job_id") not in (None, ""):
-        return []
-    cache_key = f"{_paramiko_connection_key(config)}::{_remote_results_root(config).as_posix()}"
-    cached = _LIVE_REMOTE_STALE_CLEANUPS.get(cache_key)
-    if cached is not None:
-        return list(cached.get("actions", []))
-    actions = _cleanup_stale_remote_slurm_allocations(config, remote_helper_dir=remote_helper_dir)
-    _LIVE_REMOTE_STALE_CLEANUPS[cache_key] = {
-        "timestamp": time.time(),
-        "actions": list(actions),
-    }
-    return actions
+    return _remote_allocation_runtime_context(config).maybe_cleanup_stale_allocations(
+        remote_helper_dir=remote_helper_dir,
+    )
 
 
 def _build_remote_allocation_discovery_command(
@@ -3810,209 +3805,14 @@ def _ensure_cached_remote_slurm_allocation(
     remote_helper_dir: PurePosixPath | None = None,
 ) -> dict[str, Any]:
     """Acquire or reuse one notebook-cached remote Slurm allocation."""
-    manual_job_id = config.get("slurm_allocation_job_id")
-    if manual_job_id not in (None, ""):
-        return _neuroinfra_manual_allocation_record(str(manual_job_id))
-    if not bool(config.get("slurm_reuse_allocation", False)):
-        return _neuroinfra_disabled_allocation_record()
-
-    cache_key = _slurm_allocation_cache_key(config)
-    allocation = _LIVE_SLURM_ALLOCATIONS.get(cache_key)
-    created_now = False
-    runtime_config = _slurm_allocation_runtime_config(config)
-
-    if allocation is not None:
-        if allocation.get("heartbeat_path") in (None, ""):
-            _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
-            allocation = None
-        else:
-            _refresh_remote_heartbeat(config, str(allocation["heartbeat_path"]), warn=True)
-
-    if allocation is not None:
-        status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
-        state = status.get("state", "UNKNOWN")
-        if state in _REMOTE_SLURM_TERMINAL_OK or state in _REMOTE_SLURM_TERMINAL_FAIL or state == "UNKNOWN":
-            _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
-            allocation = None
-        else:
-            print(f"[Sol remote] Reusing cached allocation {allocation['job_id']}.", flush=True)
-
-    if allocation is None:
-        discover_command, allocation_root, allocation_name = _build_remote_allocation_discovery_command(
-            config,
-            remote_helper_dir=remote_helper_dir,
-        )
-        discover_completed = _run_ssh_shell(config, discover_command)
-        if discover_completed.returncode != 0:
-            raise RuntimeError(
-                "Remote Slurm allocation discovery failed.\n"
-                f"Stdout:\n{discover_completed.stdout}\n\nStderr:\n{discover_completed.stderr}"
-            )
-        discovered_text = (discover_completed.stdout or "").strip()
-        if discovered_text:
-            try:
-                discovered = json.loads(discovered_text)
-            except json.JSONDecodeError:
-                discovered = None
-            if isinstance(discovered, dict) and discovered.get("job_id") not in (None, ""):
-                discovered_job_id = str(discovered["job_id"])
-                status = _query_remote_slurm_job_state(config, discovered_job_id)
-                state = status.get("state", "UNKNOWN")
-                if state not in _REMOTE_SLURM_TERMINAL_OK and state not in _REMOTE_SLURM_TERMINAL_FAIL and state != "UNKNOWN":
-                    heartbeat_path = str(discovered.get("heartbeat_path") or "")
-                    if not heartbeat_path:
-                        print(
-                            f"[Sol remote] Cancelling legacy reusable allocation {discovered_job_id} without heartbeat lease.",
-                            flush=True,
-                        )
-                        _run_ssh_shell(config, _build_remote_cancel_command(job_id=discovered_job_id))
-                    else:
-                        _refresh_remote_heartbeat(config, heartbeat_path, warn=True)
-                        allocation = _neuroinfra_allocation_record(
-                            job_id=discovered_job_id,
-                            cache_key=cache_key,
-                            allocation_root=str(discovered.get("allocation_root") or allocation_root.as_posix()),
-                            batch_script=str(discovered.get("batch_script") or ""),
-                            heartbeat_path=heartbeat_path,
-                            heartbeat_timeout_s=discovered.get("heartbeat_timeout_s"),
-                            slurm_log_pattern=str(discovered.get("slurm_log_pattern") or ""),
-                            name=str(discovered.get("name") or allocation_name),
-                            cached=True,
-                            manual=False,
-                            config=runtime_config,
-                        )
-                        _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
-                        print(f"[Sol remote] Reusing discovered allocation {allocation['job_id']}.", flush=True)
-
-    if allocation is None:
-        print("[Sol remote] Requesting reusable Slurm allocation...", flush=True)
-        submit_command, allocation_root, allocation_name = _build_remote_allocation_submit_command(
-            config,
-            remote_helper_dir=remote_helper_dir,
-        )
-        submit_completed = _run_ssh_shell(config, submit_command)
-        if submit_completed.returncode != 0:
-            raise RuntimeError(
-                "Remote Slurm allocation submission failed.\n"
-                f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-            )
-        try:
-            submission = json.loads((submit_completed.stdout or "").strip())
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(
-                "Remote Slurm allocation submission did not return valid JSON.\n"
-                f"Stdout:\n{submit_completed.stdout}\n\nStderr:\n{submit_completed.stderr}"
-            ) from exc
-        allocation = _neuroinfra_allocation_record(
-            job_id=str(submission["job_id"]),
-            cache_key=cache_key,
-            allocation_root=str(submission.get("allocation_root") or allocation_root.as_posix()),
-            batch_script=str(submission.get("batch_script") or ""),
-            heartbeat_path=str(submission.get("heartbeat_path") or allocation_root / "notebook-heartbeat.txt"),
-            heartbeat_timeout_s=submission.get("heartbeat_timeout_s"),
-            slurm_log_pattern=str(submission.get("slurm_log_pattern") or ""),
-            name=str(submission.get("name") or allocation_name),
-            cached=True,
-            manual=False,
-            config=runtime_config,
-        )
-        _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
-        created_now = True
-
-    last_signature: tuple[str, str, str] | None = None
-    try:
-        while True:
-            _refresh_remote_heartbeat(config, str(allocation.get("heartbeat_path") or ""), warn=False)
-            status = _query_remote_slurm_job_state(config, str(allocation["job_id"]))
-            state = status.get("state", "UNKNOWN")
-            reason = str(status.get("reason") or "").strip()
-            location = str(status.get("location") or "").strip()
-            status_signature = (state, reason, location)
-            if status_signature != last_signature:
-                detail = ""
-                if state == "PENDING" and reason:
-                    detail = f" reason={reason}"
-                elif location and state not in {"UNKNOWN", "PENDING"}:
-                    detail = f" where={location}"
-                print(
-                    f"[Sol remote] Allocation {allocation['job_id']}: {state}{detail}",
-                    flush=True,
-                )
-                last_signature = status_signature
-
-            if state == "RUNNING":
-                allocation.update(
-                    _neuroinfra_allocation_record(
-                        job_id=str(allocation["job_id"]),
-                        cache_key=str(allocation["cache_key"]),
-                        allocation_root=str(allocation["allocation_root"]),
-                        batch_script=str(allocation["batch_script"]),
-                        heartbeat_path=str(allocation["heartbeat_path"]),
-                        heartbeat_timeout_s=allocation.get("heartbeat_timeout_s"),
-                        slurm_log_pattern=str(allocation.get("slurm_log_pattern") or ""),
-                        name=str(allocation.get("name") or ""),
-                        cached=bool(allocation.get("cached", False)),
-                        manual=bool(allocation.get("manual", False)),
-                        config=runtime_config,
-                        state=state,
-                        reason=reason,
-                        location=location,
-                    )
-                )
-                _LIVE_SLURM_ALLOCATIONS[cache_key] = allocation
-                return allocation
-            if state in _REMOTE_SLURM_TERMINAL_OK or state in _REMOTE_SLURM_TERMINAL_FAIL:
-                _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
-                raise RuntimeError(
-                    "Reusable Slurm allocation terminated before it became runnable.\n"
-                    f"Job id: {allocation['job_id']}\n"
-                    f"State: {state}\n"
-                    f"Reason: {reason}\n"
-                    f"Location: {location}"
-                )
-            time.sleep(5.0)
-    except KeyboardInterrupt:
-        if created_now:
-            print(
-                f"[Sol remote] Interrupt received; cancelling new allocation {allocation['job_id']}...",
-                flush=True,
-            )
-            _run_ssh_shell(config, _build_remote_cancel_command(job_id=str(allocation["job_id"])))
-            _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
-        raise
+    return _remote_allocation_runtime_context(config).ensure_cached_allocation(
+        remote_helper_dir=remote_helper_dir,
+    )
 
 
 def release_remote_slurm_allocation(config: dict[str, Any]) -> bool:
     """Cancel and forget the cached or remotely-discovered reusable Slurm allocation."""
-    cache_key = _slurm_allocation_cache_key(config)
-    allocation = _LIVE_SLURM_ALLOCATIONS.pop(cache_key, None)
-    if allocation is None:
-        discover_command, _allocation_root, _allocation_name = _build_remote_allocation_discovery_command(
-            config,
-        )
-        discover_completed = _run_ssh_shell(config, discover_command)
-        if discover_completed.returncode != 0:
-            print(f"[Sol remote] Allocation discovery stderr: {(discover_completed.stderr or '').strip()}", flush=True)
-            return False
-        discovered_text = (discover_completed.stdout or "").strip()
-        if discovered_text:
-            try:
-                discovered = json.loads(discovered_text)
-            except json.JSONDecodeError:
-                discovered = None
-            if isinstance(discovered, dict) and discovered.get("job_id") not in (None, ""):
-                allocation = {"job_id": str(discovered["job_id"])}
-        if allocation is None:
-            print("[Sol remote] No cached or discovered reusable allocation for this config.", flush=True)
-            return False
-    job_id = str(allocation["job_id"])
-    print(f"[Sol remote] Releasing reusable allocation {job_id}...", flush=True)
-    completed = _run_ssh_shell(config, _build_remote_cancel_command(job_id=job_id))
-    if completed.returncode != 0:
-        print(f"[Sol remote] scancel stderr: {(completed.stderr or '').strip()}", flush=True)
-        return False
-    print(f"[Sol remote] Cancellation requested for allocation {job_id}.", flush=True)
-    return True
+    return _remote_allocation_runtime_context(config).release_allocation()
 
 
 def _remote_submission_payload(

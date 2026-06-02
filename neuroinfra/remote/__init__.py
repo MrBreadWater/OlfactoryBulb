@@ -31,6 +31,9 @@ from .allocation_cache import (
     disabled_allocation_record,
     manual_allocation_record,
 )
+from .allocation_runtime import (
+    RemoteAllocationRuntimeContext,
+)
 from .notebook_runtime import (
     cache_prompt_response,
     cached_prompt_responses,
@@ -130,6 +133,7 @@ __all__ = [
     "allocation_cache_key",
     "allocation_record",
     "allocation_runtime_config",
+    "RemoteAllocationRuntimeContext",
     "allocation_signature",
     "connect_retry_backoff_s",
     "connect_retry_count",

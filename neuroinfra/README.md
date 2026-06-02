@@ -158,6 +158,12 @@ The reusable-allocation cache signature, cache key, runtime-config subset, and
 normalized allocation record shape that sit underneath notebook-managed
 allocation reuse now also live under `neuroinfra.remote.allocation_cache`.
 
+The notebook-managed allocation orchestration layer that decides when to
+refresh heartbeats, throttle stale-allocation cleanup, rediscover reusable
+allocations, submit new ones, and release them now also lives under
+`neuroinfra.remote.allocation_runtime`, while the notebook-facing wrappers
+remain in `obgpu_experiment_helpers.py`.
+
 The generic parameter-space and contract helpers that back the HFO optimizer's
 search-space registry now live under `neuroinfra.contracts.parameters`, while
 the HFO-specific parameter catalog remains in `olfactorybulb.hfo_features`.

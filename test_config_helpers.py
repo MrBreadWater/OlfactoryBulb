@@ -1134,16 +1134,32 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._run_ssh_shell = original_run_ssh_shell
 
     # --- Stale allocation cleanup should skip manual allocations and reuse its session cache ---
-    original_cleanup = hlp._cleanup_stale_remote_slurm_allocations
+    original_runtime_context = hlp._remote_allocation_runtime_context
     try:
         hlp._LIVE_REMOTE_STALE_CLEANUPS.clear()
         cleanup_calls = []
 
-        def _fake_cleanup(_config, *, remote_helper_dir=None):
-            cleanup_calls.append(remote_helper_dir)
-            return [{"job_id": "1", "action": "cancel_requested"}]
+        class _FakeAllocationRuntime:
+            _cache = {}
 
-        hlp._cleanup_stale_remote_slurm_allocations = _fake_cleanup
+            def __init__(self, cfg):
+                self.cfg = cfg
+
+            def maybe_cleanup_stale_allocations(self, *, remote_helper_dir=None):
+                if self.cfg.get("slurm_allocation_job_id") not in (None, ""):
+                    return []
+                cache_key = (
+                    self.cfg.get("remote_host"),
+                    self.cfg.get("remote_results_root"),
+                )
+                if cache_key in self._cache:
+                    return list(self._cache[cache_key])
+                cleanup_calls.append(remote_helper_dir)
+                actions = [{"job_id": "1", "action": "cancel_requested"}]
+                self._cache[cache_key] = list(actions)
+                return actions
+
+        hlp._remote_allocation_runtime_context = lambda _config: _FakeAllocationRuntime(_config)
         cleanup_cfg = build_run_config(
             runner_backend="sol_slurm",
             remote_host="user@host",
@@ -1162,7 +1178,7 @@ with tempfile.TemporaryDirectory() as tmp:
         assert len(cleanup_calls) == 1
         print("Stale allocation cleanup throttle: OK")
     finally:
-        hlp._cleanup_stale_remote_slurm_allocations = original_cleanup
+        hlp._remote_allocation_runtime_context = original_runtime_context
         hlp._LIVE_REMOTE_STALE_CLEANUPS.clear()
 
     # --- Streamed Paramiko sync should fall back when expected artifacts are still missing ---

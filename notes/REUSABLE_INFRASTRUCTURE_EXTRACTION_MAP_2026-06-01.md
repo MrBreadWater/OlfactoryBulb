@@ -191,6 +191,11 @@ Current progress:
 - the reusable-allocation cache signature, cache key, runtime-config subset,
   and normalized allocation record shape now live under
   `neuroinfra.remote.allocation_cache`
+- the notebook-managed reusable-allocation orchestration layer that refreshes
+  heartbeats, throttles stale-allocation cleanup, rediscovers allocations,
+  submits new ones, and releases them now lives under
+  `neuroinfra.remote.allocation_runtime`, while the notebook-facing wrappers
+  remain in `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework
