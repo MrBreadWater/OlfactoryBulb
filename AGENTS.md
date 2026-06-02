@@ -144,6 +144,20 @@ contract for future sessions.
 - Do not resurrect older build/setup branches when the modern path is the
   maintained one.
 
+- Any NEURON/CoreNEURON portability or compatibility fix must land in:
+  - `third_party_patches/nrn/`
+  - and the pinned patch-stack workflow
+  - not as an ad hoc local edit inside `external/nrn-*`
+
+- Upstream NEURON bumps are deliberate and gated.
+  - Use:
+    - `python tools/setup/check_nrn_upgrade.py --candidate-ref <ref> ...`
+  - The supported upstream ref changes only after:
+    - patch stack replay succeeds
+    - OBGPU rebuild succeeds
+    - smoke/parity checks pass
+  - Do not silently retarget the pinned upstream dependency.
+
 - If the environment shows NVHPC stale temp-object loader failures such as
   `dlopen failed ... /tmp/pgcudafat...`:
   - use `tools/setup/fix_nvhpc_libnrnmech.sh`
@@ -198,6 +212,19 @@ contract for future sessions.
 
 ## 3a. Remote execution architecture
 
+- The supported remote-workflow model is:
+  - local notebook/kernel as the control surface
+  - remote cluster as the execution host
+  - remote clone of this repo plus an `OBGPU` environment
+  - notebook-managed submit/poll/sync lifecycle
+  - local analysis on synced results
+
+- The remote cluster should stay headless in the maintained workflow.
+  - Do not move the supported path toward “run Jupyter on the cluster”.
+
+- Do not redesign the maintained remote workflow around running Jupyter on the
+  cluster. That is not the supported model.
+
 - The maintained remote notebook/backend path is Paramiko-only.
   - Do not reintroduce or fork behavior around:
     - OpenSSH control-master transport
@@ -207,6 +234,7 @@ contract for future sessions.
     - rsync result-sync paths
     - `rsync_binary`
     - `rsync_options`
+    - `ssh_transport=\"openssh\"`
 
 - The supported concepts are:
   - Paramiko persistent sessions
@@ -218,6 +246,28 @@ contract for future sessions.
 - Keep remote config builders minimal.
   - If a value can be inferred from execution mode or Slurm resources, avoid
     adding a second independent knob.
+
+- For remote execution, use committed code rather than dirty notebook-local
+  state.
+  - The maintained workflow expects notebook-managed git publication of the
+    current local commit when needed.
+  - Prefer the recorded git-ref path over ad hoc source copying.
+
+- Preserve the remote result contract.
+  - Remote runs should sync back into the same local result layout expected by
+    local analysis helpers and notebooks, rather than inventing a second result
+    format for remote execution.
+
+- On Sol, do not run heavy jobs on the login node.
+  - Allocate first, then activate:
+    - `salloc ...`
+    - `source tools/setup/activate_sol_obgpu.sh`
+  - When inside an allocation, use `$OB_MPIEXEC` instead of guessing the MPI
+    launcher.
+
+- The Sol module autoload convenience path is intentionally opt-in.
+  - Preserve that behavior; do not make cluster-module side effects surprise
+    generic Linux hosts on plain environment activation.
 
 ## 4. Dashboard/runtime expectations
 
@@ -310,6 +360,11 @@ contract for future sessions.
   - `neuroinfra.contracts`
   - `neuroinfra.campaigns`
   - `neuroinfra.models`
+
+- The `tools/remote/*.py` entrypoints now often act as compatibility bootstrap
+  wrappers around `neuroinfra.remote_*` modules.
+  - Keep user-facing CLI wrappers working, but put new generic logic in the
+    extracted module rather than the wrapper script.
 
 ## 6. Declarative literature-validation rules
 
@@ -427,10 +482,26 @@ contract for future sessions.
   - local manually digitized CSVs
 
 - The pipeline does **not** do built-in screenshot or figure digitization.
-  - If actual numeric values cannot be extracted reliably:
+- If actual numeric values cannot be extracted reliably:
     - do not guess
     - use `needs_manual_extraction.csv`
     - use the manual reference templates where applicable
+
+- Manual intake templates live under:
+  - `research_context/manual_reference_templates/`
+  - They are raw human-curated intake artifacts, not canonical validation CSVs.
+
+- Manual intake standards:
+  - leave unknown fields blank
+  - do not guess
+  - keep `source_location` specific
+  - preserve exact wording in `reported_text`
+  - keep subtype and condition separated
+  - do not pool different cell classes or protocols in one row
+  - for f-I point templates, do not back-project points from summary metrics
+    such as max rate or gain alone
+  - keep one row per metric for summary tables, one row per current step for
+    f-I tables, and one row per protocol variant for protocol templates
 
 - Preserve provenance in all extracted rows:
   - `source_file`
