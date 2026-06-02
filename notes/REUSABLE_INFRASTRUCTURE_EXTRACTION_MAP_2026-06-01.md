@@ -218,6 +218,10 @@ Current progress:
   result-dir sync now lives under `neuroinfra.remote.deferred_artifacts`,
   while the surrounding result-loading and lazy-loader policy still remains in
   `obgpu_experiment_helpers.py`
+- the shared JSON status-poll retry/parsing helper that both the single-run
+  and remote-sweep notebook paths use now lives under
+  `neuroinfra.remote.status_poll`, while the higher-level monitoring loops
+  still remain in `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

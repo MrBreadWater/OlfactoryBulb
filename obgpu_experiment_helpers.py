@@ -188,6 +188,10 @@ from neuroinfra.remote.result_sync import (
     sync_remote_result_dir as _neuroinfra_sync_remote_result_dir,
     sync_remote_result_dir_resilient as _neuroinfra_sync_remote_result_dir_resilient,
 )
+from neuroinfra.remote.status_poll import (
+    RemoteJSONPollHooks as _NeuroinfraRemoteJSONPollHooks,
+    poll_remote_json_status as _neuroinfra_poll_remote_json_status,
+)
 from neuroinfra.remote.deferred_artifacts import (
     DeferredArtifactSyncHooks as _NeuroinfraDeferredArtifactSyncHooks,
     sync_deferred_remote_artifact as _neuroinfra_sync_deferred_remote_artifact,
@@ -2347,6 +2351,23 @@ def _artifact_loading_hooks() -> _NeuroinfraArtifactLoadingHooks:
     )
 
 
+def _remote_json_poll_hooks(
+    config: dict[str, Any],
+    notebook_timings: dict[str, float],
+) -> _NeuroinfraRemoteJSONPollHooks:
+    """Build reusable hooks for remote JSON status polling."""
+    return _NeuroinfraRemoteJSONPollHooks(
+        run_command_fn=lambda command, timeout_s=None: _run_ssh_shell(
+            config,
+            command,
+            timeout_s=timeout_s,
+        ),
+        record_timing_fn=lambda key, started: _record_timing(notebook_timings, key, started),
+        sleep_fn=time.sleep,
+        perf_counter_fn=time.perf_counter,
+    )
+
+
 def _apply_loaded_result_artifact(result: MutableMapping[str, Any], key: str, loaded: Any) -> None:
     """Apply one loaded artifact payload to the standard notebook result dict."""
     if key == "lfp":
@@ -4024,33 +4045,12 @@ def _run_remote_simulation(
             include_sacct=include_sacct,
             include_tails=include_logs,
         )
-        poll_completed = None
-        last_exc: json.JSONDecodeError | None = None
-        status: dict[str, Any] | None = None
-        for attempt in range(poll_json_retries):
-            poll_started = time.perf_counter()
-            poll_completed = _run_ssh_shell(effective_config, poll_shell)
-            _record_timing(notebook_timings, "poll_s", poll_started)
-            if poll_completed.returncode != 0:
-                raise RuntimeError(
-                    "Remote Sol status poll failed.\n"
-                    f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-                )
-            try:
-                status = json.loads((poll_completed.stdout or "").strip())
-                break
-            except json.JSONDecodeError as exc:
-                last_exc = exc
-                if attempt + 1 >= poll_json_retries:
-                    break
-                time.sleep(min(0.5 * (attempt + 1), 2.0))
-        if status is None:
-            assert poll_completed is not None
-            raise RuntimeError(
-                "Remote Sol poll did not return valid JSON.\n"
-                f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-            ) from last_exc
-
+        status = _neuroinfra_poll_remote_json_status(
+            poll_shell,
+            poll_json_retries=poll_json_retries,
+            error_prefix="Remote Sol status poll",
+            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
+        )
         poll_transcript.append(status)
         return status
 
@@ -5215,33 +5215,13 @@ def _run_remote_sweep(
             include_sacct=include_sacct,
             include_tails=False,
         )
-        poll_completed = None
-        last_exc: json.JSONDecodeError | None = None
-        for attempt in range(poll_json_retries):
-            poll_started = time.perf_counter()
-            poll_completed = _run_ssh_shell(
-                effective_config,
-                poll_shell,
-                timeout_s=_remote_poll_command_timeout_s(effective_config),
-            )
-            _record_timing(notebook_timings, "poll_s", poll_started)
-            if poll_completed.returncode != 0:
-                raise RuntimeError(
-                    "Remote sweep status poll failed.\n"
-                    f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-                )
-            try:
-                return json.loads((poll_completed.stdout or "").strip())
-            except json.JSONDecodeError as exc:
-                last_exc = exc
-                if attempt + 1 >= poll_json_retries:
-                    break
-                time.sleep(min(0.5 * (attempt + 1), 2.0))
-        assert poll_completed is not None
-        raise RuntimeError(
-            "Remote sweep poll did not return valid JSON.\n"
-            f"Stdout:\n{poll_completed.stdout}\n\nStderr:\n{poll_completed.stderr}"
-        ) from last_exc
+        return _neuroinfra_poll_remote_json_status(
+            poll_shell,
+            poll_json_retries=poll_json_retries,
+            error_prefix="Remote sweep status poll",
+            hooks=_remote_json_poll_hooks(effective_config, notebook_timings),
+            timeout_s=_remote_poll_command_timeout_s(effective_config),
+        )
 
     def sync_finished_items(status: dict[str, Any]) -> None:
         progress_payload = status.get("progress_payload") or {}
