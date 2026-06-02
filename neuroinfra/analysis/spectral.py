@@ -163,6 +163,48 @@ def butter_bandpass_filter(
     return filtfilt(b, a, signal)
 
 
+def compute_bandpassed_signal(
+    signal_t: np.ndarray | list[float],
+    signal_y: np.ndarray | list[float],
+    *,
+    dt_ms: float | None = None,
+    lowcut_hz: float = 30.0,
+    highcut_hz: float = 120.0,
+    order: int = 4,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Resample one trace and return a Butterworth band-passed copy."""
+    t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
+    if len(t) < 2:
+        return t, np.asarray(y, dtype=float)
+    fs_hz = 1000.0 / float(np.median(np.diff(t)))
+    return t, butter_bandpass_filter(y, lowcut_hz, highcut_hz, fs_hz, order=order)
+
+
+def compute_welch_psd(
+    signal_t: np.ndarray | list[float],
+    signal_y: np.ndarray | list[float],
+    *,
+    dt_ms: float | None = None,
+    nperseg: int | None = None,
+    remove_mean: bool = True,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute a Welch PSD on a uniformly sampled trace."""
+    t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
+    if len(t) < 4:
+        return np.array([]), np.array([])
+
+    values = np.asarray(y, dtype=float)
+    if remove_mean:
+        values = values - np.mean(values)
+    fs_hz = 1000.0 / float(np.median(np.diff(t)))
+    if nperseg is None:
+        nperseg = min(2048, len(values))
+    else:
+        nperseg = min(int(nperseg), len(values))
+    freqs, psd = welch(values, fs=fs_hz, nperseg=nperseg)
+    return freqs, psd
+
+
 def compute_spectrogram(
     signal_t: np.ndarray | list[float],
     signal_y: np.ndarray | list[float],
@@ -271,8 +313,14 @@ def compute_band_power_summary(
 ) -> dict[str, Any]:
     """Compute integrated Welch band powers for HFO-style summaries."""
     bands = dict(bands or DEFAULT_HFO_BANDS)
-    t, y = uniform_trace(signal_t, signal_y, dt_ms=dt_ms)
-    if len(t) < 4:
+    freqs, psd = compute_welch_psd(
+        signal_t,
+        signal_y,
+        dt_ms=dt_ms,
+        nperseg=nperseg,
+        remove_mean=True,
+    )
+    if len(freqs) == 0:
         return {
             "freqs": np.array([]),
             "psd": np.array([]),
@@ -280,15 +328,6 @@ def compute_band_power_summary(
             "relative_band_power": {name: 0.0 for name in bands},
             "relative_band": relative_band,
         }
-
-    y = np.asarray(y, dtype=float)
-    y = y - np.mean(y)
-    fs_hz = 1000.0 / float(np.median(np.diff(t)))
-    if nperseg is None:
-        nperseg = min(2048, len(y))
-    else:
-        nperseg = min(int(nperseg), len(y))
-    freqs, psd = welch(y, fs=fs_hz, nperseg=nperseg)
 
     if relative_band is None:
         denominator = trapezoid_integral(psd, freqs)

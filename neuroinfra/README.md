@@ -114,15 +114,15 @@ lazy-path bookkeeping, while the concrete OBGPU signal names and higher-level
 presentation policy still remain in `obgpu_experiment_helpers.py`.
 
 The generic result-catalog helpers, result-overview builders, shared plotting
-primitives, named-signal trace and time-frequency view helpers,
-spectral-analysis core, sweep plot protocol, sweep persistence and reload
-helpers, streamed GIF rendering pipeline, event-rate/raster analysis helpers,
-shared event-rate plotting, raster-plus-rate overview layout, and named-signal
-provider registry that list, summarize, transform, plot, animate, persist,
-reload, and resolve analysis signals in a stable ordered way now also live
-under `neuroinfra.analysis`, while the concrete OBGPU signal families and
-notebook-specific presentation and higher-level plot composition still remain
-in `obgpu_experiment_helpers.py`.
+primitives, named-signal trace, band-pass, PSD overview, and time-frequency
+view helpers, spectral-analysis core, sweep plot protocol, sweep persistence
+and reload helpers, streamed GIF rendering pipeline, event-rate/raster
+analysis helpers, shared event-rate plotting, raster-plus-rate overview
+layout, and named-signal provider registry that list, summarize, transform,
+plot, animate, persist, reload, and resolve analysis signals in a stable
+ordered way now also live under `neuroinfra.analysis`, while the concrete
+OBGPU signal families and notebook-specific presentation and higher-level plot
+composition still remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus

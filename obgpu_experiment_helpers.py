@@ -52,7 +52,7 @@ except ImportError:  # pragma: no cover - optional runtime dependency
 
 tqdm = _tqdm_plain or _tqdm_notebook
 from scipy.ndimage import gaussian_filter, gaussian_filter1d
-from scipy.signal import hilbert, welch
+from scipy.signal import hilbert
 from scipy.stats import gaussian_kde
 from modify_model import (
     add_synaptic_connection,
@@ -273,12 +273,14 @@ from neuroinfra.analysis.events import (
     smooth_rate_series as _neuroinfra_smooth_rate_series,
     style_raster_axis as _neuroinfra_style_raster_axis,
 )
-from neuroinfra.analysis.plotting import (
-    plot_band_power_summary as _neuroinfra_plot_band_power_summary,
-)
 from neuroinfra.analysis.signal_views import (
+    SignalPsdOverlay as _NeuroinfraSignalPsdOverlay,
+    compute_resolved_bandpassed_signal as _neuroinfra_compute_resolved_bandpassed_signal,
+    compute_resolved_band_power_summary as _neuroinfra_compute_resolved_band_power_summary,
     log_spectrogram_display_power as _neuroinfra_log_spectrogram_display_power,
+    plot_resolved_band_power_summary as _neuroinfra_plot_resolved_band_power_summary,
     plot_resolved_signal as _neuroinfra_plot_resolved_signal,
+    plot_resolved_signal_psd_overview as _neuroinfra_plot_resolved_signal_psd_overview,
     plot_resolved_spectrogram as _neuroinfra_plot_resolved_spectrogram,
     plot_resolved_wavelet as _neuroinfra_plot_resolved_wavelet,
     plot_resolved_wavelet_band_power as _neuroinfra_plot_resolved_wavelet_band_power,
@@ -311,7 +313,6 @@ from neuroinfra.analysis.sweeps import (
 from neuroinfra.analysis.spectral import (
     DEFAULT_HFO_BANDS,
     butter_bandpass_filter,
-    compute_band_power_summary,
     compute_wavelet_map,
     normalize_time_modulus as _normalize_time_modulus,
     uniform_trace,
@@ -6146,9 +6147,19 @@ def compute_lfp_bandpassed(
     order: int = 4,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the saved LFP resampled and band-pass filtered."""
-    t, lfp = uniform_trace(result["lfp_t"], result["lfp"], dt_ms=dt_ms)
-    fs_hz = 1000.0 / float(np.median(np.diff(t)))
-    return t, butter_bandpass_filter(lfp, lowcut_hz, highcut_hz, fs_hz, order=order)
+    return _neuroinfra_compute_resolved_bandpassed_signal(
+        result,
+        signal="lfp",
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
+        dt_ms=dt_ms,
+        lowcut_hz=lowcut_hz,
+        highcut_hz=highcut_hz,
+        order=order,
+    )
 
 
 def compute_hfo_power_summary(
@@ -6160,16 +6171,55 @@ def compute_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> dict[str, Any]:
     """Compute HFO band-power metrics for a named saved signal."""
-    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
-    summary = compute_band_power_summary(
-        signal_t,
-        signal_y,
+    return _neuroinfra_compute_resolved_band_power_summary(
+        result,
+        signal=signal,
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
         bands=bands,
         dt_ms=dt_ms,
         relative_band=relative_band,
     )
-    summary["signal"] = signal
-    return summary
+
+
+def _build_psd_template_overlays(
+    *,
+    psd_template_kind: str,
+    psd_template_fit_band_hz: tuple[float, float],
+    psd_template_scale_method: str,
+    psd_template_floor: float,
+    psd_template_color: str,
+) -> Any:
+    """Return a builder that maps one measured PSD onto overlay curves."""
+    def _builder(freqs: np.ndarray, power: np.ndarray) -> list[_NeuroinfraSignalPsdOverlay]:
+        try:
+            from olfactorybulb.hfo_optimizer import scaled_psd_template_curve
+
+            template_freqs, template_power = scaled_psd_template_curve(
+                psd_template_kind,
+                freqs,
+                power,
+                fit_band_hz=psd_template_fit_band_hz,
+                method=psd_template_scale_method,
+                floor=psd_template_floor,
+            )
+        except Exception:
+            return []
+        return [
+            _NeuroinfraSignalPsdOverlay(
+                freqs_hz=np.asarray(template_freqs, dtype=float),
+                power=np.asarray(template_power, dtype=float),
+                label=f"Template ({psd_template_kind})",
+                color=psd_template_color,
+                linewidth=1.0,
+                linestyle="--",
+            )
+        ]
+
+    return _builder
 
 
 def compute_spike_phase_locking(
@@ -7728,54 +7778,30 @@ def plot_lfp_overview(
     psd_template_color: str = "tab:orange",
 ) -> tuple[Any, Any]:
     """Plot raw LFP, band-passed LFP, and a Welch PSD summary."""
-    fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=False)
-    t = result["lfp_t"]
-    lfp = result["lfp"]
-    axes[0].plot(t, lfp, color="black", linewidth=1.0)
-    axes[0].set_title("Raw LFP")
-    axes[0].set_ylabel("LFP")
-
-    bp_t, bp_lfp = compute_lfp_bandpassed(result, dt_ms=dt_ms, lowcut_hz=lowcut_hz, highcut_hz=highcut_hz)
-    axes[1].plot(bp_t, bp_lfp, color="tab:purple", linewidth=1.0)
-    axes[1].set_title(f"Band-passed LFP ({lowcut_hz:.0f}-{highcut_hz:.0f} Hz)")
-    axes[1].set_ylabel("Filtered LFP")
-
-    fs_hz = 1000.0 / float(np.median(np.diff(bp_t)))
-    freqs, power = welch(bp_lfp, fs=fs_hz, nperseg=min(2048, len(bp_lfp)))
-    axes[2].plot(freqs, power, color="tab:green", linewidth=1.0, label="Measured PSD")
-
+    overlay_builder = None
     if show_psd_target_template:
-        try:
-            from olfactorybulb.hfo_optimizer import scaled_psd_template_curve
-
-            template_freqs, template_power = scaled_psd_template_curve(
-                psd_template_kind,
-                freqs,
-                power,
-                fit_band_hz=psd_template_fit_band_hz,
-                method=psd_template_scale_method,
-                floor=psd_template_floor,
-            )
-            axes[2].plot(
-                template_freqs,
-                template_power,
-                color=psd_template_color,
-                linewidth=1.0,
-                linestyle="--",
-                label=f"Template ({psd_template_kind})",
-            )
-            axes[2].legend(loc="upper right", fontsize=9)
-        except Exception:
-            pass
-
-    if psd_xlim_hz is None:
-        psd_xlim_hz = (0.0, float(highcut_hz))
-    axes[2].set_xlim(float(psd_xlim_hz[0]), float(psd_xlim_hz[1]))
-    axes[2].set_xlabel("Frequency (Hz)")
-    axes[2].set_ylabel("PSD")
-    axes[2].set_title("Welch Power Spectrum")
-    fig.tight_layout()
-    return fig, axes
+        overlay_builder = _build_psd_template_overlays(
+            psd_template_kind=psd_template_kind,
+            psd_template_fit_band_hz=psd_template_fit_band_hz,
+            psd_template_scale_method=psd_template_scale_method,
+            psd_template_floor=psd_template_floor,
+            psd_template_color=psd_template_color,
+        )
+    return _neuroinfra_plot_resolved_signal_psd_overview(
+        result,
+        signal="lfp",
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
+        dt_ms=dt_ms,
+        lowcut_hz=lowcut_hz,
+        highcut_hz=highcut_hz,
+        psd_xlim_hz=psd_xlim_hz,
+        signal_label="LFP",
+        psd_overlay_builder=overlay_builder,
+    )
 
 
 def plot_hfo_power_summary(
@@ -7787,15 +7813,18 @@ def plot_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> tuple[Any, Any, dict[str, Any]]:
     """Plot absolute and relative HFO band power for a named signal."""
-    summary = compute_hfo_power_summary(
+    return _neuroinfra_plot_resolved_band_power_summary(
         result,
         signal=signal,
+        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
+            current_result,
+            signal=current_signal,
+            dt_ms=current_dt_ms,
+        ),
         bands=bands,
         dt_ms=dt_ms,
         relative_band=relative_band,
     )
-    fig, axes = _neuroinfra_plot_band_power_summary(summary, signal_label=signal)
-    return fig, axes, summary
 
 
 def plot_named_signal(

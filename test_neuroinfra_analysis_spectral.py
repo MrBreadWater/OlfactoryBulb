@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import os
+import tempfile
+
+os.environ.setdefault("MPLCONFIGDIR", tempfile.mkdtemp(prefix="mplconfig-spectral-"))
+
 import numpy as np
 
 from neuroinfra.analysis.spectral import (
     butter_bandpass_filter,
     compute_band_power_summary,
+    compute_bandpassed_signal,
     compute_spectrogram,
+    compute_welch_psd,
     compute_wavelet_band_power,
     fold_time_matrix_by_modulus,
     fold_time_series_by_modulus,
@@ -46,6 +53,25 @@ def main() -> None:
     sine_100hz = np.sin(2.0 * np.pi * 100.0 * t_ms / 1000.0)
     filtered = butter_bandpass_filter(sine_100hz, 80.0, 120.0, fs_hz=2000.0, order=4)
     assert len(filtered) == len(sine_100hz)
+
+    filtered_t, filtered_signal = compute_bandpassed_signal(
+        t_ms,
+        sine_100hz,
+        dt_ms=0.5,
+        lowcut_hz=80.0,
+        highcut_hz=120.0,
+    )
+    assert len(filtered_t) == len(t_ms)
+    assert len(filtered_signal) == len(sine_100hz)
+
+    psd_freqs, psd_power = compute_welch_psd(
+        t_ms,
+        sine_100hz,
+        dt_ms=0.5,
+        nperseg=512,
+    )
+    assert len(psd_freqs) == len(psd_power)
+    assert len(psd_freqs) > 0
 
     times_ms, freqs_hz, power = compute_spectrogram(
         t_ms,
