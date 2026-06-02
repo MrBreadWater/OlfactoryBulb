@@ -105,13 +105,11 @@ from olfactorybulb.analysis_hfo_views import (
     plot_lfp_overview as _ob_plot_lfp_overview,
 )
 from olfactorybulb.analysis_presentations import (
-    StandardOutputHooks as _OlfactoryBulbStandardOutputHooks,
     SweepAnimationHooks as _OlfactoryBulbSweepAnimationHooks,
     animate_lfp_sweep as _ob_animate_lfp_sweep,
     animate_sniff_average_sweep as _ob_animate_sniff_average_sweep,
     animate_spectrogram_sweep as _ob_animate_spectrogram_sweep,
     animate_wavelet_sweep as _ob_animate_wavelet_sweep,
-    show_all_outputs as _ob_show_all_outputs,
 )
 from olfactorybulb.notebook_configs import (
     DEFAULT_CONFIGS_DIR as _OLFACTORY_BULB_DEFAULT_CONFIGS_DIR,
@@ -159,9 +157,11 @@ from olfactorybulb.notebook_remote_sweeps import (
     build_remote_sweep_payload as _ob_build_remote_sweep_payload,
     build_remote_sweep_workflow_hooks as _ob_build_remote_sweep_workflow_hooks,
 )
-from olfactorybulb.notebook_reports import (
-    NotebookReportHooks as _OlfactoryBulbNotebookReportHooks,
-    print_run_summary as _ob_print_run_summary,
+from olfactorybulb.notebook_presentations import (
+    NotebookPresentationHooks as _OlfactoryBulbNotebookPresentationHooks,
+    print_run_summary as _ob_print_notebook_run_summary,
+    save_figure as _ob_save_notebook_figure,
+    show_all_outputs as _ob_show_notebook_outputs,
 )
 from olfactorybulb.notebook_sweeps import (
     NotebookSweepHooks as _OlfactoryBulbNotebookSweepHooks,
@@ -2763,6 +2763,33 @@ def _ob_notebook_sweep_hooks() -> _OlfactoryBulbNotebookSweepHooks:
         progress_write_fn=_progress_write,
         run_parameter_sweep_fn=run_parameter_sweep,
         run_grid_sweep_fn=run_grid_sweep,
+    )
+
+
+def _ob_notebook_presentation_hooks() -> _OlfactoryBulbNotebookPresentationHooks:
+    """Build the concrete olfactory-bulb hooks for notebook presentation adapters."""
+    return _OlfactoryBulbNotebookPresentationHooks(
+        default_results_base=DEFAULT_RESULTS_BASE,
+        make_timestamp_fn=make_timestamp,
+        safe_name_fn=_safe_name,
+        plt_module=plt,
+        save_figure_fn=_neuroinfra_save_figure,
+        plot_input_overview_fn=plot_input_overview,
+        plot_voltage_traces_fn=plot_voltage_traces,
+        plot_spike_raster_fn=plot_spike_raster,
+        plot_gc_output_overview_fn=plot_gc_output_overview,
+        plot_lfp_overview_fn=plot_lfp_overview,
+        plot_spectrogram_fn=plot_spectrogram,
+        plot_wavelet_fn=plot_wavelet,
+        plot_wavelet_band_power_fn=plot_wavelet_band_power,
+        result_overview_fn=result_overview,
+        build_run_config_fn=build_run_config,
+        resolve_effective_params_fn=resolve_effective_params,
+        resolve_paramset_defaults_fn=resolve_paramset_defaults,
+        diff_values_fn=diff_values,
+        extract_runtime_control_snapshot_fn=extract_runtime_control_snapshot,
+        print_diff_section_fn=print_diff_section,
+        write_fn=print,
     )
 
 
@@ -6815,12 +6842,10 @@ def save_figure(
     When ``sweep`` is provided and has a ``sweep_dir``, the figure is saved to
     ``sweep_dir/figures/`` automatically (other location hints are ignored).
     """
-    return _neuroinfra_save_figure(
+    return _ob_save_notebook_figure(
+        _ob_notebook_presentation_hooks(),
         name,
-        fig=fig or plt.gcf(),
-        safe_name_fn=_safe_name,
-        default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "figures" / make_timestamp(),
-        close_figure_fn=plt.close,
+        fig=fig,
         run_or_result=run_or_result,
         output_dir=output_dir,
         sweep=sweep,
@@ -6831,18 +6856,8 @@ def save_figure(
 
 def show_all_outputs(result: dict[str, Any], config: dict[str, Any] | None = None) -> None:
     """Render the standard notebook figure set for one loaded result."""
-    return _ob_show_all_outputs(
-        _OlfactoryBulbStandardOutputHooks(
-            plot_input_overview_fn=plot_input_overview,
-            plot_voltage_traces_fn=plot_voltage_traces,
-            plot_spike_raster_fn=plot_spike_raster,
-            plot_gc_output_overview_fn=plot_gc_output_overview,
-            plot_lfp_overview_fn=plot_lfp_overview,
-            plot_spectrogram_fn=plot_spectrogram,
-            plot_wavelet_fn=plot_wavelet,
-            plot_wavelet_band_power_fn=plot_wavelet_band_power,
-            plt_show_fn=plt.show,
-        ),
+    return _ob_show_notebook_outputs(
+        _ob_notebook_presentation_hooks(),
         result,
         config=config,
     )
@@ -6854,17 +6869,8 @@ def print_run_summary(
     config: dict[str, Any] | None = None,
 ) -> None:
     """Print a concise run summary plus param/runtime diffs for notebook use."""
-    _ob_print_run_summary(
-        _OlfactoryBulbNotebookReportHooks(
-            result_overview_fn=result_overview,
-            build_run_config_fn=build_run_config,
-            resolve_effective_params_fn=resolve_effective_params,
-            resolve_paramset_defaults_fn=resolve_paramset_defaults,
-            diff_values_fn=diff_values,
-            extract_runtime_control_snapshot_fn=extract_runtime_control_snapshot,
-            print_diff_section_fn=print_diff_section,
-            write_fn=print,
-        ),
+    _ob_print_notebook_run_summary(
+        _ob_notebook_presentation_hooks(),
         run,
         result,
         config=config,

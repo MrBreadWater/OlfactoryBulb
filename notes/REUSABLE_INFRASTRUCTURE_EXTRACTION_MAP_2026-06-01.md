@@ -198,6 +198,7 @@ Current progress:
 Current files:
 
 - `neuroinfra/notebooks/reporting.py`
+- `olfactorybulb/notebook_presentations.py`
 - `olfactorybulb/notebook_reports.py`
 - `obgpu_experiment_helpers.py`
 
@@ -212,7 +213,8 @@ What is domain-specific:
 
 - run-summary content and section ordering
 - effective-param and runtime-control summaries
-- default figure output roots from the notebook helper
+- default figure output roots
+- standard notebook output bundle composition
 
 Extraction confidence:
 
@@ -228,8 +230,10 @@ Current progress:
   `neuroinfra.notebooks.reporting`
 - the olfactory-bulb-specific run-summary presentation now lives in
   `olfactorybulb/notebook_reports.py`
-- `obgpu_experiment_helpers.py` now delegates that reporting layer instead of
-  owning it inline
+- the notebook-facing figure/output/summary adapter assembly now also lives in
+  `olfactorybulb/notebook_presentations.py`
+- `obgpu_experiment_helpers.py` now delegates that reporting/presentation layer
+  instead of owning its hook assembly inline
 
 ### 2e. Notebook sweep planning
 
@@ -504,6 +508,7 @@ Current files:
 - `olfactorybulb/analysis_presentations.py`
 - `olfactorybulb/analysis_profile.py`
 - `olfactorybulb/analysis_views.py`
+- `olfactorybulb/notebook_presentations.py`
 - `obgpu_experiment_helpers.py`
 
 What is already generic:
@@ -560,6 +565,8 @@ What is domain-specific:
   the standard LFP/HFO summary figure policy for this notebook workflow
 - the concrete notebook presentation layer that defines standard output bundles
   and sweep-animation presets for this notebook workflow
+- the notebook-facing figure/output/summary adapter layer that binds those
+  concrete presentation policies into notebook entrypoints
 - concrete OBGPU signal families like `lfp`, `gc_output_rate`, and
   `mean_MC_voltage`
 - the remaining notebook entrypoint glue that still lives in the notebook helper
@@ -577,6 +584,8 @@ Current progress:
   `olfactorybulb/analysis_hfo_views.py`
 - the concrete notebook presentation presets have moved into
   `olfactorybulb/analysis_presentations.py`
+- the notebook-facing figure/output/summary adapters have moved into
+  `olfactorybulb/notebook_presentations.py`
 - the concrete OBGPU profile assembly has moved into
   `olfactorybulb/analysis_profile.py`
 - the concrete grouped soma presentation policy has moved into

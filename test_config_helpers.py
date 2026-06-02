@@ -6,13 +6,11 @@ Run with:
 
 import json
 import importlib.util
-import io
 import pickle
 import socket
 import subprocess
 import sys
 import tempfile
-from contextlib import redirect_stdout
 from copy import deepcopy
 from pathlib import Path
 from pathlib import PurePosixPath
@@ -428,24 +426,53 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._ob_run_sweep_with_animations = original_run_sweep_with_animations
     print("run_sweep_with_animations wrapper delegation: OK")
 
-    # --- save_figure wrapper ---
-    class _FakeFigure:
-        def __init__(self) -> None:
-            self.calls = []
+    # --- save_figure wrapper delegates through notebook presentation adapters ---
+    original_save_notebook_figure = hlp._ob_save_notebook_figure
+    save_notebook_figure_calls = []
+    try:
+        def _fake_save_notebook_figure(hooks, name, **kwargs):
+            save_notebook_figure_calls.append((hooks, name, dict(kwargs)))
+            return tmp / "delegated-figure.png"
 
-        def savefig(self, path, **kwargs) -> None:
-            self.calls.append((Path(path), kwargs))
-            Path(path).write_text("fake-figure")
+        hlp._ob_save_notebook_figure = _fake_save_notebook_figure
+        saved_figure = save_figure("Notebook Summary", fig=object(), run_or_result=record)
+        assert saved_figure == tmp / "delegated-figure.png"
+        assert save_notebook_figure_calls and save_notebook_figure_calls[0][1] == "Notebook Summary"
+        assert save_notebook_figure_calls[0][2]["run_or_result"] is record
+    finally:
+        hlp._ob_save_notebook_figure = original_save_notebook_figure
+    print("save_figure wrapper delegation: OK")
 
-    figure = _FakeFigure()
-    saved_figure = save_figure("Notebook Summary", fig=figure, run_or_result=record)
-    assert saved_figure.parent == run_dir
-    assert saved_figure.name.endswith(".png")
-    assert saved_figure.exists()
-    assert figure.calls[0][1]["dpi"] == 200
-    print("save_figure wrapper: OK")
+    # --- show_all_outputs wrapper delegates through notebook presentation adapters ---
+    original_show_notebook_outputs = hlp._ob_show_notebook_outputs
+    show_notebook_output_calls = []
+    try:
+        def _fake_show_notebook_outputs(hooks, result, config=None):
+            show_notebook_output_calls.append((hooks, result, config))
 
-    # --- print_run_summary wrapper ---
+        hlp._ob_show_notebook_outputs = _fake_show_notebook_outputs
+        summary_result = {
+            "result_dir": str(run_dir),
+            "summary": {
+                "label": "demo-summary",
+                "paramset": "GammaSignature",
+                "params": {"tstop": 1000.0, "sim_dt": 0.1},
+            },
+            "run_info": {"config": cfg},
+            "input_times": [],
+            "gc_output_events": [],
+            "lfp": [],
+        }
+        hlp.show_all_outputs(summary_result, {"show_voltage_traces": True})
+        assert show_notebook_output_calls and show_notebook_output_calls[0][1] is summary_result
+        assert show_notebook_output_calls[0][2] == {"show_voltage_traces": True}
+    finally:
+        hlp._ob_show_notebook_outputs = original_show_notebook_outputs
+    print("show_all_outputs wrapper delegation: OK")
+
+    # --- print_run_summary wrapper delegates through notebook presentation adapters ---
+    original_print_notebook_run_summary = hlp._ob_print_notebook_run_summary
+    print_notebook_run_summary_calls = []
     summary_result = {
         "result_dir": str(run_dir),
         "summary": {
@@ -458,15 +485,17 @@ with tempfile.TemporaryDirectory() as tmp:
         "gc_output_events": [],
         "lfp": [],
     }
-    summary_stdout = io.StringIO()
-    with redirect_stdout(summary_stdout):
+    try:
+        def _fake_print_notebook_run_summary(hooks, run, result, config=None):
+            print_notebook_run_summary_calls.append((hooks, run, result, config))
+
+        hlp._ob_print_notebook_run_summary = _fake_print_notebook_run_summary
         print_run_summary(record, summary_result)
-    summary_text = summary_stdout.getvalue()
-    assert "Effective inputs:" in summary_text
-    assert "Runtime and analysis controls:" in summary_text
-    assert "Result directory:" in summary_text
-    assert "Command: python demo.py" in summary_text
-    print("print_run_summary wrapper: OK")
+        assert print_notebook_run_summary_calls and print_notebook_run_summary_calls[0][1] is record
+        assert print_notebook_run_summary_calls[0][2] is summary_result
+    finally:
+        hlp._ob_print_notebook_run_summary = original_print_notebook_run_summary
+    print("print_run_summary wrapper delegation: OK")
 
     # --- run_info wrapper paths ---
     run_info_dir = tmp / "run_info_case"

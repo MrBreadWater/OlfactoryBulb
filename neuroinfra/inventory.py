@@ -153,6 +153,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         target_module="neuroinfra.notebooks",
         source_paths=(
             "neuroinfra/notebooks/reporting.py",
+            "olfactorybulb/notebook_presentations.py",
             "olfactorybulb/notebook_reports.py",
             "obgpu_experiment_helpers.py",
         ),
@@ -164,13 +165,14 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         ),
         repo_specific_couplings=(
             "run-summary content and section ordering remain olfactory-bulb-specific",
-            "default figure output roots still come from the notebook helper",
+            "default figure output roots now come from the olfactory-bulb notebook presentation adapter",
+            "standard notebook output bundle composition remains olfactory-bulb-specific",
             "effective-param and runtime-control summaries still depend on repo-specific config semantics",
         ),
         extraction_confidence="high",
         proposed_phase=2,
         current_status="internal_shim_extracted",
-        recommended_action="The generic notebook diff/report/save helpers now live under neuroinfra.notebooks.reporting, while the olfactory-bulb-specific run-summary presentation lives in olfactorybulb.notebook_reports; next keep shrinking the notebook helper by separating the remaining simulation/result entrypoint glue.",
+        recommended_action="The generic notebook diff/report/save helpers now live under neuroinfra.notebooks.reporting, while the olfactory-bulb-specific run-summary presentation lives in olfactorybulb.notebook_reports and the notebook-facing figure/output/summary adapter assembly now lives in olfactorybulb.notebook_presentations; next keep shrinking the notebook helper by separating the remaining simulation/result entrypoint glue.",
     ),
     ExtractionCandidate(
         key="notebook_sweep_planning",
@@ -525,6 +527,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "olfactorybulb/analysis_presentations.py",
             "olfactorybulb/analysis_profile.py",
             "olfactorybulb/analysis_views.py",
+            "olfactorybulb/notebook_presentations.py",
             "obgpu_experiment_helpers.py",
         ),
         generic_capabilities=(
@@ -581,7 +584,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="medium",
         proposed_phase=3,
         current_status="internal_shim_extracted",
-        recommended_action="The generic result-catalog helpers, stable ordered-name helpers, fair round-robin subgroup truncation, ordered group-row flattening with per-bucket limits, grouped row-display policies, grouped stacked-trace and event-raster suites, result-overview builders, shared plotting primitives including stacked labeled traces, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, result-backed frequency plot families plus family-bound suites, labeled-row and trace-derived frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, result-backed event-family specs plus family suites and event plot suites, reusable event-rate series assembly, prepared labeled event display rows, overview-layout derivation from them, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, named sweep plot registries, sweep persistence and animation pipeline, the named-signal provider/registry/view layer, and domain analysis profiles that aggregate concrete repo definitions now live under neuroinfra.analysis, with the current concrete OBGPU result semantics, grouped soma presentation, HFO/LFP overview policy, notebook presentation presets, and profile now assembled in olfactorybulb.analysis_data, olfactorybulb.analysis_views, olfactorybulb.analysis_hfo_views, olfactorybulb.analysis_presentations, and olfactorybulb.analysis_profile; next keep shrinking obgpu_experiment_helpers.py toward notebook entrypoint glue rather than analysis ownership.",
+        recommended_action="The generic result-catalog helpers, stable ordered-name helpers, fair round-robin subgroup truncation, ordered group-row flattening with per-bucket limits, grouped row-display policies, grouped stacked-trace and event-raster suites, result-overview builders, shared plotting primitives including stacked labeled traces, named-signal trace, band-pass, PSD overview, time-frequency view helpers, resolved-signal phase-locking summaries, frequency KDE/time-binned sample renderers, result-backed frequency plot families plus family-bound suites, labeled-row and trace-derived frequency sample collectors, label-prefix row filtering, normalization-driven event-rate computation, result-backed event-family specs plus family suites and event plot suites, reusable event-rate series assembly, prepared labeled event display rows, overview-layout derivation from them, plus event-rate and raster-analysis helpers, shared rate plotting and overview layout, spectral analysis core, sweep plot protocol, named sweep plot registries, sweep persistence and animation pipeline, the named-signal provider/registry/view layer, and domain analysis profiles that aggregate concrete repo definitions now live under neuroinfra.analysis, with the current concrete OBGPU result semantics, grouped soma presentation, HFO/LFP overview policy, notebook presentation presets, notebook-facing presentation adapters, and profile now assembled in olfactorybulb.analysis_data, olfactorybulb.analysis_views, olfactorybulb.analysis_hfo_views, olfactorybulb.analysis_presentations, olfactorybulb.notebook_presentations, and olfactorybulb.analysis_profile; next keep shrinking obgpu_experiment_helpers.py toward notebook entrypoint glue rather than analysis ownership.",
     ),
     ExtractionCandidate(
         key="dashboard_and_packets",

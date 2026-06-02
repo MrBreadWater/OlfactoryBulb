@@ -159,8 +159,10 @@ explicitly in `olfactorybulb.analysis_data` and
 `olfactorybulb.analysis_profile`, with grouped soma presentation policy now in
 `olfactorybulb.analysis_views`, HFO/LFP overview policy now in
 `olfactorybulb.analysis_hfo_views`, and standard notebook output plus sweep
-animation presets now in `olfactorybulb.analysis_presentations`; the remaining
-notebook-facing glue still remains in `obgpu_experiment_helpers.py`.
+animation presets now in `olfactorybulb.analysis_presentations`, with the
+notebook-facing figure/output/summary adapters now in
+`olfactorybulb.notebook_presentations`; the remaining notebook-facing glue
+still remains in `obgpu_experiment_helpers.py`.
 
 The generic lazy-result container, timed local artifact-loading loop, and
 result-view planner/schema now live under `neuroinfra.artifacts`, while the
@@ -183,7 +185,8 @@ effective-param diff logic now live in `olfactorybulb.notebook_configs`.
 The generic nested-diff, human-readable reporting, and figure-output helpers
 now also live under `neuroinfra.notebooks.reporting`, while the
 olfactory-bulb-specific run-summary presentation now lives in
-`olfactorybulb.notebook_reports`.
+`olfactorybulb.notebook_reports`, and the notebook-facing figure/output/summary
+adapter assembly now lives in `olfactorybulb.notebook_presentations`.
 
 The generic nested config-path mutation and single-axis, joint, and grid sweep
 planning helpers now also live under `neuroinfra.notebooks.sweeps`, while the
