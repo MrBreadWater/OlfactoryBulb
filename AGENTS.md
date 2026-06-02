@@ -617,6 +617,14 @@ contract for future sessions.
   - warn on `pending_review`
   - warn on `provisional`
 
+- Keep the semantics clear in human-facing renderers.
+  - Human-review metadata describes the review state of the underlying
+    validation rule or reference-band choice, not whether one specific observed
+    audit result row was manually checked after the fact.
+  - Do not render human-review metadata inline on individual audit result items
+    in the CLI or HTML dashboards unless the wording is explicitly reframed to
+    avoid that confusion.
+
 ## 8. Reference-band selection rules
 
 - `reference_band_rows` requires an explicit band mode for every property in

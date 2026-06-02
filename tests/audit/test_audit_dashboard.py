@@ -35,6 +35,9 @@ sample_report = AuditReport(
             acceptable="Acceptable",
             acceptable_basis="Configured",
             evidence={"count": 0},
+            human_review_status="accepted",
+            human_review_note="Manually reviewed and accepted.",
+            human_review_reviewer="human",
             group_id="audit_beta",
             group_title="Audit beta",
         ),
@@ -61,5 +64,7 @@ with TemporaryDirectory() as tmp:
     assert "aria-pressed=\"false\"" in html
     assert "group-link-label" in html
     assert "data-item-card" in html
+    assert "Human review" not in html
+    assert "reviewer: human" not in html
 
 print("audit_dashboard: OK")

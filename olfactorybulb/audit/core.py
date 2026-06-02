@@ -299,17 +299,6 @@ def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
         f"  {_paint('How Acceptable Result Was Determined', LABEL_COLOR, enabled=enabled)}  "
         f"{_expand_terms(item.acceptable_basis or _default_acceptable_basis(item), sentence_case=True)}"
     )
-    if item.human_review_status or item.human_review_note or item.human_review_reviewer:
-        review_parts = []
-        if item.human_review_status:
-            review_parts.append(_expand_terms(item.human_review_status.replace("_", " "), sentence_case=True))
-        if item.human_review_reviewer:
-            review_parts.append(f"reviewer: {item.human_review_reviewer}")
-        if item.human_review_note:
-            review_parts.append(_expand_terms(item.human_review_note, sentence_case=True))
-        lines.append(
-            f"  {_paint('Human Review', LABEL_COLOR, enabled=enabled)}  " + " | ".join(review_parts)
-        )
     if item.evidence:
         lines.append(f"  {_paint('Evidence', LABEL_COLOR, enabled=enabled)}")
         for evidence_line in _pretty_evidence_lines(item.evidence):

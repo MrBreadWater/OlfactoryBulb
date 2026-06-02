@@ -53,27 +53,6 @@ def _render_evidence(evidence: dict[str, Any]) -> str:
     )
 
 
-def _render_human_review(item: dict[str, Any]) -> str:
-    status = str(item.get("human_review_status") or "").strip()
-    reviewer = str(item.get("human_review_reviewer") or "").strip()
-    note = str(item.get("human_review_note") or "").strip()
-    if not status and not reviewer and not note:
-        return ""
-    parts = []
-    if status:
-        parts.append(_expand_terms(status.replace("_", " "), sentence_case=True))
-    if reviewer:
-        parts.append(f"reviewer: {reviewer}")
-    if note:
-        parts.append(_expand_terms(note, sentence_case=True))
-    return (
-        "<div class='item-block'>"
-        "<h4>Human review</h4>"
-        f"<p>{_esc(' | '.join(parts))}</p>"
-        "</div>"
-    )
-
-
 def _item_search_blob(item: AuditItem) -> str:
     fields = [
         item.check_id,
@@ -108,7 +87,6 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
             "<div class='item-block'><h4>How acceptable result was determined</h4>"
             f"<p>{_esc(_expand_terms(item.acceptable_basis, sentence_case=True))}</p></div>"
         ),
-        _render_human_review(item_payload),
         _render_evidence(item.evidence),
     ]
     if item.note:

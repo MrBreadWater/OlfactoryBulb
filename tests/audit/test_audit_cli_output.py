@@ -78,12 +78,12 @@ assert "Evidence" in plain
 assert "Description" in plain
 assert "Acceptable result" in plain
 assert "How Acceptable Result Was Determined" in plain
-assert "Human Review" in plain
 assert "count: 3 (reference: 4 +/- 1 counts from Demo Source (n=8))" in plain
 assert "Tufted cell coefficient of variation of interspike intervals item" in plain
 assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
-assert "Accepted | reviewer: human | Manually reviewed and accepted." in plain
+assert "Human Review" not in plain
+assert "Accepted | reviewer: human | Manually reviewed and accepted." not in plain
 
 colored = format_report(sample_report, color=True)
 assert "\033[" in colored
