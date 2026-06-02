@@ -68,6 +68,7 @@ from .events import (
     style_raster_axis,
 )
 from .signal_views import (
+    ResultSignalViewSuite,
     SignalPsdOverlay,
     compute_resolved_bandpassed_signal,
     compute_resolved_band_power_summary,
@@ -218,6 +219,7 @@ __all__ = [
     "recommended_raster_fontsize",
     "recommended_raster_height",
     "recommended_raster_line_spacing",
+    "ResultSignalViewSuite",
     "SignalPsdOverlay",
     "SweepPlotSpec",
     "SweepPlotRegistry",

@@ -288,16 +288,9 @@ from neuroinfra.analysis.events import (
     style_raster_axis as _neuroinfra_style_raster_axis,
 )
 from neuroinfra.analysis.signal_views import (
+    ResultSignalViewSuite as _NeuroinfraResultSignalViewSuite,
     SignalPsdOverlay as _NeuroinfraSignalPsdOverlay,
-    compute_resolved_bandpassed_signal as _neuroinfra_compute_resolved_bandpassed_signal,
-    compute_resolved_band_power_summary as _neuroinfra_compute_resolved_band_power_summary,
     log_spectrogram_display_power as _neuroinfra_log_spectrogram_display_power,
-    plot_resolved_band_power_summary as _neuroinfra_plot_resolved_band_power_summary,
-    plot_resolved_signal as _neuroinfra_plot_resolved_signal,
-    plot_resolved_signal_psd_overview as _neuroinfra_plot_resolved_signal_psd_overview,
-    plot_resolved_spectrogram as _neuroinfra_plot_resolved_spectrogram,
-    plot_resolved_wavelet as _neuroinfra_plot_resolved_wavelet,
-    plot_resolved_wavelet_band_power as _neuroinfra_plot_resolved_wavelet_band_power,
 )
 from neuroinfra.analysis.phase_locking import (
     compute_phase_locking_from_spike_rows as _neuroinfra_compute_phase_locking_from_spike_rows,
@@ -6124,14 +6117,9 @@ def compute_lfp_bandpassed(
     order: int = 4,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Return the saved LFP resampled and band-pass filtered."""
-    return _neuroinfra_compute_resolved_bandpassed_signal(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.compute_bandpassed_signal(
         result,
         signal="lfp",
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         dt_ms=dt_ms,
         lowcut_hz=lowcut_hz,
         highcut_hz=highcut_hz,
@@ -6148,14 +6136,9 @@ def compute_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> dict[str, Any]:
     """Compute HFO band-power metrics for a named saved signal."""
-    return _neuroinfra_compute_resolved_band_power_summary(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.compute_band_power_summary(
         result,
         signal=signal,
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         bands=bands,
         dt_ms=dt_ms,
         relative_band=relative_band,
@@ -6209,7 +6192,11 @@ def compute_spike_phase_locking(
     dt_ms: float = 0.1,
 ) -> dict[str, Any]:
     """Measure soma-spike phase locking to a band-passed LFP-like signal."""
-    signal_t, signal_y = get_named_signal(result, signal=signal, dt_ms=dt_ms)
+    signal_t, signal_y = _OBGPU_RESULT_SIGNAL_VIEWS.resolve(
+        result,
+        signal=signal,
+        dt_ms=dt_ms,
+    )
     allowed_types = tuple(str(cell_type) for cell_type in cell_types)
 
     saved_rows = _saved_soma_spike_rows(
@@ -6568,6 +6555,10 @@ _OBGPU_RESULT_SIGNAL_REGISTRY = _NeuroinfraResultSignalRegistry(
         _mean_voltage_signal_provider(),
         _soma_label_signal_provider(),
     ),
+)
+
+_OBGPU_RESULT_SIGNAL_VIEWS = _NeuroinfraResultSignalViewSuite(
+    _OBGPU_RESULT_SIGNAL_REGISTRY,
 )
 
 
@@ -7018,9 +7009,9 @@ def get_named_signal(
     dt_ms: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Resolve one named analysis signal into a uniform time/value trace."""
-    return _OBGPU_RESULT_SIGNAL_REGISTRY.resolve(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.resolve(
         result,
-        signal,
+        signal=signal,
         dt_ms=dt_ms,
     )
 
@@ -7459,14 +7450,9 @@ def plot_lfp_overview(
             psd_template_floor=psd_template_floor,
             psd_template_color=psd_template_color,
         )
-    return _neuroinfra_plot_resolved_signal_psd_overview(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_signal_psd_overview(
         result,
         signal="lfp",
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         dt_ms=dt_ms,
         lowcut_hz=lowcut_hz,
         highcut_hz=highcut_hz,
@@ -7485,14 +7471,9 @@ def plot_hfo_power_summary(
     relative_band: tuple[float, float] | None = (30.0, 250.0),
 ) -> tuple[Any, Any, dict[str, Any]]:
     """Plot absolute and relative HFO band power for a named signal."""
-    return _neuroinfra_plot_resolved_band_power_summary(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_band_power_summary(
         result,
         signal=signal,
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         bands=bands,
         dt_ms=dt_ms,
         relative_band=relative_band,
@@ -7507,14 +7488,9 @@ def plot_named_signal(
     modulus: float | None = None,
 ) -> Any:
     """Plot one named analysis signal as a time trace."""
-    return _neuroinfra_plot_resolved_signal(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_signal(
         result,
         signal=signal,
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         dt_ms=dt_ms,
         ax=ax,
         modulus=modulus,
@@ -7537,14 +7513,9 @@ def plot_spectrogram(
     modulus: float | None = None,
 ) -> Any:
     """Plot a spectrogram for a named analysis signal."""
-    return _neuroinfra_plot_resolved_spectrogram(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_spectrogram(
         result,
         signal=signal,
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         dt_ms=dt_ms,
         max_freq_hz=max_freq_hz,
         nperseg=nperseg,
@@ -7562,14 +7533,9 @@ def plot_wavelet(
     modulus: float | None = None,
 ) -> Any:
     """Plot the continuous wavelet power map for a named signal."""
-    return _neuroinfra_plot_resolved_wavelet(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_wavelet(
         result,
         signal=signal,
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         dt_ms=dt_ms,
         ax=ax,
         modulus=modulus,
@@ -7585,14 +7551,9 @@ def plot_wavelet_band_power(
     modulus: float | None = None,
 ) -> Any:
     """Plot band-collapsed wavelet power traces over time."""
-    return _neuroinfra_plot_resolved_wavelet_band_power(
+    return _OBGPU_RESULT_SIGNAL_VIEWS.plot_wavelet_band_power(
         result,
         signal=signal,
-        resolve_signal_fn=lambda current_result, current_signal, current_dt_ms: get_named_signal(
-            current_result,
-            signal=current_signal,
-            dt_ms=current_dt_ms,
-        ),
         dt_ms=dt_ms,
         bands=bands,
         ax=ax,

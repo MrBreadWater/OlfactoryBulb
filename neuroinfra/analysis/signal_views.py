@@ -8,6 +8,7 @@ from typing import Any, Callable, Sequence
 import matplotlib.pyplot as plt
 import numpy as np
 
+from .signals import ResultSignalRegistry
 from .plotting import (
     plot_band_power_summary,
     plot_named_time_series,
@@ -22,6 +23,241 @@ from .spectral import (
     compute_wavelet_band_power,
     compute_wavelet_map,
 )
+
+
+@dataclass(frozen=True)
+class ResultSignalViewSuite:
+    """Registry-backed resolved-signal analysis and plotting helpers."""
+
+    registry: ResultSignalRegistry
+
+    def resolve(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float | None = 0.1,
+        **context: Any,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Resolve one named signal through the underlying registry."""
+        return self.registry.resolve(
+            result,
+            signal,
+            dt_ms=dt_ms,
+            **context,
+        )
+
+    def compute_bandpassed_signal(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float | None = 0.1,
+        lowcut_hz: float = 30.0,
+        highcut_hz: float = 120.0,
+        order: int = 4,
+        **context: Any,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Resolve and band-pass one named signal through the registry."""
+        return compute_resolved_bandpassed_signal(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            dt_ms=dt_ms,
+            lowcut_hz=lowcut_hz,
+            highcut_hz=highcut_hz,
+            order=order,
+        )
+
+    def compute_band_power_summary(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        bands: dict[str, tuple[float, float]] | None = None,
+        dt_ms: float | None = 0.1,
+        relative_band: tuple[float, float] | None = (30.0, 250.0),
+        **context: Any,
+    ) -> dict[str, Any]:
+        """Resolve one named signal and compute Welch band-power metrics."""
+        return compute_resolved_band_power_summary(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            bands=bands,
+            dt_ms=dt_ms,
+            relative_band=relative_band,
+        )
+
+    def plot_signal(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float = 0.1,
+        ax: Any = None,
+        modulus: float | None = None,
+        title: str | None = None,
+        ylabel: str | None = None,
+        **context: Any,
+    ) -> Any:
+        """Plot one registry-backed named signal as a time trace."""
+        return plot_resolved_signal(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            dt_ms=dt_ms,
+            ax=ax,
+            modulus=modulus,
+            title=title,
+            ylabel=ylabel,
+        )
+
+    def plot_signal_psd_overview(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float = 0.1,
+        lowcut_hz: float = 30.0,
+        highcut_hz: float = 300.0,
+        order: int = 4,
+        psd_xlim_hz: tuple[float, float] | None = None,
+        figsize: tuple[float, float] = (14.0, 10.0),
+        signal_label: str | None = None,
+        psd_overlay_builder: Callable[[np.ndarray, np.ndarray], Sequence["SignalPsdOverlay"] | None] | None = None,
+        **context: Any,
+    ) -> tuple[Any, Any]:
+        """Plot raw trace, band-passed trace, and Welch PSD for one registry-backed signal."""
+        return plot_resolved_signal_psd_overview(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            dt_ms=dt_ms,
+            lowcut_hz=lowcut_hz,
+            highcut_hz=highcut_hz,
+            order=order,
+            psd_xlim_hz=psd_xlim_hz,
+            figsize=figsize,
+            signal_label=signal_label,
+            psd_overlay_builder=psd_overlay_builder,
+        )
+
+    def plot_spectrogram(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float = 0.1,
+        max_freq_hz: float = 250.0,
+        nperseg: int = 256,
+        noverlap: int = 192,
+        ax: Any = None,
+        modulus: float | None = None,
+        title: str | None = None,
+        colorbar_label: str = "Power (dB)",
+        power_transform: Callable[[np.ndarray], np.ndarray] | None = None,
+        **context: Any,
+    ) -> Any:
+        """Plot a spectrogram for one registry-backed signal."""
+        return plot_resolved_spectrogram(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            dt_ms=dt_ms,
+            max_freq_hz=max_freq_hz,
+            nperseg=nperseg,
+            noverlap=noverlap,
+            ax=ax,
+            modulus=modulus,
+            title=title,
+            colorbar_label=colorbar_label,
+            power_transform=power_transform or log_spectrogram_display_power,
+        )
+
+    def plot_wavelet(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float = 0.1,
+        ax: Any = None,
+        modulus: float | None = None,
+        title: str | None = None,
+        colorbar_label: str = "log(1 + |cwt|)",
+        **context: Any,
+    ) -> Any:
+        """Plot continuous wavelet power for one registry-backed signal."""
+        return plot_resolved_wavelet(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            dt_ms=dt_ms,
+            ax=ax,
+            modulus=modulus,
+            title=title,
+            colorbar_label=colorbar_label,
+        )
+
+    def plot_wavelet_band_power(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        dt_ms: float = 0.1,
+        bands: dict[str, tuple[float, float]] | None = None,
+        ax: Any = None,
+        modulus: float | None = None,
+        title: str = "Band Power Over Time",
+        ylabel: str = "Mean Wavelet Power",
+        **context: Any,
+    ) -> Any:
+        """Plot wavelet band-power traces for one registry-backed signal."""
+        return plot_resolved_wavelet_band_power(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            dt_ms=dt_ms,
+            bands=bands,
+            ax=ax,
+            modulus=modulus,
+            title=title,
+            ylabel=ylabel,
+        )
+
+    def plot_band_power_summary(
+        self,
+        result: dict[str, Any],
+        *,
+        signal: str,
+        bands: dict[str, tuple[float, float]] | None = None,
+        dt_ms: float | None = 0.1,
+        relative_band: tuple[float, float] | None = (30.0, 250.0),
+        signal_label: str | None = None,
+        **context: Any,
+    ) -> tuple[Any, Any, dict[str, Any]]:
+        """Plot absolute and relative band-power summaries for one registry-backed signal."""
+        return plot_resolved_band_power_summary(
+            result,
+            signal=signal,
+            resolve_signal_fn=self._resolver(**context),
+            bands=bands,
+            dt_ms=dt_ms,
+            relative_band=relative_band,
+            signal_label=signal_label,
+        )
+
+    def _resolver(
+        self,
+        **context: Any,
+    ) -> Callable[[dict[str, Any], str, float | None], tuple[np.ndarray, np.ndarray]]:
+        """Build a resolved-signal callback for the lower-level plotting helpers."""
+        return lambda result, signal, dt_ms: self.resolve(
+            result,
+            signal=signal,
+            dt_ms=dt_ms,
+            **context,
+        )
 
 
 @dataclass(frozen=True)

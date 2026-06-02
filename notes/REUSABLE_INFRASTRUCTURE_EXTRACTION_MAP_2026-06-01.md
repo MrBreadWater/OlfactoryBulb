@@ -161,6 +161,7 @@ What is already generic:
 - sweep metadata persistence, reload, and saved-sweep discovery
 - ordered named-signal providers
 - ordered named-signal registries
+- registry-backed resolved-signal view suites
 - dynamic signal enumeration
 - provider-based signal resolution
 - provider factories for keyed traces, suffix variants, pattern-matched signals, and labeled traces

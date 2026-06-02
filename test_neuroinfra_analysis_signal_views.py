@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from neuroinfra.analysis.signal_views import (
+    ResultSignalViewSuite,
     SignalPsdOverlay,
     compute_resolved_bandpassed_signal,
     compute_resolved_band_power_summary,
@@ -26,6 +27,7 @@ from neuroinfra.analysis.signal_views import (
     plot_resolved_wavelet,
     plot_resolved_wavelet_band_power,
 )
+from neuroinfra.analysis.signals import ResultSignalRegistry, keyed_trace_signal_provider
 
 
 def _resolve_signal(result: dict[str, object], signal: str, dt_ms: float | None) -> tuple[np.ndarray, np.ndarray]:
@@ -44,6 +46,25 @@ def main() -> None:
         "t": np.arange(0.0, 400.0, 1.0),
         "y": np.sin(np.linspace(0.0, 16.0 * np.pi, 400)),
     }
+    registry_result = {
+        "demo_t": result["t"],
+        "demo_y": result["y"],
+    }
+    suite = ResultSignalViewSuite(
+        ResultSignalRegistry(
+            providers=(
+                keyed_trace_signal_provider(
+                    "demo",
+                    time_key="demo_t",
+                    value_key="demo_y",
+                    uniform_trace_fn=lambda times, values, dt_ms=None: (
+                        np.asarray(times, dtype=float),
+                        np.asarray(values, dtype=float),
+                    ),
+                ),
+            )
+        )
+    )
 
     bp_t, bp_y = compute_resolved_bandpassed_signal(
         result,
@@ -162,6 +183,64 @@ def main() -> None:
         assert band_axes[1].get_title() == "Relative Band Power"
     finally:
         plt.close(band_fig)
+
+    suite_t, suite_y = suite.resolve(registry_result, signal="demo", dt_ms=1.0)
+    assert np.allclose(suite_t, result["t"])
+    assert np.allclose(suite_y, result["y"])
+
+    suite_bp_t, suite_bp_y = suite.compute_bandpassed_signal(
+        registry_result,
+        signal="demo",
+        dt_ms=1.0,
+        lowcut_hz=10.0,
+        highcut_hz=80.0,
+    )
+    assert len(suite_bp_t) == len(result["t"])
+    assert len(suite_bp_y) == len(result["y"])
+
+    suite_summary = suite.compute_band_power_summary(
+        registry_result,
+        signal="demo",
+        dt_ms=1.0,
+        bands={"low": (5.0, 20.0), "high": (20.0, 80.0)},
+        relative_band=(5.0, 100.0),
+    )
+    assert suite_summary["signal"] == "demo"
+
+    suite_signal_ax = suite.plot_signal(registry_result, signal="demo", dt_ms=1.0)
+    try:
+        assert suite_signal_ax.get_title() == "demo Trace"
+        assert len(suite_signal_ax.lines) == 1
+    finally:
+        plt.close(suite_signal_ax.figure)
+
+    suite_spectrogram_ax = suite.plot_spectrogram(
+        registry_result,
+        signal="demo",
+        dt_ms=1.0,
+        nperseg=64,
+        noverlap=48,
+    )
+    try:
+        assert suite_spectrogram_ax.get_title() == "DEMO Spectrogram"
+        assert len(suite_spectrogram_ax.collections) > 0
+    finally:
+        plt.close(suite_spectrogram_ax.figure)
+
+    suite_band_fig, suite_band_axes, suite_band_summary = suite.plot_band_power_summary(
+        registry_result,
+        signal="demo",
+        dt_ms=1.0,
+        bands={"low": (5.0, 20.0), "high": (20.0, 80.0)},
+        relative_band=(5.0, 100.0),
+        signal_label="demo",
+    )
+    try:
+        assert suite_band_summary["signal"] == "demo"
+        assert suite_band_axes[0].get_title() == "demo Band Power"
+        assert suite_band_axes[1].get_title() == "Relative Band Power"
+    finally:
+        plt.close(suite_band_fig)
 
     print("analysis signal view helpers: OK")
 

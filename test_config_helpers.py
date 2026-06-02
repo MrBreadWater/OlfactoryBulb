@@ -414,6 +414,54 @@ with tempfile.TemporaryDirectory() as tmp:
     assert phase_summary["per_cell"][0]["label"] == "MC0[0].soma"
     print("Phase-lock wrapper: OK")
 
+    bp_t, bp_y = hlp.compute_lfp_bandpassed(
+        phase_result,
+        dt_ms=0.1,
+        lowcut_hz=80.0,
+        highcut_hz=120.0,
+    )
+    assert len(bp_t) == len(phase_t)
+    assert len(bp_y) == len(phase_signal)
+
+    signal_ax = hlp.plot_named_signal(
+        phase_result,
+        signal="lfp",
+        dt_ms=0.1,
+    )
+    try:
+        assert signal_ax.get_title() == "lfp Trace"
+        assert len(signal_ax.lines) == 1
+    finally:
+        hlp.plt.close(signal_ax.figure)
+
+    spectrogram_ax = hlp.plot_spectrogram(
+        phase_result,
+        signal="lfp",
+        dt_ms=0.1,
+        nperseg=128,
+        noverlap=96,
+    )
+    try:
+        assert spectrogram_ax.get_title() == "LFP Spectrogram"
+        assert len(spectrogram_ax.collections) > 0
+    finally:
+        hlp.plt.close(spectrogram_ax.figure)
+
+    hfo_fig, hfo_axes, hfo_summary = hlp.plot_hfo_power_summary(
+        phase_result,
+        signal="lfp",
+        dt_ms=0.1,
+        bands={"hfo": (80.0, 120.0)},
+        relative_band=(60.0, 140.0),
+    )
+    try:
+        assert hfo_summary["signal"] == "lfp"
+        assert hfo_axes[0].get_title() == "lfp Band Power"
+        assert hfo_axes[1].get_title() == "Relative Band Power"
+    finally:
+        hlp.plt.close(hfo_fig)
+    print("Resolved signal view wrappers: OK")
+
     freq_ax = hlp.plot_spike_frequency_kde_1d(
         loaded_result,
         cell_types=("MC",),
