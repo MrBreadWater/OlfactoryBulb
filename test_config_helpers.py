@@ -403,6 +403,31 @@ with tempfile.TemporaryDirectory() as tmp:
         hlp._ob_run_notebook_parameter_sweep = original_local_sweep_dispatch
     print("local sweep workflow delegation: OK")
 
+    # --- run_sweep_with_animations wrapper delegates through olfactorybulb notebook sweep adapters ---
+    original_run_sweep_with_animations = hlp._ob_run_sweep_with_animations
+    run_sweep_with_animation_calls = []
+    try:
+        def _fake_run_sweep_with_animations(hooks, base_config, sweep_path, values=None, **kwargs):
+            run_sweep_with_animation_calls.append((hooks, dict(base_config), sweep_path, values, dict(kwargs)))
+            return ({"delegated": True}, {"artifact": tmp / "artifact.gif"})
+
+        hlp._ob_run_sweep_with_animations = _fake_run_sweep_with_animations
+        delegated_sweep, delegated_artifacts = hlp.run_sweep_with_animations(
+            cfg,
+            "gaba_tau2_ms",
+            [36.0, 50.0],
+            plots=["lfp_signal"],
+            workers=3,
+        )
+        assert delegated_sweep == {"delegated": True}
+        assert delegated_artifacts == {"artifact": tmp / "artifact.gif"}
+        assert run_sweep_with_animation_calls and run_sweep_with_animation_calls[0][2] == "gaba_tau2_ms"
+        assert run_sweep_with_animation_calls[0][3] == [36.0, 50.0]
+        assert run_sweep_with_animation_calls[0][4]["workers"] == 3
+    finally:
+        hlp._ob_run_sweep_with_animations = original_run_sweep_with_animations
+    print("run_sweep_with_animations wrapper delegation: OK")
+
     # --- save_figure wrapper ---
     class _FakeFigure:
         def __init__(self) -> None:

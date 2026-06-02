@@ -163,6 +163,16 @@ from olfactorybulb.notebook_reports import (
     NotebookReportHooks as _OlfactoryBulbNotebookReportHooks,
     print_run_summary as _ob_print_run_summary,
 )
+from olfactorybulb.notebook_sweeps import (
+    NotebookSweepHooks as _OlfactoryBulbNotebookSweepHooks,
+    animate_sweep_plots as _ob_animate_sweep_plots,
+    list_sweeps as _ob_list_sweeps,
+    load_sweep as _ob_load_sweep,
+    run_sweep_with_animations as _ob_run_sweep_with_animations,
+    save_animation as _ob_save_animation,
+    save_sweep as _ob_save_sweep,
+    save_sweep_animation_stream as _ob_save_sweep_animation_stream,
+)
 from olfactorybulb.notebook_workflows import (
     NotebookWorkflowAdapterHooks as _OlfactoryBulbNotebookWorkflowAdapterHooks,
     build_load_run_pair_hooks as _ob_build_load_run_pair_hooks,
@@ -2720,6 +2730,39 @@ def _ob_notebook_result_hooks() -> _OlfactoryBulbNotebookResultHooks:
         soma_trace_artifact_candidates_fn=soma_trace_artifact_candidates,
         result_view_hooks=_result_view_hooks(),
         artifact_loading_hooks=_artifact_loading_hooks(),
+    )
+
+
+def _ob_notebook_sweep_hooks() -> _OlfactoryBulbNotebookSweepHooks:
+    """Build the concrete olfactory-bulb hooks for notebook sweep persistence/output helpers."""
+    return _OlfactoryBulbNotebookSweepHooks(
+        sweeps_base=SWEEPS_BASE,
+        default_results_base=DEFAULT_RESULTS_BASE,
+        make_timestamp_fn=make_timestamp,
+        safe_name_fn=_safe_name,
+        json_ready_fn=_json_ready,
+        resolve_git_head_fn=_resolve_local_git_head,
+        load_result_fn=load_result,
+        save_sweep_fn=_neuroinfra_save_sweep,
+        load_sweep_fn=_neuroinfra_load_sweep,
+        list_sweeps_fn=_neuroinfra_list_sweeps,
+        save_animation_fn=_neuroinfra_save_animation,
+        save_sweep_animation_stream_fn=_neuroinfra_save_sweep_animation_stream,
+        animate_sweep_plots_fn=_neuroinfra_animate_sweep_plots,
+        build_sweep_plot_callable_fn=_build_sweep_plot_callable,
+        normalize_sweep_plot_spec_fn=_normalize_sweep_plot_spec,
+        is_deprecated_sweep_animation_spec_fn=_is_deprecated_sweep_animation_spec,
+        deprecated_plot_names=tuple(sorted(_DEPRECATED_SWEEP_ANIMATION_PLOTS)),
+        progress_factory_fn=lambda total, desc: _ProgressBar(
+            total=total,
+            desc=desc,
+            unit="frame",
+            unit_scale=False,
+            display_step=max(1, total // 100),
+        ),
+        progress_write_fn=_progress_write,
+        run_parameter_sweep_fn=run_parameter_sweep,
+        run_grid_sweep_fn=run_grid_sweep,
     )
 
 
@@ -6633,14 +6676,11 @@ def save_sweep(
 
     The sweep dict is updated in-place with ``sweep["sweep_dir"]``.
     """
-    return _neuroinfra_save_sweep(
+    return _ob_save_sweep(
+        _ob_notebook_sweep_hooks(),
         sweep,
         name=name,
-        base_dir=base_dir or SWEEPS_BASE,
-        timestamp_factory=make_timestamp,
-        safe_name=_safe_name,
-        json_ready=_json_ready,
-        resolve_git_head=_resolve_local_git_head,
+        base_dir=base_dir,
     )
 
 
@@ -6650,11 +6690,7 @@ def load_sweep(path: str | Path) -> dict[str, Any]:
     Results are loaded lazily (same as load_result) so re-animating old
     sweeps does not require loading all soma traces upfront.
     """
-    return _neuroinfra_load_sweep(
-        path,
-        load_result_fn=lambda result_dir: load_result(result_dir, progress=False),
-        safe_name=_safe_name,
-    )
+    return _ob_load_sweep(_ob_notebook_sweep_hooks(), path)
 
 
 def list_sweeps(
@@ -6662,7 +6698,7 @@ def list_sweeps(
     base_dir: str | Path | None = None,
 ) -> list[Path]:
     """Return saved sweep directories sorted from oldest to newest."""
-    return _neuroinfra_list_sweeps(base_dir=base_dir or SWEEPS_BASE, prefix=prefix)
+    return _ob_list_sweeps(_ob_notebook_sweep_hooks(), prefix=prefix, base_dir=base_dir)
 
 
 def save_animation(
@@ -6677,14 +6713,13 @@ def save_animation(
     When ``sweep`` is provided and has a ``sweep_dir``, the GIF is saved to
     ``sweep_dir/animations/`` automatically (``output_dir`` is ignored).
     """
-    return _neuroinfra_save_animation(
+    return _ob_save_animation(
+        _ob_notebook_sweep_hooks(),
         anim,
         name,
-        safe_name=_safe_name,
         output_dir=output_dir,
         sweep=sweep,
         fps=fps,
-        default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "animations" / make_timestamp(),
     )
 
 
@@ -6702,31 +6737,18 @@ def save_sweep_animation_stream(
     workers: int | None = None,
 ) -> Path:
     """Render and save a sweep GIF without retaining all frames in memory."""
-    progress = _ProgressBar(
-        total=len(sweep["items"]),
-        desc=f"[OBGPU load] Render {name}",
-        unit="frame",
-        unit_scale=False,
-        display_step=max(1, len(sweep["items"]) // 100),
+    return _ob_save_sweep_animation_stream(
+        _ob_notebook_sweep_hooks(),
+        sweep,
+        plot_fn,
+        name,
+        output_dir=output_dir,
+        figsize=figsize,
+        title_fn=title_fn,
+        close_frames=close_frames,
+        fps=fps,
+        workers=workers,
     )
-    try:
-        return _neuroinfra_save_sweep_animation_stream(
-            sweep,
-            plot_fn,
-            name,
-            safe_name=_safe_name,
-            output_dir=output_dir,
-            figsize=figsize,
-            title_fn=title_fn,
-            close_frames=close_frames,
-            fps=fps,
-            workers=workers,
-            env_var_name="OBGPU_SWEEP_RENDER_WORKERS",
-            progress_callback=lambda current, total: progress.update_to(current),
-            default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "animations" / make_timestamp(),
-        )
-    finally:
-        progress.close()
 
 
 def animate_sweep_plots(
@@ -6746,24 +6768,13 @@ def animate_sweep_plots(
     - a :class:`SweepPlotSpec`
     - a dict like ``{"plot": "spike_frequency_kde_2d", "plot_kwargs": {...}}``
     """
-    deprecated_names = set(_DEPRECATED_SWEEP_ANIMATION_PLOTS)
-    for raw_spec in plots:
-        spec = _normalize_sweep_plot_spec(raw_spec)
-        if _is_deprecated_sweep_animation_spec(spec):
-            _progress_write(
-                f"[OBGPU load] Skipping deprecated sweep animation plot {spec.name!r}."
-            )
-    return _neuroinfra_animate_sweep_plots(
+    return _ob_animate_sweep_plots(
+        _ob_notebook_sweep_hooks(),
         sweep,
         plots,
-        plot_builder=_build_sweep_plot_callable,
-        safe_name=_safe_name,
-        deprecated_names=deprecated_names,
         close_frames=close_frames,
         stream=stream,
         workers=workers,
-        env_var_name="OBGPU_SWEEP_RENDER_WORKERS",
-        default_output_dir_factory=lambda: DEFAULT_RESULTS_BASE / "animations" / make_timestamp(),
     )
 
 
@@ -6778,17 +6789,16 @@ def run_sweep_with_animations(
     workers: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Path]]:
     """Run a sweep once, then emit one or more animations over the same results."""
-    if use_grid:
-        if not isinstance(sweep_path, dict):
-            raise TypeError("Grid sweeps require sweep_path to be a dict of {path: values}")
-        sweep = run_grid_sweep(base_config, sweep_path)
-    else:
-        sweep = run_parameter_sweep(base_config, sweep_path, values)
-
-    artifacts: dict[str, Path] = {}
-    if plots:
-        artifacts = animate_sweep_plots(sweep, plots, close_frames=close_frames, workers=workers)
-    return sweep, artifacts
+    return _ob_run_sweep_with_animations(
+        _ob_notebook_sweep_hooks(),
+        base_config,
+        sweep_path,
+        values,
+        plots=plots,
+        use_grid=use_grid,
+        close_frames=close_frames,
+        workers=workers,
+    )
 
 
 def save_figure(

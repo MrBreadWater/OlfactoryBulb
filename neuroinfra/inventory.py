@@ -199,6 +199,31 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         recommended_action="The generic sweep-planning layer now lives under neuroinfra.notebooks.sweeps, while the notebook helper still owns concrete run-config normalization, sweep execution, and persistence; next separate the remaining local/remote sweep runner orchestration from planning.",
     ),
     ExtractionCandidate(
+        key="notebook_sweep_adapters",
+        title="Notebook sweep persistence and animation adapters",
+        target_module="neuroinfra.analysis",
+        source_paths=(
+            "neuroinfra/analysis/sweeps.py",
+            "olfactorybulb/notebook_sweeps.py",
+            "obgpu_experiment_helpers.py",
+        ),
+        generic_capabilities=(
+            "saved sweep persistence and reload primitives",
+            "saved sweep discovery",
+            "streamed and in-memory sweep animation export",
+            "built-in sweep plot registry resolution with deprecation support",
+        ),
+        repo_specific_couplings=(
+            "default sweep and animation output roots still come from the repo's notebook layout",
+            "deprecated built-in plot policy still depends on the olfactory-bulb notebook surface",
+            "run-then-animate composition still depends on the repo's concrete sweep entrypoints",
+        ),
+        extraction_confidence="high",
+        proposed_phase=2,
+        current_status="internal_shim_extracted",
+        recommended_action="The generic sweep persistence and animation pipeline already lives under neuroinfra.analysis.sweeps, while the concrete notebook output-dir policy, deprecated plot handling, progress wiring, and run-then-animate adapter now live in olfactorybulb.notebook_sweeps; next keep shrinking obgpu_experiment_helpers.py by moving the remaining notebook presentation glue into explicit domain adapters.",
+    ),
+    ExtractionCandidate(
         key="notebook_dispatch",
         title="Notebook entrypoint dispatch",
         target_module="neuroinfra.notebooks",

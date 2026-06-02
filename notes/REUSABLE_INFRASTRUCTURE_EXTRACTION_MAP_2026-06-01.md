@@ -402,6 +402,7 @@ Current files:
 - `neuroinfra/notebooks/remote_sweeps.py`
 - `neuroinfra/notebooks/workflows.py`
 - `olfactorybulb/notebook_dispatch.py`
+- `olfactorybulb/notebook_sweeps.py`
 - `olfactorybulb/notebook_workflows.py`
 - `obgpu_experiment_helpers.py`
 
@@ -424,6 +425,7 @@ What is domain-specific:
 
 - progress output strings
 - local sweep path policy
+- notebook sweep and animation output-dir policy
 - concrete remote payload construction
 - higher-level remote run and remote sweep orchestration
 - concrete run/load function wiring
@@ -470,6 +472,16 @@ Current progress:
   `run_simulation`, and the parameter/grid sweep entrypoints through those
   domain adapters while still owning notebook-facing progress messages and a
   narrower layer of presentation-oriented glue
+- the generic saved-sweep persistence, reload, built-in plot registry, and GIF
+  rendering pipeline already live under `neuroinfra.analysis.sweeps`
+- the concrete notebook sweep output policy, deprecated built-in animation
+  handling, progress wiring, and run-then-animate adapter now live under
+  `olfactorybulb.notebook_sweeps`
+- `obgpu_experiment_helpers.py` now delegates `save_sweep`, `load_sweep`,
+  `list_sweeps`, `save_animation`, `save_sweep_animation_stream`,
+  `animate_sweep_plots`, and `run_sweep_with_animations(...)` through that
+  explicit domain module instead of keeping the notebook sweep artifact helpers
+  inline
 
 ### 2i. Result analysis and signal registry
 

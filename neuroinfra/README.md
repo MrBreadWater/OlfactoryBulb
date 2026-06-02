@@ -190,6 +190,12 @@ planning helpers now also live under `neuroinfra.notebooks.sweeps`, while the
 concrete run-config normalization, label policy, and local/remote sweep
 execution still remain in `obgpu_experiment_helpers.py`.
 
+The generic sweep persistence, reload, streamed GIF rendering, and built-in
+plot registry machinery already lives under `neuroinfra.analysis.sweeps`,
+while the concrete olfactory-bulb notebook output-dir policy, deprecated built-
+in animation handling, progress wiring, and run-then-animate adapter now live
+in `olfactorybulb.notebook_sweeps`.
+
 The generic notebook entrypoint dispatch layer that chooses local vs remote
 single-run execution plus local vs remote parameter/grid sweep execution now
 also lives under `neuroinfra.notebooks.dispatch`, while the concrete
