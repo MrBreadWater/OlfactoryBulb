@@ -34,7 +34,7 @@ This directory contains protocol-aware, subtype-aware reference tables for olfac
 - `identity` rows: 15
 - `synaptic_latency` rows: 2
 - `modulation` rows: 6
-- `notes` rows: 8
+- `notes` rows: 7
 - `manual` rows: 8
 - `readme` rows: 0
 - Missing required sources after acquisition: none

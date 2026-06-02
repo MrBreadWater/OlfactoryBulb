@@ -71,6 +71,7 @@ target/
 
 # Jupyter Notebook
 .ipynb_checkpoints
+notebooks/*-Copy*.ipynb
 
 # pyenv
 .python-version
@@ -136,6 +137,8 @@ external/
 aarch64/
 corenrn_data/
 notebook_outputs/
+research_context/source_data/
+research_context/.ipynb_checkpoints/
 snapshots/
 results/benchmarks/
 results/comparisons/
@@ -143,6 +146,7 @@ results/debug_*/
 results/notebook_runs/
 results/Old Debug/
 results/profiles/
+results/sweeps/
 results/tmp_*/
 
 # Local archives

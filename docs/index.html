@@ -1,261 +1,130 @@
-
-
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" >
+<html lang="en">
 <head>
   <meta charset="utf-8">
-  
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  
-  <title>Olfactory Bulb Model Documentation &mdash; Olfactory Bulb 1.0 documentation</title>
-  
-
-  
-  <link rel="stylesheet" href="_static/css/theme.css" type="text/css" />
-  <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
-
-  
-  
-  
-  
-
-  
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-    
-      <script type="text/javascript" id="documentation_options" data-url_root="./" src="_static/documentation_options.js"></script>
-        <script src="_static/jquery.js"></script>
-        <script src="_static/underscore.js"></script>
-        <script src="_static/doctools.js"></script>
-        <script src="_static/language_data.js"></script>
-    
-    <script type="text/javascript" src="_static/js/theme.js"></script>
-
-    
-    <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Getting Started" href="gettingstarted.html" /> 
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OlfactoryBulb Maintained Docs Portal</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #0f172a;
+      --panel: #111827;
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --border: #334155;
+    }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 24px 64px;
+    }
+    h1, h2 { margin: 0 0 16px; }
+    p { margin: 0 0 16px; color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+      margin: 28px 0 40px;
+    }
+    section {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+    li + li { margin-top: 8px; }
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    a:hover { text-decoration: underline; }
+    .eyebrow {
+      color: var(--accent);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      font-size: 0.82rem;
+      margin-bottom: 12px;
+    }
+    .note {
+      margin-top: 24px;
+      padding: 16px 18px;
+      border-left: 3px solid var(--accent);
+      background: rgba(56, 189, 248, 0.08);
+      color: var(--text);
+    }
+  </style>
 </head>
-
-<body class="wy-body-for-nav">
-
-   
-  <div class="wy-grid-for-nav">
-    
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
-      <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
-          
-
-          
-            <a href="#" class="icon icon-home" alt="Documentation Home"> Olfactory Bulb
-          
-
-          
-          </a>
-
-          
-            
-            
-              <div class="version">
-                1.0
-              </div>
-            
-          
-
-          
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-
-          
-        </div>
-
-        
-        <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="main navigation">
-          
-            
-            
-              
-            
-            
-              <ul>
-<li class="toctree-l1"><a class="reference internal" href="gettingstarted.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="visualizing.html">Visualizing the Model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="recreating.html">Recreating the Model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cloud.html">Running Simulations in the Cloud (AWS)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="olfactorybulb.html">Model Python Class Reference</a></li>
-</ul>
-
-            
-          
-        </div>
-        
-      </div>
-    </nav>
-
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
-
-      
-      <nav class="wy-nav-top" aria-label="top navigation">
-        
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="#">Olfactory Bulb</a>
-        
-      </nav>
-
-
-      <div class="wy-nav-content">
-        
-        <div class="rst-content">
-        
-          
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-<div role="navigation" aria-label="breadcrumbs navigation">
-
-  <ul class="wy-breadcrumbs">
-    
-      <li><a href="#" class="icon icon-home"></a> &raquo;</li>
-        
-      <li>Olfactory Bulb Model Documentation</li>
-    
-    
-      <li class="wy-breadcrumbs-aside">
-        
-            
-            <a href="_sources/index.rst.txt" rel="nofollow"> View page source</a>
-          
-        
-      </li>
-    
-  </ul>
-
-  
-  <hr/>
-</div>
-          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-            
-  <div class="section" id="olfactory-bulb-model-documentation">
-<h1>Olfactory Bulb Model Documentation<a class="headerlink" href="#olfactory-bulb-model-documentation" title="Permalink to this headline">¶</a></h1>
-<img alt="_images/logo.png" src="_images/logo.png" />
-<p>This is the documentation site for the <a class="reference external" href="https://olfactorybulb.org/">olfactory bulb model</a> developed by <a class="reference external" href="https://www.linkedin.com/in/justasbirgiolas">Justas Birgiolas Ph.D.</a></p>
-<blockquote>
-<div><ul class="simple">
-<li><p>Model Website: <a class="reference external" href="https://olfactorybulb.org/">https://olfactorybulb.org/</a></p></li>
-<li><p>Documentation (this site): <a class="reference external" href="https://docs.olfactorybulb.org/">https://docs.olfactorybulb.org/</a></p></li>
-<li><p>Source Code Repository: <a class="reference external" href="https://github.com/justasb/olfactorybulb">https://github.com/justasb/olfactorybulb</a></p></li>
-<li><p>Pre-built Docker Images: <a class="reference external" href="https://hub.docker.com/repository/docker/jbirgio/olfactory-bulb">https://hub.docker.com/repository/docker/jbirgio/olfactory-bulb</a></p></li>
-<li><p>Ph.D. Dissertation Describing the Model: <a class="reference external" href="https://repository.asu.edu/attachments/223567/content/Birgiolas_asu_0010E_19503.pdf">Towards Brains in the Cloud: A Biophysically Realistic Computational Model of Olfactory Bulb</a></p></li>
-</ul>
-</div></blockquote>
-<p>The model and related <a class="reference external" href="https://blenderneuron.org/">BlenderNEURON model editing tool</a> were developed in collaboration with <a class="reference external" href="https://iconlab.asu.edu/">researchers at the ICON Lab at Arizona State University</a>.</p>
-</div>
-<div class="section" id="citation">
-<h1>Citation<a class="headerlink" href="#citation" title="Permalink to this headline">¶</a></h1>
-<p>If you use this model in your project, please cite it as follows:</p>
-<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="nd">@phdthesis</span><span class="p">{</span><span class="n">birgiolas2019towards</span><span class="p">,</span>
-  <span class="n">title</span><span class="o">=</span><span class="p">{</span><span class="n">Towards</span> <span class="n">Brains</span> <span class="ow">in</span> <span class="n">the</span> <span class="n">Cloud</span><span class="p">:</span> <span class="n">A</span> <span class="n">Biophysically</span> <span class="n">Realistic</span> <span class="n">Computational</span> <span class="n">Model</span> <span class="n">of</span> <span class="n">Olfactory</span> <span class="n">Bulb</span><span class="p">},</span>
-  <span class="n">author</span><span class="o">=</span><span class="p">{</span><span class="n">Birgiolas</span><span class="p">,</span> <span class="n">Justas</span><span class="p">},</span>
-  <span class="n">year</span><span class="o">=</span><span class="p">{</span><span class="mi">2019</span><span class="p">},</span>
-  <span class="n">school</span><span class="o">=</span><span class="p">{</span><span class="n">Arizona</span> <span class="n">State</span> <span class="n">University</span><span class="p">}</span>
-<span class="p">}</span>
-</pre></div>
-</div>
-</div>
-<div class="section" id="table-of-contents">
-<h1>Table of Contents<a class="headerlink" href="#table-of-contents" title="Permalink to this headline">¶</a></h1>
-<div class="toctree-wrapper compound">
-<ul>
-<li class="toctree-l1"><a class="reference internal" href="gettingstarted.html">Getting Started</a></li>
-<li class="toctree-l1"><a class="reference internal" href="visualizing.html">Visualizing the Model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="recreating.html">Recreating the Model</a></li>
-<li class="toctree-l1"><a class="reference internal" href="cloud.html">Running Simulations in the Cloud (AWS)</a></li>
-<li class="toctree-l1"><a class="reference internal" href="olfactorybulb.html">Model Python Class Reference</a></li>
-</ul>
-</div>
-</div>
-<div class="section" id="indices-and-tables">
-<h1>Indices and tables<a class="headerlink" href="#indices-and-tables" title="Permalink to this headline">¶</a></h1>
-<ul class="simple">
-<li><p><a class="reference internal" href="genindex.html"><span class="std std-ref">Index</span></a></p></li>
-<li><p><a class="reference internal" href="py-modindex.html"><span class="std std-ref">Module Index</span></a></p></li>
-<li><p><a class="reference internal" href="search.html"><span class="std std-ref">Search Page</span></a></p></li>
-</ul>
-</div>
-
-
-           </div>
-           
-          </div>
-          <footer>
-  
-    <div class="rst-footer-buttons" role="navigation" aria-label="footer navigation">
-      
-        <a href="gettingstarted.html" class="btn btn-neutral float-right" title="Getting Started" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right"></span></a>
-      
-      
-    </div>
-  
-
-  <hr/>
-
-  <div role="contentinfo">
+<body>
+  <main>
+    <div class="eyebrow">Maintained Docs Portal</div>
+    <h1>OlfactoryBulb current workflow docs</h1>
     <p>
-        
-        &copy; Copyright 2020, Justas Birgiolas
-
+      This page is the maintained landing surface for the current OBGPU workflow.
+      Start here for the docs that describe the active install, runtime, audit,
+      and reference-data paths. The older generated Sphinx pages are still
+      available below, but they are historical reference pages, not the source
+      of truth for the maintained workflow.
     </p>
-  </div>
-    
-    
-    
-    Built with <a href="http://sphinx-doc.org/">Sphinx</a> using a
-    
-    <a href="https://github.com/rtfd/sphinx_rtd_theme">theme</a>
-    
-    provided by <a href="https://readthedocs.org">Read the Docs</a>. 
 
-</footer>
+    <div class="grid">
+      <section>
+        <h2>Core workflow</h2>
+        <ul>
+          <li><a href="../readme.md">Repository README</a></li>
+          <li><a href="../INSTALL.md">Install and bootstrap guide</a></li>
+          <li><a href="../tools/README.md">Tooling map</a></li>
+          <li><a href="../notes/DOCS_OWNERSHIP_MAP.md">Documentation ownership map</a></li>
+        </ul>
+      </section>
 
-        </div>
-      </div>
+      <section>
+        <h2>Reference data and validation</h2>
+        <ul>
+          <li><a href="../notes/REFERENCE_DATASET_HOWTO.md">Reference dataset HOWTO</a></li>
+          <li><a href="../notes/REFERENCE_VALIDATION_HOWTO.md">Reference validation HOWTO</a></li>
+          <li><a href="../notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md">Reference validation overview</a></li>
+          <li><a href="../research_context/README.md">research_context boundaries</a></li>
+        </ul>
+      </section>
 
-    </section>
+      <section>
+        <h2>Remote and build operations</h2>
+        <ul>
+          <li><a href="../notes/porting/SOL_REMOTE_WORKFLOW.md">Remote Slurm workflow</a></li>
+          <li><a href="../notes/porting/NEURON_UPGRADE_WORKFLOW.md">NEURON upgrade workflow</a></li>
+          <li><a href="../notes/porting/MODERN_NEURON_PORT_NOTES.md">Modern port notes</a></li>
+        </ul>
+      </section>
 
-  </div>
-  
+      <section>
+        <h2>Historical reference pages</h2>
+        <ul>
+          <li><a href="gettingstarted.html">Historical getting-started page</a></li>
+          <li><a href="visualizing.html">Historical visualization page</a></li>
+          <li><a href="recreating.html">Historical recreating-the-model page</a></li>
+          <li><a href="cloud.html">Historical cloud page</a></li>
+          <li><a href="olfactorybulb.html">Historical model API reference</a></li>
+        </ul>
+      </section>
+    </div>
 
-  <script type="text/javascript">
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script>
-
-  
-  
-    
-   
-
+    <div class="note">
+      If a historical page disagrees with the maintained markdown docs above,
+      the maintained markdown docs win.
+    </div>
+  </main>
 </body>
 </html>

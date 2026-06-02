@@ -33,6 +33,11 @@ The active notebook is:
 See [INSTALL.md](INSTALL.md) for host prerequisites, GPU/CUDA notes, smoke
 tests, and Slurm/Phoenix/Sol setup details.
 
+For a linkable local docs landing page that points at the current maintained
+markdown docs, open:
+
+- `docs/index.html`
+
 For a curated maintained-surface health pass after setup or refactors, run:
 
 ```bash

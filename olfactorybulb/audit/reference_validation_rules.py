@@ -12,32 +12,10 @@ from scipy.stats import beta as beta_distribution
 
 from olfactorybulb.audit.core import AuditItem, rounded
 from olfactorybulb.audit.reference_data import (
-    GC_VALIDATION_NOTES_FILENAME,
-    PV_CRH_EPL_FSI_EPHYS_FILENAME,
-    PV_CRH_EPL_FSI_FI_CURVE_FILENAME,
-    PV_CRH_EPL_FSI_IDENTITY_FILENAME,
-    GC_EPHYS_FILENAME,
-    GC_FI_CURVE_FILENAME,
-    GC_SGC_DGC_EPHYS_FILENAME,
-    GC_SGC_DGC_FI_CURVE_FILENAME,
-    GC_IDENTITY_FILENAME,
-    GC_MODULATION_FILENAME,
-    GC_SYNAPTIC_LATENCY_FILENAME,
     REPO_ROOT,
     csv_rows,
-    load_gc_ephys_rows,
-    load_gc_fi_curve_rows,
-    load_gc_identity_rows,
-    load_gc_modulation_rows,
-    load_gc_protocol_rows,
-    load_gc_sgc_dgc_ephys_rows,
-    load_gc_sgc_dgc_fi_curve_rows,
-    load_gc_synaptic_latency_rows,
+    load_dataset_output_rows,
     load_normalized_legacy_mc_tc_rows,
-    load_pv_crh_epl_fsi_ephys_rows,
-    load_pv_crh_epl_fsi_fi_curve_rows,
-    load_pv_crh_epl_fsi_identity_rows,
-    load_pv_crh_epl_fsi_protocol_rows,
 )
 from olfactorybulb.audit.reference_notes import load_notes, notes_for_rows
 
@@ -72,18 +50,18 @@ RULE_HANDLERS: dict[str, RuleHandler] = {}
 
 REFERENCE_ROW_LOADERS: dict[str, Callable[[], list[dict[str, Any]]]] = {
     "legacy_mc_tc_ephys": load_normalized_legacy_mc_tc_rows,
-    "epl_fsi_ephys": load_pv_crh_epl_fsi_ephys_rows,
-    "epl_fsi_fi_curve": load_pv_crh_epl_fsi_fi_curve_rows,
-    "epl_fsi_identity": load_pv_crh_epl_fsi_identity_rows,
-    "pv_crh_epl_fsi_protocols": load_pv_crh_epl_fsi_protocol_rows,
-    "gc_ephys": load_gc_ephys_rows,
-    "gc_fi_curve": load_gc_fi_curve_rows,
-    "gc_subtype_ephys": load_gc_sgc_dgc_ephys_rows,
-    "gc_subtype_fi_curve": load_gc_sgc_dgc_fi_curve_rows,
-    "gc_identity": load_gc_identity_rows,
-    "gc_modulation": load_gc_modulation_rows,
-    "gc_protocols": load_gc_protocol_rows,
-    "gc_synaptic_latency": load_gc_synaptic_latency_rows,
+    "epl_fsi_ephys": lambda: load_dataset_output_rows(dataset_id="pv_crh_epl_fsi", output_key="ephys"),
+    "epl_fsi_fi_curve": lambda: load_dataset_output_rows(dataset_id="pv_crh_epl_fsi", output_key="fi_curve"),
+    "epl_fsi_identity": lambda: load_dataset_output_rows(dataset_id="pv_crh_epl_fsi", output_key="identity"),
+    "pv_crh_epl_fsi_protocols": lambda: load_dataset_output_rows(dataset_id="pv_crh_epl_fsi", output_key="protocols"),
+    "gc_ephys": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="ephys"),
+    "gc_fi_curve": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="fi_curve"),
+    "gc_subtype_ephys": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="subtype_ephys"),
+    "gc_subtype_fi_curve": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="subtype_fi_curve"),
+    "gc_identity": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="identity"),
+    "gc_modulation": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="modulation"),
+    "gc_protocols": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="protocols"),
+    "gc_synaptic_latency": lambda: load_dataset_output_rows(dataset_id="granule_cells", output_key="synaptic_latency"),
 }
 
 
@@ -437,6 +415,14 @@ def _load_rows(loader_spec: str) -> list[dict[str, Any]]:
         if not path.is_absolute():
             path = REPO_ROOT / path
         return csv_rows(path)
+    if loader_spec.startswith("dataset:"):
+        try:
+            _prefix, dataset_id, output_key = loader_spec.split(":", 2)
+        except ValueError as exc:
+            raise ValueError(
+                "Dataset loader specs must look like 'dataset:<dataset_id>:<output_key>'"
+            ) from exc
+        return load_dataset_output_rows(dataset_id=dataset_id, output_key=output_key)
     try:
         loader = REFERENCE_ROW_LOADERS[loader_spec]
     except KeyError as exc:

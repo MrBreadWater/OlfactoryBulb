@@ -3,7 +3,7 @@
 `research_context/` mixes four different kinds of artifacts. Treat them
 differently.
 
-## 1. Raw downloaded or manually added source material
+## 1. Raw/source files
 
 Examples:
 
@@ -70,8 +70,9 @@ but **not** as the first place to hand-edit data.
 ## Editing rules
 
 - Do not guess missing numeric values.
-- Do not hand-fix generated canonical CSVs unless the task explicitly calls for
-  a deliberate manual correction and the provenance implications are understood.
+- Do not hand-edit generated canonical outputs unless the task explicitly calls
+  for a deliberate manual correction and the provenance implications are
+  understood.
 - Keep stable publisher URLs in `source_url`; redirected object-store fetch
   targets are transport details, not canonical provenance.
 - If a source-only gap remains unresolved, record it in the appropriate
@@ -91,6 +92,8 @@ Verify generated outputs:
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
 python test_reference_data_sanity.py
+python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
+python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi
 python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
 ```

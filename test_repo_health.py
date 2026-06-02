@@ -20,13 +20,15 @@ assert "hfo_feature_contracts" in maintained_ids
 assert "config_helpers" in maintained_ids
 assert "reference_validation_engine" in maintained_ids
 assert "reference_data_sanity" in maintained_ids
+assert "maintained_docs_integrity" in maintained_ids
+assert "scratch_boundary" in maintained_ids
 
 reference_checks = repo_health_checks("reference")
 reference_ids = {check.check_id for check in reference_checks}
-assert "epl_fsi_reference_data" in reference_ids
-assert "gc_reference_data" in reference_ids
 assert "epl_fsi_reference_dataset_status" in reference_ids
+assert "epl_fsi_reference_dataset_contracts" in reference_ids
 assert "gc_reference_dataset_status" in reference_ids
+assert "gc_reference_dataset_contracts" in reference_ids
 
 full_checks = repo_health_checks("full")
 assert len(full_checks) == len(maintained_checks) + len(reference_checks)

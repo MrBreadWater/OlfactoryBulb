@@ -94,8 +94,10 @@ multiple places and to decide where a doc change should land first.
     - detailed install or remote execution procedures
 
 - `docs-source/` and tracked generated `docs/`
-  - Purpose: historical documentation from older repo eras.
+  - Purpose: maintained landing portal plus historical documentation from older
+    repo eras.
   - Owns:
+    - the thin maintained docs landing portal at `docs/index.html`
     - historical examples and archived user docs
   - Should not own:
     - the current maintained OBGPU install/run path

@@ -65,6 +65,16 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
             title="Reference-data sanity heuristics",
             command=_py("test_reference_data_sanity.py"),
         ),
+        RepoHealthCheck(
+            check_id="maintained_docs_integrity",
+            title="Maintained docs integrity audit",
+            command=_py("tools/run_audit.py", "maintained_docs_integrity"),
+        ),
+        RepoHealthCheck(
+            check_id="scratch_boundary",
+            title="Scratch-boundary audit",
+            command=_py("tools/run_audit.py", "scratch_boundary"),
+        ),
     ),
     "reference": (
         RepoHealthCheck(
@@ -73,24 +83,24 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
             command=_py("test_reference_dataset_engine.py"),
         ),
         RepoHealthCheck(
-            check_id="epl_fsi_reference_data",
-            title="EPL-FSI reference-data tests",
-            command=_py("test_pv_crh_epl_fsi_reference_data.py"),
-        ),
-        RepoHealthCheck(
-            check_id="gc_reference_data",
-            title="Granule-cell reference-data tests",
-            command=_py("test_gc_reference_data.py"),
-        ),
-        RepoHealthCheck(
             check_id="epl_fsi_reference_dataset_status",
             title="EPL-FSI generated bundle status audit",
             command=_py("tools/run_audit.py", "reference_dataset_status", "--dataset-id", "pv_crh_epl_fsi"),
         ),
         RepoHealthCheck(
+            check_id="epl_fsi_reference_dataset_contracts",
+            title="EPL-FSI generated bundle contract audit",
+            command=_py("tools/run_audit.py", "reference_dataset_contracts", "--dataset-id", "pv_crh_epl_fsi"),
+        ),
+        RepoHealthCheck(
             check_id="gc_reference_dataset_status",
             title="Granule-cell generated bundle status audit",
             command=_py("tools/run_audit.py", "reference_dataset_status", "--dataset-id", "granule_cells"),
+        ),
+        RepoHealthCheck(
+            check_id="gc_reference_dataset_contracts",
+            title="Granule-cell generated bundle contract audit",
+            command=_py("tools/run_audit.py", "reference_dataset_contracts", "--dataset-id", "granule_cells"),
         ),
     ),
 }

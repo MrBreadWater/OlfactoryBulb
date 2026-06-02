@@ -686,7 +686,8 @@ Prefer:
 10. Run the downloader.
 11. Run the extractor.
 12. Inspect the generated CSVs and README.
-13. Run the dataset-specific tests.
+13. Run the official dataset audits.
+14. Run the dataset-specific tests when you are changing source-specific logic.
 
 ## Current example commands
 
@@ -696,10 +697,11 @@ Using the current EPL-FSI dataset:
 source tools/setup/activate_obgpu.sh OBGPU
 python tools/download_reference_dataset_sources.py --dataset-id pv_crh_epl_fsi
 python tools/extract_reference_dataset.py --dataset-id pv_crh_epl_fsi
+python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi
+python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
 python test_reference_dataset_engine.py
 python test_download_epl_fsi_reference_sources.py
 python test_pv_crh_epl_fsi_reference_data.py
-python tools/run_audit.py reference_dataset_status --dataset-id pv_crh_epl_fsi
 ```
 
 Using the current GC dataset:
@@ -708,10 +710,11 @@ Using the current GC dataset:
 source tools/setup/activate_obgpu.sh OBGPU
 python tools/download_reference_dataset_sources.py --dataset-id granule_cells
 python tools/extract_reference_dataset.py --dataset-id granule_cells
+python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
+python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 python test_reference_dataset_engine.py
 python test_download_gc_reference_sources.py
 python test_gc_reference_data.py
-python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 ```
 
 ## When to add code versus when to add config

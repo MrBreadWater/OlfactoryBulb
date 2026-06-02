@@ -15,6 +15,7 @@ LEGACY_MC_TC_EPHYS_FILENAMES = {
     "TC": "MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv",
 }
 
+PV_CRH_EPL_FSI_DATASET_ID = "pv_crh_epl_fsi"
 PV_CRH_EPL_FSI_EPHYS_FILENAME = "PV_CRH_EPL_FSI_ephys.csv"
 PV_CRH_EPL_FSI_FI_CURVE_FILENAME = "PV_CRH_EPL_FSI_fI_curve.csv"
 PV_CRH_EPL_FSI_PROTOCOLS_FILENAME = "PV_CRH_EPL_FSI_protocols.csv"
@@ -351,6 +352,61 @@ def reference_data_path(filename: str) -> Path:
     return REFERENCE_DATA_DIR / filename
 
 
+def _dataset_config(dataset_id: str) -> dict[str, Any]:
+    from .reference_dataset_config import load_dataset_config
+
+    return load_dataset_config(dataset_id=dataset_id)
+
+
+def dataset_output_filename(*, dataset_id: str, output_key: str) -> str:
+    from .reference_dataset_config import dataset_output_specs
+
+    config = _dataset_config(dataset_id)
+    try:
+        return str(dataset_output_specs(config)[output_key]["filename"])
+    except KeyError as exc:
+        raise KeyError(f"Dataset {dataset_id!r} has no configured output {output_key!r}") from exc
+
+
+def dataset_output_path(*, dataset_id: str, output_key: str) -> Path:
+    from .reference_dataset_config import dataset_output_path as config_output_path
+
+    return config_output_path(_dataset_config(dataset_id), output_key)
+
+
+def dataset_output_columns(*, dataset_id: str, output_key: str) -> list[str]:
+    from .reference_dataset_config import dataset_output_specs
+
+    config = _dataset_config(dataset_id)
+    try:
+        return list(dataset_output_specs(config)[output_key]["columns"])
+    except KeyError as exc:
+        raise KeyError(f"Dataset {dataset_id!r} has no configured output {output_key!r}") from exc
+
+
+def dataset_output_row_type(*, dataset_id: str, output_key: str) -> str:
+    from .reference_dataset_config import dataset_output_specs
+
+    config = _dataset_config(dataset_id)
+    try:
+        return str(dataset_output_specs(config)[output_key]["row_type"])
+    except KeyError as exc:
+        raise KeyError(f"Dataset {dataset_id!r} has no configured output {output_key!r}") from exc
+
+
+def dataset_output_keys(*, dataset_id: str, row_type: str | None = None) -> list[str]:
+    from .reference_dataset_config import dataset_output_specs
+
+    specs = dataset_output_specs(_dataset_config(dataset_id))
+    if row_type is None:
+        return list(specs)
+    return [output_key for output_key, spec in specs.items() if str(spec["row_type"]) == row_type]
+
+
+def load_dataset_output_rows(*, dataset_id: str, output_key: str) -> list[dict[str, str]]:
+    return csv_rows(dataset_output_path(dataset_id=dataset_id, output_key=output_key))
+
+
 def canonical_property_name(property_name: str) -> str:
     text = str(property_name).strip()
     return PROPERTY_ALIASES.get(text, text)
@@ -422,51 +478,51 @@ def load_normalized_legacy_mc_tc_rows() -> list[dict[str, Any]]:
 
 
 def load_pv_crh_epl_fsi_ephys_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(PV_CRH_EPL_FSI_EPHYS_FILENAME))
+    return load_dataset_output_rows(dataset_id=PV_CRH_EPL_FSI_DATASET_ID, output_key="ephys")
 
 
 def load_pv_crh_epl_fsi_fi_curve_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(PV_CRH_EPL_FSI_FI_CURVE_FILENAME))
+    return load_dataset_output_rows(dataset_id=PV_CRH_EPL_FSI_DATASET_ID, output_key="fi_curve")
 
 
 def load_pv_crh_epl_fsi_protocol_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(PV_CRH_EPL_FSI_PROTOCOLS_FILENAME))
+    return load_dataset_output_rows(dataset_id=PV_CRH_EPL_FSI_DATASET_ID, output_key="protocols")
 
 
 def load_pv_crh_epl_fsi_identity_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(PV_CRH_EPL_FSI_IDENTITY_FILENAME))
+    return load_dataset_output_rows(dataset_id=PV_CRH_EPL_FSI_DATASET_ID, output_key="identity")
 
 
 def load_gc_ephys_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_EPHYS_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="ephys")
 
 
 def load_gc_fi_curve_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_FI_CURVE_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="fi_curve")
 
 
 def load_gc_sgc_dgc_ephys_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_SGC_DGC_EPHYS_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="subtype_ephys")
 
 
 def load_gc_sgc_dgc_fi_curve_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_SGC_DGC_FI_CURVE_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="subtype_fi_curve")
 
 
 def load_gc_protocol_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_PROTOCOLS_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="protocols")
 
 
 def load_gc_identity_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_IDENTITY_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="identity")
 
 
 def load_gc_synaptic_latency_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_SYNAPTIC_LATENCY_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="synaptic_latency")
 
 
 def load_gc_modulation_rows() -> list[dict[str, str]]:
-    return csv_rows(reference_data_path(GC_MODULATION_FILENAME))
+    return load_dataset_output_rows(dataset_id=GC_DATASET_ID, output_key="modulation")
 
 
 def _matches(value: str, criterion: str | Iterable[str] | None) -> bool:

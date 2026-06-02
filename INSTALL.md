@@ -119,6 +119,10 @@ source tools/setup/activate_obgpu.sh OBGPU
 python tools/run_audit.py repo_health --profile maintained
 ```
 
+For a local landing page that links to the maintained markdown docs, open:
+
+- `docs/index.html`
+
 ## Notebook Workflow
 
 Once the env is active:
@@ -152,8 +156,8 @@ Maintained benchmark smoke, GPU/CoreNEURON-oriented:
 mpiexec -n 1 nrniv -mpi -python tools/benchmarks/benchmark_ob.py --label gamma_gpu --paramset GammaSignature --coreneuron --coreneuron-gpu
 ```
 
-Historical `initslice.py` / `runbatch.py` entrypoints have been removed. Use
-the benchmark runner or the notebook/helper path instead.
+Historical simulation entrypoints have been removed. Use the benchmark runner
+or the notebook/helper path instead.
 
 ## Important Repo-Specific Notes
 

@@ -12,7 +12,10 @@ from olfactorybulb.audit.epli_correctness import run as run_epli_correctness
 from olfactorybulb.audit.gc_intrinsic_validation import run as run_gc_intrinsic_validation
 from olfactorybulb.audit.hfo_feature_contracts import run as run_hfo_feature_contracts
 from olfactorybulb.audit.human_review_status import run as run_human_review_status
+from olfactorybulb.audit.maintained_docs_integrity import run as run_maintained_docs_integrity
+from olfactorybulb.audit.reference_dataset_contracts import run as run_reference_dataset_contracts
 from olfactorybulb.audit.reference_dataset_status import run as run_reference_dataset_status
+from olfactorybulb.audit.scratch_boundary import run as run_scratch_boundary
 
 
 def _assert_human_metadata(report) -> None:
@@ -102,6 +105,20 @@ reference_dataset_report = run_reference_dataset_status(
     )
 )
 _assert_human_metadata(reference_dataset_report)
+
+reference_dataset_contract_report = run_reference_dataset_contracts(
+    argparse.Namespace(
+        dataset_id="pv_crh_epl_fsi",
+        config_path=None,
+    )
+)
+_assert_human_metadata(reference_dataset_contract_report)
+
+maintained_docs_report = run_maintained_docs_integrity(argparse.Namespace())
+_assert_human_metadata(maintained_docs_report)
+
+scratch_boundary_report = run_scratch_boundary(argparse.Namespace())
+_assert_human_metadata(scratch_boundary_report)
 
 new_sweep_report = run_new_sweep(["--skip-neuron", "--skip-imports"])
 _assert_human_metadata(new_sweep_report)

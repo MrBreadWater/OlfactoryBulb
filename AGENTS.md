@@ -332,7 +332,8 @@ contract for future sessions.
   - `tools/run_reference_validation.py` is the generic declarative
     literature-validation runner.
   - `test_*reference_data.py` and
-    `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
+    `python tools/run_audit.py reference_dataset_status --dataset-id <id>` /
+    `python tools/run_audit.py reference_dataset_contracts --dataset-id <id>`
     validate extracted literature bundles and provenance; they are not, by
     themselves, simulation-backed model-vs-literature audits.
   - Do not stop at reference-data extraction tests if the user asked for an
@@ -540,6 +541,7 @@ contract for future sessions.
 
 - Human-readable bundle summaries:
   - `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
+  - `python tools/run_audit.py reference_dataset_contracts --dataset-id <id>`
   - Do not assume dataset-specific helper wrappers exist.
 
 - Treat normalized reference bundle outputs in `research_context/` as generated
@@ -636,6 +638,7 @@ contract for future sessions.
     - `python tools/download_reference_dataset_sources.py --dataset-id <id>`
   - Human-readable verification:
     - `python tools/run_audit.py reference_dataset_status --dataset-id <id>`
+    - `python tools/run_audit.py reference_dataset_contracts --dataset-id <id>`
 
 - That test is heuristic, not exhaustive. It is intended to catch obvious
   mistakes such as:
@@ -669,6 +672,9 @@ contract for future sessions.
 
 - Run maintained repo-health checks:
   - `python tools/run_audit.py repo_health --profile maintained`
+
+- Open the maintained local docs portal:
+  - `docs/index.html`
 
 - Run all audits:
   - `python tools/run_audit.py`

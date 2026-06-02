@@ -36,3 +36,8 @@ For one maintained-surface health command that stays inside the official audit
 system, use:
 
 - `python tools/run_audit.py repo_health --profile maintained`
+
+For a local docs portal that points at the maintained markdown docs first and
+historical generated pages second, open:
+
+- `docs/index.html`

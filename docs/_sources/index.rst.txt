@@ -1,49 +1,36 @@
-Olfactory Bulb Model Documentation
-=========================================
+Maintained Repository Docs Portal
+=================================
 
-.. image:: files_static/logo.png
+This landing page points at the current maintained markdown docs for the OBGPU
+workflow. Treat these links as the first stop for current install, runtime,
+audit, and reference-data procedures.
 
-This is the documentation site for the `olfactory bulb model <https://olfactorybulb.org/>`_ developed by `Justas Birgiolas Ph.D. <https://www.linkedin.com/in/justasbirgiolas>`_
+The older generated Sphinx pages remain available below as historical reference
+only. They are no longer the source of truth for the maintained workflow.
 
- - Model Website: https://olfactorybulb.org/
- - Documentation (this site): https://docs.olfactorybulb.org/
- - Source Code Repository: https://github.com/justasb/olfactorybulb
- - Pre-built Docker Images: https://hub.docker.com/repository/docker/jbirgio/olfactory-bulb
- - Ph.D. Dissertation Describing the Model: `Towards Brains in the Cloud: A Biophysically Realistic Computational Model of Olfactory Bulb <https://repository.asu.edu/attachments/223567/content/Birgiolas_asu_0010E_19503.pdf>`_
+Maintained workflow docs
+------------------------
 
+- `Repository README <../readme.md>`_
+- `Install and bootstrap guide <../INSTALL.md>`_
+- `Tooling map <../tools/README.md>`_
+- `Documentation ownership map <../notes/DOCS_OWNERSHIP_MAP.md>`_
+- `Reference dataset HOWTO <../notes/REFERENCE_DATASET_HOWTO.md>`_
+- `Reference validation HOWTO <../notes/REFERENCE_VALIDATION_HOWTO.md>`_
+- `Reference validation overview <../notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md>`_
+- `Research-context boundaries <../research_context/README.md>`_
+- `Remote Slurm workflow <../notes/porting/SOL_REMOTE_WORKFLOW.md>`_
+- `NEURON upgrade workflow <../notes/porting/NEURON_UPGRADE_WORKFLOW.md>`_
 
-The model and related `BlenderNEURON model editing tool <https://blenderneuron.org/>`_ were developed in collaboration with `researchers at the ICON Lab at Arizona State University <https://iconlab.asu.edu/>`_.
+Historical reference pages
+--------------------------
 
-Citation
-========
+- `Historical getting-started page <gettingstarted.html>`_
+- `Historical visualization page <visualizing.html>`_
+- `Historical recreating-the-model page <recreating.html>`_
+- `Historical cloud page <cloud.html>`_
+- `Historical model API reference <olfactorybulb.html>`_
 
-If you use this model in your project, please cite it as follows:
-
-::
-
-    @phdthesis{birgiolas2019towards,
-      title={Towards Brains in the Cloud: A Biophysically Realistic Computational Model of Olfactory Bulb},
-      author={Birgiolas, Justas},
-      year={2019},
-      school={Arizona State University}
-    }
-
-
-Table of Contents
-=================
-
-.. toctree::
-   :maxdepth: 1
-
-   gettingstarted
-   visualizing
-   recreating
-   cloud
-   olfactorybulb
-
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+Use the historical pages only when you need older background or archived API
+docs. If a historical page disagrees with the maintained markdown docs above,
+the maintained markdown docs win.

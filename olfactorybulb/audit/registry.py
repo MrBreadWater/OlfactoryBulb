@@ -52,6 +52,34 @@ AUDITS: "OrderedDict[str, AuditSpec]" = OrderedDict(
             ),
         ),
         (
+            "reference_dataset_contracts",
+            AuditSpec(
+                audit_id="reference_dataset_contracts",
+                title="Reference dataset contract audit",
+                description="Audit that one declarative reference dataset satisfies maintained schema, provenance, notes, and f-I tagging contracts.",
+                module_path="olfactorybulb.audit.reference_dataset_contracts",
+                include_in_new_sweep=False,
+            ),
+        ),
+        (
+            "maintained_docs_integrity",
+            AuditSpec(
+                audit_id="maintained_docs_integrity",
+                title="Maintained docs integrity audit",
+                description="Audit that maintained docs avoid removed entrypoints and that the docs portal points at the current markdown docs.",
+                module_path="olfactorybulb.audit.maintained_docs_integrity",
+            ),
+        ),
+        (
+            "scratch_boundary",
+            AuditSpec(
+                audit_id="scratch_boundary",
+                title="Scratch boundary audit",
+                description="Audit that local scratch areas, source-data corpora, and generated artifact boundaries remain explicit and protected.",
+                module_path="olfactorybulb.audit.scratch_boundary",
+            ),
+        ),
+        (
             "burton_urban_fi",
             AuditSpec(
                 audit_id="burton_urban_fi",
