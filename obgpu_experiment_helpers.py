@@ -182,6 +182,12 @@ from neuroinfra.remote.stream_sync import (
     stream_archive_to_local_dir as _neuroinfra_stream_archive_to_local_dir,
     stream_file_to_local_path as _neuroinfra_stream_file_to_local_path,
 )
+from neuroinfra.remote.result_sync import (
+    RemoteResultSyncHooks as _NeuroinfraRemoteResultSyncHooks,
+    combine_sync_attempt_stderr as _neuroinfra_combine_sync_attempt_stderr,
+    sync_remote_result_dir as _neuroinfra_sync_remote_result_dir,
+    sync_remote_result_dir_resilient as _neuroinfra_sync_remote_result_dir_resilient,
+)
 from neuroinfra.remote.slurm_launch import (
     build_allocation_discovery_command as _neuroinfra_build_allocation_discovery_command,
     build_cleanup_stale_allocations_argv as _neuroinfra_build_cleanup_stale_allocations_argv,
@@ -2247,6 +2253,58 @@ def _paramiko_stream_sync_hooks() -> _NeuroinfraParamikoStreamSyncHooks:
     )
 
 
+def _remote_result_sync_hooks() -> _NeuroinfraRemoteResultSyncHooks:
+    """Build reusable hooks for higher-level Paramiko result-sync policy."""
+    return _NeuroinfraRemoteResultSyncHooks(
+        remote_transport_fn=_remote_transport,
+        run_paramiko_shell_fn=_run_paramiko_shell,
+        build_remote_archive_probe_command_fn=_build_remote_archive_probe_command,
+        probe_selected_sync_files_fn=lambda cfg, remote_result_dir, include_files: _probe_remote_selected_sync_files(
+            cfg,
+            remote_result_dir=remote_result_dir,
+            include_files=include_files,
+        ),
+        build_remote_selected_stream_archive_command_fn=lambda remote_result_dir, include_files, compressor: _build_remote_selected_stream_archive_command(
+            remote_result_dir,
+            include_files=include_files,
+            compressor=compressor,
+        ),
+        stream_archive_to_local_dir_fn=_stream_paramiko_archive_to_local_dir,
+        get_paramiko_sftp_fn=_get_paramiko_sftp,
+        close_paramiko_sftp_fn=_close_paramiko_sftp,
+        sftp_copy_files_fn=lambda sftp, remote_dir, local_dir, file_names: _sftp_copy_files(
+            sftp,
+            remote_dir,
+            local_dir,
+            file_names,
+        ),
+        sftp_copy_tree_fn=lambda sftp, remote_dir, local_dir: _sftp_copy_tree(
+            sftp,
+            remote_dir,
+            local_dir,
+        ),
+        cached_transport_fn=lambda cfg: (
+            (_LIVE_PARAMIKO_CONNECTIONS.get(_paramiko_connection_key(cfg)) or {}).get("transport")
+            if isinstance(_LIVE_PARAMIKO_CONNECTIONS.get(_paramiko_connection_key(cfg)), dict)
+            else None
+        ),
+        transport_is_usable_fn=_paramiko_transport_is_usable,
+        preserve_reauth_blocked_fn=lambda cfg: (
+            bool(cfg.get("remote_preserve_paramiko_session", True))
+            and _paramiko_connection_key(cfg) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS
+        ),
+        drop_paramiko_connection_fn=_drop_paramiko_connection,
+        midrun_reauth_error_fn=_paramiko_midrun_reauth_error,
+        progress_write=_progress_write,
+        missing_local_sync_artifacts_fn=lambda result_dir, expected_files: _missing_local_sync_artifacts(
+            result_dir,
+            expected_files=expected_files,
+        ),
+        local_sync_artifact_is_usable_fn=_local_sync_artifact_is_usable,
+        sleep_fn=time.sleep,
+    )
+
+
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
     """Prompt the notebook user for one interactive SSH auth field."""
     cfg = {} if config is None else config
@@ -2730,271 +2788,19 @@ def _sync_remote_result_dir(
     include_files: tuple[str, ...] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Sync one remote result directory back into the local notebook results tree."""
-    local_result_dir.mkdir(parents=True, exist_ok=True)
-    if _remote_transport(config) == "paramiko":
-        def _cached_transport() -> Any:
-            cached = _LIVE_PARAMIKO_CONNECTIONS.get(_paramiko_connection_key(config))
-            if not isinstance(cached, dict):
-                return None
-            return cached.get("transport")
-
-        last_exc: Exception | None = None
-        for attempt in range(2):
-            try:
-                if include_files:
-                    stream_selected = bool(config.get("remote_sync_compress", True)) and bool(include_files)
-                    if stream_selected:
-                        selected_probe = _probe_remote_selected_sync_files(
-                            config,
-                            remote_result_dir=remote_result_dir,
-                            include_files=tuple(include_files),
-                        )
-                        if isinstance(selected_probe, subprocess.CompletedProcess):
-                            return selected_probe
-                        compressor, raw_bytes, available_files = selected_probe
-                        if not available_files:
-                            missing_selected_files = _missing_local_sync_artifacts(
-                                local_result_dir,
-                                expected_files=expected_files,
-                            )
-                            expected_text = ", ".join(missing_selected_files or include_files)
-                            return subprocess.CompletedProcess(
-                                args=["paramiko-probe-selected", remote_result_dir.as_posix(), str(local_result_dir)],
-                                returncode=1,
-                                stdout="",
-                                stderr=(
-                                    "[OBGPU load] None of the requested fast-sync files currently exist on the remote result dir. "
-                                    f"Missing: {expected_text}"
-                                ),
-                            )
-                        selected_stage_dir = Path(
-                            tempfile.mkdtemp(prefix="obgpu-selected-sync-", dir=str(local_result_dir.parent))
-                        )
-                        try:
-                            stream_completed = _stream_paramiko_archive_to_local_dir(
-                                config,
-                                remote_result_dir=remote_result_dir,
-                                local_result_dir=selected_stage_dir,
-                                compressor=compressor,
-                                raw_bytes=raw_bytes,
-                                stream_command=_build_remote_selected_stream_archive_command(
-                                    remote_result_dir,
-                                    include_files=available_files,
-                                    compressor=compressor,
-                                ),
-                            )
-                            if stream_completed.returncode == 0:
-                                for selected_name in available_files:
-                                    staged_path = selected_stage_dir / selected_name
-                                    if _local_sync_artifact_is_usable(staged_path):
-                                        target_path = local_result_dir / selected_name
-                                        target_path.parent.mkdir(parents=True, exist_ok=True)
-                                        os.replace(staged_path, target_path)
-                        finally:
-                            shutil.rmtree(selected_stage_dir, ignore_errors=True)
-                        missing_stream_files = _missing_local_sync_artifacts(
-                            local_result_dir,
-                            expected_files=expected_files,
-                        )
-                        if stream_completed.returncode == 0 and missing_stream_files:
-                            expected_text = ", ".join(missing_stream_files)
-                            stream_completed = subprocess.CompletedProcess(
-                                args=stream_completed.args,
-                                returncode=1,
-                                stdout=stream_completed.stdout or "",
-                                stderr=(stream_completed.stderr or "")
-                                + (
-                                    "\n[OBGPU load] Streamed selected-file sync produced no usable local artifacts. "
-                                    f"Missing: {expected_text}\n"
-                                ),
-                            )
-                        if stream_completed.returncode != 0:
-                            _progress_write(
-                                "[OBGPU load] Streamed selected-file sync failed; retrying the same files over SFTP..."
-                            )
-                            _close_paramiko_sftp(config)
-                            _sftp_copy_files(
-                                _get_paramiko_sftp(config),
-                                remote_result_dir.as_posix(),
-                                local_result_dir,
-                                available_files,
-                            )
-                            missing_fallback_files = _missing_local_sync_artifacts(
-                                local_result_dir,
-                                expected_files=expected_files,
-                            )
-                            if missing_fallback_files:
-                                expected_text = ", ".join(missing_fallback_files)
-                                return subprocess.CompletedProcess(
-                                    args=["paramiko-stream-selected-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
-                                    returncode=1,
-                                    stdout=stream_completed.stdout or "",
-                                    stderr=(stream_completed.stderr or "")
-                                    + (
-                                        "\n[OBGPU load] Streamed selected-file sync failed, SFTP fallback ran, "
-                                        f"but required local artifacts are still missing: {expected_text}\n"
-                                    ),
-                                )
-                            return subprocess.CompletedProcess(
-                                args=["paramiko-stream-selected-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
-                                returncode=0,
-                                stdout=stream_completed.stdout or "",
-                                stderr=(stream_completed.stderr or "")
-                                + "\n[OBGPU load] Streamed selected-file sync failed, but SFTP fallback completed successfully.\n",
-                            )
-                    else:
-                        _close_paramiko_sftp(config)
-                        _sftp_copy_files(
-                            _get_paramiko_sftp(config),
-                            remote_result_dir.as_posix(),
-                            local_result_dir,
-                            include_files,
-                        )
-                elif bool(config.get("remote_sync_compress", True)):
-                    probe_completed = _run_paramiko_shell(
-                        config,
-                        _build_remote_archive_probe_command(remote_result_dir),
-                    )
-                    if probe_completed.returncode != 0:
-                        return subprocess.CompletedProcess(
-                            args=["paramiko-probe", remote_result_dir.as_posix(), str(local_result_dir)],
-                            returncode=1,
-                            stdout=probe_completed.stdout or "",
-                            stderr=probe_completed.stderr or "",
-                        )
-                    probe_lines = [line.strip() for line in (probe_completed.stdout or "").splitlines() if line.strip()]
-                    if len(probe_lines) < 3:
-                        return subprocess.CompletedProcess(
-                            args=["paramiko-probe", remote_result_dir.as_posix(), str(local_result_dir)],
-                            returncode=1,
-                            stdout=probe_completed.stdout or "",
-                            stderr="Remote archive probe did not return the expected metadata",
-                        )
-                    compressor, raw_bytes_text, _archive_suffix = probe_lines[:3]
-                    raw_bytes = int(raw_bytes_text or "0")
-                    stream_completed = _stream_paramiko_archive_to_local_dir(
-                        config,
-                        remote_result_dir=remote_result_dir,
-                        local_result_dir=local_result_dir,
-                        compressor=compressor,
-                        raw_bytes=raw_bytes,
-                    )
-                    missing_stream_files = _missing_local_sync_artifacts(
-                        local_result_dir,
-                        expected_files=expected_files,
-                    )
-                    if stream_completed.returncode == 0 and missing_stream_files:
-                        expected_text = ", ".join(missing_stream_files)
-                        stream_completed = subprocess.CompletedProcess(
-                            args=stream_completed.args,
-                            returncode=1,
-                            stdout=stream_completed.stdout or "",
-                            stderr=(stream_completed.stderr or "")
-                            + (
-                                "\n[OBGPU load] Streamed archive sync produced no usable local artifacts. "
-                                f"Missing: {expected_text}\n"
-                            ),
-                        )
-                    if stream_completed.returncode != 0:
-                        _progress_write(
-                            "[OBGPU load] Streamed archive sync failed; retrying the same result dir over SFTP..."
-                        )
-                        _close_paramiko_sftp(config)
-                        _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
-                        missing_fallback_files = _missing_local_sync_artifacts(
-                            local_result_dir,
-                            expected_files=expected_files,
-                        )
-                        if missing_fallback_files:
-                            expected_text = ", ".join(missing_fallback_files)
-                            return subprocess.CompletedProcess(
-                                args=["paramiko-stream-extract-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
-                                returncode=1,
-                                stdout=stream_completed.stdout or "",
-                                stderr=(stream_completed.stderr or "")
-                                + (
-                                    "\n[OBGPU load] Stream archive sync failed, SFTP fallback ran, "
-                                    f"but required local artifacts are still missing: {expected_text}\n"
-                                ),
-                            )
-                        return subprocess.CompletedProcess(
-                            args=["paramiko-stream-extract-fallback", remote_result_dir.as_posix(), str(local_result_dir)],
-                            returncode=0,
-                            stdout=stream_completed.stdout or "",
-                            stderr=(stream_completed.stderr or "")
-                            + "\n[OBGPU load] Stream archive sync failed, but SFTP fallback completed successfully.\n",
-                        )
-                else:
-                    _sftp_copy_tree(_get_paramiko_sftp(config), remote_result_dir.as_posix(), local_result_dir)
-            except Exception as exc:
-                last_exc = exc
-                _close_paramiko_sftp(config)
-                transport_usable = _paramiko_transport_is_usable(_cached_transport())
-                if not transport_usable:
-                    if (
-                        bool(config.get("remote_preserve_paramiko_session", True))
-                        and _paramiko_connection_key(config) in _LIVE_PARAMIKO_AUTHENTICATED_KEYS
-                    ):
-                        return subprocess.CompletedProcess(
-                            args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-                            returncode=1,
-                            stdout="",
-                            stderr=_paramiko_midrun_reauth_error(config) + f"\nOriginal error: {exc}",
-                        )
-                    _drop_paramiko_connection(config)
-                if attempt == 0 and transport_usable:
-                    continue
-                return subprocess.CompletedProcess(
-                    args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-                    returncode=1,
-                    stdout="",
-                    stderr=str(exc),
-                )
-            finally:
-                _close_paramiko_sftp(config)
-            missing_direct_files = _missing_local_sync_artifacts(
-                local_result_dir,
-                expected_files=expected_files,
-            )
-            if missing_direct_files:
-                expected_text = ", ".join(missing_direct_files)
-                return subprocess.CompletedProcess(
-                    args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-                    returncode=1,
-                    stdout="",
-                    stderr=(
-                        "[OBGPU load] Paramiko sync completed without producing the expected local artifacts: "
-                        f"{expected_text}"
-                    ),
-                )
-            return subprocess.CompletedProcess(
-                args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-                returncode=0,
-                stdout="",
-                stderr="",
-            )
-        return subprocess.CompletedProcess(
-            args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-            returncode=1,
-            stdout="",
-            stderr=str(last_exc) if last_exc is not None else "unknown paramiko sftp failure",
-        )
-
-    return subprocess.CompletedProcess(
-        args=["paramiko-sftp", remote_result_dir.as_posix(), str(local_result_dir)],
-        returncode=1,
-        stdout="",
-        stderr="Remote result sync reached an unreachable non-Paramiko path.",
+    return _neuroinfra_sync_remote_result_dir(
+        config,
+        remote_result_dir=remote_result_dir,
+        local_result_dir=local_result_dir,
+        expected_files=expected_files,
+        include_files=include_files,
+        hooks=_remote_result_sync_hooks(),
     )
 
 
 def _combine_sync_attempt_stderr(attempts: list[tuple[str, subprocess.CompletedProcess[str]]]) -> str:
     """Render sync-attempt stderr with stage labels for actionable diagnostics."""
-    chunks = []
-    for label, completed in attempts:
-        stderr = (completed.stderr or "").strip() or "<no stderr>"
-        chunks.append(f"[{label}]\n{stderr}")
-    return "\n".join(chunks)
+    return _neuroinfra_combine_sync_attempt_stderr(attempts)
 
 
 def _sync_remote_result_dir_resilient(
@@ -3008,66 +2814,15 @@ def _sync_remote_result_dir_resilient(
     retry_delay_s: float = 2.0,
 ) -> subprocess.CompletedProcess[str]:
     """Sync remote results while treating selected-file sync as an optimization."""
-
-    def complete_enough(completed: subprocess.CompletedProcess[str]) -> bool:
-        if completed.returncode == 0:
-            return True
-        if not _missing_local_sync_artifacts(local_result_dir, expected_files=expected_files):
-            return True
-        return False
-
-    attempts: list[tuple[str, subprocess.CompletedProcess[str]]] = []
-    completed = _sync_remote_result_dir(
+    return _neuroinfra_sync_remote_result_dir_resilient(
         config,
         remote_result_dir=remote_result_dir,
         local_result_dir=local_result_dir,
         expected_files=expected_files,
         include_files=include_files,
-    )
-    attempts.append(("selected fast sync" if include_files else "full result sync", completed))
-    if complete_enough(completed):
-        return completed
-
-    if include_files:
-        _progress_write("[OBGPU load] Fast remote artifact sync was incomplete; retrying once...")
-        if retry_delay_s > 0:
-            time.sleep(float(retry_delay_s))
-        completed = _sync_remote_result_dir(
-            config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=local_result_dir,
-            expected_files=expected_files,
-            include_files=include_files,
-        )
-        attempts.append(("selected fast sync retry", completed))
-        if complete_enough(completed):
-            return completed
-
-        _progress_write("[OBGPU load] Fast remote artifact sync still missing files; falling back to full result sync...")
-        completed = _sync_remote_result_dir(
-            config,
-            remote_result_dir=remote_result_dir,
-            local_result_dir=local_result_dir,
-            expected_files=expected_files,
-        )
-        attempts.append(("full result sync fallback", completed))
-        if complete_enough(completed):
-            return completed
-
-    if wrapper_dir not in (None, ""):
-        _progress_write("[OBGPU load] Result payload sync failed; syncing wrapper diagnostics...")
-        wrapper_completed = _sync_remote_result_dir(
-            config,
-            remote_result_dir=PurePosixPath(str(wrapper_dir)),
-            local_result_dir=local_result_dir,
-        )
-        attempts.append(("wrapper diagnostic sync", wrapper_completed))
-
-    return subprocess.CompletedProcess(
-        args=["remote-result-sync-resilient", remote_result_dir.as_posix(), str(local_result_dir)],
-        returncode=1,
-        stdout="\n".join((completed.stdout or "") for _label, completed in attempts if completed.stdout),
-        stderr=_combine_sync_attempt_stderr(attempts),
+        wrapper_dir=wrapper_dir,
+        retry_delay_s=retry_delay_s,
+        hooks=_remote_result_sync_hooks(),
     )
 
 

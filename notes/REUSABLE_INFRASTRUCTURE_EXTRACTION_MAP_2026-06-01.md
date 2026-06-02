@@ -198,8 +198,12 @@ Current progress:
   remain in `obgpu_experiment_helpers.py`
 - the low-level Paramiko archive-stream, direct-file stream, and selected-file
   probe helpers that power notebook result sync now live under
-  `neuroinfra.remote.stream_sync`, while the higher-level result-sync policy
-  still remains in `obgpu_experiment_helpers.py`
+  `neuroinfra.remote.stream_sync`
+- the higher-level Paramiko result-sync retry/fallback policy that sits above
+  those low-level stream helpers now lives under
+  `neuroinfra.remote.result_sync`, while deferred-artifact sync policy and the
+  larger notebook load/orchestration flow still remain in
+  `obgpu_experiment_helpers.py`
 - the launcher scripts themselves still live under `tools/remote/`
 
 ### 4. Campaign / optimizer archive framework

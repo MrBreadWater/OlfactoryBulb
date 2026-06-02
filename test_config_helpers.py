@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 import obgpu_experiment_helpers as hlp
 from neuroinfra.remote.helper_bundle import helper_bundle_manifest
+from neuroinfra.remote.result_sync import RemoteResultSyncHooks
 
 REMOTE_TOOLS_DIR = Path(__file__).resolve().parent / "tools" / "remote"
 if str(REMOTE_TOOLS_DIR) not in sys.path:
@@ -1001,28 +1002,52 @@ with tempfile.TemporaryDirectory() as tmp:
     print("Remote sweep sync file set stays compact by default: OK")
 
     # --- Fast result sync should fall back to full sync when selected files are not visible ---
-    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    original_result_sync_hooks = hlp._remote_result_sync_hooks
     try:
         resilient_dir = tmp / "resilient-sync"
         resilient_dir.mkdir()
         sync_calls = []
 
-        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
-            sync_calls.append((remote_result_dir, expected_files, include_files))
-            local_result_dir = Path(local_result_dir)
-            if include_files is not None:
-                return subprocess.CompletedProcess(
-                    args=["sync-selected"],
-                    returncode=1,
-                    stdout="",
-                    stderr="[OBGPU load] None of the requested fast-sync files currently exist on the remote result dir. Missing: summary.json",
-                )
-            (local_result_dir / "summary.json").write_text("{}")
-            return subprocess.CompletedProcess(args=["sync-full"], returncode=0, stdout="", stderr="")
+        def _fake_sftp_copy_files(_sftp, remote_dir, local_dir, file_names):
+            sync_calls.append((PurePosixPath(remote_dir), ("summary.json",), tuple(file_names)))
+            Path(local_dir).mkdir(parents=True, exist_ok=True)
 
-        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        def _fake_sftp_copy_tree(_sftp, remote_dir, local_dir):
+            sync_calls.append((PurePosixPath(remote_dir), ("summary.json",), None))
+            local_dir = Path(local_dir)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            (local_dir / "summary.json").write_text("{}")
+
+        hlp._remote_result_sync_hooks = lambda: RemoteResultSyncHooks(
+            remote_transport_fn=lambda _config: "paramiko",
+            run_paramiko_shell_fn=lambda _config, _command: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            build_remote_archive_probe_command_fn=lambda remote_result_dir: f"probe::{remote_result_dir.as_posix()}",
+            probe_selected_sync_files_fn=lambda *_args, **_kwargs: ("gzip", 0, ("summary.json",)),
+            build_remote_selected_stream_archive_command_fn=lambda remote_result_dir, include_files, compressor: (
+                f"selected::{remote_result_dir.as_posix()}::{','.join(include_files)}::{compressor}"
+            ),
+            stream_archive_to_local_dir_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("non-compressed resilient sync should not use the archive stream path")
+            ),
+            get_paramiko_sftp_fn=lambda _config: object(),
+            close_paramiko_sftp_fn=lambda _config: None,
+            sftp_copy_files_fn=_fake_sftp_copy_files,
+            sftp_copy_tree_fn=_fake_sftp_copy_tree,
+            cached_transport_fn=lambda _config: object(),
+            transport_is_usable_fn=lambda _transport: True,
+            preserve_reauth_blocked_fn=lambda _config: False,
+            drop_paramiko_connection_fn=lambda _config: None,
+            midrun_reauth_error_fn=lambda _config: "midrun reauth blocked",
+            progress_write=lambda _message: None,
+            missing_local_sync_artifacts_fn=lambda local_result_dir, expected_files: hlp._missing_local_sync_artifacts(
+                local_result_dir,
+                expected_files=expected_files,
+            ),
+            local_sync_artifact_is_usable_fn=hlp._local_sync_artifact_is_usable,
+            sleep_fn=lambda _seconds: None,
+        )
         completed = hlp._sync_remote_result_dir_resilient(
-            remote_cfg,
+            {**remote_cfg, "remote_sync_compress": False},
             remote_result_dir=PurePosixPath("/remote/result"),
             local_result_dir=resilient_dir,
             expected_files=("summary.json",),
@@ -1038,26 +1063,56 @@ with tempfile.TemporaryDirectory() as tmp:
         ]
         print("Resilient remote sync selected-to-full fallback: OK")
     finally:
-        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+        hlp._remote_result_sync_hooks = original_result_sync_hooks
 
     # --- Failed payload sync should still pull wrapper diagnostics before returning failure ---
-    original_sync_remote_result_dir = hlp._sync_remote_result_dir
+    original_result_sync_hooks = hlp._remote_result_sync_hooks
     try:
         diagnostic_dir = tmp / "resilient-sync-diagnostics"
         diagnostic_dir.mkdir()
         sync_calls = []
 
-        def _fake_sync_remote_result_dir(_config, *, remote_result_dir, local_result_dir, expected_files=None, include_files=None):
-            sync_calls.append((remote_result_dir, expected_files, include_files))
-            local_result_dir = Path(local_result_dir)
-            if remote_result_dir == PurePosixPath("/remote/wrapper"):
-                (local_result_dir / "bootstrap.log").write_text("wrapper diagnostics")
-                return subprocess.CompletedProcess(args=["sync-wrapper"], returncode=0, stdout="", stderr="")
-            return subprocess.CompletedProcess(args=["sync-fail"], returncode=1, stdout="", stderr="missing payload")
+        def _fake_sftp_copy_files(_sftp, remote_dir, local_dir, file_names):
+            sync_calls.append((PurePosixPath(remote_dir), ("summary.json",), tuple(file_names)))
+            Path(local_dir).mkdir(parents=True, exist_ok=True)
 
-        hlp._sync_remote_result_dir = _fake_sync_remote_result_dir
+        def _fake_sftp_copy_tree(_sftp, remote_dir, local_dir):
+            sync_calls.append((PurePosixPath(remote_dir), None, None))
+            local_dir = Path(local_dir)
+            local_dir.mkdir(parents=True, exist_ok=True)
+            if PurePosixPath(remote_dir) == PurePosixPath("/remote/wrapper"):
+                (local_dir / "bootstrap.log").write_text("wrapper diagnostics")
+
+        hlp._remote_result_sync_hooks = lambda: RemoteResultSyncHooks(
+            remote_transport_fn=lambda _config: "paramiko",
+            run_paramiko_shell_fn=lambda _config, _command: subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr=""),
+            build_remote_archive_probe_command_fn=lambda remote_result_dir: f"probe::{remote_result_dir.as_posix()}",
+            probe_selected_sync_files_fn=lambda *_args, **_kwargs: ("gzip", 0, ("summary.json",)),
+            build_remote_selected_stream_archive_command_fn=lambda remote_result_dir, include_files, compressor: (
+                f"selected::{remote_result_dir.as_posix()}::{','.join(include_files)}::{compressor}"
+            ),
+            stream_archive_to_local_dir_fn=lambda *_args, **_kwargs: (_ for _ in ()).throw(
+                AssertionError("non-compressed resilient sync should not use the archive stream path")
+            ),
+            get_paramiko_sftp_fn=lambda _config: object(),
+            close_paramiko_sftp_fn=lambda _config: None,
+            sftp_copy_files_fn=_fake_sftp_copy_files,
+            sftp_copy_tree_fn=_fake_sftp_copy_tree,
+            cached_transport_fn=lambda _config: object(),
+            transport_is_usable_fn=lambda _transport: True,
+            preserve_reauth_blocked_fn=lambda _config: False,
+            drop_paramiko_connection_fn=lambda _config: None,
+            midrun_reauth_error_fn=lambda _config: "midrun reauth blocked",
+            progress_write=lambda _message: None,
+            missing_local_sync_artifacts_fn=lambda local_result_dir, expected_files: hlp._missing_local_sync_artifacts(
+                local_result_dir,
+                expected_files=expected_files,
+            ),
+            local_sync_artifact_is_usable_fn=hlp._local_sync_artifact_is_usable,
+            sleep_fn=lambda _seconds: None,
+        )
         completed = hlp._sync_remote_result_dir_resilient(
-            remote_cfg,
+            {**remote_cfg, "remote_sync_compress": False},
             remote_result_dir=PurePosixPath("/remote/result"),
             local_result_dir=diagnostic_dir,
             expected_files=("summary.json",),
@@ -1071,7 +1126,7 @@ with tempfile.TemporaryDirectory() as tmp:
         assert sync_calls[-1] == (PurePosixPath("/remote/wrapper"), None, None)
         print("Resilient remote sync wrapper diagnostics: OK")
     finally:
-        hlp._sync_remote_result_dir = original_sync_remote_result_dir
+        hlp._remote_result_sync_hooks = original_result_sync_hooks
 
     # --- Remote preflight should cache successful probes within one notebook runtime ---
     original_run_ssh_shell = hlp._run_ssh_shell

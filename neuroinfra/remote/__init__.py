@@ -67,6 +67,12 @@ from .stream_sync import (
     stream_archive_to_local_dir,
     stream_file_to_local_path,
 )
+from .result_sync import (
+    RemoteResultSyncHooks,
+    combine_sync_attempt_stderr,
+    sync_remote_result_dir,
+    sync_remote_result_dir_resilient,
+)
 from .helper_bundle import (
     HelperBundleEntry,
     bundle_entries_by_path,
@@ -224,4 +230,8 @@ __all__ = [
     "stream_archive_to_local",
     "stream_archive_to_local_dir",
     "stream_file_to_local_path",
+    "RemoteResultSyncHooks",
+    "combine_sync_attempt_stderr",
+    "sync_remote_result_dir",
+    "sync_remote_result_dir_resilient",
 ]
