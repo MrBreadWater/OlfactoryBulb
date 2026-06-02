@@ -196,6 +196,10 @@ marker_profile = "Example Marker"
 # value_column = "Example Cohort"
 # property_map = { "Soma area (um^2)" = "Soma Area", "Input resistance (MOhm)" = "Input Resistance" }
 # unit_map = { "Soma area (um^2)" = "um^2" }
+# # Use this when one formatted table mixes unit systems and only some rows need
+# # conversion, for example converting Gain from Hz/pA to Hz/nA without also
+# # multiplying latency or rheobase rows:
+# property_transform_scales = { "Gain (Hz/pA)" = 1000.0 }
 # source_location = "Supplementary table 1, Example cohort"
 # source = "Example et al. (2026)"
 # cell_type = "Example Cell"

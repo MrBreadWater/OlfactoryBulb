@@ -539,7 +539,7 @@ maturity = "resident_GC"
 layer_or_location = "main olfactory bulb granule cell layer"
 recording_temperature_C = 32.0
 protocol_id = "BU2015_GC_intrinsic_current_clamp"
-transform_scale = 1000.0
+property_transform_scales = { "Gain (Hz/pA)" = 1000.0 }
 data_kind = "fI_summary_metric"
 extraction_method = "source_table_summary"
 include_in_validation = true
@@ -659,7 +659,7 @@ maturity = "resident_GC"
 layer_or_location = "superficial granule cell layer"
 recording_temperature_C = 32.0
 protocol_id = "GERAMITA2016_sGC_dGC_intrinsic_current_clamp"
-transform_scale = 1000.0
+property_transform_scales = { "Gain (Hz pA -1 )" = 1000.0 }
 data_kind = "fI_summary_metric"
 extraction_method = "source_table_summary"
 include_in_validation = true
@@ -685,7 +685,7 @@ maturity = "resident_GC"
 layer_or_location = "deep granule cell layer"
 recording_temperature_C = 32.0
 protocol_id = "GERAMITA2016_sGC_dGC_intrinsic_current_clamp"
-transform_scale = 1000.0
+property_transform_scales = { "Gain (Hz pA -1 )" = 1000.0 }
 data_kind = "fI_summary_metric"
 extraction_method = "source_table_summary"
 include_in_validation = true

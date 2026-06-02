@@ -449,6 +449,19 @@ Typical fields:
 Use `property_map` to normalize paper-facing labels into canonical property
 names, and `unit_map` when units should be overridden for specific labels.
 
+If a formatted summary table mixes rows with different unit semantics, do not
+use one blanket `transform_scale` unless every mapped row truly needs it.
+
+Instead use:
+
+```toml
+property_transform_scales = { "Gain (Hz/pA)" = 1000.0 }
+```
+
+That is the right pattern for tables where, for example, gain should be
+converted from `Hz/pA` to `Hz/nA` but rheobase, latency, and peak rate should
+remain in their source units.
+
 ### 4. `point_rules`
 
 Use `[[point_rules]]` when a source table contains actual current-rate points.

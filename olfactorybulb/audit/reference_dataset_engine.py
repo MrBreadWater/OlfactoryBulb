@@ -421,7 +421,11 @@ def _formatted_summary_rule_rows(
     property_map = {_clean_label(key): str(value) for key, value in dict(rule.get("property_map", {})).items()}
     unit_map = {_clean_label(key): str(value) for key, value in dict(rule.get("unit_map", {})).items()}
     include_unmapped = bool(rule.get("include_unmapped", False))
-    scale = float(rule.get("transform_scale", 1.0))
+    default_scale = float(rule.get("transform_scale", 1.0))
+    property_transform_scales = {
+        _clean_label(key): float(value)
+        for key, value in dict(rule.get("property_transform_scales", {})).items()
+    }
     stat_type = str(rule.get("stat_type", "mean_sd"))
     source_id = str(rule["source_id"])
     source_meta = source_entry(source_id, config=config)
@@ -434,6 +438,7 @@ def _formatted_summary_rule_rows(
         property_name = property_map.get(raw_property, raw_property if include_unmapped else "")
         if not property_name:
             continue
+        scale = property_transform_scales.get(raw_property, default_scale)
 
         mean_value, spread_value, sem_value, count = _parse_summary_stat_cell(record[value_column])
         if mean_value is None:

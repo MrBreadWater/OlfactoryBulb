@@ -87,6 +87,28 @@ assert not modulation_df.empty
 assert not notes_df.empty
 assert not manual_df.empty
 
+generic_rheobase_row = ephys_df[
+    (ephys_df["Property"] == "Rheobase Current")
+    & (ephys_df["gc_subtype"] == "generic_or_unspecified")
+].iloc[0]
+assert float(generic_rheobase_row["mean"]) == 37.1
+
+generic_latency_row = ephys_df[
+    (ephys_df["Property"] == "First Spike Latency")
+    & (ephys_df["gc_subtype"] == "generic_or_unspecified")
+].iloc[0]
+assert float(generic_latency_row["mean"]) == 511.6
+
+generic_peak_rate_row = ephys_df[
+    (ephys_df["Property"] == "Peak Instantaneous Rate")
+    & (ephys_df["gc_subtype"] == "generic_or_unspecified")
+].iloc[0]
+assert float(generic_peak_rate_row["mean"]) == 53.2
+
+subtype_rheobase_rows = subtype_ephys_df[subtype_ephys_df["Property"] == "Rheobase Current"]
+assert float(subtype_rheobase_rows[subtype_rheobase_rows["gc_subtype"] == "sGC"]["mean"].iloc[0]) == 36.3
+assert float(subtype_rheobase_rows[subtype_rheobase_rows["gc_subtype"] == "dGC"]["mean"].iloc[0]) == 46.2
+
 for df_name, df in (
     ("ephys", ephys_df),
     ("subtype_ephys", subtype_ephys_df),

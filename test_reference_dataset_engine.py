@@ -55,6 +55,24 @@ assert gc_result["rows"]["modulation"], "expected GC modulation rows"
 assert gc_result["rows"]["synaptic_latency"], "expected GC latency rows"
 assert gc_result["rows"]["notes"], "expected GC note rows"
 
+generic_rheobase = next(
+    row for row in gc_result["rows"]["ephys"]
+    if row["Property"] == "Rheobase Current" and row["gc_subtype"] == "generic_or_unspecified"
+)
+assert float(generic_rheobase["mean"]) == 37.1
+
+generic_latency = next(
+    row for row in gc_result["rows"]["ephys"]
+    if row["Property"] == "First Spike Latency" and row["gc_subtype"] == "generic_or_unspecified"
+)
+assert float(generic_latency["mean"]) == 511.6
+
+generic_gain = next(
+    row for row in gc_result["rows"]["ephys"]
+    if row["Property"] == "FI Curve Slope" and row["gc_subtype"] == "generic_or_unspecified"
+)
+assert float(generic_gain["mean"]) == 860.0
+
 gc_written = write_reference_dataset_outputs(dataset_id="granule_cells")
 for output_key in (
     "ephys",
