@@ -239,12 +239,11 @@ from neuroinfra.artifacts.result_view import (
 )
 from neuroinfra.analysis.signals import (
     ResultSignalProvider as _NeuroinfraResultSignalProvider,
+    ResultSignalRegistry as _NeuroinfraResultSignalRegistry,
     keyed_trace_signal_provider as _neuroinfra_keyed_trace_signal_provider,
     labeled_trace_signal_provider as _neuroinfra_labeled_trace_signal_provider,
-    list_available_result_signals as _neuroinfra_list_available_result_signals,
     mean_aligned_row_trace as _neuroinfra_mean_aligned_row_trace,
     pattern_result_signal_provider as _neuroinfra_pattern_result_signal_provider,
-    resolve_result_signal as _neuroinfra_resolve_result_signal,
     suffix_variant_signal_provider as _neuroinfra_suffix_variant_signal_provider,
 )
 from neuroinfra.analysis.catalog import (
@@ -6561,12 +6560,14 @@ def _soma_label_signal_provider() -> _NeuroinfraResultSignalProvider:
     )
 
 
-_OBGPU_RESULT_SIGNAL_PROVIDERS: tuple[_NeuroinfraResultSignalProvider, ...] = (
-    _lfp_signal_provider(),
-    _gc_output_rate_signal_provider(),
-    _input_rate_signal_provider(),
-    _mean_voltage_signal_provider(),
-    _soma_label_signal_provider(),
+_OBGPU_RESULT_SIGNAL_REGISTRY = _NeuroinfraResultSignalRegistry(
+    providers=(
+        _lfp_signal_provider(),
+        _gc_output_rate_signal_provider(),
+        _input_rate_signal_provider(),
+        _mean_voltage_signal_provider(),
+        _soma_label_signal_provider(),
+    ),
 )
 
 
@@ -6576,9 +6577,8 @@ def list_available_named_signals(
     include_soma_labels: bool = False,
 ) -> list[str]:
     """List named analysis signals currently resolvable for one loaded result."""
-    return _neuroinfra_list_available_result_signals(
+    return _OBGPU_RESULT_SIGNAL_REGISTRY.list_available(
         result,
-        _OBGPU_RESULT_SIGNAL_PROVIDERS,
         include_soma_labels=include_soma_labels,
     )
 
@@ -7018,10 +7018,9 @@ def get_named_signal(
     dt_ms: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Resolve one named analysis signal into a uniform time/value trace."""
-    return _neuroinfra_resolve_result_signal(
+    return _OBGPU_RESULT_SIGNAL_REGISTRY.resolve(
         result,
         signal,
-        _OBGPU_RESULT_SIGNAL_PROVIDERS,
         dt_ms=dt_ms,
     )
 

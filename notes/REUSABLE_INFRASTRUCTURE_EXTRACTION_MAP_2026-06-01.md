@@ -160,6 +160,7 @@ What is already generic:
 - sweep plot specification, named plot registries, placeholder rendering, per-frame rendering, and GIF assembly
 - sweep metadata persistence, reload, and saved-sweep discovery
 - ordered named-signal providers
+- ordered named-signal registries
 - dynamic signal enumeration
 - provider-based signal resolution
 - provider factories for keyed traces, suffix variants, pattern-matched signals, and labeled traces

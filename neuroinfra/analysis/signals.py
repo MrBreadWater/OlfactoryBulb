@@ -18,6 +18,48 @@ class ResultSignalProvider:
     resolve_fn: Callable[[dict[str, Any], str, dict[str, Any]], Any]
 
 
+@dataclass(frozen=True)
+class ResultSignalRegistry:
+    """Ordered registry of named analysis signal providers."""
+
+    providers: Sequence[ResultSignalProvider]
+
+    def list_available(
+        self,
+        result: dict[str, Any],
+        **context: Any,
+    ) -> list[str]:
+        """List currently available named analysis signals in registry order."""
+        resolved_context = dict(context)
+        signals: list[str] = []
+        seen: set[str] = set()
+        for provider in self.providers:
+            for name in provider.list_names_fn(result, resolved_context):
+                label = str(name)
+                if label in seen:
+                    continue
+                seen.add(label)
+                signals.append(label)
+        return signals
+
+    def resolve(
+        self,
+        result: dict[str, Any],
+        signal: str,
+        **context: Any,
+    ) -> Any:
+        """Resolve one named signal by consulting ordered providers."""
+        resolved_context = dict(context)
+        for provider in self.providers:
+            if not provider.matches_fn(signal):
+                continue
+            try:
+                return provider.resolve_fn(result, signal, resolved_context)
+            except KeyError:
+                continue
+        raise KeyError(f"Unsupported signal {signal!r}")
+
+
 def keyed_trace_signal_provider(
     signal_name: str,
     *,
@@ -163,17 +205,7 @@ def list_available_result_signals(
     **context: Any,
 ) -> list[str]:
     """List currently available named analysis signals from ordered providers."""
-    resolved_context = dict(context)
-    signals: list[str] = []
-    seen: set[str] = set()
-    for provider in providers:
-        for name in provider.list_names_fn(result, resolved_context):
-            label = str(name)
-            if label in seen:
-                continue
-            seen.add(label)
-            signals.append(label)
-    return signals
+    return ResultSignalRegistry(tuple(providers)).list_available(result, **context)
 
 
 def resolve_result_signal(
@@ -183,12 +215,8 @@ def resolve_result_signal(
     **context: Any,
 ) -> Any:
     """Resolve one named signal by consulting ordered providers."""
-    resolved_context = dict(context)
-    for provider in providers:
-        if not provider.matches_fn(signal):
-            continue
-        try:
-            return provider.resolve_fn(result, signal, resolved_context)
-        except KeyError:
-            continue
-    raise KeyError(f"Unsupported signal {signal!r}")
+    return ResultSignalRegistry(tuple(providers)).resolve(
+        result,
+        signal,
+        **context,
+    )

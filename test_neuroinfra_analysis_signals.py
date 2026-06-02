@@ -6,6 +6,7 @@ import numpy as np
 
 from neuroinfra.analysis.signals import (
     ResultSignalProvider,
+    ResultSignalRegistry,
     keyed_trace_signal_provider,
     list_available_result_signals,
     labeled_trace_signal_provider,
@@ -60,9 +61,19 @@ def main() -> None:
             resolve_fn=lambda result, signal, _context: signal if signal in result["labels"] else (_ for _ in ()).throw(KeyError(signal)),
         ),
     )
+    registry = ResultSignalRegistry(providers)
 
     assert list_available_result_signals(result, providers) == ["lfp", "input_rate", "input_rate_MC", "mean_MC_voltage"]
     assert list_available_result_signals(result, providers, include_labels=True) == [
+        "lfp",
+        "input_rate",
+        "input_rate_MC",
+        "mean_MC_voltage",
+        "MC0",
+        "TC0",
+    ]
+    assert registry.list_available(result) == ["lfp", "input_rate", "input_rate_MC", "mean_MC_voltage"]
+    assert registry.list_available(result, include_labels=True) == [
         "lfp",
         "input_rate",
         "input_rate_MC",
@@ -79,8 +90,10 @@ def main() -> None:
     mc_t, mc_v = resolve_result_signal(result, "MC0", providers, include_labels=True)
     assert np.allclose(mc_t, [0.0, 1.0])
     assert np.allclose(mc_v, [3.0, 4.0])
+    assert registry.resolve(result, "input_rate") == "all"
+    assert registry.resolve(result, "mean_MC_voltage") == "MC"
     try:
-        resolve_result_signal(result, "missing", providers)
+        registry.resolve(result, "missing")
         raise AssertionError("Expected unsupported signal lookup to fail")
     except KeyError as exc:
         assert "missing" in str(exc)

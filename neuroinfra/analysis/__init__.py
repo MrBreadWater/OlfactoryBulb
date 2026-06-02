@@ -136,6 +136,7 @@ from .catalog import (
 )
 from .signals import (
     ResultSignalProvider,
+    ResultSignalRegistry,
     keyed_trace_signal_provider,
     list_available_result_signals,
     labeled_trace_signal_provider,
@@ -226,6 +227,7 @@ __all__ = [
     "compose_sweep_display_frame",
     "default_sweep_animation_worker_count",
     "ResultSignalProvider",
+    "ResultSignalRegistry",
     "describe_unavailable_sweep_item",
     "extract_figure_from_plot_result",
     "format_sweep_frame_title",
