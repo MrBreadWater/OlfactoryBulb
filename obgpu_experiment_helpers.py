@@ -31,7 +31,7 @@ from getpass import getpass
 from hashlib import sha1, sha256
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
-from typing import Any
+from typing import Any, MutableMapping
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -214,6 +214,11 @@ from neuroinfra.remote.git_sync import (
     resolve_local_git_branch as _neuroinfra_resolve_local_git_branch,
     resolve_local_git_head as _neuroinfra_resolve_local_git_head,
     resolve_local_git_upstream_ref as _neuroinfra_resolve_local_git_upstream_ref,
+)
+from neuroinfra.artifacts.loading import (
+    ArtifactLoadingHooks as _NeuroinfraArtifactLoadingHooks,
+    LazyResult as _NeuroinfraLazyResult,
+    load_local_artifact_plan as _neuroinfra_load_local_artifact_plan,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -2322,6 +2327,34 @@ def _deferred_remote_artifact_sync_hooks() -> _NeuroinfraDeferredArtifactSyncHoo
         stream_file_to_local_path_fn=_stream_paramiko_file_to_local_path,
         perf_counter_fn=time.perf_counter,
     )
+
+
+def _artifact_loading_hooks() -> _NeuroinfraArtifactLoadingHooks:
+    """Build reusable hooks for local result artifact loading."""
+    return _NeuroinfraArtifactLoadingHooks(
+        load_pickle_fn=load_pickle,
+        apply_loaded_fn=_apply_loaded_result_artifact,
+        progress_factory_fn=lambda total_bytes, desc: _ProgressBar(
+            total=total_bytes,
+            desc=desc,
+            unit="B",
+            unit_scale=True,
+        ),
+        progress_write=_progress_write,
+        format_bytes_fn=_format_bytes,
+        render_progress_bar_fn=_render_progress_bar,
+        perf_counter_fn=time.perf_counter,
+    )
+
+
+def _apply_loaded_result_artifact(result: MutableMapping[str, Any], key: str, loaded: Any) -> None:
+    """Apply one loaded artifact payload to the standard notebook result dict."""
+    if key == "lfp":
+        lfp_t, lfp = loaded
+        result["lfp_t"] = np.asarray(lfp_t, dtype=float)
+        result["lfp"] = np.asarray(lfp, dtype=float)
+    else:
+        result[key] = loaded
 
 
 def _paramiko_prompt_response(prompt_text: str, *, config: dict[str, Any] | None = None) -> str:
@@ -5697,41 +5730,24 @@ def _sync_deferred_remote_artifact_direct(
     )
 
 
-class LazyResult(dict):
-    """Result dict that loads selected heavy payloads on first access."""
-
-    def __init__(self, *args: Any, lazy_loaders: dict[str, Any] | None = None, **kwargs: Any):
-        super().__init__(*args, **kwargs)
-        self._lazy_loaders = dict(lazy_loaders or {})
+class LazyResult(_NeuroinfraLazyResult):
+    """Notebook result dict that adds progress and artifact-size bookkeeping."""
 
     def _ensure_loaded(self, key: str) -> None:
         if key not in self._lazy_loaders:
             return
-        loader = self._lazy_loaders[key]
         _progress_write(f"[OBGPU load] Lazy-loading {key}...")
         started = time.perf_counter()
-        value = loader()
-        dict.__setitem__(self, key, value)
-        self._lazy_loaders.pop(key, None)
+        try:
+            super()._ensure_loaded(key)
+        finally:
+            elapsed_s = time.perf_counter() - started
         if key == "soma_vs":
             soma_path = dict.get(self, "soma_vs_file")
             artifact_sizes = dict.get(self, "artifact_sizes")
             if isinstance(soma_path, Path) and soma_path.exists() and isinstance(artifact_sizes, dict):
                 artifact_sizes[soma_path.name] = int(soma_path.stat().st_size)
-        elapsed_s = time.perf_counter() - started
         _progress_write(f"[OBGPU load] Loaded {key} in {elapsed_s:.1f}s")
-
-    def __getitem__(self, key: str) -> Any:
-        self._ensure_loaded(key)
-        return dict.__getitem__(self, key)
-
-    def get(self, key: str, default: Any = None) -> Any:
-        if key in self._lazy_loaders:
-            self._ensure_loaded(key)
-        return dict.get(self, key, default)
-
-    def __contains__(self, key: object) -> bool:
-        return dict.__contains__(self, key) or key in self._lazy_loaders
 
 
 def load_result(
@@ -5748,9 +5764,6 @@ def load_result(
     remote_payload = remote_payload_value if isinstance(remote_payload_value, dict) else {}
     deferred_remote_artifacts = set(remote_payload.get("deferred_remote_artifacts") or [])
     artifact_sizes = _standard_result_artifact_sizes(result_dir)
-    load_timings: dict[str, float] = {}
-    load_started = time.perf_counter()
-
     result = LazyResult({
         "result_dir": result_dir,
         "summary": summary,
@@ -5797,45 +5810,12 @@ def load_result(
     if _local_sync_artifact_is_usable(voltage_summary_path):
         load_plan.append(("voltage_summary", voltage_summary_path))
 
-    total_bytes = sum(path.stat().st_size for _key, path in load_plan)
-    loaded_bytes = 0
-    progress_bar = (
-        _ProgressBar(total=total_bytes, desc="[OBGPU load] Load result files", unit="B", unit_scale=True)
-        if progress
-        else None
+    load_timings, load_total_seconds = _neuroinfra_load_local_artifact_plan(
+        result,
+        load_plan,
+        hooks=_artifact_loading_hooks(),
+        progress=progress,
     )
-    if load_plan and progress:
-        _progress_write(
-            f"[OBGPU load] Loading {len(load_plan)} local result files ({_format_bytes(total_bytes)})...",
-        )
-
-    for index, (key, path) in enumerate(load_plan, start=1):
-        file_size = path.stat().st_size
-        if progress:
-            _progress_write(
-                f"[OBGPU load] Loading {index}/{len(load_plan)}: {path.name} ({_format_bytes(file_size)})",
-            )
-        started = time.perf_counter()
-        loaded = load_pickle(path)
-        elapsed_s = time.perf_counter() - started
-        load_timings[path.name] = round(elapsed_s, 3)
-        if key == "lfp":
-            lfp_t, lfp = loaded
-            result["lfp_t"] = np.asarray(lfp_t, dtype=float)
-            result["lfp"] = np.asarray(lfp, dtype=float)
-        else:
-            result[key] = loaded
-        loaded_bytes += file_size
-        if progress_bar is not None:
-            progress_bar.update_to(loaded_bytes)
-        if progress:
-            _progress_write(
-                f"[OBGPU load] {_render_progress_bar(loaded_bytes, total_bytes)} "
-                f"{_format_bytes(loaded_bytes)} / {_format_bytes(total_bytes)} "
-                f"(loaded {path.name} in {elapsed_s:.1f}s)",
-            )
-    if progress_bar is not None:
-        progress_bar.close()
 
     if isinstance(soma_path, Path) and _local_sync_artifact_is_usable(soma_path) and lazy_soma_vs:
         result["soma_vs_file"] = soma_path
@@ -5858,7 +5838,7 @@ def load_result(
             )
 
     result["load_timing_seconds"] = load_timings
-    result["load_total_seconds"] = round(time.perf_counter() - load_started, 3)
+    result["load_total_seconds"] = load_total_seconds
     if load_timings and progress:
         timing_summary = ", ".join(
             f"{name}={seconds:.2f}s"

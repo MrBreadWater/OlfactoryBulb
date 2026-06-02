@@ -70,6 +70,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         title="Result artifact and output-path helpers",
         target_module="neuroinfra.artifacts",
         source_paths=(
+            "neuroinfra/artifacts/loading.py",
             "neuroinfra/artifacts/output_paths.py",
             "neuroinfra/artifacts/result_artifacts.py",
             "olfactorybulb/result_artifacts.py",
@@ -81,6 +82,8 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
             "compact NPZ/PKL persistence",
             "saved trace discovery",
             "spike detection from saved voltages",
+            "lazy artifact result containers",
+            "timed local artifact load plans with progress reporting",
         ),
         repo_specific_couplings=(
             "artifact names still use OBGPU terminology like soma_vs and lfp",
@@ -88,7 +91,7 @@ EXTRACTION_CANDIDATES: tuple[ExtractionCandidate, ...] = (
         extraction_confidence="high",
         proposed_phase=1,
         current_status="internal_shim_extracted",
-        recommended_action="The first internal extraction has been done behind compatibility shims; next remove remaining OBGPU-specific naming and add more consumer tests.",
+        recommended_action="The first internal extraction has been done behind compatibility shims, and the local artifact-loading helpers now live under neuroinfra.artifacts.loading; next remove remaining OBGPU-specific naming and separate more of the high-level load policy from the OBGPU artifact plan.",
     ),
     ExtractionCandidate(
         key="remote_slurm_execution",

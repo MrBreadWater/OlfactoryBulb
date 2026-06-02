@@ -103,6 +103,14 @@ Recommended public package target:
 
 - `neuroinfra.artifacts`
 
+Current progress:
+
+- the artifact/output-path helpers already live under `neuroinfra.artifacts`
+- the generic lazy-result container and timed local artifact-loading loop now
+  live under `neuroinfra.artifacts.loading`
+- the remaining concrete OBGPU artifact plan and field mapping still live in
+  `obgpu_experiment_helpers.py`
+
 ### 3. Remote Slurm execution layer
 
 Current files:

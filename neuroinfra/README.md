@@ -17,6 +17,7 @@ The first implemented artifact is the component inventory:
 
 The first live internal extraction is now also present:
 
+- `neuroinfra.artifacts.loading`
 - `neuroinfra.artifacts.output_paths`
 - `neuroinfra.artifacts.result_artifacts`
 
@@ -85,6 +86,11 @@ The expected first-wave extractions are:
 The result-artifact and output-path helpers have already been mirrored into
 `neuroinfra.artifacts` and left behind compatibility wrappers under
 `olfactorybulb.*`.
+
+The generic lazy-result container plus the timed local artifact-loading loop
+that powers notebook result ingestion now also live under
+`neuroinfra.artifacts.loading`, while the concrete OBGPU artifact plan and
+field mapping still remain in `obgpu_experiment_helpers.py`.
 
 The remote Slurm layer is not extracted yet, but the helper-bundle
 manifest/signature protocol that packages those scripts for remote upload, plus
