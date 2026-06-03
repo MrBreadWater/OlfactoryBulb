@@ -381,6 +381,8 @@ contract for future sessions.
     - collapsed audit item cards should show only the title/status summary and
       any compact numeric strip; the full detail body must stay hidden until
       expanded
+    - collapsed item cards should size to their own content instead of
+      stretching to the tallest card in the row
     - warning text should be rendered in its own persistent collapsed block,
       not mixed into the title/status summary area; the header should stay
       clean and the warning block should collapse alongside the card body

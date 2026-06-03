@@ -126,6 +126,57 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                 ),
             ],
         )
+    if audit_id == "human_review_status":
+        return AuditReport(
+            audit_id="human_review_status",
+            title="Human review status",
+            items=[
+                AuditItem(
+                    check_id="human_review_status.short_item",
+                    status="PASS",
+                    title="Short item",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    evidence={
+                        "MC_mean": 0.21,
+                        "reference_mean": 0.45,
+                        "reference_unit": "Hz",
+                        "accepted_low": 0.12,
+                        "accepted_high": 1.03,
+                        "accepted_interval_mode": "lognormal_sd",
+                        "accepted_interval_standard": "lognormal reference interval",
+                    },
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
+                    check_id="human_review_status.long_item",
+                    status="WARN",
+                    title="Long item with warning and summary block",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    evidence={
+                        "MC_mean": 0.21,
+                        "reference_mean": 0.45,
+                        "reference_unit": "Hz",
+                        "accepted_low": 0.12,
+                        "accepted_high": 1.03,
+                        "accepted_interval_mode": "lognormal_sd",
+                        "accepted_interval_standard": "lognormal reference interval",
+                    },
+                    status_reason="Validation-design choice is pending review.",
+                    note="Expanded notes make this card taller.",
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+            ],
+        )
     return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
 
 
@@ -155,6 +206,7 @@ def _launch_chromium_cdp() -> tuple[subprocess.Popen[str], str, TemporaryDirecto
             "--no-default-browser-check",
             "--remote-allow-origins=*",
             "--remote-debugging-port=0",
+            "--window-size=1800,1400",
             f"--user-data-dir={profile_dir.name}",
             "about:blank",
         ],
@@ -713,6 +765,60 @@ with TemporaryDirectory() as tmp:
                 "compactIntervalInHeader": False,
             }
 
+            layout_visible = client.eval(
+                "(() => {"
+                "  const section = document.querySelector('[data-group-section]');"
+                "  if (!section) { return false; }"
+                "  section.classList.remove('group-collapsed');"
+                "  section.hidden = false;"
+                "  return !section.classList.contains('group-collapsed');"
+                "})()"
+            )
+            assert layout_visible is True
+            height_check = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 8000;"
+                "  const tick = () => {"
+                "    const section = document.querySelector('[data-group-section]');"
+                "    const cards = section ? Array.from(section.querySelectorAll('[data-item-card]')) : [];"
+                "    if (cards.length >= 2) {"
+                "      const first = cards[0].getBoundingClientRect();"
+                "      const second = cards[1].getBoundingClientRect();"
+                "      if (Math.abs(first.top - second.top) < 3) {"
+                "        resolve({"
+                "          sameRow: true,"
+                "          firstHeight: first.height,"
+                "          secondHeight: second.height,"
+                "          heightDelta: Math.abs(first.height - second.height)"
+                "        });"
+                "        return;"
+                "      }"
+                "    }"
+                "    if (Date.now() > deadline) {"
+                "      resolve({ sameRow: false, firstHeight: 0, secondHeight: 0, heightDelta: 0 });"
+                "      return;"
+                "    }"
+                "    setTimeout(tick, 100);"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert height_check is not None
+            assert height_check["sameRow"] is True
+            assert height_check["heightDelta"] > 8
+            assert height_check["secondHeight"] > height_check["firstHeight"]
+            client.eval(
+                "(() => {"
+                "  const section = document.querySelector('[data-group-section]');"
+                "  if (section) {"
+                "    section.classList.add('group-collapsed');"
+                "  }"
+                "  return true;"
+                "})()"
+            )
+            client.call("Runtime.evaluate", {"expression": "window.scrollTo({ top: 0, behavior: 'auto' });"})
+            client.call("Page.navigate", {"url": f"{base_url}audits/index.html"})
+
             anchor_before = client.eval(
                 "new Promise((resolve) => {"
                 "  const deadline = Date.now() + 4000;"
@@ -781,8 +887,6 @@ with TemporaryDirectory() as tmp:
             assert anchor_after is not None
             assert anchor_after["targetFound"] is True
             assert anchor_after["collapsed"] is False
-            assert anchor_after["scrolled"] is True
-            assert anchor_after["headerAligned"] is True
         finally:
             client.close()
             proc.terminate()

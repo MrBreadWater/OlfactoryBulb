@@ -751,6 +751,7 @@ def render_audit_dashboard_html(
     .items-grid {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      align-items: start;
       gap: 16px;
       padding: 16px;
     }}
@@ -766,6 +767,7 @@ def render_audit_dashboard_html(
       border: 1px solid var(--line);
       border-radius: 8px;
       background: #ffffff;
+      align-self: start;
       overflow: hidden;
     }}
     .item-header {{
