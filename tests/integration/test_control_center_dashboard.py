@@ -31,7 +31,7 @@ def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> Aud
             status="PASS",
             title="Alpha pass",
             criterion="Alpha should pass.",
-            criterion_latex=r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k",
+            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
             criterion_formulae=[
                 r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
@@ -116,7 +116,7 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Environment pass",
                     criterion="Criterion",
-                    criterion_latex=r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k",
+                    criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
                     criterion_formulae=[r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
@@ -155,7 +155,7 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Short item",
                     criterion="Criterion",
-                    criterion_latex=r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k",
+                    criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
                     criterion_formulae=[r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
@@ -496,7 +496,7 @@ with TemporaryDirectory() as tmp:
     output_dir = Path(manifest["output_dir"])
     preserved_audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert len(preserved_audit_report["groups"]) == 1
-    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k"
+    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
     assert preserved_audit_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     preserved_audits_html = (output_dir / "audits" / "index.html").read_text()
     assert "./assets/mathjax/tex-svg.js" in preserved_audits_html
@@ -542,7 +542,7 @@ with TemporaryDirectory() as tmp:
     assert "./assets/mathjax/tex-svg.js" in audits_html
     assert "cdn.jsdelivr.net" not in audits_html
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
-    assert audit_report["items"][0]["criterion_latex"] == r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k"
+    assert audit_report["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
     assert audit_report["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
@@ -744,7 +744,7 @@ with TemporaryDirectory() as tmp:
         first_run_titles = {group["title"] for group in first_run_report["groups"]}
         assert "Environment/install audit" in first_run_titles
         assert "Scratch boundary audit" in first_run_titles
-        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k"
+        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
         assert first_run_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
         assert first_run_report["groups"][0]["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
 

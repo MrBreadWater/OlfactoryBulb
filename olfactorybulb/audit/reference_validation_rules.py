@@ -582,7 +582,7 @@ def _criterion_math_for_band(
     band: ReferenceAcceptanceBand,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     observed_label = f"{group} mean {property_name.lower()}"
-    latex = r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k"
+    latex = r"\left|\bar{x} - \mu\right| \leq k\sigma"
     formulae: list[str] = []
     definitions: list[dict[str, Any]] = [{"symbol": r"\bar{x}", "definition": observed_label}]
     if band.mode == "quantile_interval":
@@ -621,21 +621,15 @@ def _criterion_math_for_band(
         latex = r"\bar{x} = b"
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        latex = r"\left|\frac{\ln(\bar{x}) - \mu_\ell}{\sigma_\ell}\right| \leq k"
+        latex = (
+            r"\left|\ln(\bar{x}) - \ln(\mu) + \frac{1}{2}\ln(1 + (\sigma / \mu)^2)\right| "
+            r"\leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}"
+        )
         definitions.extend(
             [
-                {"symbol": r"\mu_\ell", "definition": "log-space mean"},
-                {"symbol": r"\sigma_\ell", "definition": "log-space standard deviation"},
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                 {"symbol": "k", "definition": "configured sigma multiplier"},
-            ]
-        )
-        formulae.extend(
-            [
-                r"\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}",
-                r"\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2",
-                r"\mu_\ell - k\sigma_\ell \leq \ln(\bar{x}) \leq \mu_\ell + k\sigma_\ell",
             ]
         )
     else:
