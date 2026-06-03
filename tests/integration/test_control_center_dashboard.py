@@ -1152,12 +1152,14 @@ with TemporaryDirectory() as tmp:
                 "    const header = document.querySelector('header');"
                 "    const headerBottom = header.getBoundingClientRect().bottom;"
                 "    const headerRect = target ? target.querySelector('.group-header').getBoundingClientRect() : { top: -9999 };"
+                "    const selected = document.querySelector('.group-link[aria-current=\"true\"]');"
                 "    if (target && !target.classList.contains('group-collapsed') && headerRect.top >= headerBottom - 2 && headerRect.top <= headerBottom + 96) {"
                 "      resolve({"
                 "        collapsed: false,"
                 "        scrolled: window.scrollY > " + str(before_scroll_y) + ","
                 "        targetFound: true,"
-                "        headerAligned: true"
+                "        headerAligned: true,"
+                "        selected: Boolean(selected)"
                 "      });"
                 "      return;"
                 "    }"
@@ -1166,7 +1168,8 @@ with TemporaryDirectory() as tmp:
                 "        collapsed: Boolean(target) && target.classList.contains('group-collapsed'),"
                 "        scrolled: window.scrollY > " + str(before_scroll_y) + ","
                 "        targetFound: Boolean(target),"
-                "        headerAligned: headerRect.top >= headerBottom - 2 && headerRect.top <= headerBottom + 96"
+                "        headerAligned: headerRect.top >= headerBottom - 2 && headerRect.top <= headerBottom + 96,"
+                "        selected: Boolean(selected)"
                 "      });"
                 "      return;"
                 "    }"
@@ -1178,6 +1181,7 @@ with TemporaryDirectory() as tmp:
             assert anchor_after is not None
             assert anchor_after["targetFound"] is True
             assert anchor_after["collapsed"] is False
+            assert anchor_after["selected"] is False, anchor_after
         finally:
             client.close()
             proc.terminate()

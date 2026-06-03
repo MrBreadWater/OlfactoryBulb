@@ -1840,11 +1840,6 @@ def render_audit_dashboard_html(
       border-color: #c7d4e6;
       background: #f7faff;
     }}
-    .group-link[aria-current="true"] {{
-      border-color: #91aed6;
-      background: #eff5ff;
-      box-shadow: inset 4px 0 0 rgba(37, 99, 235, 0.78);
-    }}
     .group-link.status-pass {{ border-left-color: rgba(22, 163, 74, 0.56); }}
     .group-link.status-warn {{ border-left-color: rgba(217, 119, 6, 0.68); }}
     .group-link.status-fail {{ border-left-color: rgba(220, 38, 38, 0.78); }}
@@ -2381,9 +2376,6 @@ def render_audit_dashboard_html(
       }}
       .layout {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; }}
-      .group-link[aria-current="true"] {{
-        box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.78);
-      }}
       .group-header-actions {{
         width: 100%;
         justify-content: flex-start;
@@ -2451,7 +2443,6 @@ def render_audit_dashboard_html(
       const emptyStateSubtitle = document.getElementById("audit-empty-state-subtitle");
       const emptyStateDefaultText = {json.dumps(empty_message)};
       const groupSections = Array.from(document.querySelectorAll("[data-group-section]"));
-      const groupLinks = Array.from(document.querySelectorAll(".group-link"));
       const itemCards = Array.from(document.querySelectorAll("[data-item-card]"));
       const emptyStateRunButton = document.getElementById("audit-empty-state-run");
 
@@ -2464,23 +2455,6 @@ def render_audit_dashboard_html(
 
       function isPressed(button) {{
         return String(button?.getAttribute("aria-pressed") || "false") === "true";
-      }}
-
-      function setActiveGroupLink(activeLink) {{
-        groupLinks.forEach((link) => {{
-          link.setAttribute("aria-current", link === activeLink ? "true" : "false");
-        }});
-      }}
-
-      function ensureActiveGroupLink() {{
-        const current = groupLinks.find((link) => link.getAttribute("aria-current") === "true" && !link.hidden);
-        if (current) {{
-          return;
-        }}
-        const firstVisible = groupLinks.find((link) => !link.hidden);
-        if (firstVisible) {{
-          setActiveGroupLink(firstVisible);
-        }}
       }}
 
       function toggleGroup(section, collapse) {{
@@ -2561,7 +2535,6 @@ def render_audit_dashboard_html(
             resultsMeta.textContent = `${{visibleItems}} visible items across ${{visibleGroups}} visible groups`;
           }}
         }}
-        ensureActiveGroupLink();
       }}
 
       document.querySelectorAll("[data-group-toggle]").forEach((button) => {{
@@ -2578,7 +2551,6 @@ def render_audit_dashboard_html(
       }});
       document.querySelectorAll(".group-link").forEach((link) => {{
         link.addEventListener("click", () => {{
-          setActiveGroupLink(link);
           const target = document.getElementById(String(link.dataset.groupTarget || ""));
           if (!target) {{
             return;
@@ -2601,9 +2573,6 @@ def render_audit_dashboard_html(
           window.setTimeout(alignGroupHeader, 500);
         }});
       }});
-      if (groupLinks.length > 0) {{
-        setActiveGroupLink(groupLinks[0]);
-      }}
       document.querySelectorAll("[data-item-toggle]").forEach((button) => {{
         button.addEventListener("click", () => {{
           const item = button.closest("[data-item-card]");

@@ -338,6 +338,9 @@ contract for future sessions.
   - when a dashboard iframe needs to trigger a shell-side action such as rerunning an audit from an empty state, use a small postMessage bridge to the shell rather than duplicating a second control surface inside the iframe
   - make audit reports glanceable by default, with collapsed groups/items and
     explicit expansion controls
+  - audit-group sidebar rows are navigation only; clicking a group should
+    scroll to it, but the sidebar must not render a selected/current-group
+    state or `aria-current` highlight
   - keep warnings visible, specific, and non-duplicated
   - when audit evidence contains an explicit series or curve, such as
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
