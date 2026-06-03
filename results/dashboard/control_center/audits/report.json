@@ -494,16 +494,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{R}_{\\mathrm{in}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{R}_{\\mathrm{in}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -554,16 +553,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{\\tau}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{\\tau}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -614,16 +612,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{C}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{C}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -671,11 +668,6 @@
             {
               "definition": "uploaded reference standard deviation",
               "symbol": "\\sigma",
-              "unit": ""
-            },
-            {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
               "unit": ""
             }
           ],
@@ -730,11 +722,6 @@
             {
               "definition": "uploaded reference standard deviation",
               "symbol": "\\sigma",
-              "unit": ""
-            },
-            {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
               "unit": ""
             }
           ],
@@ -792,16 +779,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{A}_{\\mathrm{AP}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{A}_{\\mathrm{AP}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -852,16 +838,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\overline{\\mathrm{FWHM}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\overline{\\mathrm{FWHM}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -912,16 +897,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{s}_{\\mathrm{rise}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{s}_{\\mathrm{rise}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -969,11 +953,6 @@
             {
               "definition": "uploaded reference standard deviation",
               "symbol": "\\sigma",
-              "unit": ""
-            },
-            {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
               "unit": ""
             }
           ],
@@ -1031,16 +1010,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{I}_{\\mathrm{rh}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{I}_{\\mathrm{rh}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1091,16 +1069,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{t}_{\\mathrm{lat}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{t}_{\\mathrm{lat}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1151,16 +1128,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{g}_{\\mathrm{FI}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{g}_{\\mathrm{FI}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1211,16 +1187,15 @@
               "unit": ""
             },
             {
-              "definition": "configured sigma multiplier",
-              "symbol": "k",
+              "definition": "uploaded reference coefficient of variation",
+              "symbol": "c_{\\mathrm{v}}",
               "unit": ""
             }
           ],
           "criterion_formulae": [
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+            "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
           ],
-          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{f}_{\\max}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+          "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{f}_{\\max}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1748,16 +1723,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{R}_{\\mathrm{in}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{R}_{\\mathrm{in}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1808,16 +1782,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{\\tau}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{\\tau}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1868,16 +1841,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{C}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{C}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1925,11 +1897,6 @@
         {
           "definition": "uploaded reference standard deviation",
           "symbol": "\\sigma",
-          "unit": ""
-        },
-        {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
           "unit": ""
         }
       ],
@@ -1984,11 +1951,6 @@
         {
           "definition": "uploaded reference standard deviation",
           "symbol": "\\sigma",
-          "unit": ""
-        },
-        {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
           "unit": ""
         }
       ],
@@ -2046,16 +2008,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{A}_{\\mathrm{AP}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{A}_{\\mathrm{AP}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2106,16 +2067,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\overline{\\mathrm{FWHM}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\overline{\\mathrm{FWHM}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2166,16 +2126,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{s}_{\\mathrm{rise}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{s}_{\\mathrm{rise}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2223,11 +2182,6 @@
         {
           "definition": "uploaded reference standard deviation",
           "symbol": "\\sigma",
-          "unit": ""
-        },
-        {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
           "unit": ""
         }
       ],
@@ -2285,16 +2239,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{I}_{\\mathrm{rh}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{I}_{\\mathrm{rh}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2345,16 +2298,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{t}_{\\mathrm{lat}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{t}_{\\mathrm{lat}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2405,16 +2357,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{g}_{\\mathrm{FI}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{g}_{\\mathrm{FI}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2465,16 +2416,15 @@
           "unit": ""
         },
         {
-          "definition": "configured sigma multiplier",
-          "symbol": "k",
+          "definition": "uploaded reference coefficient of variation",
+          "symbol": "c_{\\mathrm{v}}",
           "unit": ""
         }
       ],
       "criterion_formulae": [
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
-        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+        "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}"
       ],
-      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{f}_{\\max}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+      "criterion_latex": "-2 \\leq \\frac{\\ln\\!\\left(\\bar{f}_{\\max}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}} \\leq 2",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {

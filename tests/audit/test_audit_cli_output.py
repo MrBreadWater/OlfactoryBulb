@@ -30,7 +30,7 @@ sample_report = AuditReport(
             status="WARN",
             title="TC CV_ISI item",
             criterion="TC CV_ISI should render cleanly.",
-            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+            criterion_latex=r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             criterion_formulae=[
                 r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
@@ -94,7 +94,7 @@ assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
 assert "Warning" in plain
 assert "Warning surfaced for an unresolved caveat or condition" in plain
-assert r"\left|\bar{x} - \mu\right| \leq k\sigma" in plain
+assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in plain
 assert "Formulae" in plain
 assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in plain
 assert "Definitions" in plain

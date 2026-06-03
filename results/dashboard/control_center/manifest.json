@@ -3,11 +3,11 @@
   "audit_id": "gc_intrinsic_validation",
   "audits": {
     "audit_id": "control_center_audits",
-    "generated_at": "2026-06-03T14:53:33",
+    "generated_at": "2026-06-03T15:03:36",
     "group_count": 1,
     "index_html": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits/index.html",
     "item_count": 17,
-    "manifest_revision": 1780512813307873840,
+    "manifest_revision": 1780513416804638673,
     "output_dir": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits",
     "report_json": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits/report.json",
     "summary": {
@@ -20,7 +20,7 @@
   },
   "campaign_dir": "/home/alek/OlfactoryBulb/results/notebook_runs/optimization/hfo_epli_big_singlewrapper_120cpu_20260527_082225",
   "docs_root": "/home/alek/OlfactoryBulb/docs",
-  "generated_at": "2026-06-03T14:53:33",
+  "generated_at": "2026-06-03T15:03:36",
   "optimization": {
     "asset_url_prefix": "/repo",
     "campaign_dir": "/home/alek/OlfactoryBulb/results/notebook_runs/optimization/hfo_epli_big_singlewrapper_120cpu_20260527_082225",
@@ -29,10 +29,10 @@
     "entrypoint_html": "/home/alek/OlfactoryBulb/results/index.html",
     "entrypoint_url_path": "/dashboard/control_center/optimization/",
     "generate_packet_workers": 0,
-    "generated_at": "2026-06-03T14:53:22.399875",
+    "generated_at": "2026-06-03T15:03:25.950162",
     "generated_packets": [],
     "index_html": "/home/alek/OlfactoryBulb/results/dashboard/control_center/optimization/index.html",
-    "manifest_revision": 1780512802399872272,
+    "manifest_revision": 1780513405950159001,
     "output_dir": "/home/alek/OlfactoryBulb/results/dashboard/control_center/optimization",
     "packet_count": 77,
     "top_candidate_id": "C03039",
@@ -192,6 +192,6 @@
         "src": "/optimization/index.html"
       }
     },
-    "updated_at": "2026-06-03T14:53:33"
+    "updated_at": "2026-06-03T15:03:36"
   }
 }

@@ -627,24 +627,27 @@ def _criterion_math_for_band(
         latex = r"{obs} = b".format(obs=observed_symbol)
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        log_center = r"\ln(\mu) - \frac{1}{2}\ln\!\left(1 + \left(\frac{\sigma}{\mu}\right)^2\right)"
-        log_spread = rf"{sigma_multiplier}\sqrt{{\ln\!\left(1 + \left(\frac{{\sigma}}{{\mu}}\right)^2\right)}}"
-        latex = rf"{log_center} - {log_spread} \leq \ln({observed_symbol}) \leq {log_center} + {log_spread}"
+        cv_symbol = r"c_{\mathrm{v}}"
+        log_score = (
+            rf"\frac{{\ln\!\left({observed_symbol}/\mu\right) + "
+            rf"\frac{{1}}{{2}}\ln\!\left(1 + {cv_symbol}^2\right)}}"
+            rf"{{\sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}}}"
+        )
+        latex = rf"-{sigma_multiplier} \leq {log_score} \leq {sigma_multiplier}"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
-                {"symbol": "k", "definition": "configured sigma multiplier"},
+                {"symbol": cv_symbol, "definition": "uploaded reference coefficient of variation"},
             ]
         )
-        formulae.extend([rf"{log_center} - {log_spread}", rf"{log_center} + {log_spread}"])
+        formulae.extend([rf"{cv_symbol} = \frac{{\sigma}}{{\mu}}"])
     else:
         latex = rf"\mu - {sigma_multiplier}\sigma \leq {observed_symbol} \leq \mu + {sigma_multiplier}\sigma"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
-                {"symbol": "k", "definition": "configured sigma multiplier"},
             ]
         )
         formulae.extend([rf"\mu - {sigma_multiplier}\sigma", rf"\mu + {sigma_multiplier}\sigma"])

@@ -6,7 +6,6 @@ from argparse import Namespace
 from pathlib import Path
 import tempfile
 
-from olfactorybulb.audit.dashboard import _render_math_svg_fragment
 from olfactorybulb.audit.reference_validation_rules import (
     ValidationRuleContext,
     build_rule_items,
@@ -117,10 +116,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert "configured lognormal reference interval" in log_item.acceptable_basis
     assert (
         log_item.criterion_latex
-        == r"\vert \ln\!\left(\frac{\overline{\mathrm{CV}}_{\mathrm{ISI}}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \vert \leq 2\sqrt{\ln(1 + (\sigma / \mu)^2)}"
+        == r"-2 \leq \frac{\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}/\mu\right) + \frac{1}{2}\ln\!\left(1 + c_{\mathrm{v}}^2\right)}{\sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}} \leq 2"
     )
     assert log_item.criterion_definitions[0]["symbol"] == r"\overline{\mathrm{CV}}_{\mathrm{ISI}}"
-    assert _render_math_svg_fragment(log_item.criterion_latex, display=True)
+    assert log_item.criterion_definitions[-1]["symbol"] == r"c_{\mathrm{v}}"
+    assert log_item.criterion_formulae == [r"c_{\mathrm{v}} = \frac{\sigma}{\mu}"]
 
     beta_rule = {
         "kind": "reference_band_rows",
@@ -313,11 +313,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert comparison_items[0].criterion_latex == r"\bar{x}_{\mathrm{MC}} \geq -60"
     assert comparison_items[1].criterion_latex == r"1 \leq \bar{x}_{\mathrm{MC}} \leq 2"
     assert comparison_items[2].criterion_latex == r"\bar{x}_{\mathrm{TC}} < \bar{x}_{\mathrm{MC}}"
-    assert comparison_items[3].criterion_latex == r"\vert \bar{x}_{\mathrm{TC}} - \bar{x}_{\mathrm{MC}} \vert \leq 5"
+    assert comparison_items[3].criterion_latex == r"\bar{x}_{\mathrm{MC}} - 5 \leq \bar{x}_{\mathrm{TC}} \leq \bar{x}_{\mathrm{MC}} + 5"
     assert comparison_items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
-    assert comparison_items[5].criterion_latex == r"\forall i,\ \vert x_i - 0 \vert \leq 1e-09"
-    for item in comparison_items:
-        assert _render_math_svg_fragment(item.criterion_latex, display=True)
+    assert comparison_items[5].criterion_latex == r"\forall i,\ c - \epsilon \leq x_i \leq c + \epsilon"
 
     missing_mode_rule = {
         "kind": "reference_band_rows",

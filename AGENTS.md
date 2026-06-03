@@ -367,10 +367,10 @@ contract for future sessions.
     keep `\bar{x}` as the fallback only when no clearer symbol exists. Render
     the selected sigma multiplier numerically in the headline inequality
     rather than leaving a literal `k` in the display. For lognormal
-    reconstructions, prefer the explicit centered log-space inequality with the
-    substituted mean/variance terms rather than introducing auxiliary symbols
-    like `\mu_\ell` or `\sigma_\ell` or `L/U` endpoints unless the paper
-    actually defines those quantities
+    reconstructions, prefer a standardized log-score inequality with
+    `c_{\mathrm{v}}=\sigma/\mu`, rather than endpoint notation or auxiliary
+    lognormal symbols like `\mu_\ell`, `\sigma_\ell`, `L`, or `U` unless the
+    paper actually defines those quantities
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
       dicts when possible
