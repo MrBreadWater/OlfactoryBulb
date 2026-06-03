@@ -359,6 +359,14 @@ contract for future sessions.
   - for math-rendered criteria, prefer one headline inequality or equality in
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
+  - do not let audit/dashboard presentation rules become a web of hand-edited
+    fixtures, generated artifacts, and hardcoded one-off strings. When a
+    presentation convention changes, first move the convention into a
+    high-level helper, declarative visual/math spec, renderer contract, or
+    generator default, then regenerate the artifacts and update tests through
+    shared fixtures or builders where practical. Configurability is the default
+    expectation; repeated manual edits across many files are a signal to add or
+    improve an abstraction before continuing
   - when a reference-band check is centered around a mean, prefer a compact
     absolute-residual criterion rather than endpoint notation or z-score
     notation. Use `|\bar{x} - \mu_{\mathrm{ref}}| \leq k\sigma_{\mathrm{ref}}`
