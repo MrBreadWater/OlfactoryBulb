@@ -14,10 +14,15 @@ contract for future sessions.
 - Add or revise this file when the new information is one of:
   - a repo-wide invariant or source-of-truth boundary
   - a maintained workflow or entrypoint future agents should prefer
+  - a durable change to how a maintained surface is registered, rendered, or
+    launched
   - a recurring failure mode plus its correct recovery path
   - a verification standard that prevents false "done" reports
   - an anti-sprawl rule about where new logic should live
   - a reproducibility rule that must survive across chats
+  - a dashboard or validation contract that future agents are expected to keep
+    using, such as explicit plot-registration, backend selection, or item-level
+    presentation fields
 
 - Do **not** use this file for:
   - dynamic inventories that can be discovered live
@@ -36,6 +41,9 @@ contract for future sessions.
 - If a behavior matters for reproducibility, encode it in code defaults,
   declarative config, tests, CLI discovery, or HOWTO docs. Use `AGENTS.md` to
   point at those sources of truth, not to replace them.
+- When a change alters the day-to-day workflow that future agents will touch
+  again, update the relevant HOWTO/docs in the same task and add a short
+  contract note here if the rule needs to persist across chats.
 
 - Keep detailed documentation ownership in `notes/DOCS_OWNERSHIP_MAP.md`.
   Keep `AGENTS.md` focused on contract-level rules and anti-rot expectations.

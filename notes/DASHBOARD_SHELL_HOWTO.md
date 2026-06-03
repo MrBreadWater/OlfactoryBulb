@@ -33,6 +33,10 @@ The shell is implemented in two layers:
   - `index.html`
   - `report.json`
   - `manifest.json`
+- audit cards render explicit item visuals declared by the audit/rule layer
+  rather than inferring them from array-shaped evidence alone
+- the standard series backend is Matplotlib; use explicit visual specs when
+  registering a new plotted audit item
 
 ## Canonical commands
 
