@@ -60,6 +60,36 @@
 - Recommendation:
   - Remove duplicated code or add explicit deprecation/use-path comments and tests showing intentional retention.
 
+### 6) High — campaign path is hard-coded to one developer checkout
+
+- Location: `tools/run_hfo_campaign.py:372`
+- Evidence:
+  - `campaign_dir = _load_or_init_campaign(Path("/home/alek/OlfactoryBulb/results/notebook_runs/optimization") / campaign_slug, base_config, search_space)`
+- Why suboptimal:
+  - A hard-coded absolute path makes autonomous runs fail on any machine/worktree not mounted at `/home/alek`, including shared automation and non-default user sessions.
+- Recommendation:
+  - Resolve base path via the maintained repo root (for example `Path(__file__).resolve().parents[1] / "results"/"notebook_runs"/"optimization"`) and/or require an explicit campaign-root CLI option.
+
+### 7) Medium — simulation-progress write failures are fully swallowed
+
+- Location: `olfactorybulb/model.py:1047-1052`
+- Evidence:
+  - `write_progress_status()` wraps atomic JSON write + replace in `try/except Exception` and does `pass` on failure.
+- Why suboptimal:
+  - Polling and resume surfaces that rely on `sim_progress.json` will silently operate with stale status while no operator-visible warning is emitted.
+- Recommendation:
+  - Keep the progress file optional, but capture failure metadata in a logger or diagnostics channel (e.g., a warning with path and exception text) before continuing.
+
+### 8) Medium — template PSD overlay builder silently drops rendering failures
+
+- Location: `olfactorybulb/analysis_hfo_views.py:27-42`
+- Evidence:
+  - `build_psd_template_overlays()` catches all resolver exceptions and returns `[]` when template computation fails.
+- Why suboptimal:
+  - Visualization-only errors are hidden as empty overlays, making it hard to distinguish a failed overlay computation from a legitimately empty series.
+- Recommendation:
+  - Return a structured warning/failure payload or emit a logged warning; keep rendering robust but observable for debugging and reproducibility checks.
+
 ## Suggested Next Step
 
-- Prioritize High finding first (remote defaults), then the two Medium parsing-failure items that can affect campaign correctness.
+- Prioritize the two High findings first (remote defaults + campaign path), then parsing/observability Medium items that can affect campaign correctness and live monitoring.
