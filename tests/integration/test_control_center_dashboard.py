@@ -451,6 +451,7 @@ with TemporaryDirectory() as tmp:
     assert "shell-status-strip" in html
     assert "shell-status-chip" in html
     assert "tab-bar" not in html
+    assert "position: sticky" not in html
     assert "Optimization campaign" in html
     assert str(campaign_dir) in html
     assert "No audit has been run yet." in html

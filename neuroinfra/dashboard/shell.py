@@ -134,9 +134,7 @@ def render_dashboard_shell(
       font: 14px/1.45 var(--ui-font-stack);
     }}
     header {{
-      position: sticky;
-      top: 0;
-      z-index: 20;
+      position: static;
       background: rgba(243, 246, 251, 0.96);
       border-bottom: 1px solid var(--line);
       padding: 10px 20px 10px;
@@ -531,7 +529,7 @@ def render_dashboard_shell(
       display: flex;
       flex-direction: column;
       gap: 16px;
-      min-height: calc(100vh - 155px);
+      min-height: calc(100vh - 120px);
     }}
     .panel-toolbar-shell {{
       display: grid;
@@ -540,7 +538,7 @@ def render_dashboard_shell(
     iframe {{
       display: block;
       width: 100%;
-      min-height: calc(100vh - 190px);
+      min-height: calc(100vh - 140px);
       flex: 1 1 auto;
       border: 1px solid var(--line);
       border-radius: 12px;
@@ -563,7 +561,7 @@ def render_dashboard_shell(
       .audit-runner-actions {{
         justify-content: flex-start;
       }}
-      iframe {{ min-height: calc(100vh - 210px); }}
+      iframe {{ min-height: calc(100vh - 160px); }}
     }}
   </style>
 </head>
