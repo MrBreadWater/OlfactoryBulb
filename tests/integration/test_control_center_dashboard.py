@@ -283,7 +283,8 @@ with TemporaryDirectory() as tmp:
     assert "OlfactoryBulb Control Center" in html
     assert "Run selected audit" in html
     assert "/__control_center_state__" in html
-    assert "shell-status-strip" not in html
+    assert "shell-status-strip" in html
+    assert "shell-status-chip" in html
     assert "No audit is running yet." in html
     assert ">default<" in html
     assert ">all<" in html

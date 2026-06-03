@@ -34,10 +34,9 @@ assert "toolbar" in html
 assert "audit runner" in html
 assert "/__control_center_state__" in html
 assert "dashboard-shell-state" in html
-assert "shell-status-chip" not in html
-assert "shell-status-strip" not in html
+assert "shell-status-chip" in html
+assert "shell-status-strip" in html
 assert "tab-badge tone-fail" in html
-assert "tab-detail" in html
 assert "shell-progress" in html
 assert "Running audit" in html
 

@@ -56,16 +56,24 @@ def render_dashboard_shell(
     def _tab_state_key(tab_key: str) -> str:
         return "audit" if tab_key == "audits" else tab_key
 
+    header_status_html = "\n".join(
+        (
+            f"<div class='shell-status-chip tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-shell-status-card data-tab-key='{_esc(tab.key)}'>"
+            f"<span>{_esc(tab.label)}</span>"
+            f"<strong class='tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-shell-status-badge>{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge') or tab.badge or 'idle'))}</strong>"
+            f"<small data-shell-status-detail>{_esc(str((shell_state.get(_tab_state_key(tab.key)) or {}).get('message') if isinstance(shell_state.get(_tab_state_key(tab.key)), dict) else tab.description or ''))}</small>"
+            "</div>"
+        )
+        for tab in tab_specs
+    )
+
     nav_html = "\n".join(
         (
-            f"<button class='tab-button tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' type='button' role='tab' data-tab-button "
+            f"<button class='tab-button' type='button' role='tab' data-tab-button "
             f"data-tab-key='{_esc(tab.key)}' data-tab-target='tab-{_esc(tab.key)}' aria-controls='tab-{_esc(tab.key)}' "
-            f"data-tab-state-key='{_esc(_tab_state_key(tab.key))}' data-tab-default-detail='{_esc(tab.description)}' aria-selected='{'true' if tab.key == active_key else 'false'}'>"
-            "<span class='tab-button-head'>"
+            f"title='{_esc(tab.description or tab.label)}' aria-selected='{'true' if tab.key == active_key else 'false'}'>"
             f"<span class='tab-label'>{_esc(tab.label)}</span>"
             f"<em class='tab-badge tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-tab-badge {'hidden' if not (tab_state_payload.get(tab.key) or {}).get('badge') and not tab.badge else ''}>{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge') or tab.badge or 'idle'))}</em>"
-            "</span>"
-            f"<small class='tab-detail' data-tab-detail>{_esc(str((shell_state.get(_tab_state_key(tab.key)) or {}).get('message') if isinstance(shell_state.get(_tab_state_key(tab.key)), dict) else tab.description or ''))}</small>"
             "</button>"
         )
         for tab in tab_specs
@@ -129,6 +137,7 @@ def render_dashboard_shell(
     .shell-header {{
       display: flex;
       align-items: flex-start;
+      justify-content: space-between;
       gap: 18px;
     }}
     .shell-heading {{
@@ -137,6 +146,57 @@ def render_dashboard_shell(
     }}
     h1 {{ margin: 0 0 2px; font-size: 18px; letter-spacing: 0; }}
     .subtle {{ color: var(--muted); font-size: 12px; }}
+    .shell-status-strip {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 8px;
+      flex: 1 1 620px;
+      max-width: 820px;
+      align-self: stretch;
+    }}
+    .shell-status-chip {{
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+      min-width: 0;
+      overflow: hidden;
+    }}
+    .shell-status-chip span {{
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }}
+    .shell-status-chip strong {{
+      font-size: 13px;
+      line-height: 1.3;
+    }}
+    .shell-status-chip small {{
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }}
+    .shell-status-chip.tone-running {{
+      animation: shell-status-aura 1.8s ease-in-out infinite;
+    }}
+    @keyframes shell-status-aura {{
+      0% {{
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05), 0 0 0 0 rgba(37, 99, 235, 0.0);
+      }}
+      40% {{
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05), 0 0 0 5px rgba(37, 99, 235, 0.14);
+      }}
+      100% {{
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05), 0 0 0 10px rgba(37, 99, 235, 0.0);
+      }}
+    }}
     .shell-progress {{
       margin-top: 8px;
       display: flex;
@@ -331,37 +391,18 @@ def render_dashboard_shell(
     }}
     .tab-button {{
       appearance: none;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      align-items: stretch;
-      justify-content: flex-start;
-      gap: 6px;
-      flex: 1 1 220px;
-      min-width: 190px;
-      text-align: left;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
       border: 1px solid #d6deea;
       background: #ffffff;
       color: #334155;
       border-radius: 8px;
-      padding: 10px 12px 11px;
+      padding: 9px 12px;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
       box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-      overflow: hidden;
-      isolation: isolate;
-    }}
-    .tab-button > * {{
-      position: relative;
-      z-index: 1;
-    }}
-    .tab-button-head {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      justify-content: space-between;
-      min-width: 0;
     }}
     .tab-label {{
       min-width: 0;
@@ -380,13 +421,6 @@ def render_dashboard_shell(
       border: 1px solid transparent;
       background: #eef2f8;
       color: var(--muted);
-    }}
-    .tab-detail {{
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.35;
-      font-weight: 500;
-      overflow-wrap: anywhere;
     }}
     .tab-badge[hidden] {{
       display: none !important;
@@ -415,20 +449,6 @@ def render_dashboard_shell(
       background: var(--blue-soft);
       color: var(--blue);
       border-color: #bfd0f7;
-    }}
-    .tab-button.tone-running {{
-      animation: tab-button-aura 1.8s ease-in-out infinite;
-    }}
-    @keyframes tab-button-aura {{
-      0% {{
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04), 0 0 0 0 rgba(37, 99, 235, 0.0);
-      }}
-      40% {{
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04), 0 0 0 6px rgba(37, 99, 235, 0.14);
-      }}
-      100% {{
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04), 0 0 0 12px rgba(37, 99, 235, 0.0);
-      }}
     }}
     .tab-button[aria-selected="true"] {{
       background: var(--blue-soft);
@@ -473,6 +493,9 @@ def render_dashboard_shell(
       <div class="shell-heading">
         <h1>{_esc(title)}</h1>
         <div class="subtle">{_esc(subtitle)}</div>
+      </div>
+      <div class="shell-status-strip">
+        {header_status_html}
       </div>
     </div>
     <div class="shell-progress" id="shell-progress" {'hidden' if not progress_active else ''}>
@@ -540,25 +563,32 @@ def render_dashboard_shell(
         Object.entries(tabs).forEach(([key, tabState]) => {{
           const button = document.querySelector(`[data-tab-button][data-tab-key="${{key}}"]`);
           const frame = document.querySelector(`iframe[data-tab-frame][data-tab-key="${{key}}"]`);
+          const statusCard = document.querySelector(`[data-shell-status-card][data-tab-key="${{key}}"]`);
           if (button) {{
             const badgeEl = button.querySelector("[data-tab-badge]");
-            const detailEl = button.querySelector("[data-tab-detail]");
-            const stateKey = String(button.dataset.tabStateKey || key);
-            const stateValue = state[stateKey] && typeof state[stateKey] === "object" ? state[stateKey] : {{}};
-            const detailText = String(stateValue.message || button.dataset.defaultDetail || "");
-            const tone = toneClass(tabState.badge_tone || tabState.status || "neutral");
             const badgeText = String(tabState.badge || "").trim();
-            button.classList.remove("tone-neutral", "tone-pass", "tone-warn", "tone-fail", "tone-running", "tone-info");
-            button.classList.add(tone);
             if (badgeEl) {{
               badgeEl.textContent = badgeText;
               badgeEl.hidden = !badgeText;
-              badgeEl.className = `tab-badge ${{tone}}`;
+              badgeEl.className = `tab-badge ${{toneClass(tabState.badge_tone || tabState.status || "neutral")}}`;
+            }}
+          }}
+          if (statusCard) {{
+            const badgeEl = statusCard.querySelector("[data-shell-status-badge]");
+            const detailEl = statusCard.querySelector("[data-shell-status-detail]");
+            const stateKey = String(key === "audits" ? "audit" : key);
+            const stateValue = state[stateKey] && typeof state[stateKey] === "object" ? state[stateKey] : {{}};
+            const detailText = String(stateValue.message || statusCard.querySelector("[data-shell-status-detail]")?.textContent || "");
+            const tone = toneClass(tabState.badge_tone || tabState.status || "neutral");
+            const badgeText = String(tabState.badge || "").trim();
+            statusCard.className = `shell-status-chip ${{tone}}`;
+            if (badgeEl) {{
+              badgeEl.textContent = badgeText;
+              badgeEl.className = tone;
             }}
             if (detailEl) {{
               detailEl.textContent = detailText;
             }}
-            button.title = [String(tabState.badge || tabState.status || "idle"), detailText].filter(Boolean).join(" - ");
           }}
           if (frame) {{
             const desiredBaseSrc = String(tabState.src || frame.dataset.baseSrc || frame.getAttribute("src") || "").trim();
