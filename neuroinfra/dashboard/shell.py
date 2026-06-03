@@ -233,7 +233,8 @@ def render_dashboard_shell(
       100% {{ left: 100%; }}
     }}
     main {{
-      max-width: 1600px;
+      width: 100%;
+      max-width: max(95%, 1700px);
       margin: 0 auto;
       padding: 16px 20px 24px;
     }}

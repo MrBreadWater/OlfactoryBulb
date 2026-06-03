@@ -1344,7 +1344,7 @@ def _render_html(
     }}
     h1 {{ margin: 0 0 4px; font-size: 22px; letter-spacing: 0; }}
     .subtle {{ color: var(--muted); font-size: 13px; }}
-    main {{ max-width: 1500px; margin: 0 auto; padding: 24px 28px 60px; }}
+    main {{ width: 100%; max-width: max(95%, 1700px); margin: 0 auto; padding: 24px 28px 60px; }}
     .stats {{
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
