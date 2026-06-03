@@ -381,6 +381,9 @@ contract for future sessions.
     - collapsed audit item cards should show only the title/status summary and
       any compact numeric strip; the full detail body must stay hidden until
       expanded
+    - when tuning dashboard spacing or summary-strip padding, prefer responsive
+      `clamp()`-based values that scale across window sizes and monitor
+      resolutions over fixed desktop-only padding
     - clicking an audit-group link should scroll that group header to the top
       of the content pane, and the sidebar/content surfaces should start below
       the sticky shell header rather than disappearing behind it

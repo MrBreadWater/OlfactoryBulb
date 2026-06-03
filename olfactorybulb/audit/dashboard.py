@@ -827,7 +827,7 @@ def render_audit_dashboard_html(
       overflow-wrap: anywhere;
     }}
     .item-body-summary {{
-      padding: 0 16px 14px 46px;
+      padding: clamp(12px, 1vw, 16px) clamp(16px, 3vw, 60px);
       background: #ffffff;
     }}
     .check-id {{ margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
