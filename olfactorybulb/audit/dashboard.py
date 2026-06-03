@@ -6,6 +6,7 @@ import argparse
 import html
 import json
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -97,6 +98,11 @@ def _format_evidence_value(value: Any) -> str:
 def _evidence_label(key: str) -> str:
     normalized = key.replace("__", " ").replace("_", " ")
     return _expand_terms(normalized, sentence_case=True)
+
+
+def _safe_dom_id(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9_-]+", "-", str(value)).strip("-")
+    return slug or "item"
 
 
 def _extract_interval_visual_data(item: AuditItem) -> dict[str, Any] | None:
@@ -224,6 +230,36 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
 """
 
 
+def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
+    unit = str(interval["reference_unit"])
+    observed_text = _format_numeric(interval["observed_value"], unit=unit)
+    reference_text = _format_numeric(interval["reference_mean"], unit=unit)
+    low_text = _format_numeric(interval["accepted_low"], unit=unit)
+    high_text = _format_numeric(interval["accepted_high"], unit=unit)
+    positions = interval["positions"]
+    band_left = min(float(positions["accepted_low"]), float(positions["accepted_high"]))
+    band_width = max(0.0, abs(float(positions["accepted_high"]) - float(positions["accepted_low"])))
+    reference_tick_html = ""
+    if positions["reference_mean"] is not None:
+        reference_tick_html = (
+            f"<div class='compact-interval-tick' style='left:{float(positions['reference_mean']):.2f}%'></div>"
+        )
+    return f"""
+<div class='item-compact-interval' data-compact-interval>
+  <div class='compact-interval-track'>
+    <div class='compact-interval-band' style='left:{band_left:.2f}%; width:{band_width:.2f}%;'></div>
+    {reference_tick_html}
+    <div class='compact-interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
+  </div>
+  <div class='compact-interval-meta'>
+    <span>observed {_esc(observed_text)}</span>
+    <span>reference {_esc(reference_text)}</span>
+    <span>range {_esc(low_text)} to {_esc(high_text)}</span>
+  </div>
+</div>
+"""
+
+
 def _render_structured_evidence(evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> str:
     if not evidence:
         return ""
@@ -264,6 +300,25 @@ def _render_evidence(item: AuditItem) -> str:
     return "".join(section for section in rendered_sections if section)
 
 
+def _collapsed_summary_messages(item: AuditItem) -> list[str]:
+    messages: list[str] = []
+    status_reason = str(status_reason_text(item)).strip()
+    if status_reason:
+        messages.append(status_reason)
+    if item.note:
+        note_text = str(item.note).strip()
+        if note_text and note_text not in messages:
+            messages.append(note_text)
+    notes_list = item.evidence.get("notes") if isinstance(item.evidence, dict) else None
+    if isinstance(notes_list, list):
+        for note_text in notes_list:
+            rendered = str(note_text).strip()
+            if rendered and rendered not in messages:
+                messages.append(rendered)
+                break
+    return messages[:2]
+
+
 def _item_search_blob(item: AuditItem) -> str:
     fields = [
         item.check_id,
@@ -281,17 +336,38 @@ def _item_search_blob(item: AuditItem) -> str:
 
 def _render_item_card(item_payload: dict[str, Any]) -> str:
     item = AuditItem(**item_payload)
+    interval = _extract_interval_visual_data(item)
+    card_id = _safe_dom_id(item.check_id)
+    item_body_id = f"item-body-{card_id}"
+    compact_messages = _collapsed_summary_messages(item)
+    compact_messages_html = "".join(
+        f"<div class='item-summary-message'>{_esc(_expand_terms(message, sentence_case=True))}</div>"
+        for message in compact_messages
+    )
+    compact_interval_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
     sections = [
         (
-            f"<article class='item-card {_status_class(item.status)}' data-item-card data-status='{_esc(item.status)}' "
+            f"<article class='item-card {_status_class(item.status)} item-collapsed' data-item-card data-status='{_esc(item.status)}' "
             f"data-detail-level='{_esc(item.detail_level or 'detail')}' data-search='{_esc(_item_search_blob(item))}'>"
         ),
         "<header class='item-header'>",
+        (
+            f"<button class='item-toggle' type='button' data-item-toggle aria-expanded='false' "
+            f"aria-controls='{_esc(item_body_id)}' aria-label='Expand {_esc(_expand_terms(item.title, sentence_case=True))}'>"
+        ),
+        "<span class='item-toggle-icon' aria-hidden='true'>&#9656;</span>",
+        "<span class='item-header-main'>",
+        "<span class='item-header-row'>",
+        f"<span class='item-title'>{_esc(_expand_terms(item.title, sentence_case=True))}</span>",
         _render_status_badge(item.status),
-        f"<div><h3>{_esc(_expand_terms(item.title, sentence_case=True))}</h3>",
-        f"<p class='check-id'>{_esc(item.check_id)}</p></div>",
+        "</span>",
+        (f"<span class='item-summary-text'>{compact_messages_html}</span>" if compact_messages_html else ""),
+        (f"<span class='item-summary-interval'>{compact_interval_html}</span>" if compact_interval_html else ""),
+        "</span>",
+        "</button>",
         "</header>",
-        "<div class='item-body'>",
+        f"<div class='item-body' id='{_esc(item_body_id)}' hidden>",
+        f"<div class='item-block'><h4>Check id</h4><p class='check-id'>{_esc(item.check_id)}</p></div>",
         f"<div class='item-block'><h4>Criterion</h4><p>{_esc(_expand_terms(item.criterion, sentence_case=True))}</p></div>",
         f"<div class='item-block'><h4>Description</h4><p>{_esc(_expand_terms(item.description, sentence_case=True))}</p></div>",
         f"<div class='item-block'><h4>Acceptable result</h4><p>{_esc(_expand_terms(item.acceptable, sentence_case=True))}</p></div>",
@@ -299,7 +375,6 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
             "<div class='item-block'><h4>Decision basis</h4>"
             f"<p>{_esc(_expand_terms(item.acceptable_basis, sentence_case=True))}</p></div>"
         ),
-        _render_evidence(item),
     ]
     status_reason = status_reason_text(item)
     if status_reason:
@@ -307,6 +382,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
             "<div class='item-block status-reason-block'><h4>Why this is a warning</h4>"
             f"<p>{_esc(_expand_terms(status_reason, sentence_case=True))}</p></div>"
         )
+    sections.append(_render_evidence(item))
     if item.note:
         sections.append(
             "<div class='item-block'><h4>Note</h4>"
@@ -422,11 +498,11 @@ def render_audit_dashboard_html(
       z-index: 10;
       background: rgba(247, 248, 251, 0.96);
       border-bottom: 1px solid var(--line);
-      padding: 14px 22px 12px;
+      padding: 14px clamp(18px, 2vw, 30px) 12px;
       backdrop-filter: blur(8px);
     }}
     h1 {{ margin: 0 0 4px; font-size: 18px; }}
-    main {{ max-width: 1540px; margin: 0 auto; padding: 18px 22px 40px; }}
+    main {{ width: 100%; max-width: none; margin: 0; padding: 18px clamp(18px, 2vw, 30px) 40px; }}
     .subtle {{ color: var(--muted); font-size: 13px; }}
     .stats {{
       display: grid;
@@ -556,8 +632,8 @@ def render_audit_dashboard_html(
     }}
     .layout {{
       display: grid;
-      grid-template-columns: minmax(220px, 260px) minmax(0, 1fr);
-      gap: 18px;
+      grid-template-columns: minmax(250px, 320px) minmax(0, 1fr);
+      gap: 20px;
       position: relative;
       z-index: 1;
       align-items: start;
@@ -573,7 +649,7 @@ def render_audit_dashboard_html(
       top: 74px;
       z-index: 1;
       align-self: start;
-      padding: 14px;
+      padding: 16px;
     }}
     .sidebar h2 {{ margin: 0 0 10px; font-size: 16px; }}
     .group-links {{
@@ -646,9 +722,9 @@ def render_audit_dashboard_html(
     .summary-row {{ display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }}
     .items-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-      gap: 14px;
-      padding: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 16px;
+      padding: 16px;
     }}
     .group-section.group-collapsed .items-grid {{
       display: none;
@@ -665,20 +741,74 @@ def render_audit_dashboard_html(
       overflow: hidden;
     }}
     .item-header {{
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      padding: 12px 14px;
+      display: block;
       border-bottom: 1px solid var(--line);
       background: #fbfcfe;
     }}
-    .item-header > div {{
+    .item-toggle {{
+      appearance: none;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      width: 100%;
+      padding: 14px 16px;
+      border: 0;
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+    }}
+    .item-toggle:hover {{
+      background: rgba(239, 246, 255, 0.55);
+    }}
+    .item-toggle-icon {{
+      flex: 0 0 auto;
+      width: 18px;
+      color: #475569;
+      font-size: 13px;
+      line-height: 1.4;
+      transform-origin: 50% 45%;
+      transition: transform 140ms ease;
+    }}
+    .item-card:not(.item-collapsed) .item-toggle-icon {{
+      transform: rotate(90deg);
+    }}
+    .item-header-main {{
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
       min-width: 0;
       flex: 1 1 auto;
     }}
-    .item-header h3 {{ margin: 0; font-size: 15px; }}
-    .check-id {{ margin: 4px 0 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
-    .item-body {{ padding: 14px; display: flex; flex-direction: column; gap: 12px; }}
+    .item-header-row {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }}
+    .item-title {{
+      min-width: 0;
+      font-size: 15px;
+      font-weight: 700;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+    }}
+    .item-summary-text {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      color: #475569;
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .item-summary-message {{
+      overflow-wrap: anywhere;
+    }}
+    .item-summary-interval {{
+      display: block;
+    }}
+    .check-id {{ margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
+    .item-body {{ padding: 16px; display: flex; flex-direction: column; gap: 12px; }}
     .item-block h4 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); }}
     .item-block p {{ margin: 0; }}
     .status-reason-block {{
@@ -784,6 +914,61 @@ def render_audit_dashboard_html(
       align-items: center;
       gap: 6px;
     }}
+    .item-compact-interval {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }}
+    .compact-interval-track {{
+      position: relative;
+      height: 10px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #edf2fa, #dbe5f4);
+      overflow: visible;
+      border: 1px solid #d3ddeb;
+    }}
+    .compact-interval-band {{
+      position: absolute;
+      top: 1px;
+      bottom: 1px;
+      border-radius: 999px;
+      background: rgba(37, 99, 235, 0.18);
+      border: 1px solid rgba(37, 99, 235, 0.26);
+    }}
+    .compact-interval-tick {{
+      position: absolute;
+      top: -2px;
+      width: 2px;
+      height: 14px;
+      transform: translateX(-50%);
+      border-radius: 999px;
+      background: #475569;
+    }}
+    .compact-interval-marker {{
+      position: absolute;
+      top: 50%;
+      width: 10px;
+      height: 10px;
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
+      background: var(--blue);
+    }}
+    .compact-interval-marker.status-pass {{ background: var(--green); }}
+    .compact-interval-marker.status-warn {{ background: var(--amber); }}
+    .compact-interval-marker.status-fail {{ background: var(--red); }}
+    .compact-interval-meta {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }}
+    .compact-interval-meta span {{
+      white-space: nowrap;
+    }}
     .legend-swatch {{
       display: inline-block;
       width: 10px;
@@ -864,6 +1049,15 @@ def render_audit_dashboard_html(
       .evidence-row {{
         grid-template-columns: 1fr;
       }}
+      .items-grid {{
+        grid-template-columns: 1fr;
+      }}
+      .item-header-row {{
+        align-items: flex-start;
+      }}
+      .compact-interval-meta span {{
+        white-space: normal;
+      }}
     }}
   </style>
 </head>
@@ -929,6 +1123,7 @@ def render_audit_dashboard_html(
       const emptyState = document.getElementById("audit-empty-state");
       const emptyStateDefaultText = {json.dumps(empty_message)};
       const groupSections = Array.from(document.querySelectorAll("[data-group-section]"));
+      const itemCards = Array.from(document.querySelectorAll("[data-item-card]"));
 
       function togglePressed(button) {{
         if (!button) return false;
@@ -947,6 +1142,20 @@ def render_audit_dashboard_html(
         const button = section.querySelector("[data-group-toggle]");
         if (button) {{
           button.textContent = collapse ? "Expand" : "Collapse";
+        }}
+      }}
+
+      function toggleItem(item, collapse) {{
+        if (!item) return;
+        item.classList.toggle("item-collapsed", Boolean(collapse));
+        const button = item.querySelector("[data-item-toggle]");
+        const body = item.querySelector(".item-body");
+        if (button) {{
+          button.setAttribute("aria-expanded", collapse ? "false" : "true");
+          button.setAttribute("aria-label", collapse ? "Expand item" : "Collapse item");
+        }}
+        if (body) {{
+          body.hidden = Boolean(collapse);
         }}
       }}
 
@@ -1001,11 +1210,19 @@ def render_audit_dashboard_html(
           toggleGroup(section, !section?.classList.contains("group-collapsed"));
         }});
       }});
+      document.querySelectorAll("[data-item-toggle]").forEach((button) => {{
+        button.addEventListener("click", () => {{
+          const item = button.closest("[data-item-card]");
+          toggleItem(item, !item?.classList.contains("item-collapsed"));
+        }});
+      }});
       document.getElementById("expand-all-groups")?.addEventListener("click", () => {{
         groupSections.forEach((section) => toggleGroup(section, false));
+        itemCards.forEach((item) => toggleItem(item, false));
       }});
       document.getElementById("collapse-all-groups")?.addEventListener("click", () => {{
         groupSections.forEach((section) => toggleGroup(section, true));
+        itemCards.forEach((item) => toggleItem(item, true));
       }});
       [failuresOnlyToggle, hidePassedGroupsToggle, showDetailToggle].forEach((button) => {{
         button?.addEventListener("click", () => {{
@@ -1015,6 +1232,7 @@ def render_audit_dashboard_html(
       }});
       searchInput?.addEventListener("input", applyFilters);
       searchInput?.addEventListener("change", applyFilters);
+      itemCards.forEach((item) => toggleItem(item, true));
       applyFilters();
     }})();
   </script>

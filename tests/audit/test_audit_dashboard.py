@@ -73,7 +73,10 @@ with TemporaryDirectory() as tmp:
     assert "Show detail items" not in html
     assert "group-link-label" in html
     assert "data-item-card" in html
+    assert "data-item-toggle" in html
+    assert "item-collapsed" in html
     assert "data-interval-visual" in html
+    assert "item-compact-interval" in html
     assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html
@@ -119,5 +122,6 @@ with TemporaryDirectory() as tmp:
     export_audit_dashboard(summary_report, output_dir)
     html = (output_dir / "index.html").read_text()
     assert "Show detail items" in html
+    assert "data-item-toggle" in html
 
 print("audit_dashboard: OK")

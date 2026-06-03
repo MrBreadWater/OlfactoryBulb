@@ -373,6 +373,9 @@ contract for future sessions.
       of duplicating those controls in a global page toolbar
     - the tab content area should read as one full working surface rather than
       a card nested inside another card
+    - audit item cards should remain compact by default, with item-level
+      expand/collapse plus global expand/collapse controls that affect both
+      groups and items
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed
