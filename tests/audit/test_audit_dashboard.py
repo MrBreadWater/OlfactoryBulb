@@ -51,14 +51,20 @@ sample_report = AuditReport(
             group_title="Audit beta",
         ),
         AuditItem(
-            check_id="audit_gamma.gamma_profile",
+            check_id="audit_gamma.gamma_curve",
             status="PASS",
-            title="Gamma profile",
-            criterion="Gamma values should stay stable.",
+            title="Gamma curve",
+            criterion="Gamma firing should be shown as a current-versus-rate series.",
             description="Description",
             acceptable="Acceptable",
             acceptable_basis="Configured",
-            evidence={"count": 12, "mean": 4.2, "std": 1.1, "label": "Observed sweep"},
+            evidence={
+                "currents_pA": [0.0, 50.0, 100.0, 150.0],
+                "firing_rates_by_step_Hz": [0.0, 2.4, 5.8, 9.6],
+                "reference_values_Hz": [0.0, 2.0, 5.0, 9.0],
+                "model_values_Hz": [0.0, 1.8, 4.6, 8.7],
+                "label": "Observed sweep",
+            },
             group_id="audit_gamma",
             group_title="Audit gamma",
         ),
@@ -103,9 +109,9 @@ with TemporaryDirectory() as tmp:
     assert "warning-summary-text" in html
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
-    assert "Numeric profile" in html
-    assert "numeric-profile-graph" in html
-    assert html.count("<div class='numeric-profile-row'>") >= 1
+    assert "f-I curve" in html
+    assert "data-series-graph" in html
+    assert html.count("<circle class='series-point'") >= 4
     assert "Observed sweep" in html
     notes_index = html.index("<div class='item-body-notes'>")
     warning_index = html.index("<div class='item-body-warning'>")

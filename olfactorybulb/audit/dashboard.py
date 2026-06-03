@@ -230,26 +230,29 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
 """
 
 
-def _extract_numeric_profile_data(evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> dict[str, Any] | None:
-    exclude = set(exclude_keys or set())
-    entries: list[tuple[str, float]] = []
-    for key, value in evidence.items():
-        if key in exclude or key == "__reference_annotations__":
-            continue
-        numeric_value = _float_or_none(value)
-        if numeric_value is not None:
-            entries.append((key, numeric_value))
-    if not entries:
-        return None
+_SERIES_X_KEY_CANDIDATES = ("currents_pA", "step_currents_pA", "current_steps_pA", "current_pA")
+_SERIES_Y_KEY_CANDIDATES = ("firing_rates_by_step_Hz", "reference_values_Hz", "model_values_Hz", "firing_rate_Hz")
 
-    values = [value for _, value in entries]
+
+def _float_list_or_none(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or not value:
+        return None
+    values: list[float] = []
+    for entry in value:
+        numeric = _float_or_none(entry)
+        if numeric is None:
+            return None
+        values.append(numeric)
+    return values
+
+
+def _series_domain(values: list[float]) -> tuple[float, float]:
     domain_low = min(values)
     domain_high = max(values)
     if all(value >= 0.0 for value in values):
         domain_low = 0.0
     elif all(value <= 0.0 for value in values):
         domain_high = 0.0
-
     span = domain_high - domain_low
     if span <= 0.0:
         pad = max(abs(domain_high) * 0.25, 1.0)
@@ -261,72 +264,183 @@ def _extract_numeric_profile_data(evidence: dict[str, Any], *, exclude_keys: set
         domain_low = max(0.0, domain_low)
     if max(values) <= 0.0:
         domain_high = min(0.0, domain_high)
+    if domain_low == domain_high:
+        domain_high = domain_low + 1.0
+    return domain_low, domain_high
 
-    def _position(value: float) -> float:
-        width = domain_high - domain_low
-        if width <= 0.0:
-            return 50.0
-        return max(0.0, min(100.0, ((value - domain_low) / width) * 100.0))
 
-    zero_position = _position(0.0)
-    rows: list[dict[str, Any]] = []
-    for key, value in entries:
-        value_position = _position(value)
-        left = min(zero_position, value_position)
-        width = max(0.0, abs(value_position - zero_position))
-        rows.append(
+def _series_color_for_key(key: str, index: int, *, status: str) -> dict[str, str]:
+    lowered = key.lower()
+    if "reference" in lowered:
+        return {"stroke": "#64748b", "fill": "#64748b", "dash": "6 4"}
+    if "model" in lowered:
+        stroke = {"PASS": "#2563eb", "WARN": "#d97706", "FAIL": "#dc2626"}.get(status, "#2563eb")
+        return {"stroke": stroke, "fill": stroke, "dash": ""}
+    palette = ["#2563eb", "#0f766e", "#7c3aed", "#d97706"]
+    color = palette[index % len(palette)]
+    return {"stroke": color, "fill": color, "dash": ""}
+
+
+def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> tuple[str, set[str]]:
+    exclude = set(exclude_keys or set())
+    if not evidence:
+        return "", set()
+
+    series_kind = str(evidence.get("series_kind", "")).strip()
+    x_key = ""
+    x_values: list[float] | None = None
+    series_entries: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+
+    row_source = evidence.get("fi_curve_rows")
+    if isinstance(row_source, list) and row_source:
+        row_points: list[tuple[float, float]] = []
+        for row in row_source:
+            if not isinstance(row, dict):
+                continue
+            x_value = _float_or_none(row.get("current_pA"))
+            y_value = _float_or_none(row.get("firing_rate_Hz"))
+            if x_value is None or y_value is None:
+                continue
+            row_points.append((x_value, y_value))
+        if row_points:
+            row_points.sort(key=lambda pair: pair[0])
+            x_values = [point[0] for point in row_points]
+            x_key = "current_pA"
+            series_entries.append(
+                {
+                    "key": "firing_rate_Hz",
+                    "label": _evidence_label("firing_rate_Hz"),
+                    "points": row_points,
+                }
+            )
+            used_keys.add("fi_curve_rows")
+            used_keys.add("current_pA")
+            used_keys.add("firing_rate_Hz")
+            if not series_kind:
+                series_kind = "f-i curve"
+
+    if x_values is None:
+        for candidate in _SERIES_X_KEY_CANDIDATES:
+            if candidate in exclude or candidate == "fi_curve_rows":
+                continue
+            candidate_values = _float_list_or_none(evidence.get(candidate))
+            if candidate_values is not None and len(candidate_values) >= 2:
+                x_key = candidate
+                x_values = candidate_values
+                used_keys.add(candidate)
+                break
+
+    if x_values is None:
+        return "", set()
+
+    x_len = len(x_values)
+    for candidate in _SERIES_Y_KEY_CANDIDATES:
+        if candidate in exclude or candidate == x_key:
+            continue
+        candidate_values = _float_list_or_none(evidence.get(candidate))
+        if candidate_values is None or len(candidate_values) != x_len:
+            continue
+        ordered_pairs = sorted(zip(x_values, candidate_values), key=lambda pair: pair[0])
+        series_entries.append(
             {
-                "key": key,
-                "label": _evidence_label(key),
-                "value": value,
-                "value_text": _format_numeric(value),
-                "left": left,
-                "width": width,
+                "key": candidate,
+                "label": _evidence_label(candidate),
+                "points": ordered_pairs,
             }
         )
+        used_keys.add(candidate)
 
-    return {
-        "rows": rows,
-        "domain_low": domain_low,
-        "domain_high": domain_high,
-        "domain_low_text": _format_numeric(domain_low),
-        "domain_high_text": _format_numeric(domain_high),
-        "zero_position": zero_position,
-        "numeric_keys": [key for key, _ in entries],
-    }
-
-
-def _render_numeric_profile(item: AuditItem, evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> tuple[str, set[str]]:
-    profile = _extract_numeric_profile_data(evidence, exclude_keys=exclude_keys)
-    if profile is None:
+    if not series_entries:
         return "", set()
-    rows = profile["rows"]
-    row_count = len(rows)
-    status_class = _status_class(item.status)
-    rows_html = "".join(
-        f"<div class='numeric-profile-row'>"
-        f"<div class='numeric-profile-label'>{_esc(row['label'])}</div>"
-        f"<div class='numeric-profile-track'>"
-        f"<div class='numeric-profile-zero' style='left:{profile['zero_position']:.2f}%;'></div>"
-        f"<div class='numeric-profile-bar {status_class}' style='left:{row['left']:.2f}%; width:{row['width']:.2f}%;'></div>"
-        "</div>"
-        f"<div class='numeric-profile-value'>{_esc(row['value_text'])}</div>"
-        "</div>"
-        for row in rows
-    )
-    aria_label = (
-        f"Numeric profile with {row_count} values on a shared scale from "
-        f"{profile['domain_low_text']} to {profile['domain_high_text']}."
-    )
+
+    x_domain = _series_domain([point[0] for series in series_entries for point in series["points"]])
+    y_domain = _series_domain([point[1] for series in series_entries for point in series["points"]])
+    x_low, x_high = x_domain
+    y_low, y_high = y_domain
+    plot_width = 520.0
+    plot_height = 160.0
+    margin_left = 56.0
+    margin_right = 18.0
+    margin_top = 16.0
+    margin_bottom = 26.0
+    svg_width = margin_left + plot_width + margin_right
+    svg_height = margin_top + plot_height + margin_bottom
+
+    def _x_pos(value: float) -> float:
+        width = x_high - x_low
+        if width <= 0.0:
+            return margin_left + plot_width / 2.0
+        return margin_left + ((value - x_low) / width) * plot_width
+
+    def _y_pos(value: float) -> float:
+        height = y_high - y_low
+        if height <= 0.0:
+            return margin_top + plot_height / 2.0
+        return margin_top + plot_height - ((value - y_low) / height) * plot_height
+
+    def _path_d(points: list[tuple[float, float]]) -> str:
+        commands = [f"M {_x_pos(points[0][0]):.2f} {_y_pos(points[0][1]):.2f}"]
+        commands.extend(f"L {_x_pos(x):.2f} {_y_pos(y):.2f}" for x, y in points[1:])
+        return " ".join(commands)
+
+    x_label = _evidence_label(x_key)
+    if not series_kind:
+        if "current" in x_key.lower() and any(
+            "rate" in entry["key"].lower() or entry["key"].lower().endswith("_hz") for entry in series_entries
+        ):
+            series_kind = "f-i curve"
+        else:
+            series_kind = "series graph"
+
+    svg_lines = [
+        f"<svg class='series-graph-svg' data-series-graph role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
+        f"aria-label='{_esc(series_kind.title())} with {len(series_entries)} series on a shared scale. "
+        f"X axis {x_label} from {_format_numeric(x_low)} to {_format_numeric(x_high)}. "
+        f"Y axis from {_format_numeric(y_low)} to {_format_numeric(y_high)}.'>"
+        f"<rect class='series-graph-bg' x='0' y='0' width='{svg_width:.0f}' height='{svg_height:.0f}' rx='10' ry='10'></rect>",
+        f"<line class='series-axis' x1='{margin_left:.2f}' y1='{margin_top + plot_height:.2f}' x2='{margin_left + plot_width:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
+        f"<line class='series-axis' x1='{margin_left:.2f}' y1='{margin_top:.2f}' x2='{margin_left:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
+    ]
+
+    if x_low <= 0.0 <= x_high:
+        svg_lines.append(
+            f"<line class='series-zero' x1='{_x_pos(0.0):.2f}' y1='{margin_top:.2f}' x2='{_x_pos(0.0):.2f}' y2='{margin_top + plot_height:.2f}'></line>"
+        )
+
+    if y_low <= 0.0 <= y_high:
+        svg_lines.append(
+            f"<line class='series-zero' x1='{margin_left:.2f}' y1='{_y_pos(0.0):.2f}' x2='{margin_left + plot_width:.2f}' y2='{_y_pos(0.0):.2f}'></line>"
+        )
+
+    legend_items: list[str] = []
+    for index, series in enumerate(series_entries):
+        color = _series_color_for_key(series["key"], index, status=str(item.status))
+        dash_attr = f" stroke-dasharray='{color['dash']}'" if color["dash"] else ""
+        svg_lines.append(
+            f"<path class='series-line' d='{_esc(_path_d(series['points']))}' "
+            f"style='stroke:{color['stroke']}; fill:none;' {dash_attr}></path>"
+        )
+        for x_value, y_value in series["points"]:
+            svg_lines.append(
+                f"<circle class='series-point' cx='{_x_pos(x_value):.2f}' cy='{_y_pos(y_value):.2f}' r='3.4' "
+                f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
+            )
+        legend_items.append(
+            f"<span class='series-legend-item'><i class='series-legend-swatch' style='background:{color['fill']}; border-color:{color['stroke']};"
+            f"{' border-style:dashed;' if color['dash'] else ''}'></i>{_esc(series['label'])}</span>"
+        )
+
     return (
-        "<div class='item-block numeric-profile-block'>"
-        "<h4>Numeric profile</h4>"
-        f"<div class='numeric-profile-scale'><span>{_esc(profile['domain_low_text'])}</span><span>{_esc(profile['domain_high_text'])}</span></div>"
-        f"<div class='numeric-profile-graph' data-evidence-graph role='img' aria-label='{_esc(aria_label)}'>"
-        f"{rows_html}"
-        "</div>"
-        "</div>"
-    ), set(profile["numeric_keys"])
+        f"<div class='item-block series-graph-block'>"
+        f"<h4>{_esc('f-I curve' if series_kind == 'f-i curve' else 'Series graph')}</h4>"
+        f"<div class='series-graph-meta'><span>x-axis {_esc(x_label)}</span><span>y-axis values</span></div>"
+        f"<div class='series-graph-shell'>"
+        f"{''.join(svg_lines)}</svg>"
+        f"</div>"
+        f"<div class='series-legend'>{''.join(legend_items)}</div>"
+        f"</div>"
+    ), used_keys
 
 
 def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
@@ -396,10 +510,10 @@ def _render_evidence(item: AuditItem) -> str:
         if observed_key:
             exclude_keys.add(observed_key)
     else:
-        numeric_profile_html, numeric_keys = _render_numeric_profile(item, evidence, exclude_keys=exclude_keys)
-        if numeric_profile_html:
-            rendered_sections.append(numeric_profile_html)
-            exclude_keys.update(numeric_keys)
+        series_graph_html, series_keys = _render_series_graph(item, evidence, exclude_keys=exclude_keys)
+        if series_graph_html:
+            rendered_sections.append(series_graph_html)
+            exclude_keys.update(series_keys)
     rendered_sections.append(_render_structured_evidence(evidence, exclude_keys=exclude_keys))
     return "".join(section for section in rendered_sections if section)
 
@@ -1177,13 +1291,13 @@ def render_audit_dashboard_html(
     .legend-swatch.observed.status-pass {{ background: var(--green); border-color: var(--green); }}
     .legend-swatch.observed.status-warn {{ background: var(--amber); border-color: var(--amber); }}
     .legend-swatch.observed.status-fail {{ background: var(--red); border-color: var(--red); }}
-    .numeric-profile-block {{
+    .series-graph-block {{
       border: 1px solid #dbe4f0;
       border-radius: 10px;
       padding: 12px;
       background: #fbfdff;
     }}
-    .numeric-profile-scale {{
+    .series-graph-meta {{
       display: flex;
       justify-content: space-between;
       gap: 12px;
@@ -1192,67 +1306,57 @@ def render_audit_dashboard_html(
       line-height: 1.35;
       margin-bottom: 8px;
     }}
-    .numeric-profile-graph {{
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }}
-    .numeric-profile-row {{
-      display: grid;
-      grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
-      gap: 10px;
-      align-items: center;
-      min-width: 0;
-    }}
-    .numeric-profile-label {{
-      color: #334155;
-      font-size: 12px;
-      font-weight: 700;
-      overflow-wrap: anywhere;
-    }}
-    .numeric-profile-track {{
-      position: relative;
-      height: 14px;
-      border-radius: 999px;
-      overflow: hidden;
-      background: linear-gradient(180deg, #eef3fb 0%, #e6edf7 100%);
+    .series-graph-shell {{
       border: 1px solid #d9e2ee;
+      border-radius: 10px;
+      background: linear-gradient(180deg, #eef3fb 0%, #e6edf7 100%);
+      overflow: hidden;
     }}
-    .numeric-profile-zero {{
-      position: absolute;
-      top: -1px;
-      bottom: -1px;
-      width: 2px;
-      background: #94a3b8;
+    .series-graph-svg {{
+      display: block;
+      width: 100%;
+      height: auto;
+    }}
+    .series-graph-bg {{
+      fill: transparent;
+    }}
+    .series-axis {{
+      stroke: #cbd5e1;
+      stroke-width: 1;
+    }}
+    .series-zero {{
+      stroke: #94a3b8;
+      stroke-width: 1.5;
+      stroke-dasharray: 4 4;
+    }}
+    .series-line {{
+      fill: none;
+      stroke-width: 2.5;
+    }}
+    .series-point {{
+      stroke-width: 1.5;
+      fill: #ffffff;
+    }}
+    .series-legend {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 11px;
+    }}
+    .series-legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }}
+    .series-legend-swatch {{
+      display: inline-block;
+      width: 10px;
+      height: 10px;
       border-radius: 999px;
-      opacity: 0.9;
-    }}
-    .numeric-profile-bar {{
-      position: absolute;
-      top: 2px;
-      bottom: 2px;
-      border-radius: 999px;
-      border: 1px solid transparent;
-      min-width: 2px;
-      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
-    }}
-    .numeric-profile-bar.status-pass {{
-      background: rgba(21, 128, 61, 0.18);
-      border-color: rgba(21, 128, 61, 0.28);
-    }}
-    .numeric-profile-bar.status-warn {{
-      background: rgba(217, 119, 6, 0.18);
-      border-color: rgba(217, 119, 6, 0.28);
-    }}
-    .numeric-profile-bar.status-fail {{
-      background: rgba(220, 38, 38, 0.18);
-      border-color: rgba(220, 38, 38, 0.28);
-    }}
-    .numeric-profile-value {{
-      color: #334155;
-      font-size: 12px;
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
+      background: #cbd5e1;
+      border: 1px solid #94a3b8;
     }}
     .evidence-grid {{
       margin: 0;

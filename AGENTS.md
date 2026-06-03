@@ -328,9 +328,13 @@ contract for future sessions.
   - make audit reports glanceable by default, with collapsed groups/items and
     explicit expansion controls
   - keep warnings visible, specific, and non-duplicated
-  - when audit evidence is primarily numeric, render a compact graph or band
-    first and keep the key/value grid as fallback metadata rather than the
-    primary visual
+  - when audit evidence contains an explicit series or curve, such as
+    f-I/current-clamp arrays or `fi_curve_rows`, render the curve first and
+    keep the key/value grid as fallback metadata rather than the primary
+    visual
+  - do not force scalar numeric evidence into a chart; if the evidence is not
+    explicitly series-shaped, keep it as metadata or use a dedicated interval
+    visual when bounds are present
   - keep persistent audit-card body regions visually coherent in collapsed and
     expanded states; numeric summaries, notes/caveats, and warning blocks
     should share deliberate spacing/order instead of relying on each block's

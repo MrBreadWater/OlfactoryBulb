@@ -176,6 +176,24 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     detail_level="summary",
                 ),
                 AuditItem(
+                    check_id="human_review_status.series_item",
+                    status="PASS",
+                    title="Series item",
+                    criterion="The firing-rate-versus-current evidence should render as a series graph.",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    evidence={
+                        "currents_pA": [0.0, 50.0, 100.0, 150.0],
+                        "firing_rates_by_step_Hz": [0.0, 2.2, 5.4, 8.9],
+                        "reference_values_Hz": [0.0, 2.0, 5.0, 8.6],
+                        "model_values_Hz": [0.0, 1.7, 4.5, 8.1],
+                    },
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
                     check_id="human_review_status.notes_only_item",
                     status="PASS",
                     title="Notes-only item",
@@ -781,6 +799,7 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert cards_ready is True
+            assert client.eval("Boolean(document.querySelector('[data-series-graph]'))") is True
             collapsed = client.eval(
                 "(() => {"
                 "  const group = document.querySelector('[data-group-section]');"
