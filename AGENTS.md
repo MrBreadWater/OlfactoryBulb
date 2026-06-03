@@ -350,6 +350,8 @@ contract for future sessions.
     third-party CDN runtime assets for features such as math rendering
   - prefer server-rendered criterion math in exported audit HTML so the
     critical readability path does not depend on client-side JavaScript
+  - keep rendered criterion SVG backgrounds transparent; do not rely on the
+    default Matplotlib white patch around math fragments
   - when audit evidence contains an explicit series or curve, such as
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
     when the item explicitly opts into a `series_visuals` declaration; do not

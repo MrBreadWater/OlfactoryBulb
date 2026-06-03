@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import AuditItem, AuditReport
-from olfactorybulb.audit.dashboard import export_audit_dashboard
+from olfactorybulb.audit.dashboard import _render_math_svg_fragment, export_audit_dashboard
 
 
 sample_report = AuditReport(
@@ -250,6 +250,9 @@ with TemporaryDirectory() as tmp:
     assert "Observed scalar metrics" in html
     assert "Observed sequence" in html
     assert "Plain scalar metrics" in html
+    math_svg = _render_math_svg_fragment(r"\left|\ln(\bar{x})\right|", display=True)
+    assert 'style="fill: none"' in math_svg
+    assert 'style="fill: #ffffff"' not in math_svg
     gamma_index = html.index("audit_gamma.gamma_curve")
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
     plain_index = html.index("audit_gamma.gamma_plain_numeric")

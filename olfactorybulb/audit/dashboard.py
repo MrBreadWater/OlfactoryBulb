@@ -57,6 +57,7 @@ def _render_math_svg_fragment(expression: str, *, display: bool) -> str:
     if svg_start < 0 or svg_end < 0:
         return ""
     svg_markup = svg_text[svg_start : svg_end + len("</svg>")]
+    svg_markup = re.sub(r'style="fill:\s*#ffffff"', 'style="fill: none"', svg_markup, count=1)
     svg_class = "criterion-svg criterion-svg-display" if display else "criterion-svg criterion-svg-inline"
     if "class=" in svg_markup.partition(">")[0]:
         svg_markup = re.sub(r'class="([^"]*)"', lambda match: f'class="{match.group(1)} {svg_class}"', svg_markup, count=1)
@@ -2352,6 +2353,7 @@ def render_audit_dashboard_html(
       max-width: 100%;
       height: auto;
       fill: currentColor;
+      background: transparent;
     }}
     .criterion-svg-display {{
       min-width: max-content;
