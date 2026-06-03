@@ -1557,9 +1557,10 @@ def render_audit_dashboard_html(
       --amber: #d97706;
       --green: #15803d;
       --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --ui-font-stack: Verdana, sans-serif;
     }}
     * {{ box-sizing: border-box; }}
-    body {{ margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow-anchor: none; }}
+    body {{ margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--ui-font-stack); overflow-anchor: none; }}
     header {{
       position: sticky;
       top: 0;

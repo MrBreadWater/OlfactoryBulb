@@ -58,22 +58,13 @@ def render_dashboard_shell(
 
     header_status_html = "\n".join(
         (
-            f"<div class='shell-status-chip tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-shell-status-card data-tab-key='{_esc(tab.key)}'>"
+            f"<button class='shell-status-chip' type='button' role='tab' data-tab-button data-shell-status-card "
+            f"data-tab-key='{_esc(tab.key)}' data-tab-target='tab-{_esc(tab.key)}' aria-controls='tab-{_esc(tab.key)}' "
+            f"data-tab-tone='{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' "
+            f"aria-selected='{'true' if tab.key == active_key else 'false'}' title='{_esc(tab.description or tab.label)}'>"
             f"<span>{_esc(tab.label)}</span>"
             f"<strong class='tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-shell-status-badge>{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge') or tab.badge or 'idle'))}</strong>"
             f"<small data-shell-status-detail>{_esc(str((shell_state.get(_tab_state_key(tab.key)) or {}).get('message') if isinstance(shell_state.get(_tab_state_key(tab.key)), dict) else tab.description or ''))}</small>"
-            "</div>"
-        )
-        for tab in tab_specs
-    )
-
-    nav_html = "\n".join(
-        (
-            f"<button class='tab-button' type='button' role='tab' data-tab-button "
-            f"data-tab-key='{_esc(tab.key)}' data-tab-target='tab-{_esc(tab.key)}' aria-controls='tab-{_esc(tab.key)}' "
-            f"title='{_esc(tab.description or tab.label)}' aria-selected='{'true' if tab.key == active_key else 'false'}'>"
-            f"<span class='tab-label'>{_esc(tab.label)}</span>"
-            f"<em class='tab-badge tone-{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge_tone') or tab.badge_tone or 'neutral'))}' data-tab-badge {'hidden' if not (tab_state_payload.get(tab.key) or {}).get('badge') and not tab.badge else ''}>{_esc(str((tab_state_payload.get(tab.key) or {}).get('badge') or tab.badge or 'idle'))}</em>"
             "</button>"
         )
         for tab in tab_specs
@@ -112,18 +103,24 @@ def render_dashboard_shell(
       --panel: #ffffff;
       --panel-alt: #f8fbff;
       --blue: #2b5fb8;
-      --blue-soft: #e8f0ff;
+      --blue-soft: #e6edff;
+      --blue-chip-active: #dce8f8;
+      --blue-chip-active-border: #7d98be;
+      --blue-chip-active-ink: #173a7a;
+      --blue-running-chip: #edf2ff;
+      --blue-running-border: #9cb4ef;
       --red: #c23d3d;
       --amber: #b87414;
       --green: #177245;
       --surface-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+      --ui-font-stack: Verdana, sans-serif;
     }}
     * {{ box-sizing: border-box; }}
-    body {{
+      body {{
       margin: 0;
       background: var(--bg);
       color: var(--ink);
-      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 14px/1.45 var(--ui-font-stack);
     }}
     header {{
       position: sticky;
@@ -144,38 +141,92 @@ def render_dashboard_shell(
       min-width: 0;
       flex: 1 1 auto;
     }}
+    .shell-controls {{
+      display: flex;
+      align-items: flex-end;
+      min-width: 0;
+      width: 100%;
+      max-width: 220px;
+      margin-left: auto;
+    }}
+    .font-mode-control {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      min-width: 170px;
+    }}
+    .font-mode-control span {{
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }}
+    .font-mode-control select {{
+      appearance: none;
+      width: 100%;
+      border: 1px solid #d6deea;
+      border-radius: 8px;
+      padding: 9px 11px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }}
     h1 {{ margin: 0 0 2px; font-size: 18px; letter-spacing: 0; }}
     .subtle {{ color: var(--muted); font-size: 12px; }}
     .shell-status-strip {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-      gap: 8px;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 10px;
       flex: 1 1 620px;
       max-width: 820px;
       align-self: stretch;
     }}
     .shell-status-chip {{
+      appearance: none;
+      position: relative;
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      padding: 8px 10px;
+      gap: 10px;
+      padding: 14px 12px 12px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: rgba(255, 255, 255, 0.92);
+      background: #ffffff;
+      color: inherit;
       box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
       min-width: 0;
       overflow: hidden;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      line-height: 1.2;
+    }}
+    .shell-status-chip[aria-selected="true"] {{
+      border-color: var(--blue-chip-active-border);
+      background: var(--blue-chip-active);
+      color: var(--blue-chip-active-ink);
+      box-shadow: inset 0 0 0 1px rgba(47, 133, 211, 0.22), inset 0 -2px 0 0 rgba(47, 133, 211, 0.14);
+    }}
+    .shell-status-chip[aria-selected="false"] {{
+      background: #ffffff;
     }}
     .shell-status-chip span {{
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 700;
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.02em;
+      letter-spacing: 0;
+      line-height: 1.2;
     }}
     .shell-status-chip strong {{
+      position: absolute;
+      top: 12px;
+      right: 12px;
       font-size: 13px;
       line-height: 1.3;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      font-style: normal;
+      font-weight: 600;
     }}
     .shell-status-chip small {{
       color: var(--muted);
@@ -183,7 +234,7 @@ def render_dashboard_shell(
       line-height: 1.35;
       overflow-wrap: anywhere;
     }}
-    .shell-status-chip.tone-running {{
+    .shell-status-chip[aria-selected="true"][data-tab-tone="running"] {{
       animation: shell-status-aura 1.8s ease-in-out infinite;
     }}
     @keyframes shell-status-aura {{
@@ -378,53 +429,6 @@ def render_dashboard_shell(
       font-size: 12px;
       line-height: 1.4;
     }}
-    .tab-bar {{
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      position: sticky;
-      top: 72px;
-      z-index: 19;
-      padding: 8px 0 2px;
-      background: rgba(243, 246, 251, 0.96);
-      backdrop-filter: blur(8px);
-    }}
-    .tab-button {{
-      appearance: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      border: 1px solid #d6deea;
-      background: #ffffff;
-      color: #334155;
-      border-radius: 8px;
-      padding: 9px 12px;
-      font: inherit;
-      font-weight: 700;
-      cursor: pointer;
-      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.04);
-    }}
-    .tab-label {{
-      min-width: 0;
-      font-size: 14px;
-    }}
-    .tab-badge {{
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-width: 22px;
-      padding: 3px 8px;
-      border-radius: 999px;
-      font-style: normal;
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid transparent;
-      background: #eef2f8;
-      color: var(--muted);
-    }}
-    .tab-badge[hidden] {{
-      display: none !important;
-    }}
     .tone-neutral {{
       background: #eef2f8;
       color: var(--muted);
@@ -446,14 +450,9 @@ def render_dashboard_shell(
       border-color: #f0b6b6;
     }}
     .tone-running, .tone-info {{
-      background: var(--blue-soft);
-      color: var(--blue);
-      border-color: #bfd0f7;
-    }}
-    .tab-button[aria-selected="true"] {{
-      background: var(--blue-soft);
-      border-color: #bfd0f7;
-      color: #204c98;
+      background: var(--blue-running-chip);
+      color: #264db0;
+      border-color: var(--blue-running-border);
     }}
     .tab-panel[hidden] {{ display: none !important; }}
     .tab-panel {{
@@ -482,7 +481,6 @@ def render_dashboard_shell(
       .shell-header {{
         flex-direction: column;
       }}
-      .tab-bar {{ top: 64px; }}
       iframe {{ min-height: calc(100vh - 210px); }}
     }}
   </style>
@@ -494,7 +492,25 @@ def render_dashboard_shell(
         <h1>{_esc(title)}</h1>
         <div class="subtle">{_esc(subtitle)}</div>
       </div>
-      <div class="shell-status-strip">
+      <div class="shell-controls">
+        <label class="font-mode-control">
+          <span>Typography</span>
+          <select id="dashboard-font-mode" title="Switch typography for this shell session">
+            <option value="system-sans">System Sans</option>
+            <option value="arial">Arial</option>
+            <option value="helvetica">Helvetica Neue</option>
+            <option value="calibri">Calibri</option>
+            <option value="lucida">Lucida Sans</option>
+            <option value="verdana">Verdana</option>
+            <option value="georgia">Georgia</option>
+            <option value="cambria">Cambria</option>
+            <option value="garamond">Garamond</option>
+            <option value="baskerville">Baskerville</option>
+            <option value="didot">Didot</option>
+          </select>
+        </label>
+      </div>
+      <div class="shell-status-strip" role="tablist" aria-label="Dashboard sections">
         {header_status_html}
       </div>
     </div>
@@ -511,21 +527,106 @@ def render_dashboard_shell(
   <main>
     <div class="tab-shell">
       {toolbar_block}
-      <nav class="tab-bar" aria-label="Dashboard sections" role="tablist">
-        {nav_html}
-      </nav>
       {panel_html}
     </div>
   </main>
-  <script id="dashboard-shell-state" type="application/json">{initial_state_json}</script>
-  <script>
-    (() => {{
+      <script id="dashboard-shell-state" type="application/json">{initial_state_json}</script>
+    <script>
+      (() => {{
+        const FONT_FAMILY_BY_MODE = {{
+          "system-sans": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+          arial: "Arial, sans-serif",
+          helvetica: '"Helvetica Neue", Helvetica, Arial, sans-serif',
+          calibri: "Calibri, sans-serif",
+          lucida: '"Lucida Grande", "Lucida Sans Unicode", sans-serif',
+          verdana: "Verdana, sans-serif",
+          georgia: "Georgia, serif",
+          cambria: "Cambria, Georgia, serif",
+          garamond: 'Garamond, "Times New Roman", serif',
+          baskerville: 'Baskerville, "Baskerville Old Face", "Bodoni MT", Georgia, serif',
+          didot: 'Didot, "Didot LT STD", "Times New Roman", serif',
+        }};
+      const fontModeSelect = document.getElementById("dashboard-font-mode");
+      const frames = Array.from(document.querySelectorAll("iframe[data-tab-frame]"));
+      const DEFAULT_FONT_MODE = "verdana";
+      const FONT_MODE_STORAGE_KEY = "dashboard-font-mode";
+
+      function normalizeFontMode(mode) {{
+        const normalized = String(mode || "").trim();
+        return Object.prototype.hasOwnProperty.call(FONT_FAMILY_BY_MODE, normalized)
+          ? normalized
+          : DEFAULT_FONT_MODE;
+      }}
+
+      function loadFontModePreference() {{
+        try {{
+          return normalizeFontMode(window.localStorage?.getItem(FONT_MODE_STORAGE_KEY));
+        }} catch (_error) {{
+          return DEFAULT_FONT_MODE;
+        }}
+      }}
+
+      function persistFontModePreference(mode) {{
+        try {{
+          window.localStorage?.setItem(FONT_MODE_STORAGE_KEY, String(mode || DEFAULT_FONT_MODE));
+        }} catch (_error) {{
+          return;
+        }}
+      }}
+
+      function applyFontFamily(element, value) {{
+        if (!element) {{
+          return;
+        }}
+        element.style.setProperty("font-family", value);
+      }}
+
+      function applyFontModeToFrame(frame, mode) {{
+        const fontFamily = FONT_FAMILY_BY_MODE[String(mode || DEFAULT_FONT_MODE)] || FONT_FAMILY_BY_MODE[DEFAULT_FONT_MODE];
+        if (!frame) {{
+          return;
+        }}
+        try {{
+          const frameDocument = frame.contentDocument;
+          if (!frameDocument) {{
+            return;
+          }}
+          applyFontFamily(frameDocument.body, fontFamily);
+          const frameHtml = frameDocument.documentElement;
+          if (frameHtml) {{
+            frameHtml.style.setProperty("font-family", fontFamily);
+          }}
+        }} catch (_error) {{
+          return;
+        }}
+      }}
+
+      function applyFontMode(mode) {{
+        const fontFamily = FONT_FAMILY_BY_MODE[String(mode || DEFAULT_FONT_MODE)] || FONT_FAMILY_BY_MODE[DEFAULT_FONT_MODE];
+        document.documentElement.style.setProperty("--ui-font-stack", fontFamily);
+        applyFontFamily(document.documentElement, fontFamily);
+        applyFontFamily(document.body, fontFamily);
+        document.body.style.setProperty("font-family", fontFamily);
+        frames.forEach((frame) => {{
+          applyFontModeToFrame(frame, mode);
+        }});
+      }}
+
       function toneClass(tone) {{
         const normalized = String(tone || "neutral").toLowerCase();
         if (["pass", "warn", "fail", "info", "running", "neutral"].includes(normalized)) {{
           return "tone-" + normalized;
         }}
         return "tone-neutral";
+      }}
+      function applyChipTone(card, tone, isActive) {{
+        const normalizedTone = String(tone || "neutral").toLowerCase();
+        if (!card) return;
+        const badge = card.querySelector("[data-shell-status-badge]");
+        if (badge) {{
+          badge.className = toneClass(tone);
+        }}
+        card.dataset.tabTone = normalizedTone;
       }}
       function withRevision(src, revision) {{
         const base = String(src || "");
@@ -551,6 +652,8 @@ def render_dashboard_shell(
         buttons.forEach((button) => {{
           const selected = button.dataset.tabTarget === resolved;
           button.setAttribute("aria-selected", selected ? "true" : "false");
+          const tone = button.getAttribute("data-tab-tone") || "neutral";
+          applyChipTone(button, tone, selected);
         }});
         panels.forEach((panel) => {{
           panel.hidden = panel.id !== resolved;
@@ -563,25 +666,17 @@ def render_dashboard_shell(
         Object.entries(tabs).forEach(([key, tabState]) => {{
           const button = document.querySelector(`[data-tab-button][data-tab-key="${{key}}"]`);
           const frame = document.querySelector(`iframe[data-tab-frame][data-tab-key="${{key}}"]`);
-          const statusCard = document.querySelector(`[data-shell-status-card][data-tab-key="${{key}}"]`);
-          if (button) {{
-            const badgeEl = button.querySelector("[data-tab-badge]");
-            const badgeText = String(tabState.badge || "").trim();
-            if (badgeEl) {{
-              badgeEl.textContent = badgeText;
-              badgeEl.hidden = !badgeText;
-              badgeEl.className = `tab-badge ${{toneClass(tabState.badge_tone || tabState.status || "neutral")}}`;
-            }}
-          }}
+          const statusCard = document.querySelector(`[data-shell-status-card][data-tab-key="${{key}}"]`) || button;
+          const rawTone = String(tabState.badge_tone || tabState.status || "neutral").toLowerCase();
+          const tone = toneClass(rawTone);
           if (statusCard) {{
-            const badgeEl = statusCard.querySelector("[data-shell-status-badge]");
             const detailEl = statusCard.querySelector("[data-shell-status-detail]");
             const stateKey = String(key === "audits" ? "audit" : key);
             const stateValue = state[stateKey] && typeof state[stateKey] === "object" ? state[stateKey] : {{}};
-            const detailText = String(stateValue.message || statusCard.querySelector("[data-shell-status-detail]")?.textContent || "");
-            const tone = toneClass(tabState.badge_tone || tabState.status || "neutral");
+            const detailText = String(stateValue.message || detailEl?.textContent || "");
             const badgeText = String(tabState.badge || "").trim();
-            statusCard.className = `shell-status-chip ${{tone}}`;
+            const badgeEl = statusCard.querySelector("[data-shell-status-badge]");
+            const isActive = statusCard.getAttribute("aria-selected") === "true";
             if (badgeEl) {{
               badgeEl.textContent = badgeText;
               badgeEl.className = tone;
@@ -589,16 +684,24 @@ def render_dashboard_shell(
             if (detailEl) {{
               detailEl.textContent = detailText;
             }}
-          }}
-          if (frame) {{
-            const desiredBaseSrc = String(tabState.src || frame.dataset.baseSrc || frame.getAttribute("src") || "").trim();
-            const desiredSrc = withRevision(desiredBaseSrc, tabState.revision || "");
-            if (desiredBaseSrc) {{
-              frame.dataset.baseSrc = desiredBaseSrc;
+            statusCard.dataset.tabTone = rawTone;
+            applyChipTone(statusCard, rawTone, isActive);
+            if (button && button !== statusCard) {{
+              button.dataset.tabTone = rawTone;
+              applyChipTone(button, rawTone, isActive);
             }}
-            if (desiredSrc && frame.dataset.currentSrc !== desiredSrc) {{
-              frame.dataset.currentSrc = desiredSrc;
-              frame.src = desiredSrc;
+          }}
+          if (statusCard) {{
+            const desiredBaseSrc = String(tabState.src || frame?.dataset.baseSrc || frame?.getAttribute("src") || "").trim();
+            const desiredSrc = withRevision(desiredBaseSrc, tabState.revision || "");
+            if (frame) {{
+              if (desiredBaseSrc) {{
+                frame.dataset.baseSrc = desiredBaseSrc;
+              }}
+              if (desiredSrc && frame.dataset.currentSrc !== desiredSrc) {{
+                frame.dataset.currentSrc = desiredSrc;
+                frame.src = desiredSrc;
+              }}
             }}
           }}
         }});
@@ -641,6 +744,21 @@ def render_dashboard_shell(
         const button = event.target.closest("[data-tab-button]");
         if (!button) return;
         setActiveTab(button.dataset.tabTarget || "tab-{_esc(active_key)}");
+      }});
+      if (fontModeSelect) {{
+        const savedFontMode = loadFontModePreference();
+        fontModeSelect.value = savedFontMode;
+        applyFontMode(savedFontMode);
+        fontModeSelect.addEventListener("change", () => {{
+          const nextFontMode = fontModeSelect.value || DEFAULT_FONT_MODE;
+          persistFontModePreference(nextFontMode);
+          applyFontMode(nextFontMode);
+        }});
+      }}
+      frames.forEach((frame) => {{
+        frame.addEventListener("load", () => {{
+          applyFontModeToFrame(frame, String(fontModeSelect?.value || DEFAULT_FONT_MODE));
+        }}, {{ passive: true }});
       }});
       const stateNode = document.getElementById("dashboard-shell-state");
       if (stateNode && stateNode.textContent) {{
