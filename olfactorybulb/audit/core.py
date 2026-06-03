@@ -81,6 +81,7 @@ class AuditItem:
     acceptable: str = ""
     acceptable_basis: str = ""
     evidence: dict[str, Any] = field(default_factory=dict)
+    companion_visuals: list[dict[str, Any]] = field(default_factory=list)
     note: str = ""
     status_reason: str = ""
     human_review_status: str = ""

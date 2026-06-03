@@ -339,8 +339,8 @@ contract for future sessions.
     marks and numeric labels so the graph communicates scale without becoming
     cluttered
   - scalar numeric evidence may use a compact shared-scale dot strip, and
-    short unpaired numeric sequences may use a sparkline; prefer those over
-    bar charts when the data type does not justify a bar encoding
+    short unpaired numeric sequences may use a sparkline, but only when the
+    item explicitly opts into those companion visuals via `companion_visuals`
   - do not force scalar numeric evidence into a bar chart; use the compact
     dot strip or sparkline when a light visual improves the item, and keep the
     raw values available in the detail grid
@@ -464,6 +464,9 @@ contract for future sessions.
     - `notes/porting/NETWORK_AND_CELL_PARAMETER_CATALOG.md`
   - Do not let helper wrappers or notebooks become the only place a new
     user-facing knob exists.
+  - When wrappers clone or prefix `AuditItem` instances, preserve
+    `companion_visuals` and the other item-level presentation fields; do not
+    rebuild audit items from a partial field subset.
 
 - For HFO-facing parameter and visualization surfaces:
   - use the current contract/registry path rather than ad hoc whitelists

@@ -82,6 +82,29 @@ sample_report = AuditReport(
                 "sample_count": 40,
                 "label": "Observed scalar metrics",
             },
+            companion_visuals=[
+                {
+                    "kind": "numeric_strip",
+                    "keys": ["spike_count", "response_latency_ms", "sample_count"],
+                }
+            ],
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
+            check_id="audit_gamma.gamma_plain_numeric",
+            status="PASS",
+            title="Gamma plain numeric",
+            criterion="Gamma numeric evidence should stay plain unless a companion visual is explicitly requested.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "spike_count": 7,
+                "response_latency_ms": 11.2,
+                "sample_count": 18,
+                "label": "Plain scalar metrics",
+            },
             group_id="audit_gamma",
             group_title="Audit gamma",
         ),
@@ -97,6 +120,12 @@ sample_report = AuditReport(
                 "trial_values": [0.2, 0.6, 0.9, 1.4, 1.6],
                 "label": "Observed sequence",
             },
+            companion_visuals=[
+                {
+                    "kind": "numeric_sparkline",
+                    "key": "trial_values",
+                }
+            ],
             group_id="audit_gamma",
             group_title="Audit gamma",
         ),
@@ -158,11 +187,19 @@ with TemporaryDirectory() as tmp:
     assert "Numeric sequence" in html
     assert "Observed scalar metrics" in html
     assert "Observed sequence" in html
+    assert "Plain scalar metrics" in html
     gamma_index = html.index("audit_gamma.gamma_curve")
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
+    plain_index = html.index("audit_gamma.gamma_plain_numeric")
+    strip_item_index = html.index("audit_gamma.gamma_numeric")
+    plain_segment = html[plain_index:strip_item_index]
+    assert "data-numeric-strip" not in plain_segment
+    assert "data-numeric-sparkline" not in plain_segment
     strip_index = html.index("data-numeric-strip")
     sparkline_index = html.index("data-numeric-sparkline")
     assert strip_index < sparkline_index
+    assert html.count("data-numeric-strip") == 1
+    assert html.count("data-numeric-sparkline") == 1
     summary_index = html.index("<div class='item-body-summary'>")
     legend_index = html.index("<div class='interval-legend'>", summary_index)
     track_index = html.index("<div class='interval-track'>", summary_index)

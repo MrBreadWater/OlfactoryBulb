@@ -513,24 +513,49 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
     ), used_keys
 
 
-def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> tuple[str, set[str]]:
+def _render_numeric_companions(
+    item: AuditItem,
+    evidence: dict[str, Any],
+    *,
+    visuals: list[dict[str, Any]] | None = None,
+    exclude_keys: set[str] | None = None,
+) -> tuple[str, set[str]]:
     exclude = set(exclude_keys or set())
-    if not evidence:
+    requested_visuals = [spec for spec in (visuals or []) if isinstance(spec, dict)]
+    if not evidence or not requested_visuals:
         return "", set()
 
-    scalar_entries: list[dict[str, Any]] = []
-    sequence_entry: dict[str, Any] | None = None
     used_keys: set[str] = set()
+    blocks: list[str] = []
 
-    for key, value in evidence.items():
-        if key in exclude or key == "__reference_annotations__":
-            continue
-        if key in _INTERVAL_RESERVED_EVIDENCE_KEYS:
-            continue
-        if key in _SERIES_X_KEY_CANDIDATES or key in _SERIES_Y_KEY_CANDIDATES or key == "fi_curve_rows":
-            continue
-        numeric_value = _float_or_none(value)
-        if numeric_value is not None:
+    def _requested_keys(spec: dict[str, Any]) -> list[str]:
+        raw_keys = spec.get("keys")
+        if raw_keys is None:
+            raw_key = spec.get("key")
+            if raw_key is None:
+                return []
+            raw_keys = [raw_key]
+        elif isinstance(raw_keys, str):
+            raw_keys = [raw_keys]
+        return [str(key).strip() for key in raw_keys if str(key).strip()]
+
+    def _render_numeric_strip(spec: dict[str, Any]) -> tuple[str, set[str]]:
+        keys = _requested_keys(spec)
+        if not keys:
+            return "", set()
+
+        scalar_entries: list[dict[str, Any]] = []
+        local_used: set[str] = set()
+        for key in keys:
+            if key in exclude or key == "__reference_annotations__":
+                continue
+            if key in _INTERVAL_RESERVED_EVIDENCE_KEYS:
+                continue
+            if key in _SERIES_X_KEY_CANDIDATES or key in _SERIES_Y_KEY_CANDIDATES or key == "fi_curve_rows":
+                continue
+            numeric_value = _float_or_none(evidence.get(key))
+            if numeric_value is None:
+                continue
             scalar_entries.append(
                 {
                     "key": key,
@@ -538,20 +563,11 @@ def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exc
                     "value": numeric_value,
                 }
             )
-            used_keys.add(key)
-            continue
-        numeric_values = _float_list_or_none(value)
-        if sequence_entry is None and numeric_values is not None and len(numeric_values) >= 2:
-            sequence_entry = {
-                "key": key,
-                "label": _evidence_label(key),
-                "values": numeric_values,
-            }
-            used_keys.add(key)
+            local_used.add(key)
 
-    blocks: list[str] = []
+        if not scalar_entries:
+            return "", set()
 
-    if scalar_entries:
         values = [float(entry["value"]) for entry in scalar_entries]
         domain_low, domain_high = _series_domain(values)
         plot_width = 520.0
@@ -586,6 +602,9 @@ def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exc
                 f"</span>"
             )
 
+        block_title = str(spec.get("title") or "Numeric summary")
+        left_meta = str(spec.get("left_meta") or "shared scale")
+        right_meta = str(spec.get("right_meta") or "scalar metrics")
         svg_lines = [
             f"<svg class='numeric-strip-svg' data-numeric-strip role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
             f"aria-label='Numeric summary with {len(scalar_entries)} values on a shared scale from {_format_numeric(domain_low)} to {_format_numeric(domain_high)}.'>",
@@ -607,23 +626,39 @@ def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exc
             )
         svg_lines.extend(dots)
         svg_lines.append("</svg>")
-        blocks.append(
+        return (
             "".join(
                 [
                     "<div class='item-block numeric-strip-block'>",
-                    "<h4>Numeric summary</h4>",
-                    "<div class='numeric-strip-meta'><span>shared scale</span><span>scalar metrics</span></div>",
+                    f"<h4>{_esc(block_title)}</h4>",
+                    f"<div class='numeric-strip-meta'><span>{_esc(left_meta)}</span><span>{_esc(right_meta)}</span></div>",
                     "<div class='numeric-strip-shell'>",
                     "".join(svg_lines),
                     "</div>",
                     f"<div class='numeric-legend'>{''.join(legend_items)}</div>",
                     "</div>",
                 ]
-            )
+            ),
+            local_used,
         )
 
-    if sequence_entry is not None:
-        values = list(sequence_entry["values"])
+    def _render_numeric_sparkline(spec: dict[str, Any]) -> tuple[str, set[str]]:
+        keys = _requested_keys(spec)
+        if not keys:
+            return "", set()
+
+        key = keys[0]
+        if key in exclude or key == "__reference_annotations__":
+            return "", set()
+        if key in _INTERVAL_RESERVED_EVIDENCE_KEYS:
+            return "", set()
+        if key in _SERIES_X_KEY_CANDIDATES or key in _SERIES_Y_KEY_CANDIDATES or key == "fi_curve_rows":
+            return "", set()
+
+        values = _float_list_or_none(evidence.get(key))
+        if values is None or len(values) < 2:
+            return "", set()
+
         x_low = 0.5
         x_high = float(len(values)) + 0.5
         y_low, y_high = _series_domain(values)
@@ -650,11 +685,13 @@ def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exc
 
         x_ticks = _series_tick_values(1.0, float(len(values)), target_ticks=min(5, len(values)))
         y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
-        x_label = "Index"
-        y_label = "Value"
+        x_label = str(spec.get("x_label") or "Index")
+        y_label = str(spec.get("y_label") or "Value")
+        sequence_label = str(spec.get("label") or _evidence_label(key))
+        block_title = str(spec.get("title") or "Numeric sequence")
         svg_lines = [
             f"<svg class='numeric-sparkline-svg' data-numeric-sparkline role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
-            f"aria-label='Numeric sequence for {_esc(sequence_entry['label'])} with {len(values)} points. "
+            f"aria-label='Numeric sequence for {_esc(sequence_label)} with {len(values)} points. "
             f"X axis {x_label} from 1 to {len(values)}. Y axis {y_label} from {_format_numeric(y_low)} to {_format_numeric(y_high)}.'>",
             f"<rect class='numeric-sparkline-bg' x='0' y='0' width='{svg_width:.0f}' height='{svg_height:.0f}' rx='10' ry='10'></rect>",
             f"<line class='numeric-sparkline-axis' x1='{margin_left:.2f}' y1='{margin_top + plot_height:.2f}' x2='{margin_left + plot_width:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
@@ -685,7 +722,7 @@ def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exc
 
         path_commands = [f"M {_x_pos(1.0):.2f} {_y_pos(values[0]):.2f}"]
         path_commands.extend(f"L {_x_pos(float(index + 1)):.2f} {_y_pos(value):.2f}" for index, value in enumerate(values[1:]))
-        color = _series_color_for_key(str(sequence_entry["key"]), 0, status=str(item.status))
+        color = _series_color_for_key(str(key), 0, status=str(item.status))
         svg_lines.append(
             f"<path class='numeric-sparkline-line' d='{_esc(' '.join(path_commands))}' style='stroke:{color['stroke']}; fill:none;'></path>"
         )
@@ -695,19 +732,32 @@ def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exc
                 f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
             )
         svg_lines.append("</svg>")
-        blocks.append(
+        return (
             "".join(
                 [
                     "<div class='item-block numeric-sparkline-block'>",
-                    "<h4>Numeric sequence</h4>",
-                    f"<div class='numeric-sparkline-meta'><span>{_esc(sequence_entry['label'])}</span><span>Index / Value</span></div>",
+                    f"<h4>{_esc(block_title)}</h4>",
+                    f"<div class='numeric-sparkline-meta'><span>{_esc(sequence_label)}</span><span>{_esc(x_label)} / {_esc(y_label)}</span></div>",
                     "<div class='numeric-sparkline-shell'>",
                     "".join(svg_lines),
                     "</div>",
                     "</div>",
                 ]
-            )
+            ),
+            {key},
         )
+
+    for spec in requested_visuals:
+        kind = str(spec.get("kind") or "").strip().lower()
+        if kind in {"numeric_strip", "scalar_strip", "strip", "numeric_summary", "summary"}:
+            block_html, local_used = _render_numeric_strip(spec)
+        elif kind in {"numeric_sparkline", "sparkline", "sequence", "numeric_sequence"}:
+            block_html, local_used = _render_numeric_sparkline(spec)
+        else:
+            continue
+        if block_html:
+            blocks.append(block_html)
+            used_keys.update(local_used)
 
     return "".join(blocks), used_keys
 
@@ -849,8 +899,12 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
     series_graph_html, series_graph_keys = _render_series_graph(item, evidence)
     numeric_companion_html = ""
     numeric_companion_keys: set[str] = set()
-    if interval is None and not series_graph_html:
-        numeric_companion_html, numeric_companion_keys = _render_numeric_companions(item, evidence)
+    if interval is None and not series_graph_html and item.companion_visuals:
+        numeric_companion_html, numeric_companion_keys = _render_numeric_companions(
+            item,
+            evidence,
+            visuals=item.companion_visuals,
+        )
     warning_text = status_reason_text(item)
     notes_html = _notes_html(item)
     sections = [

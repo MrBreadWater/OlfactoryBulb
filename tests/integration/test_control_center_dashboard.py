@@ -207,6 +207,30 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "sample_count": 40,
                         "label": "Observed scalar metrics",
                     },
+                    companion_visuals=[
+                        {
+                            "kind": "numeric_strip",
+                            "keys": ["spike_count", "response_latency_ms", "sample_count"],
+                        }
+                    ],
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
+                    check_id="human_review_status.numeric_plain_item",
+                    status="PASS",
+                    title="Plain numeric item",
+                    criterion="Scalar numeric evidence should stay plain unless a companion visual is explicitly requested.",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    evidence={
+                        "spike_count": 7,
+                        "response_latency_ms": 11.2,
+                        "sample_count": 18,
+                        "label": "Plain scalar metrics",
+                    },
                     group_id="human_review_status",
                     group_title="Human review status",
                     detail_level="summary",
@@ -223,6 +247,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "trial_values": [0.2, 0.6, 0.9, 1.4, 1.6],
                         "label": "Observed sequence",
                     },
+                    companion_visuals=[
+                        {
+                            "kind": "numeric_sparkline",
+                            "key": "trial_values",
+                        }
+                    ],
                     group_id="human_review_status",
                     group_title="Human review status",
                     detail_level="summary",
@@ -888,6 +918,13 @@ with TemporaryDirectory() as tmp:
                 "stripLegend": True,
                 "sparklineMeta": True,
             }
+            plain_numeric = client.eval(
+                "(() => {"
+                "  const card = [...document.querySelectorAll('[data-item-card]')].find((node) => node.innerText.includes('Plain numeric item'));"
+                "  return Boolean(card) && !card.querySelector('[data-numeric-strip], [data-numeric-sparkline]');"
+                "})()"
+            )
+            assert plain_numeric is True
             collapsed = client.eval(
                 "(() => {"
                 "  const group = document.querySelector('[data-group-section]');"

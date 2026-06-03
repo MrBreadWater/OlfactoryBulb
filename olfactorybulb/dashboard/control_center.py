@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import errno
 import http.server
+import importlib
 import json
 import os
 import posixpath
@@ -18,7 +19,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from neuroinfra.dashboard import ShellTabSpec, render_dashboard_shell
+from neuroinfra.dashboard import ShellTabSpec
 from olfactorybulb.audit.cli import available_audit_entries, run_audit_by_id
 from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.audit.dashboard import export_audit_dashboard
@@ -39,6 +40,7 @@ DEFAULT_CONTROL_CENTER_GENERATE_PACKETS_TOP_N = 0
 DEFAULT_CONTROL_CENTER_GENERATE_PACKET_WORKERS = hfo_dashboard.DEFAULT_PACKET_GENERATION_WORKERS
 DEFAULT_CONTROL_CENTER_CLEANUP_STALE_PACKETS = False
 DEFAULT_STATE_POLL_INTERVAL_MS = 2000
+DEFAULT_DEV_RELOAD_POLL_INTERVAL_MS = 1000
 
 
 def _progress(message: str) -> None:
@@ -58,6 +60,63 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
 
 def _json_script_payload(payload: Any) -> str:
     return json.dumps(payload, indent=2, sort_keys=True).replace("</", "<\\/")
+
+
+def _source_revision(paths: list[Path]) -> str:
+    parts: list[str] = []
+    for path in paths:
+        try:
+            stat = path.stat()
+        except OSError:
+            parts.append(f"{path.name}:missing")
+            continue
+        parts.append(f"{path.name}:{stat.st_mtime_ns}:{stat.st_size}")
+    return "|".join(parts)
+
+
+def _dev_reload_source_paths() -> list[Path]:
+    shell_module = importlib.import_module("neuroinfra.dashboard.shell")
+    audit_dashboard_module = importlib.import_module("olfactorybulb.audit.dashboard")
+    return [
+        Path(str(shell_module.__file__)).resolve(),
+        Path(str(audit_dashboard_module.__file__)).resolve(),
+    ]
+
+
+def _inject_dev_reload_script(html_text: str, *, endpoint: str = "/__control_center_dev_state__", poll_interval_ms: int = DEFAULT_DEV_RELOAD_POLL_INTERVAL_MS) -> str:
+    script = f"""
+  <script>
+    (() => {{
+      const endpoint = {json.dumps(endpoint)};
+      const pollMs = {int(poll_interval_ms)};
+      let seenRevision = "";
+      let inFlight = false;
+      async function pollDevRevision() {{
+        if (inFlight) return;
+        inFlight = true;
+        try {{
+          const response = await fetch(endpoint + "?cache=" + Date.now(), {{ cache: "no-store" }});
+          if (!response.ok) return;
+          const payload = await response.json();
+          const revision = String(payload.revision || "");
+          if (!seenRevision) {{
+            seenRevision = revision;
+          }} else if (revision && revision !== seenRevision) {{
+            window.location.reload();
+          }}
+        }} catch (_error) {{
+        }} finally {{
+          inFlight = false;
+        }}
+      }}
+      window.setInterval(pollDevRevision, pollMs);
+      pollDevRevision();
+    }})();
+  </script>
+"""
+    if "</body>" in html_text:
+        return html_text.replace("</body>", script + "</body>", 1)
+    return html_text + script
 
 
 def _default_audit_args_for(audit_id: str) -> list[str]:
@@ -500,8 +559,10 @@ def _write_control_center_shell(
     audit_id: str,
     audit_args: list[str],
     shell_state: dict[str, Any],
+    dev_reload: bool = False,
 ) -> None:
-    shell_html = render_dashboard_shell(
+    shell_module = importlib.import_module("neuroinfra.dashboard.shell")
+    shell_html = shell_module.render_dashboard_shell(
         title="OlfactoryBulb Control Center",
         subtitle="docs, audits, and optimization in one maintained shell",
         tabs=_module_tabs(),
@@ -520,6 +581,8 @@ def _write_control_center_shell(
         state_endpoint="/__control_center_state__",
         state_poll_interval_ms=DEFAULT_STATE_POLL_INTERVAL_MS,
     )
+    if dev_reload:
+        shell_html = _inject_dev_reload_script(shell_html)
     _write_text_atomic(root_dir / "index.html", shell_html)
 
 
@@ -635,6 +698,7 @@ def _combine_audit_history(entries: list[dict[str, Any]]) -> AuditReport:
                     acceptable=item.acceptable,
                     acceptable_basis=item.acceptable_basis,
                     evidence=item.evidence,
+                    companion_visuals=item.companion_visuals,
                     note=item.note,
                     human_review_status=item.human_review_status,
                     human_review_note=item.human_review_note,
@@ -1077,6 +1141,7 @@ def serve_control_center(
     port: int = DEFAULT_PORT,
     watch_optimization: bool = True,
     open_browser: bool = False,
+    dev_reload: bool = True,
 ) -> None:
     resolved_audit_args = list(_default_audit_args_for(audit_id) if audit_args is None else audit_args)
     campaign_path = resolve_control_center_campaign(campaign_dir, status_json=status_json)
@@ -1100,6 +1165,8 @@ def serve_control_center(
     )
     audit_thread_holder: dict[str, threading.Thread | None] = {"thread": None}
     audit_thread_lock = threading.Lock()
+    dev_source_paths = _dev_reload_source_paths() if dev_reload else []
+    dev_reload_state = {"revision": _source_revision(dev_source_paths) if dev_reload else ""}
 
     def _refresh_state_file() -> dict[str, Any]:
         with base_state_lock:
@@ -1143,6 +1210,7 @@ def serve_control_center(
         audit_id=audit_id,
         audit_args=resolved_audit_args,
         shell_state=base_state,
+        dev_reload=dev_reload,
     )
     _refresh_state_file()
     stop_event = threading.Event()
@@ -1294,6 +1362,40 @@ def serve_control_center(
             thread.start()
         return True, f"Running {audit_id_to_run}"
 
+    def _maybe_refresh_dev_outputs() -> str:
+        if not dev_reload:
+            return ""
+        current_revision = _source_revision(dev_source_paths)
+        if current_revision == dev_reload_state.get("revision"):
+            return current_revision
+        importlib.invalidate_caches()
+        shell_module = importlib.import_module("neuroinfra.dashboard.shell")
+        importlib.reload(shell_module)
+        audit_dashboard_module = importlib.import_module("olfactorybulb.audit.dashboard")
+        reloaded_audit_dashboard = importlib.reload(audit_dashboard_module)
+        globals()["export_audit_dashboard"] = reloaded_audit_dashboard.export_audit_dashboard
+        current_state = _refresh_state_file()
+        _write_control_center_shell(
+            root_dir,
+            campaign_label=campaign_label,
+            campaign_path_text=campaign_path_text,
+            audit_id=str(current_state.get("audit", {}).get("audit_id") or audit_id),
+            audit_args=list(current_state.get("audit", {}).get("audit_args") or resolved_audit_args),
+            shell_state=current_state,
+            dev_reload=dev_reload,
+        )
+        history_entries = _load_audit_history(audits_dir)
+        combined_report = _combine_audit_history(history_entries)
+        export_audit_dashboard(
+            combined_report,
+            audits_dir,
+            refresh_endpoint="/__audit_refresh__",
+        )
+        refreshed_revision = _source_revision(dev_source_paths)
+        dev_reload_state["revision"] = refreshed_revision
+        _progress("dev reload refreshed dashboard shell")
+        return refreshed_revision
+
     class ControlCenterRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
             kwargs.setdefault("directory", str(REPO_ROOT))
@@ -1315,6 +1417,10 @@ def serve_control_center(
             if request_path == "/__control_center_state__":
                 self._send_json(200, _refresh_state_file())
                 return
+            if request_path == "/__control_center_dev_state__":
+                self._send_json(200, {"ok": True, "revision": _maybe_refresh_dev_outputs()})
+                return
+            _maybe_refresh_dev_outputs()
             super().do_GET()
 
         def translate_path(self, path: str) -> str:
@@ -1568,6 +1674,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-watch-optimization", action="store_true")
     parser.add_argument("--run-audit-on-start", action="store_true", help="Run the selected audit immediately instead of leaving the audit tab idle on startup.")
     parser.add_argument("--open-browser", action="store_true", help="Open the control center in a local browser after startup.")
+    parser.add_argument("--no-dev-reload", action="store_true", help="Disable local source polling and browser reload for dashboard UI development.")
     args, extra_args = parser.parse_known_args(argv)
     if extra_args[:1] == ["--"]:
         extra_args = extra_args[1:]
@@ -1593,6 +1700,7 @@ def main(argv: list[str] | None = None) -> int:
         port=int(args.port),
         watch_optimization=not bool(args.no_watch_optimization),
         open_browser=bool(args.open_browser),
+        dev_reload=not bool(args.no_dev_reload),
         **common_kwargs,
     )
     return 0
