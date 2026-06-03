@@ -191,9 +191,9 @@ contract for future sessions.
     are not enough when the task is spacing, overflow, collapse behavior,
     z-order, or responsive fit.
   - For math-criterion dashboard changes, verify the served browser path
-    renders both the main equation and any symbol-definition rows via MathJax;
-    raw TeX in definition text is a regression even if `mjx-container` exists
-    elsewhere on the card.
+    renders both the main equation and any symbol-definition rows from the
+    exported HTML itself; raw TeX in definition text is a regression even if
+    some separate math runtime appears elsewhere on the card.
 - For notebook-facing defaults, verify the actual notebook/runtime paths that
   consume them.
   - If a user reports that a just-delivered change failed, reproduce that exact
@@ -348,6 +348,8 @@ contract for future sessions.
   - keep warnings visible, specific, and non-duplicated
   - keep core maintained dashboard rendering self-contained; do not depend on
     third-party CDN runtime assets for features such as math rendering
+  - prefer server-rendered criterion math in exported audit HTML so the
+    critical readability path does not depend on client-side JavaScript
   - when audit evidence contains an explicit series or curve, such as
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
     when the item explicitly opts into a `series_visuals` declaration; do not

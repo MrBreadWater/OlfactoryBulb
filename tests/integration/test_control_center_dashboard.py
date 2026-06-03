@@ -958,25 +958,25 @@ with TemporaryDirectory() as tmp:
                 "  const deadline = Date.now() + 12000;"
                 "  const tick = () => {"
                 "    const equation = document.querySelector('.criterion-math');"
-                "    const equationMath = equation ? equation.querySelector('mjx-container') : null;"
+                "    const equationSvg = equation ? equation.querySelector('svg') : null;"
                 "    const definitions = Array.from(document.querySelectorAll('.criterion-definition'));"
-                "    const definitionMathCount = definitions.filter((row) => row.querySelector('.criterion-definition-symbol mjx-container')).length;"
+                "    const definitionSvgCount = definitions.filter((row) => row.querySelector('.criterion-definition-symbol svg')).length;"
                 "    const definitionTexts = definitions.map((row) => ({"
                 "      meaning: row.querySelector('.criterion-definition-meaning')?.textContent?.trim() || '',"
                 "      symbolText: row.querySelector('.criterion-definition-symbol')?.textContent?.trim() || ''"
                 "    }));"
-                "    if (equationMath && definitionMathCount >= 3 && definitions.length >= 3) {"
+                "    if (equationSvg && definitionSvgCount >= 3 && definitions.length >= 3) {"
                 "      resolve({"
                 "        equationRendered: true,"
-                "        definitionMathCount,"
+                "        definitionSvgCount,"
                 "        definitionTexts,"
                 "      });"
                 "      return;"
                 "    }"
                 "    if (Date.now() > deadline) {"
                 "      resolve({"
-                "        equationRendered: Boolean(equationMath),"
-                "        definitionMathCount,"
+                "        equationRendered: Boolean(equationSvg),"
+                "        definitionSvgCount,"
                 "        definitionTexts,"
                 "      });"
                 "      return;"
@@ -987,7 +987,7 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert math_render["equationRendered"] is True
-            assert math_render["definitionMathCount"] >= 3
+            assert math_render["definitionSvgCount"] >= 3
             definition_meanings = [entry["meaning"] for entry in math_render["definitionTexts"]]
             assert "Observed group mean" in definition_meanings
             assert "Lower accepted bound" in definition_meanings

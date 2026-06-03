@@ -9,6 +9,8 @@ import json
 import os
 import re
 import shutil
+from functools import lru_cache
+from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -23,6 +25,56 @@ _MATHJAX_BUNDLE_PATH = Path(__file__).resolve().parent / "static" / "mathjax" / 
 
 def _esc(value: object) -> str:
     return html.escape(str(value), quote=True)
+
+
+@lru_cache(maxsize=512)
+def _render_math_svg_fragment(expression: str, *, display: bool) -> str:
+    source = str(expression or "").strip()
+    if not source:
+        return ""
+    try:
+        from matplotlib.font_manager import FontProperties
+        from matplotlib.mathtext import math_to_image
+    except Exception:
+        return ""
+    wrapped = source if source.startswith("$") and source.endswith("$") else f"${source}$"
+    buffer = BytesIO()
+    font_size = 15 if display else 12
+    try:
+        math_to_image(
+            wrapped,
+            buffer,
+            prop=FontProperties(size=font_size),
+            dpi=180,
+            format="svg",
+            color="#1f2937",
+        )
+    except Exception:
+        return ""
+    svg_text = buffer.getvalue().decode("utf-8", errors="ignore")
+    svg_start = svg_text.find("<svg")
+    svg_end = svg_text.rfind("</svg>")
+    if svg_start < 0 or svg_end < 0:
+        return ""
+    svg_markup = svg_text[svg_start : svg_end + len("</svg>")]
+    svg_class = "criterion-svg criterion-svg-display" if display else "criterion-svg criterion-svg-inline"
+    if "class=" in svg_markup.partition(">")[0]:
+        svg_markup = re.sub(r'class="([^"]*)"', lambda match: f'class="{match.group(1)} {svg_class}"', svg_markup, count=1)
+    else:
+        svg_markup = svg_markup.replace("<svg ", f"<svg class=\"{svg_class}\" ", 1)
+    return svg_markup
+
+
+def _render_math_markup(expression: str, *, display: bool) -> str:
+    source = str(expression or "").strip()
+    if not source:
+        return ""
+    svg_markup = _render_math_svg_fragment(source, display=display)
+    if svg_markup:
+        return svg_markup
+    if display:
+        return f"\\[{_esc(source)}\\]"
+    return f"\\({_esc(source)}\\)"
 
 
 def _status_class(status: str) -> str:
@@ -1427,7 +1479,11 @@ def _criterion_definition_html(definition: dict[str, Any]) -> str:
         return ""
     parts: list[str] = []
     if symbol:
-        parts.append(f"<span class='criterion-definition-symbol' role='math'>\\({_esc(symbol)}\\)</span>")
+        parts.append(
+            f"<span class='criterion-definition-symbol' role='img' aria-label='{_esc(symbol)}'>"
+            f"{_render_math_markup(symbol, display=False)}"
+            "</span>"
+        )
     if meaning:
         parts.append(f"<span class='criterion-definition-meaning'>{meaning}</span>")
     if unit:
@@ -1450,7 +1506,7 @@ def _criterion_body_html(item: AuditItem) -> str:
         return (
             "<div class='item-block criterion-block'>"
             "<h4>Criterion</h4>"
-            f"<div class='criterion-math' role='math'>\\[{_esc(item.criterion_latex)}\\]</div>"
+            f"<div class='criterion-math' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
             f"{definitions_html}"
             "</div>"
         )
@@ -2257,9 +2313,24 @@ def render_audit_dashboard_html(
     }}
     .criterion-math {{
       margin-top: 2px;
+      display: flex;
+      align-items: center;
       overflow-x: auto;
       overflow-y: hidden;
       padding-bottom: 2px;
+    }}
+    .criterion-svg {{
+      display: block;
+      max-width: 100%;
+      height: auto;
+      fill: currentColor;
+    }}
+    .criterion-svg-display {{
+      min-width: max-content;
+    }}
+    .criterion-svg-inline {{
+      height: 1.15em;
+      width: auto;
     }}
     .criterion-definitions {{
       display: grid;
@@ -2284,6 +2355,10 @@ def render_audit_dashboard_html(
       border: 1px solid #dbe3ef;
       border-radius: 999px;
       white-space: nowrap;
+    }}
+    .criterion-definition-symbol .criterion-svg-inline {{
+      display: block;
+      max-width: none;
     }}
     .criterion-definition-meaning {{
       color: #475569;

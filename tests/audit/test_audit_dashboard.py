@@ -217,12 +217,15 @@ with TemporaryDirectory() as tmp:
     assert "criterion-math" in html
     assert "criterion-definitions" in html
     assert "criterion-definition-symbol" in html
+    assert "criterion-svg-display" in html
+    assert "criterion-svg-inline" in html
     assert "criterion-variables" not in html
     assert "criterion-variable-chip" not in html
     assert "MathJax" in html
     assert "./assets/mathjax/tex-svg.js" in html
     assert "cdn.jsdelivr.net" not in html
     assert r"\bar{x} \in [L, U]" in html
+    assert html.count("<svg") >= 3
     assert "observed group mean" in html
     assert "f-I curve" in html
     assert "data-series-graph" in html
