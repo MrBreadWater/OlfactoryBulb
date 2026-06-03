@@ -447,6 +447,28 @@ def _series_color_for_key(key: str, index: int, *, status: str) -> dict[str, str
     return {"stroke": color, "fill": color, "dash": ""}
 
 
+def _series_points_are_function_like(points: list[tuple[float, float]]) -> bool:
+    observed_y_by_x: dict[float, float] = {}
+    for x_value, y_value in points:
+        x_key = round(float(x_value), 9)
+        y_key = round(float(y_value), 9)
+        previous_y = observed_y_by_x.get(x_key)
+        if previous_y is None:
+            observed_y_by_x[x_key] = y_key
+            continue
+        if not math.isclose(previous_y, y_key, rel_tol=0.0, abs_tol=1e-9):
+            return False
+    return True
+
+
+def _series_entries_require_scatter(series_entries: list[dict[str, Any]]) -> bool:
+    for series in series_entries:
+        points = series.get("points")
+        if isinstance(points, list) and points and not _series_points_are_function_like(points):
+            return True
+    return False
+
+
 def _visual_backend(spec: dict[str, Any] | None) -> str:
     if not isinstance(spec, dict):
         return "svg"
@@ -770,6 +792,7 @@ def _render_series_graph_matplotlib(
     ax.set_xticklabels([_series_tick_label(tick) for tick in x_ticks])
     ax.set_yticks(y_ticks)
     ax.set_yticklabels([_series_tick_label(tick) for tick in y_ticks])
+    fallback_to_scatter = kind not in {"scatter", "regression"} and _series_entries_require_scatter(series_entries)
     if x_low <= 0.0 <= x_high:
         ax.axvline(0.0, color="#94a3b8", linewidth=0.8, alpha=0.35, zorder=0)
     if y_low <= 0.0 <= y_high:
@@ -783,7 +806,7 @@ def _render_series_graph_matplotlib(
         x_points = [point[0] for point in series["points"]]
         y_points = [point[1] for point in series["points"]]
         dash_style = (0, (6, 4)) if color["dash"] else None
-        if kind == "scatter":
+        if kind == "scatter" or fallback_to_scatter:
             ax.scatter(
                 x_points,
                 y_points,
@@ -848,18 +871,22 @@ def _render_series_graph_matplotlib(
     fig.tight_layout()
     svg = _figure_to_inline_svg(fig)
     plt.close(fig)
+    visual_kind = "scatter" if fallback_to_scatter else kind
+    title_label = str(
+        style.get("title")
+        or ("f-I curve" if payload["series_kind"] == "f-i curve" else "Scatter plot" if fallback_to_scatter else "Series graph")
+    )
     svg = svg.replace(
         "<svg ",
-        f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(str(style.get('title') or ('f-I curve' if payload['series_kind'] == 'f-i curve' else 'Series graph')))}' ",
+        f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(title_label)}' ",
         1,
     )
 
-    visual_kind = kind or str(payload["series_kind"])
     return (
         (
             f"<div class='item-block series-graph-block' data-visual-backend='matplotlib' "
             f"data-visual-kind='{_esc(visual_kind)}'>"
-            f"<h4>{_esc('f-I curve' if payload['series_kind'] == 'f-i curve' else 'Series graph')}</h4>"
+            f"<h4>{_esc(title_label)}</h4>"
             f"<div class='series-graph-meta'><span>{_esc(x_axis_label)}</span><span>{_esc(y_axis_label)}</span></div>"
             f"<div class='series-graph-shell'>"
             f"{svg}"
@@ -998,6 +1025,7 @@ def _render_series_graph(
     y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
     x_ticks = _series_tick_values(x_low, x_high, target_ticks=5)
     y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
+    fallback_to_scatter = _series_entries_require_scatter(series_entries)
 
     svg_lines = [
         f"<svg class='series-graph-svg' data-series-graph role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
@@ -1045,28 +1073,36 @@ def _render_series_graph(
 
     legend_items: list[str] = []
     visual_backend = _visual_backend(spec)
-    visual_kind = _visual_kind(spec) or series_kind
+    visual_kind = "scatter" if fallback_to_scatter else (_visual_kind(spec) or series_kind)
     for index, series in enumerate(series_entries):
         color = _series_color_for_key(series["key"], index, status=str(item.status))
         dash_attr = f" stroke-dasharray='{color['dash']}'" if color["dash"] else ""
-        svg_lines.append(
-            f"<path class='series-line' d='{_esc(_path_d(series['points']))}' "
-            f"style='stroke:{color['stroke']}; fill:none;' {dash_attr}></path>"
-        )
-        for x_value, y_value in series["points"]:
+        if visual_kind == "scatter":
+            for x_value, y_value in series["points"]:
+                svg_lines.append(
+                    f"<circle class='series-point' cx='{_x_pos(x_value):.2f}' cy='{_y_pos(y_value):.2f}' r='3.4' "
+                    f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
+                )
+        else:
             svg_lines.append(
-                f"<circle class='series-point' cx='{_x_pos(x_value):.2f}' cy='{_y_pos(y_value):.2f}' r='3.4' "
-                f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
+                f"<path class='series-line' d='{_esc(_path_d(series['points']))}' "
+                f"style='stroke:{color['stroke']}; fill:none;' {dash_attr}></path>"
             )
+            for x_value, y_value in series["points"]:
+                svg_lines.append(
+                    f"<circle class='series-point' cx='{_x_pos(x_value):.2f}' cy='{_y_pos(y_value):.2f}' r='3.4' "
+                    f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
+                )
         legend_items.append(
             f"<span class='series-legend-item'><i class='series-legend-swatch' style='background:{color['fill']}; border-color:{color['stroke']};"
             f"{' border-style:dashed;' if color['dash'] else ''}'></i>{_esc(series['label'])}</span>"
         )
 
+    title_label = "f-I curve" if series_kind == "f-i curve" else ("Scatter plot" if visual_kind == "scatter" else "Series graph")
     return (
         f"<div class='item-block series-graph-block' data-visual-backend='{_esc(visual_backend)}' "
         f"data-visual-kind='{_esc(visual_kind)}'>"
-        f"<h4>{_esc('f-I curve' if series_kind == 'f-i curve' else 'Series graph')}</h4>"
+        f"<h4>{_esc(title_label)}</h4>"
         f"<div class='series-graph-meta'><span>{_esc(x_axis_label)}</span><span>{_esc(y_axis_label)}</span></div>"
         f"<div class='series-graph-shell'>"
         f"{''.join(svg_lines)}</svg>"

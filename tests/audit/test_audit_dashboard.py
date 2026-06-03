@@ -91,6 +91,26 @@ sample_report = AuditReport(
             group_title="Audit gamma",
         ),
         AuditItem(
+            check_id="audit_gamma.gamma_nonfunction_curve",
+            status="PASS",
+            title="Gamma nonfunction curve",
+            criterion="Repeated current values with multiple rates should render as a scatter plot.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "currents_pA": [0.0, 50.0, 50.0, 100.0],
+                "reference_values_Hz": [0.0, 2.0, 3.1, 9.0],
+                "model_values_Hz": [0.0, 1.8, 2.6, 8.7],
+                "label": "Repeated current values",
+            },
+            series_visuals=[
+                series_visual_spec(keys=["currents_pA", "reference_values_Hz", "model_values_Hz"]),
+            ],
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
             check_id="audit_delta.delta_formulae_only",
             status="PASS",
             title="Delta formulae only",
@@ -271,6 +291,10 @@ with TemporaryDirectory() as tmp:
     assert "Plain scalar metrics" in html
     gamma_index = html.index("audit_gamma.gamma_curve")
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
+    nonfunction_index = html.index("audit_gamma.gamma_nonfunction_curve")
+    nonfunction_segment = html[nonfunction_index:html.index("</article>", nonfunction_index)]
+    assert "data-visual-kind='scatter'" in nonfunction_segment
+    assert "series-line" not in nonfunction_segment
     plain_index = html.index("audit_gamma.gamma_plain_numeric")
     strip_item_index = html.index("audit_gamma.gamma_numeric")
     plain_segment = html[plain_index:strip_item_index]
