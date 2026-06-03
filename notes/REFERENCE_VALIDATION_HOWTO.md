@@ -219,7 +219,7 @@ minimum = 8.0
 maximum = 12.0
 title = "Soma diameter stays inside the accepted range"
 criterion = "The observed soma diameter should remain inside the accepted range."
-criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
+criterion_latex = '\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k'
 criterion_formulae = [
   '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 ]
@@ -235,8 +235,8 @@ For reference-band rows, prefer a compact centered inequality when the rule is
 centered around a mean, and keep explicit endpoint notation only for modes that
 really need asymmetric bounds. For example:
 
-- symmetric bands: `\left|\bar{x} - \mu\right| \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
-- lognormal bands: `\left|\ln(\bar{x}) - \mu_\ell\right| \leq k\sigma_\ell`, plus `\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}` and `\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2`
+- symmetric bands: `\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
+- lognormal bands: `\left|\frac{\ln(\bar{x}) - \mu_\ell}{\sigma_\ell}\right| \leq k`, plus `\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}` and `\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2`
 
 The framework now supports two skip behaviors:
 

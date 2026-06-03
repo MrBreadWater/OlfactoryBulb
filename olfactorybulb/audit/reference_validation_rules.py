@@ -582,7 +582,7 @@ def _criterion_math_for_band(
     band: ReferenceAcceptanceBand,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     observed_label = f"{group} mean {property_name.lower()}"
-    latex = r"\left|\bar{x} - \mu\right| \leq k\sigma"
+    latex = r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k"
     formulae: list[str] = []
     definitions: list[dict[str, Any]] = [{"symbol": r"\bar{x}", "definition": observed_label}]
     if band.mode == "quantile_interval":
@@ -621,7 +621,7 @@ def _criterion_math_for_band(
         latex = r"\bar{x} = b"
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        latex = r"\left|\ln(\bar{x}) - \mu_\ell\right| \leq k\sigma_\ell"
+        latex = r"\left|\frac{\ln(\bar{x}) - \mu_\ell}{\sigma_\ell}\right| \leq k"
         definitions.extend(
             [
                 {"symbol": r"\mu_\ell", "definition": "log-space mean"},

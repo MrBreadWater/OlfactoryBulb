@@ -166,7 +166,7 @@ human_review_status = "pending_review"
 # maximum = 12.0
 # title = "Soma diameter stays inside the accepted range"
 # criterion = "Explain the accepted numeric band."
-# criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
+# criterion_latex = '\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k'
 # criterion_formulae = [
 #   '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 # ]
@@ -222,7 +222,7 @@ human_review_status = "pending_review"
 # default_quantile_high_label_field = "q_high_label"
 # title = "Reference band placeholder"
 # criterion = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
-# criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
+# criterion_latex = '\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k'
 # criterion_formulae = [
 #   '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 # ]

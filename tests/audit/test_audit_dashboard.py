@@ -56,7 +56,7 @@ sample_report = AuditReport(
             status="PASS",
             title="Alpha math",
             criterion="The observed mean should stay within the accepted interval.",
-            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+            criterion_latex=r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k",
             criterion_formulae=[
                 r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
@@ -230,7 +230,7 @@ with TemporaryDirectory() as tmp:
     assert "MathJax" in html
     assert "./assets/mathjax/tex-svg.js" in html
     assert "cdn.jsdelivr.net" not in html
-    assert r"\left|\bar{x} - \mu\right| \leq k\sigma" in html
+    assert r"\left|\frac{\bar{x} - \mu}{\sigma}\right| \leq k" in html
     assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in html
     assert html.count("<svg") >= 3
     assert "observed group mean" in html

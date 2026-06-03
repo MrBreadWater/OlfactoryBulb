@@ -358,8 +358,8 @@ contract for future sessions.
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
   - when a reference-band check is centered around a mean, prefer an absolute-
-    value criterion such as `|\bar{x} - \mu| \le k\sigma` or
-    `|\ln(\bar{x}) - \mu_\ell| \le k\sigma_\ell`; reserve explicit `L/U`
+    value criterion such as `|(\bar{x} - \mu)/\sigma| \le k` or
+    `|(\ln(\bar{x}) - \mu_\ell)/\sigma_\ell| \le k`; reserve explicit `L/U`
     endpoints for asymmetric or non-centered modes
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
