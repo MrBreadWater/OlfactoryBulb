@@ -82,11 +82,13 @@ with TemporaryDirectory() as tmp:
     assert "item-compact-interval" in html
     assert "item-body-summary" in html
     assert "item-body-warning" in html
+    assert html.count("<div class='item-body-warning'>") == 1
     assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html
     assert "Warning" in html
     assert "warning-summary-text" in html
+    assert "status-reason-block" not in html
     assert "Human review" not in html
     assert "reviewer: human" not in html
 

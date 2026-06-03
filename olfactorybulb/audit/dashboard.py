@@ -394,11 +394,6 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ),
         ]
     )
-    if warning_text:
-        sections.append(
-            "<div class='item-block status-reason-block'><h4>Warning</h4>"
-            f"<p>{_esc(_expand_terms(warning_text, sentence_case=True))}</p></div>"
-        )
     sections.append(_render_evidence(item))
     if item.note:
         sections.append(
@@ -842,18 +837,21 @@ def render_audit_dashboard_html(
       display: flex;
       flex-direction: column;
       gap: 6px;
-      padding: 12px clamp(16px, 3vw, 60px) 0;
-      background: #ffffff;
+      margin: 12px clamp(16px, 3vw, 60px) 0;
+      padding: 10px 12px;
+      border: 1px solid #f3d8a2;
+      border-radius: 8px;
+      background: #fffaf0;
     }}
     .warning-summary-label {{
-      color: #8a4b00;
+      color: #a16207;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.02em;
     }}
     .warning-summary-text {{
-      color: #8a4b00;
+      color: #334155;
       font-size: 12px;
       line-height: 1.45;
       overflow-wrap: anywhere;
@@ -865,12 +863,6 @@ def render_audit_dashboard_html(
     }}
     .item-block h4 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); }}
     .item-block p {{ margin: 0; }}
-    .status-reason-block {{
-      border: 1px solid #f3d8a2;
-      border-radius: 8px;
-      padding: 10px 12px;
-      background: #fffaf0;
-    }}
     .interval-block {{
       border: 1px solid #e2e8f0;
       border-radius: 10px;
