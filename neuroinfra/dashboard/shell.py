@@ -538,7 +538,7 @@ def render_dashboard_shell(
     iframe {{
       display: block;
       width: 100%;
-      min-height: calc(100vh - 140px);
+      min-height: calc(120vh - 140px);
       flex: 1 1 auto;
       border: 1px solid var(--line);
       border-radius: 12px;
