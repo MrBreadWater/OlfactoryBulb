@@ -149,6 +149,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Short item",
                     criterion="Criterion",
+                    criterion_latex=r"\bar{x} \in [L, U]",
+                    criterion_definitions=[
+                        {"symbol": r"\bar{x}", "definition": "observed group mean"},
+                        {"symbol": "L", "definition": "lower accepted bound"},
+                        {"symbol": "U", "definition": "upper accepted bound"},
+                    ],
                     description="Description",
                     acceptable="Acceptable",
                     acceptable_basis="Configured",
@@ -897,6 +903,44 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert cards_ready is True
+            math_render = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 12000;"
+                "  const tick = () => {"
+                "    const equation = document.querySelector('.criterion-math');"
+                "    const equationMath = equation ? equation.querySelector('mjx-container') : null;"
+                "    const chips = Array.from(document.querySelectorAll('.criterion-variable-chip'));"
+                "    const chipMathCount = chips.filter((chip) => chip.querySelector('mjx-container')).length;"
+                "    const definitions = Array.from(document.querySelectorAll('.criterion-definitions .criterion-definition-meaning'));"
+                "    if (equationMath && chipMathCount >= 3 && definitions.length >= 3) {"
+                "      resolve({"
+                "        equationRendered: true,"
+                "        chipMathCount,"
+                "        variablesLabel: document.querySelector('.criterion-variables-label')?.textContent?.trim() || '',"
+                "        definitionTexts: definitions.map((node) => (node.textContent || '').trim()),"
+                "      });"
+                "      return;"
+                "    }"
+                "    if (Date.now() > deadline) {"
+                "      resolve({"
+                "        equationRendered: Boolean(equationMath),"
+                "        chipMathCount,"
+                "        variablesLabel: document.querySelector('.criterion-variables-label')?.textContent?.trim() || '',"
+                "        definitionTexts: definitions.map((node) => (node.textContent || '').trim()),"
+                "      });"
+                "      return;"
+                "    }"
+                "    setTimeout(tick, 100);"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert math_render["equationRendered"] is True
+            assert math_render["chipMathCount"] >= 3
+            assert math_render["variablesLabel"] == "Variables"
+            assert "Observed group mean" in math_render["definitionTexts"]
+            assert "Lower accepted bound" in math_render["definitionTexts"]
+            assert "Upper accepted bound" in math_render["definitionTexts"]
             series_visibility = client.eval(
                 "(() => {"
                 "  const graph = document.querySelector('[data-series-graph]');"
