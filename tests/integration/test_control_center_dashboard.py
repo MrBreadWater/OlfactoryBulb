@@ -175,6 +175,44 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     group_title="Human review status",
                     detail_level="summary",
                 ),
+                AuditItem(
+                    check_id="human_review_status.notes_only_item",
+                    status="PASS",
+                    title="Notes-only item",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    note="Protocol caveat without a warning status.",
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
+                    check_id="human_review_status.warning_only_item",
+                    status="WARN",
+                    title="Warning-only item",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    status_reason="Warning without notes or a numeric summary.",
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
+                    check_id="human_review_status.no_persistent_body_item",
+                    status="PASS",
+                    title="No persistent body item",
+                    criterion="Criterion",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
             ],
         )
     return _sample_report(audit_id=audit_id, title=f"{audit_id} report")
@@ -812,6 +850,77 @@ with TemporaryDirectory() as tmp:
             assert height_check["sameRow"] is True
             assert height_check["heightDelta"] > 8
             assert height_check["secondHeight"] > height_check["firstHeight"]
+            style_contract = client.eval(
+                "(() => {"
+                "  const failures = [];"
+                "  const cards = Array.from(document.querySelectorAll('[data-item-card]'));"
+                "  const rectOf = (element) => element.getBoundingClientRect();"
+                "  const direct = (card, selector) => card.querySelector(':scope > ' + selector);"
+                "  const visible = (element) => element && getComputedStyle(element).display !== 'none';"
+                "  const topGap = (element, previous) => Math.round((rectOf(element).top - rectOf(previous).bottom) * 10) / 10;"
+                "  const bottomGap = (element, card) => Math.round((rectOf(card).bottom - rectOf(element).bottom) * 10) / 10;"
+                "  const combos = {"
+                "    noPersistent: false,"
+                "    numericOnly: false,"
+                "    notesOnly: false,"
+                "    warningOnly: false,"
+                "    notesWarning: false,"
+                "    numericNotesWarning: false"
+                "  };"
+                "  for (const card of cards) {"
+                "    const id = card.querySelector('.check-id') ? card.querySelector('.check-id').textContent.trim() : '<unknown>';"
+                "    const header = direct(card, '.item-header');"
+                "    const summary = direct(card, '.item-body-summary');"
+                "    const notes = direct(card, '.item-body-notes');"
+                "    const warning = direct(card, '.item-body-warning');"
+                "    const detail = direct(card, '.item-detail-body');"
+                "    if (!header) { failures.push(id + ': missing direct item header'); }"
+                "    if (!detail) { failures.push(id + ': missing direct detail body'); }"
+                "    if (card.querySelector('.item-header .item-body-summary, .item-header .item-body-notes, .item-header .item-body-warning')) {"
+                "      failures.push(id + ': persistent body content rendered inside header');"
+                "    }"
+                "    if (card.querySelector('.item-detail-body .item-body-summary, .item-detail-body .item-body-notes, .item-detail-body .item-body-warning')) {"
+                "      failures.push(id + ': persistent body content rendered inside expanded detail body');"
+                "    }"
+                "    const persistent = [summary, notes, warning].filter(Boolean);"
+                "    if (!summary && !notes && !warning) { combos.noPersistent = true; }"
+                "    if (summary && !notes && !warning) { combos.numericOnly = true; }"
+                "    if (!summary && notes && !warning) { combos.notesOnly = true; }"
+                "    if (!summary && !notes && warning) { combos.warningOnly = true; }"
+                "    if (notes && warning) { combos.notesWarning = true; }"
+                "    if (summary && notes && warning) { combos.numericNotesWarning = true; }"
+                "    for (const element of persistent) {"
+                "      if (element.parentElement !== card) { failures.push(id + ': persistent region is not a direct card child'); }"
+                "      if (!visible(element) || rectOf(element).height < 8) { failures.push(id + ': persistent region has no rendered height'); }"
+                "    }"
+                "    const ordered = persistent.map((element) => rectOf(element).top);"
+                "    for (let index = 1; index < ordered.length; index += 1) {"
+                "      if (ordered[index] < ordered[index - 1] - 1.5) { failures.push(id + ': persistent regions are not vertically ordered'); }"
+                "    }"
+                "    if (notes) {"
+                "      const previous = summary || header;"
+                "      const gap = previous ? topGap(notes, previous) : 0;"
+                "      if (gap < 8) { failures.push(id + ': notes block has only ' + gap + 'px top gap before it'); }"
+                "    }"
+                "    if (warning) {"
+                "      const previous = notes || summary || header;"
+                "      const gap = previous ? topGap(warning, previous) : 0;"
+                "      if (gap < 8) { failures.push(id + ': warning block has only ' + gap + 'px top gap before it'); }"
+                "    }"
+                "    const lastPersistent = persistent[persistent.length - 1];"
+                "    if ((lastPersistent === notes || lastPersistent === warning) && bottomGap(lastPersistent, card) < 8) {"
+                "      failures.push(id + ': persistent region has insufficient bottom spacing');"
+                "    }"
+                "  }"
+                "  for (const [name, found] of Object.entries(combos)) {"
+                "    if (!found) { failures.push('missing representative card combination: ' + name); }"
+                "  }"
+                "  return { cardCount: cards.length, combos, failures };"
+                "})()"
+            )
+            assert style_contract is not None
+            assert style_contract["cardCount"] >= 5
+            assert style_contract["failures"] == [], style_contract
             client.eval(
                 "(() => {"
                 "  const section = document.querySelector('[data-group-section]');"
