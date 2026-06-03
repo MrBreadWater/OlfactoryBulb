@@ -360,11 +360,15 @@ contract for future sessions.
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
   - when a reference-band check is centered around a mean, prefer an absolute-
-    value criterion such as `|\bar{x} - \mu| \le k\sigma`; for lognormal
-    reconstructions, prefer the algebraically simplified directly substituted
-    log-space inequality over introducing auxiliary symbols like `\mu_\ell` or
-    `\sigma_\ell` when the substituted form stays readable. Reserve explicit
-    `L/U` endpoints for asymmetric or non-centered modes
+    value criterion such as `\lvert \bar{x} - \mu \rvert \le k\sigma`; use a
+    metric-specific observed symbol when the quantity has a common notation
+    such as `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or
+    `\bar{I}_{\mathrm{rh}}`, and keep `\bar{x}` as the fallback only when no
+    clearer symbol exists. For lognormal reconstructions, prefer the
+    algebraically simplified directly substituted log-space inequality over
+    introducing auxiliary symbols like `\mu_\ell` or `\sigma_\ell` when the
+    substituted form stays readable. Reserve explicit `L/U` endpoints for
+    asymmetric or non-centered modes
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
       dicts when possible

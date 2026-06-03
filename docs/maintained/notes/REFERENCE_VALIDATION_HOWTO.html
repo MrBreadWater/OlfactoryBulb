@@ -319,7 +319,7 @@ minimum = 8.0
 maximum = 12.0
 title = &quot;Soma diameter stays inside the accepted range&quot;
 criterion = &quot;The observed soma diameter should remain inside the accepted range.&quot;
-criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
+criterion_latex = '\lvert \bar{x} - \mu \rvert \leq k\sigma'
 criterion_formulae = [
   '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 ]
@@ -334,12 +334,15 @@ criterion_definitions = [
 centered around a mean, and keep explicit endpoint notation only for modes that
 really need asymmetric bounds. For example:</p>
 <ul>
-<li>symmetric bands: <code>\left|\bar{x} - \mu\right| \leq k\sigma</code>, with optional equivalent form <code>\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma</code></li>
-<li>lognormal bands: <code>\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}</code></li>
+<li>symmetric bands: <code>\lvert \bar{x} - \mu \rvert \leq k\sigma</code>, with optional equivalent form <code>\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma</code></li>
+<li>lognormal bands: <code>\lvert \ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}</code></li>
 </ul>
 <p>If a log-space criterion can be reduced algebraically without obscuring the
 reference quantities, prefer that reduced form over a longer expanded sum of
 logs or display-only auxiliary parameters.</p>
+<p>When a metric has a conventional symbol, prefer it over <code>\bar{x}</code>. Examples
+include <code>\bar{R}_{\mathrm{in}}</code>, <code>\bar{\tau}_m</code>, <code>\bar{I}_{\mathrm{rh}}</code>,
+and <code>\bar{V}_{\mathrm{rest}}</code>.</p>
 <p>The framework now supports two skip behaviors:</p>
 <ul>
 <li><code>short_circuit</code></li>

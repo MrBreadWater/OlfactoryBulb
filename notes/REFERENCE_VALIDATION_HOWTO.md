@@ -219,7 +219,7 @@ minimum = 8.0
 maximum = 12.0
 title = "Soma diameter stays inside the accepted range"
 criterion = "The observed soma diameter should remain inside the accepted range."
-criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
+criterion_latex = '\lvert \bar{x} - \mu \rvert \leq k\sigma'
 criterion_formulae = [
   '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 ]
@@ -235,12 +235,16 @@ For reference-band rows, prefer a compact centered inequality when the rule is
 centered around a mean, and keep explicit endpoint notation only for modes that
 really need asymmetric bounds. For example:
 
-- symmetric bands: `\left|\bar{x} - \mu\right| \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
-- lognormal bands: `\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
+- symmetric bands: `\lvert \bar{x} - \mu \rvert \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
+- lognormal bands: `\lvert \ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
 
 If a log-space criterion can be reduced algebraically without obscuring the
 reference quantities, prefer that reduced form over a longer expanded sum of
 logs or display-only auxiliary parameters.
+
+When a metric has a conventional symbol, prefer it over `\bar{x}`. Examples
+include `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, `\bar{I}_{\mathrm{rh}}`,
+and `\bar{V}_{\mathrm{rest}}`.
 
 The framework now supports two skip behaviors:
 

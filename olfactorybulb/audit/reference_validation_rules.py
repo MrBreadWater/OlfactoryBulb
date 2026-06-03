@@ -582,9 +582,10 @@ def _criterion_math_for_band(
     band: ReferenceAcceptanceBand,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     observed_label = f"{group} mean {property_name.lower()}"
-    latex = r"\left|\bar{x} - \mu\right| \leq k\sigma"
+    observed_symbol = _observed_symbol_for_property(property_name)
+    latex = r"\lvert {obs} - \mu \rvert \leq k\sigma".format(obs=observed_symbol)
     formulae: list[str] = []
-    definitions: list[dict[str, Any]] = [{"symbol": r"\bar{x}", "definition": observed_label}]
+    definitions: list[dict[str, Any]] = [{"symbol": observed_symbol, "definition": observed_label}]
     if band.mode == "quantile_interval":
         definitions.extend(
             [
@@ -618,13 +619,10 @@ def _criterion_math_for_band(
             ]
         )
     elif band.mode == "binary_indicator":
-        latex = r"\bar{x} = b"
+        latex = r"{obs} = b".format(obs=observed_symbol)
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        latex = (
-            r"\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| "
-            r"\leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}"
-        )
+        latex = rf"\lvert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \rvert \leq k\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -640,7 +638,7 @@ def _criterion_math_for_band(
                 {"symbol": "k", "definition": "configured sigma multiplier"},
             ]
         )
-        formulae.extend([r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"])
+        formulae.extend([r"\mu - k\sigma \leq {obs} \leq \mu + k\sigma".format(obs=observed_symbol)])
     return latex, definitions, formulae
 
 
@@ -662,6 +660,35 @@ def _row_field_name(
     if override is not None:
         return str(override).strip()
     return str(rule.get(default_field_key, default) or default).strip()
+
+
+_PROPERTY_OBSERVED_SYMBOLS: dict[str, str] = {
+    "ISI Coefficient of Variation": r"\overline{\mathrm{CV}}_{\mathrm{ISI}}",
+    "Rheobase Current": r"\bar{I}_{\mathrm{rh}}",
+    "Input Resistance": r"\bar{R}_{\mathrm{in}}",
+    "Membrane Time Constant": r"\bar{\tau}_m",
+    "Capacitance": r"\bar{C}_m",
+    "Membrane Resting Voltage": r"\bar{V}_{\mathrm{rest}}",
+    "AP Threshold": r"\bar{V}_{\mathrm{th}}",
+    "AP Amplitude": r"\bar{A}_{\mathrm{AP}}",
+    "AP Half-Width": r"\overline{\mathrm{FWHM}}",
+    "AP Width at Half-height": r"\overline{\mathrm{FWHM}}",
+    "AP Rising Slope": r"\bar{s}_{\mathrm{rise}}",
+    "AP Falling Slope": r"\bar{s}_{\mathrm{fall}}",
+    "First Spike Latency": r"\bar{t}_{\mathrm{lat}}",
+    "FI Curve Slope": r"\bar{g}_{\mathrm{FI}}",
+    "Peak Instantaneous Rate": r"\bar{f}_{\max}",
+    "Max FI Rate": r"\bar{f}_{\max}",
+    "Spontaneous Firing Rate": r"\bar{f}_{\mathrm{spont}}",
+    "AHP Amplitude": r"\bar{A}_{\mathrm{AHP}}",
+    "AHP Duration": r"\bar{t}_{\mathrm{AHP50}}",
+    "Spiking Rate Accommodation": r"\overline{\mathrm{SRA}}",
+    "Spiking Rate Accom. Time Constant": r"\bar{\tau}_{\mathrm{SRA}}",
+}
+
+
+def _observed_symbol_for_property(property_name: str) -> str:
+    return _PROPERTY_OBSERVED_SYMBOLS.get(str(property_name or "").strip(), r"\bar{x}")
 
 
 def _group_mean(summary: dict[str, dict[str, float]], group: str, metric_key: str) -> float:
