@@ -800,6 +800,7 @@ def _combine_audit_history(entries: list[dict[str, Any]]) -> AuditReport:
                     title=item.title,
                     criterion=item.criterion,
                     criterion_latex=item.criterion_latex,
+                    criterion_formulae=item.criterion_formulae,
                     criterion_definitions=item.criterion_definitions,
                     description=item.description,
                     acceptable=item.acceptable,

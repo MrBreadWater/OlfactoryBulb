@@ -166,11 +166,18 @@ human_review_status = "pending_review"
 # maximum = 12.0
 # title = "Soma diameter stays inside the accepted range"
 # criterion = "Explain the accepted numeric band."
-# criterion_latex = '\bar{x} \in [L, U]'
+# criterion_latex = 'L \leq \bar{x} \leq U'
+# criterion_formulae = [
+#   'L = \mu - k\sigma',
+#   'U = \mu + k\sigma',
+# ]
 # criterion_definitions = [
 #   { symbol = '\bar{x}', definition = 'observed group mean' },
 #   { symbol = 'L', definition = 'lower accepted bound' },
 #   { symbol = 'U', definition = 'upper accepted bound' },
+#   { symbol = '\mu', definition = 'uploaded reference mean' },
+#   { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
+#   { symbol = 'k', definition = 'configured sigma multiplier' },
 # ]
 # description = "Use this for direct one-group range checks."
 # acceptable = "The observed value stays inside the configured minimum and maximum."
@@ -218,11 +225,18 @@ human_review_status = "pending_review"
 # default_quantile_high_label_field = "q_high_label"
 # title = "Reference band placeholder"
 # criterion = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
-# criterion_latex = '\bar{x} \in [L, U]'
+# criterion_latex = 'L \leq \bar{x} \leq U'
+# criterion_formulae = [
+#   'L = \mu - k\sigma',
+#   'U = \mu + k\sigma',
+# ]
 # criterion_definitions = [
 #   { symbol = '\bar{x}', definition = 'observed group mean' },
 #   { symbol = 'L', definition = 'lower accepted bound' },
 #   { symbol = 'U', definition = 'upper accepted bound' },
+#   { symbol = '\mu', definition = 'uploaded reference mean' },
+#   { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
+#   { symbol = 'k', definition = 'configured sigma multiplier' },
 # ]
 # description = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 # acceptable = "Unused placeholder text; this rule auto-generates one item per mapped literature row."

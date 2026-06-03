@@ -354,6 +354,9 @@ contract for future sessions.
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
     when the item explicitly opts into a `series_visuals` declaration; do not
     infer a line graph from array-shaped evidence alone
+  - for math-rendered criteria, prefer one headline inequality or equality in
+    `criterion_latex`, then place any supporting bound-construction formulas in
+    `criterion_formulae` rather than hiding the actual mathematics inside prose
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
       dicts when possible

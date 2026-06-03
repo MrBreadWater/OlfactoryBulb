@@ -56,11 +56,18 @@ sample_report = AuditReport(
             status="PASS",
             title="Alpha math",
             criterion="The observed mean should stay within the accepted interval.",
-            criterion_latex=r"\bar{x} \in [L, U]",
+            criterion_latex=r"L \leq \bar{x} \leq U",
+            criterion_formulae=[
+                r"L = \mu - k\sigma",
+                r"U = \mu + k\sigma",
+            ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
                 {"symbol": "L", "definition": "lower accepted bound"},
                 {"symbol": "U", "definition": "upper accepted bound"},
+                {"symbol": r"\mu", "definition": "uploaded reference mean"},
+                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                {"symbol": "k", "definition": "configured sigma multiplier"},
             ],
             description="Description",
             acceptable="Acceptable",
@@ -215,6 +222,8 @@ with TemporaryDirectory() as tmp:
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "criterion-math" in html
+    assert "criterion-formulae" in html
+    assert "criterion-formula" in html
     assert "criterion-definitions" in html
     assert "criterion-definition-symbol" in html
     assert "criterion-svg-display" in html
@@ -224,7 +233,9 @@ with TemporaryDirectory() as tmp:
     assert "MathJax" in html
     assert "./assets/mathjax/tex-svg.js" in html
     assert "cdn.jsdelivr.net" not in html
-    assert r"\bar{x} \in [L, U]" in html
+    assert r"L \leq \bar{x} \leq U" in html
+    assert r"L = \mu - k\sigma" in html
+    assert r"U = \mu + k\sigma" in html
     assert html.count("<svg") >= 3
     assert "observed group mean" in html
     assert "f-I curve" in html

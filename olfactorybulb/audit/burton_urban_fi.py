@@ -929,7 +929,11 @@ def _build_burton_reference_fit_items(
             in_range = np.isfinite(observed_value) and accepted_low <= observed_value <= accepted_high
             metric_label = BURTON_PROPERTY_LABELS.get(metric_key, metric_key)
             units_suffix = f" {reference.units}" if reference.units else ""
-            criterion_latex, criterion_definitions = _criterion_math_for_band(_cell_label(cell_type), metric_label, band)
+            criterion_latex, criterion_definitions, criterion_formulae = _criterion_math_for_band(
+                _cell_label(cell_type),
+                metric_label,
+                band,
+            )
             items.append(
                 AuditItem(
                     check_id=f"{cell_type.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
@@ -937,6 +941,7 @@ def _build_burton_reference_fit_items(
                     title=_title_text_for_band(cell_type, metric_label, band.mode),
                     criterion=_criterion_text_for_band(cell_type, metric_label, band.mode, sigma_phrase),
                     criterion_latex=criterion_latex,
+                    criterion_formulae=criterion_formulae,
                     criterion_definitions=criterion_definitions,
                     description=(
                         f"This is the direct single-cell-type reference check derived from the uploaded Burton and Urban 2014 "

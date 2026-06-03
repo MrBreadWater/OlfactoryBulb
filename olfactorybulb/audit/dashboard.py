@@ -1491,8 +1491,20 @@ def _criterion_definition_html(definition: dict[str, Any]) -> str:
     return f"<div class='criterion-definition'>{' '.join(parts)}</div>"
 
 
+def _criterion_formulae_html(formulae: list[str]) -> str:
+    normalized = [str(formula).strip() for formula in formulae if str(formula).strip()]
+    if not normalized:
+        return ""
+    rows = "".join(
+        f"<div class='criterion-formula' role='img' aria-label='{_esc(formula)}'>{_render_math_markup(formula, display=False)}</div>"
+        for formula in normalized
+    )
+    return f"<div class='criterion-formulae'>{rows}</div>"
+
+
 def _criterion_body_html(item: AuditItem) -> str:
     if item.criterion_latex:
+        formulae_html = _criterion_formulae_html(item.criterion_formulae)
         definitions_html = ""
         if item.criterion_definitions:
             definitions_html = (
@@ -1507,6 +1519,7 @@ def _criterion_body_html(item: AuditItem) -> str:
             "<div class='item-block criterion-block'>"
             "<h4>Criterion</h4>"
             f"<div class='criterion-math' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
+            f"{formulae_html}"
             f"{definitions_html}"
             "</div>"
         )
@@ -1534,6 +1547,7 @@ def _item_search_blob(item: AuditItem) -> str:
         item.title,
         item.criterion,
         item.criterion_latex,
+        " ".join(item.criterion_formulae),
         " ".join(definition_fields),
         item.description,
         item.acceptable,
@@ -2319,6 +2333,20 @@ def render_audit_dashboard_html(
       overflow-y: hidden;
       padding-bottom: 2px;
     }}
+    .criterion-formulae {{
+      display: grid;
+      gap: 6px;
+      margin: 10px 0 0;
+      padding-top: 10px;
+      border-top: 1px solid #dde6f3;
+    }}
+    .criterion-formula {{
+      display: flex;
+      align-items: center;
+      overflow-x: auto;
+      overflow-y: hidden;
+      color: #334155;
+    }}
     .criterion-svg {{
       display: block;
       max-width: 100%;
@@ -2331,6 +2359,10 @@ def render_audit_dashboard_html(
     .criterion-svg-inline {{
       height: 1.15em;
       width: auto;
+    }}
+    .criterion-formula .criterion-svg-inline {{
+      height: 1.4em;
+      max-width: none;
     }}
     .criterion-definitions {{
       display: grid;
@@ -2347,13 +2379,11 @@ def render_audit_dashboard_html(
     .criterion-definition-symbol {{
       display: inline-flex;
       align-items: center;
-      justify-content: center;
-      min-height: 24px;
-      padding: 2px 9px;
+      justify-content: flex-start;
+      min-height: 0;
+      min-width: 34px;
+      padding: 0;
       color: #1f2937;
-      background: rgba(255, 255, 255, 0.92);
-      border: 1px solid #dbe3ef;
-      border-radius: 999px;
       white-space: nowrap;
     }}
     .criterion-definition-symbol .criterion-svg-inline {{

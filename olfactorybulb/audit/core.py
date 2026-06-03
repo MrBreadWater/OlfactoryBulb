@@ -109,6 +109,32 @@ def _normalize_criterion_definitions(value: Any) -> list[dict[str, str]]:
     return normalized
 
 
+def _normalize_criterion_formulae(value: Any) -> list[str]:
+    if value is None:
+        return []
+    entries: list[Any]
+    if isinstance(value, (str, dict)):
+        entries = [value]
+    elif isinstance(value, Iterable):
+        entries = list(value)
+    else:
+        entries = [value]
+    normalized: list[str] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            text = str(
+                entry.get("latex")
+                or entry.get("formula")
+                or entry.get("expression")
+                or ""
+            ).strip()
+        else:
+            text = str(entry).strip()
+        if text:
+            normalized.append(text)
+    return normalized
+
+
 @dataclass
 class AuditItem:
     check_id: str
@@ -116,6 +142,7 @@ class AuditItem:
     title: str
     criterion: str
     criterion_latex: str = ""
+    criterion_formulae: list[str] = field(default_factory=list)
     criterion_definitions: list[dict[str, Any]] = field(default_factory=list)
     description: str = ""
     acceptable: str = ""
@@ -134,6 +161,7 @@ class AuditItem:
 
     def __post_init__(self) -> None:
         self.criterion_latex = str(self.criterion_latex or "").strip()
+        self.criterion_formulae = _normalize_criterion_formulae(self.criterion_formulae)
         self.criterion_definitions = _normalize_criterion_definitions(self.criterion_definitions)
 
 
@@ -460,6 +488,12 @@ def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
     lines.append(f"  {_paint(_expand_terms(item.title, sentence_case=True), '1', enabled=enabled)}")
     criterion_text = item.criterion_latex if item.criterion_latex else _expand_terms(item.criterion, sentence_case=True)
     lines.append(f"  {_paint('Criterion', LABEL_COLOR, enabled=enabled)}  {criterion_text}")
+    if item.criterion_formulae:
+        lines.append(f"  {_paint('Formulae', LABEL_COLOR, enabled=enabled)}")
+        for formula in item.criterion_formulae:
+            text = str(formula).strip()
+            if text:
+                lines.append(f"    - {text}")
     if item.criterion_definitions:
         lines.append(f"  {_paint('Definitions', LABEL_COLOR, enabled=enabled)}")
         for definition in item.criterion_definitions:

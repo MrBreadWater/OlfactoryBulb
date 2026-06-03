@@ -30,11 +30,18 @@ sample_report = AuditReport(
             status="WARN",
             title="TC CV_ISI item",
             criterion="TC CV_ISI should render cleanly.",
-            criterion_latex=r"\bar{x} \in [L, U]",
+            criterion_latex=r"L \leq \bar{x} \leq U",
+            criterion_formulae=[
+                r"L = \mu - k\sigma",
+                r"U = \mu + k\sigma",
+            ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
                 {"symbol": "L", "definition": "lower accepted bound"},
                 {"symbol": "U", "definition": "upper accepted bound"},
+                {"symbol": r"\mu", "definition": "uploaded reference mean"},
+                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                {"symbol": "k", "definition": "configured sigma multiplier"},
             ],
             description="CV_ISI should be expanded so the reader does not have to infer it.",
             acceptable="The tufted-cell value must exceed the mitral-cell value.",
@@ -90,7 +97,10 @@ assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
 assert "Warning" in plain
 assert "Warning surfaced for an unresolved caveat or condition" in plain
-assert r"\bar{x} \in [L, U]" in plain
+assert r"L \leq \bar{x} \leq U" in plain
+assert "Formulae" in plain
+assert r"L = \mu - k\sigma" in plain
+assert r"U = \mu + k\sigma" in plain
 assert "Definitions" in plain
 assert "Observed group mean" in plain
 assert "Why This Is A Warning" not in plain

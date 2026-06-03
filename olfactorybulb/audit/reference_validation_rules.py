@@ -173,6 +173,7 @@ def _rule_item(
     title: str | None = None,
     criterion: str | None = None,
     criterion_latex: str | None = None,
+    criterion_formulae: list[str] | None = None,
     criterion_definitions: list[dict[str, Any]] | None = None,
     description: str | None = None,
     acceptable: str | None = None,
@@ -187,6 +188,9 @@ def _rule_item(
         title=str(title or rule["title"]),
         criterion=str(criterion or rule["criterion"]),
         criterion_latex=str(criterion_latex if criterion_latex is not None else rule.get("criterion_latex", "")),
+        criterion_formulae=(
+            criterion_formulae if criterion_formulae is not None else rule.get("criterion_formulae", [])
+        ),
         criterion_definitions=(
             criterion_definitions if criterion_definitions is not None else rule.get("criterion_definitions", [])
         ),
@@ -572,17 +576,25 @@ def _criterion_text_for_band(group: str, property_name: str, band: ReferenceAcce
     )
 
 
-def _criterion_math_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand) -> tuple[str, list[dict[str, Any]]]:
+def _criterion_math_for_band(
+    group: str,
+    property_name: str,
+    band: ReferenceAcceptanceBand,
+) -> tuple[str, list[dict[str, Any]], list[str]]:
     observed_label = f"{group} mean {property_name.lower()}"
-    latex = r"\bar{x} \in [L, U]"
+    latex = r"L \leq \bar{x} \leq U"
+    formulae: list[str] = []
     definitions: list[dict[str, Any]] = [{"symbol": r"\bar{x}", "definition": observed_label}]
     if band.mode == "quantile_interval":
         definitions.extend(
             [
-                {"symbol": "L", "definition": "reported lower quantile"},
-                {"symbol": "U", "definition": "reported upper quantile"},
+                {"symbol": "L", "definition": "reported lower quantile bound"},
+                {"symbol": "U", "definition": "reported upper quantile bound"},
+                {"symbol": r"q_{\mathrm{low}}", "definition": "reported lower quantile"},
+                {"symbol": r"q_{\mathrm{high}}", "definition": "reported upper quantile"},
             ]
         )
+        formulae.extend([r"L = q_{\mathrm{low}}", r"U = q_{\mathrm{high}}"])
     elif band.mode == "beta_sd":
         definitions.extend(
             [
@@ -591,6 +603,18 @@ def _criterion_math_for_band(group: str, property_name: str, band: ReferenceAcce
                 {"symbol": "q", "definition": "tail probability matched to the configured sigma multiplier"},
                 {"symbol": r"\alpha", "definition": "beta-shape parameter"},
                 {"symbol": r"\beta", "definition": "beta-shape parameter"},
+                {"symbol": r"\kappa", "definition": "beta concentration parameter"},
+                {"symbol": r"\mu", "definition": "uploaded reference mean"},
+                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+            ]
+        )
+        formulae.extend(
+            [
+                r"\kappa = \frac{\mu (1 - \mu)}{\sigma^2} - 1",
+                r"\alpha = \mu \kappa",
+                r"\beta = (1 - \mu)\kappa",
+                r"L = Q_{\mathrm{Beta}}(q;\alpha,\beta)",
+                r"U = Q_{\mathrm{Beta}}(1 - q;\alpha,\beta)",
             ]
         )
     elif band.mode == "binary_indicator":
@@ -603,7 +627,17 @@ def _criterion_math_for_band(group: str, property_name: str, band: ReferenceAcce
                 {"symbol": "U", "definition": "upper lognormal reconstruction of the uploaded mean and standard deviation"},
                 {"symbol": r"\mu_\ell", "definition": "log-space mean"},
                 {"symbol": r"\sigma_\ell", "definition": "log-space standard deviation"},
+                {"symbol": r"\mu", "definition": "uploaded reference mean"},
+                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                 {"symbol": "k", "definition": "configured sigma multiplier"},
+            ]
+        )
+        formulae.extend(
+            [
+                r"\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}",
+                r"\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2",
+                r"L = e^{\mu_\ell - k\sigma_\ell}",
+                r"U = e^{\mu_\ell + k\sigma_\ell}",
             ]
         )
     else:
@@ -616,7 +650,8 @@ def _criterion_math_for_band(group: str, property_name: str, band: ReferenceAcce
                 {"symbol": "k", "definition": "configured sigma multiplier"},
             ]
         )
-    return latex, definitions
+        formulae.extend([r"L = \mu - k\sigma", r"U = \mu + k\sigma"])
+    return latex, definitions, formulae
 
 
 def _title_text_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand) -> str:
@@ -995,7 +1030,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
         if unit_text:
             range_text = f"{range_text} {unit_text}"
         review_metadata = _property_review_metadata(rule, context, property_name)
-        criterion_latex, criterion_definitions = _criterion_math_for_band(group, property_name, band)
+        criterion_latex, criterion_definitions, criterion_formulae = _criterion_math_for_band(group, property_name, band)
         items.append(
             _rule_item(
                 rule,
@@ -1004,6 +1039,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                 title=_title_text_for_band(group, property_name, band),
                 criterion=_criterion_text_for_band(group, property_name, band, sigma_phrase),
                 criterion_latex=criterion_latex,
+                criterion_formulae=criterion_formulae,
                 criterion_definitions=criterion_definitions,
                 description=(
                     f"This is the direct single-cell-type reference check derived from uploaded literature rows for "
