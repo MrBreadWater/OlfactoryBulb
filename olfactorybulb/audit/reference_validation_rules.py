@@ -679,11 +679,25 @@ def _curve_points_by_current(
 @register_validation_rule("protocol_executed")
 def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
+    series_visuals: list[dict[str, Any]] = []
+    fi_curve_rows = protocol_evidence.get("fi_curve_rows")
+    if isinstance(fi_curve_rows, list) and fi_curve_rows:
+        series_visuals.append(
+            series_visual_spec(
+                keys=["fi_curve_rows"],
+                style={
+                    "line_width": 1.8,
+                    "marker_size": 3.2,
+                    "legend_loc": "lower center",
+                },
+            )
+        )
     return [
         _rule_item(
             rule,
             status=_rule_status(rule, bool(context.metrics)),
             evidence=protocol_evidence,
+            series_visuals=series_visuals,
         )
     ]
 

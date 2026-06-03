@@ -27,9 +27,12 @@ completed = subprocess.run(
 
 assert completed.returncode in {0, 1}, completed
 payload = json.loads(completed.stdout)
+protocol_item = next(item for item in payload["items"] if item["check_id"] == "gc_intrinsic_protocol_executed")
 
 assert payload["audit_id"] == "gc_intrinsic_validation"
 assert any(item["check_id"] == "gc_intrinsic_protocol_executed" for item in payload["items"])
+assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
+assert "fi_curve_rows" in protocol_item["evidence"]
 assert any(item["check_id"] == "gc_generic_fi_caveats" for item in payload["items"])
 warn_items = [item for item in payload["items"] if item["status"] == "WARN"]
 assert warn_items

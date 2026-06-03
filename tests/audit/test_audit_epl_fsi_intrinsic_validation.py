@@ -25,9 +25,12 @@ completed = subprocess.run(
 
 assert completed.returncode in {0, 1}, completed
 payload = json.loads(completed.stdout)
+protocol_item = next(item for item in payload["items"] if item["check_id"] == "epl_fsi_protocol_executed")
 
 assert payload["audit_id"] == "epl_fsi_intrinsic_validation"
 assert any(item["check_id"] == "epl_fsi_protocol_executed" for item in payload["items"])
+assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
+assert "fi_curve_rows" in protocol_item["evidence"]
 assert any(item["check_id"] == "epl_fsi_protocol_caveats" for item in payload["items"])
 assert any(item["check_id"] == "epl_fsi_reference_curve_match" for item in payload["items"])
 

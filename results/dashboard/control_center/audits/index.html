@@ -910,7 +910,7 @@
       }
     }
     </style>
-    
+
   <link rel="stylesheet" href="./assets/katex/katex.min.css">
   <script>
     window.__KATEX_RENDER_OPTIONS__ = {
@@ -938,7 +938,7 @@
 <body>
   <header>
     <h1>Control center audits</h1>
-    <div class="subtle">audit_id=control_center_audits | generated 2026-06-03T16:07:06</div>
+    <div class="subtle">audit_id=control_center_audits | generated 2026-06-03T16:21:54</div>
     <div class="actions">
       <span class='summary-chip status-fail'>3 Failures</span><span class='summary-chip status-warn'>4 Warnings</span><span class='summary-chip status-pass'>10 Passes</span>
       <span class="overall-status"><span class="overall-status-label">Overall</span><span class='status-badge status-fail'><span class='status-icon' aria-hidden='true'>✕</span><span class='status-text'>FAIL</span></span></span>
@@ -947,7 +947,7 @@
     </div>
   </header>
   <main>
-    
+
       <section class="control-strip">
         <div class="control-card">
           <h2>Display controls</h2>
@@ -961,7 +961,7 @@
               <div class="toggle-row">
                 <button class="toggle-button" type="button" id="failures-only-toggle" aria-pressed="false">Failures and warnings only</button>
                 <button class="toggle-button" type="button" id="hide-passed-groups-toggle" aria-pressed="false">Hide fully passing groups</button>
-                
+
               </div>
             </div>
             <div class="control-field">
@@ -974,7 +974,7 @@
           </div>
         </div>
       </section>
-    
+
     <div class="layout">
       <aside class="sidebar">
         <h2>Audit groups</h2>
@@ -984,7 +984,344 @@
       </aside>
       <div class="content">
         <section id='group-gc_intrinsic_validation-001.gc_intrinsic_validation' class='group-section group-collapsed' data-group-section data-group-id='gc_intrinsic_validation-001.gc_intrinsic_validation' data-worst-status='FAIL'><header class='group-header'><div class='group-heading'><h2>Granule cell intrinsic validation</h2></div><div class='group-header-actions'><div class='summary-row'><span class='summary-chip status-fail'>3 Failures</span><span class='summary-chip status-warn'>4 Warnings</span><span class='summary-chip status-pass'>10 Passes</span></div><button class='action-button group-toggle' type='button' data-group-toggle>Expand</button></div></header><div class='items-grid' data-group-items><article class='item-card status-warn item-collapsed' data-item-card data-status='WARN' data-detail-level='detail' data-search='gc_intrinsic_validation-001.gc_intrinsic_validation.gc_generic_fi_caveats notes / protocol caveats generic-granule-cell firing-rate-versus-current outputs should display the current extraction-status and protocol caveats that travel with the reference dataset. this section keeps the generic-granule-cell firing-rate-versus-current caveats visible, including the fact that the current-rate point table remains unavailable in the extracted bundle. all caveats relevant to the generic-granule-cell firing-rate-versus-current context are displayed here. the note set is loaded from the granule-cell validation-notes table by matching the synthetic source and protocol context declared in this validation. {&quot;note_ids&quot;: [&quot;n_gc_generic_fi_points_unavailable&quot;], &quot;notes&quot;: [&quot;no validated generic-granule-cell current-rate point set was extracted. gc_fi_curve.csv remains empty until a machine-readable or manually curated point table is added.&quot;], &quot;protocol_ids_in_scope&quot;: [&quot;bu2015_gc_intrinsic_current_clamp&quot;]}'><header class='item-header'><button class='item-toggle' type='button' data-item-toggle aria-expanded='false' aria-controls='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_generic_fi_caveats' aria-label='Expand Notes / protocol caveats'><span class='item-toggle-icon' aria-hidden='true'>&#9656;</span><span class='item-header-main'><span class='item-group-label'>Granule cell intrinsic validation</span><span class='item-header-row'><span class='item-title'>Notes / protocol caveats</span><span class='status-badge status-warn'><span class='status-icon' aria-hidden='true'>!</span><span class='status-text'>WARN</span></span></span></span></button></header><div class='item-body-notes'><div class='item-notes-label'>Notes / caveats</div><ul class='item-notes-list'><li class='item-note'>No validated generic-granule-cell current-rate point set was extracted. GC_fI_curve.csv remains empty until a machine-readable or manually curated point table is added.</li></ul></div><div class='item-body-warning'><div class='warning-summary-label'>Warning</div><div class='warning-summary-text'>Pending human review for the validation-design choice behind this check.</div></div><div class='item-body item-detail-body' id='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_generic_fi_caveats' data-item-detail-body hidden><div class='item-block'><h4>Check id</h4><p class='check-id'>gc_intrinsic_validation-001.gc_intrinsic_validation.gc_generic_fi_caveats</p></div><div class='item-block criterion-block'><h4>Criterion</h4><p>Generic-granule-cell firing-rate-versus-current outputs should display the current extraction-status and protocol caveats that travel with the reference dataset.</p></div><div class='item-block'><h4>Description</h4><p>This section keeps the generic-granule-cell firing-rate-versus-current caveats visible, including the fact that the current-rate point table remains unavailable in the extracted bundle.</p></div><div class='item-block'><h4>Acceptable result</h4><p>All caveats relevant to the generic-granule-cell firing-rate-versus-current context are displayed here.</p></div><div class='item-block'><h4>Decision basis</h4><p>The note set is loaded from the granule-cell validation-notes table by matching the synthetic source and protocol context declared in this validation.</p></div><div class='item-block evidence-block'><h4>Details</h4><dl class='evidence-grid'><div class='evidence-row'><dt>Protocol ids in scope</dt><dd>BU2015_GC_intrinsic_current_clamp</dd></div><div class='evidence-row'><dt>Notes</dt><dd>No validated generic-granule-cell current-rate point set was extracted. GC_fI_curve.csv remains empty until a machine-readable or manually curated point table is added.</dd></div><div class='evidence-row'><dt>Note ids</dt><dd>N_GC_GENERIC_FI_POINTS_UNAVAILABLE</dd></div></dl></div></div></article>
-<article class='item-card status-pass item-collapsed' data-item-card data-status='PASS' data-detail-level='detail' data-search='gc_intrinsic_validation-001.gc_intrinsic_validation.gc_intrinsic_protocol_executed granule-cell intrinsic protocol executed run the maintained granule-cell models through the configured intrinsic current-clamp protocol and produce at least one metric row for every requested model. this is the top-level execution sanity check for the granule-cell intrinsic validation path. at least one audited granule-cell metric record is produced and the evidence lists the current-step family that was executed. this rule is an implementation sanity check rather than a literature tolerance band. {&quot;cell_models&quot;: [&quot;gc1&quot;, &quot;gc2&quot;, &quot;gc3&quot;, &quot;gc4&quot;, &quot;gc5&quot;], &quot;fi_curve_rows&quot;: [{&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 5.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 18.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 29.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 41.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 53.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 68.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 27.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 50.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 11.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 11.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 22.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 52.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 1.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 1.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 7.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 53.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 13.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 21.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 31.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 45.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 61.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 32.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 62.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 91.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 48.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 56.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}], &quot;reference_gc_subtypes&quot;: [&quot;generic_or_unspecified&quot;], &quot;step_currents_pa&quot;: [0.0, 50.0, 100.0, 150.00000000000003, 200.0, 250.0, 300.00000000000006], &quot;step_duration_ms&quot;: 2000.0, &quot;target_vm_mv&quot;: null}'><header class='item-header'><button class='item-toggle' type='button' data-item-toggle aria-expanded='false' aria-controls='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_intrinsic_protocol_executed' aria-label='Expand Granule-cell intrinsic protocol executed'><span class='item-toggle-icon' aria-hidden='true'>&#9656;</span><span class='item-header-main'><span class='item-group-label'>Granule cell intrinsic validation</span><span class='item-header-row'><span class='item-title'>Granule-cell intrinsic protocol executed</span><span class='status-badge status-pass'><span class='status-icon' aria-hidden='true'>✓</span><span class='status-text'>PASS</span></span></span></span></button></header><div class='item-body item-detail-body' id='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_intrinsic_protocol_executed' data-item-detail-body hidden><div class='item-block'><h4>Check id</h4><p class='check-id'>gc_intrinsic_validation-001.gc_intrinsic_validation.gc_intrinsic_protocol_executed</p></div><div class='item-block criterion-block'><h4>Criterion</h4><p>Run the maintained granule-cell models through the configured intrinsic current-clamp protocol and produce at least one metric row for every requested model.</p></div><div class='item-block'><h4>Description</h4><p>This is the top-level execution sanity check for the granule-cell intrinsic validation path.</p></div><div class='item-block'><h4>Acceptable result</h4><p>At least one audited granule-cell metric record is produced and the evidence lists the current-step family that was executed.</p></div><div class='item-block'><h4>Decision basis</h4><p>This rule is an implementation sanity check rather than a literature tolerance band.</p></div><div class='item-block evidence-block'><h4>Details</h4><dl class='evidence-grid'><div class='evidence-row'><dt>Target vm mV</dt><dd>--</dd></div><div class='evidence-row'><dt>Step duration ms</dt><dd>2,000</dd></div><div class='evidence-row'><dt>Step currents pA</dt><dd>0, 50, 100, 150, 200, 250, 300</dd></div><div class='evidence-row'><dt>Cell models</dt><dd>GC1, GC2, GC3, GC4, GC5</dd></div><div class='evidence-row'><dt>Reference gc subtypes</dt><dd>generic_or_unspecified</dd></div><div class='evidence-row'><dt>Fi curve rows</dt><dd>{&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 0.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 50.0, &quot;firing_rate_Hz&quot;: 5.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 100.0, &quot;firing_rate_Hz&quot;: 18.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 150.00000000000003, &quot;firing_rate_Hz&quot;: 29.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 200.0, &quot;firing_rate_Hz&quot;: 41.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 250.0, &quot;firing_rate_Hz&quot;: 53.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC1&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 300.00000000000006, &quot;firing_rate_Hz&quot;: 68.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 0.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 50.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 100.0, &quot;firing_rate_Hz&quot;: 27.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 150.00000000000003, &quot;firing_rate_Hz&quot;: 50.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 200.0, &quot;firing_rate_Hz&quot;: 11.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 250.0, &quot;firing_rate_Hz&quot;: 11.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC2&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 300.00000000000006, &quot;firing_rate_Hz&quot;: 22.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 0.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 50.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 100.0, &quot;firing_rate_Hz&quot;: 52.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 150.00000000000003, &quot;firing_rate_Hz&quot;: 1.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 200.0, &quot;firing_rate_Hz&quot;: 1.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 250.0, &quot;firing_rate_Hz&quot;: 7.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC3&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 300.00000000000006, &quot;firing_rate_Hz&quot;: 53.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 0.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 50.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 100.0, &quot;firing_rate_Hz&quot;: 13.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 150.00000000000003, &quot;firing_rate_Hz&quot;: 21.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 200.0, &quot;firing_rate_Hz&quot;: 31.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 250.0, &quot;firing_rate_Hz&quot;: 45.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC4&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 300.00000000000006, &quot;firing_rate_Hz&quot;: 61.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 0.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 50.0, &quot;firing_rate_Hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 100.0, &quot;firing_rate_Hz&quot;: 32.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 150.00000000000003, &quot;firing_rate_Hz&quot;: 62.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 200.0, &quot;firing_rate_Hz&quot;: 91.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 250.0, &quot;firing_rate_Hz&quot;: 48.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;GC5&quot;, &quot;cell_type&quot;: &quot;GC&quot;, &quot;current_pA&quot;: 300.00000000000006, &quot;firing_rate_Hz&quot;: 56.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}</dd></div></dl></div></div></article>
+<article class='item-card status-pass item-collapsed' data-item-card data-status='PASS' data-detail-level='detail' data-search='gc_intrinsic_validation-001.gc_intrinsic_validation.gc_intrinsic_protocol_executed granule-cell intrinsic protocol executed run the maintained granule-cell models through the configured intrinsic current-clamp protocol and produce at least one metric row for every requested model. this is the top-level execution sanity check for the granule-cell intrinsic validation path. at least one audited granule-cell metric record is produced and the evidence lists the current-step family that was executed. this rule is an implementation sanity check rather than a literature tolerance band. {&quot;cell_models&quot;: [&quot;gc1&quot;, &quot;gc2&quot;, &quot;gc3&quot;, &quot;gc4&quot;, &quot;gc5&quot;], &quot;fi_curve_rows&quot;: [{&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 5.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 18.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 29.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 41.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 53.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc1&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 68.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 27.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 50.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 11.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 11.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc2&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 22.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 52.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 1.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 1.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 7.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc3&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 53.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 13.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 21.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 31.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 45.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc4&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 61.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 0.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 50.0, &quot;firing_rate_hz&quot;: 0.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 100.0, &quot;firing_rate_hz&quot;: 32.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 150.00000000000003, &quot;firing_rate_hz&quot;: 62.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 200.0, &quot;firing_rate_hz&quot;: 91.0, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 250.0, &quot;firing_rate_hz&quot;: 48.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}, {&quot;cell_name&quot;: &quot;gc5&quot;, &quot;cell_type&quot;: &quot;granule cell&quot;, &quot;current_pa&quot;: 300.00000000000006, &quot;firing_rate_hz&quot;: 56.5, &quot;gc_subtype&quot;: &quot;generic_or_unspecified&quot;, &quot;rate_definition&quot;: &quot;mean_step_rate&quot;, &quot;step_duration_ms&quot;: 2000.0}], &quot;reference_gc_subtypes&quot;: [&quot;generic_or_unspecified&quot;], &quot;step_currents_pa&quot;: [0.0, 50.0, 100.0, 150.00000000000003, 200.0, 250.0, 300.00000000000006], &quot;step_duration_ms&quot;: 2000.0, &quot;target_vm_mv&quot;: null}'><header class='item-header'><button class='item-toggle' type='button' data-item-toggle aria-expanded='false' aria-controls='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_intrinsic_protocol_executed' aria-label='Expand Granule-cell intrinsic protocol executed'><span class='item-toggle-icon' aria-hidden='true'>&#9656;</span><span class='item-header-main'><span class='item-group-label'>Granule cell intrinsic validation</span><span class='item-header-row'><span class='item-title'>Granule-cell intrinsic protocol executed</span><span class='status-badge status-pass'><span class='status-icon' aria-hidden='true'>✓</span><span class='status-text'>PASS</span></span></span></span></button></header><div class='item-block series-graph-block' data-visual-backend='matplotlib' data-visual-kind='fi_curve'><h4>f-I curve</h4><div class='series-graph-meta'><span>Current (pA)</span><span>Firing rate (Hz)</span></div><div class='series-graph-shell'><svg class='series-graph-svg' data-series-graph role='img' aria-label='f-I curve' xmlns:xlink="http://www.w3.org/1999/xlink" width="424.218125pt" height="194.7pt" viewBox="0 0 424.218125 194.7" xmlns="http://www.w3.org/2000/svg" version="1.1">
+ <metadata>
+  <rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+   <cc:Work>
+    <dc:type rdf:resource="http://purl.org/dc/dcmitype/StillImage"/>
+    <dc:date>2026-06-03T16:21:54.737993</dc:date>
+    <dc:format>image/svg+xml</dc:format>
+    <dc:creator>
+     <cc:Agent>
+      <dc:title>Matplotlib v3.10.8, https://matplotlib.org/</dc:title>
+     </cc:Agent>
+    </dc:creator>
+   </cc:Work>
+  </rdf:RDF>
+ </metadata>
+ <defs>
+  <style type="text/css">*{stroke-linejoin: round; stroke-linecap: butt}</style>
+ </defs>
+ <g id="figure_1">
+  <g id="patch_1">
+   <path d="M 0 194.7
+L 424.218125 194.7
+L 424.218125 0
+L 0 0
+z
+" style="fill: #f8fafc"/>
+  </g>
+  <g id="axes_1">
+   <g id="patch_2">
+    <path d="M 43.148125 159.079375
+L 409.383125 159.079375
+L 409.383125 10.239375
+L 43.148125 10.239375
+z
+" style="fill: #f8fafc"/>
+   </g>
+   <g id="line2d_1">
+    <path d="M 43.148125 159.079375
+L 43.148125 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #94a3b8; stroke-opacity: 0.35; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="line2d_2">
+    <path d="M 43.148125 159.079375
+L 409.383125 159.079375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #94a3b8; stroke-opacity: 0.35; stroke-width: 0.8; stroke-linecap: square"/>
+   </g>
+   <g id="matplotlib.axis_1">
+    <g id="xtick_1">
+     <g id="line2d_3">
+      <path d="M 43.148125 159.079375
+L 43.148125 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #e2e8f0; stroke-opacity: 0.25; stroke-width: 0.4; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_4">
+      <defs>
+       <path id="mb09cb0ef53" d="M 0 0
+L 0 3.5
+" style="stroke: #334155; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#mb09cb0ef53" x="43.148125" y="159.079375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_1">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #334155" x="43.148125" y="172.158125" transform="rotate(-0 43.148125 172.158125)">0</text>
+     </g>
+    </g>
+    <g id="xtick_2">
+     <g id="line2d_5">
+      <path d="M 134.706875 159.079375
+L 134.706875 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #e2e8f0; stroke-opacity: 0.25; stroke-width: 0.4; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_6">
+      <g>
+       <use xlink:href="#mb09cb0ef53" x="134.706875" y="159.079375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_2">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #334155" x="134.706875" y="172.158125" transform="rotate(-0 134.706875 172.158125)">100</text>
+     </g>
+    </g>
+    <g id="xtick_3">
+     <g id="line2d_7">
+      <path d="M 226.265625 159.079375
+L 226.265625 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #e2e8f0; stroke-opacity: 0.25; stroke-width: 0.4; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_8">
+      <g>
+       <use xlink:href="#mb09cb0ef53" x="226.265625" y="159.079375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_3">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #334155" x="226.265625" y="172.158125" transform="rotate(-0 226.265625 172.158125)">200</text>
+     </g>
+    </g>
+    <g id="xtick_4">
+     <g id="line2d_9">
+      <path d="M 317.824375 159.079375
+L 317.824375 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #e2e8f0; stroke-opacity: 0.25; stroke-width: 0.4; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_10">
+      <g>
+       <use xlink:href="#mb09cb0ef53" x="317.824375" y="159.079375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_4">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #334155" x="317.824375" y="172.158125" transform="rotate(-0 317.824375 172.158125)">300</text>
+     </g>
+    </g>
+    <g id="xtick_5">
+     <g id="line2d_11">
+      <path d="M 409.383125 159.079375
+L 409.383125 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #e2e8f0; stroke-opacity: 0.25; stroke-width: 0.4; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_12">
+      <g>
+       <use xlink:href="#mb09cb0ef53" x="409.383125" y="159.079375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_5">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle; fill: #334155" x="409.383125" y="172.158125" transform="rotate(-0 409.383125 172.158125)">400</text>
+     </g>
+    </g>
+    <g id="text_6">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="226.265625" y="185.420312" transform="rotate(-0 226.265625 185.420312)">Current (pA)</text>
+    </g>
+   </g>
+   <g id="matplotlib.axis_2">
+    <g id="ytick_1">
+     <g id="line2d_13">
+      <path d="M 43.148125 159.079375
+L 409.383125 159.079375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #cbd5e1; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_14">
+      <defs>
+       <path id="m8a0a374b78" d="M 0 0
+L -3.5 0
+" style="stroke: #334155; stroke-width: 0.8"/>
+      </defs>
+      <g>
+       <use xlink:href="#m8a0a374b78" x="43.148125" y="159.079375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_7">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: end; fill: #334155" x="36.148125" y="162.11875" transform="rotate(-0 36.148125 162.11875)">0</text>
+     </g>
+    </g>
+    <g id="ytick_2">
+     <g id="line2d_15">
+      <path d="M 43.148125 129.311375
+L 409.383125 129.311375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #cbd5e1; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_16">
+      <g>
+       <use xlink:href="#m8a0a374b78" x="43.148125" y="129.311375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_8">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: end; fill: #334155" x="36.148125" y="132.35075" transform="rotate(-0 36.148125 132.35075)">25</text>
+     </g>
+    </g>
+    <g id="ytick_3">
+     <g id="line2d_17">
+      <path d="M 43.148125 99.543375
+L 409.383125 99.543375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #cbd5e1; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_18">
+      <g>
+       <use xlink:href="#m8a0a374b78" x="43.148125" y="99.543375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_9">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: end; fill: #334155" x="36.148125" y="102.58275" transform="rotate(-0 36.148125 102.58275)">50</text>
+     </g>
+    </g>
+    <g id="ytick_4">
+     <g id="line2d_19">
+      <path d="M 43.148125 69.775375
+L 409.383125 69.775375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #cbd5e1; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_20">
+      <g>
+       <use xlink:href="#m8a0a374b78" x="43.148125" y="69.775375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_10">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: end; fill: #334155" x="36.148125" y="72.81475" transform="rotate(-0 36.148125 72.81475)">75</text>
+     </g>
+    </g>
+    <g id="ytick_5">
+     <g id="line2d_21">
+      <path d="M 43.148125 40.007375
+L 409.383125 40.007375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #cbd5e1; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_22">
+      <g>
+       <use xlink:href="#m8a0a374b78" x="43.148125" y="40.007375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_11">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: end; fill: #334155" x="36.148125" y="43.04675" transform="rotate(-0 36.148125 43.04675)">100</text>
+     </g>
+    </g>
+    <g id="ytick_6">
+     <g id="line2d_23">
+      <path d="M 43.148125 10.239375
+L 409.383125 10.239375
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #cbd5e1; stroke-opacity: 0.35; stroke-width: 0.6; stroke-linecap: square"/>
+     </g>
+     <g id="line2d_24">
+      <g>
+       <use xlink:href="#m8a0a374b78" x="43.148125" y="10.239375" style="fill: #334155; stroke: #334155; stroke-width: 0.8"/>
+      </g>
+     </g>
+     <g id="text_12">
+      <text style="font-size: 8px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: end; fill: #334155" x="36.148125" y="13.27875" transform="rotate(-0 36.148125 13.27875)">125</text>
+     </g>
+    </g>
+    <g id="text_13">
+     <text style="font-size: 10px; font-family: 'DejaVu Sans', 'Bitstream Vera Sans', 'Computer Modern Sans Serif', 'Lucida Grande', 'Verdana', 'Geneva', 'Lucid', 'Arial', 'Helvetica', 'Avant Garde', sans-serif; text-anchor: middle" x="14.798438" y="84.659375" transform="rotate(-90 14.798438 84.659375)">Firing rate (Hz)</text>
+    </g>
+   </g>
+   <g id="line2d_25">
+    <path d="M 43.148125 159.079375
+L 43.148125 159.079375
+L 43.148125 159.079375
+L 43.148125 159.079375
+L 43.148125 159.079375
+L 88.9275 153.125775
+L 88.9275 159.079375
+L 88.9275 159.079375
+L 88.9275 159.079375
+L 88.9275 159.079375
+L 134.706875 137.051055
+L 134.706875 126.929935
+L 134.706875 97.161935
+L 134.706875 143.004655
+L 134.706875 120.380975
+L 180.48625 124.548495
+L 180.48625 98.948015
+L 180.48625 157.293295
+L 180.48625 134.074255
+L 180.48625 85.254735
+L 226.265625 110.259855
+L 226.265625 145.981455
+L 226.265625 157.293295
+L 226.265625 121.571695
+L 226.265625 50.723855
+L 272.045 95.375855
+L 272.045 145.386095
+L 272.045 150.148975
+L 272.045 105.496975
+L 272.045 101.329455
+L 317.824375 77.515055
+L 317.824375 132.288175
+L 317.824375 95.375855
+L 317.824375 86.445455
+L 317.824375 91.803695
+" clip-path="url(#pc8756ba19e)" style="fill: none; stroke: #2563eb; stroke-width: 1.8; stroke-linecap: square"/>
+    <defs>
+     <path id="m1894764573" d="M 0 1.6
+C 0.424325 1.6 0.831328 1.431414 1.131371 1.131371
+C 1.431414 0.831328 1.6 0.424325 1.6 0
+C 1.6 -0.424325 1.431414 -0.831328 1.131371 -1.131371
+C 0.831328 -1.431414 0.424325 -1.6 0 -1.6
+C -0.424325 -1.6 -0.831328 -1.431414 -1.131371 -1.131371
+C -1.431414 -0.831328 -1.6 -0.424325 -1.6 0
+C -1.6 0.424325 -1.431414 0.831328 -1.131371 1.131371
+C -0.831328 1.431414 -0.424325 1.6 0 1.6
+z
+" style="stroke: #2563eb"/>
+    </defs>
+    <g clip-path="url(#pc8756ba19e)">
+     <use xlink:href="#m1894764573" x="43.148125" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="43.148125" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="43.148125" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="43.148125" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="43.148125" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="88.9275" y="153.125775" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="88.9275" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="88.9275" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="88.9275" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="88.9275" y="159.079375" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="134.706875" y="137.051055" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="134.706875" y="126.929935" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="134.706875" y="97.161935" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="134.706875" y="143.004655" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="134.706875" y="120.380975" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="180.48625" y="124.548495" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="180.48625" y="98.948015" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="180.48625" y="157.293295" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="180.48625" y="134.074255" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="180.48625" y="85.254735" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="226.265625" y="110.259855" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="226.265625" y="145.981455" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="226.265625" y="157.293295" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="226.265625" y="121.571695" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="226.265625" y="50.723855" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="272.045" y="95.375855" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="272.045" y="145.386095" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="272.045" y="150.148975" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="272.045" y="105.496975" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="272.045" y="101.329455" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="317.824375" y="77.515055" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="317.824375" y="132.288175" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="317.824375" y="95.375855" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="317.824375" y="86.445455" style="fill: #2563eb; stroke: #2563eb"/>
+     <use xlink:href="#m1894764573" x="317.824375" y="91.803695" style="fill: #2563eb; stroke: #2563eb"/>
+    </g>
+   </g>
+   <g id="patch_3">
+    <path d="M 43.148125 159.079375
+L 43.148125 10.239375
+" style="fill: none; stroke: #94a3b8; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+   <g id="patch_4">
+    <path d="M 43.148125 159.079375
+L 409.383125 159.079375
+" style="fill: none; stroke: #94a3b8; stroke-width: 0.8; stroke-linejoin: miter; stroke-linecap: square"/>
+   </g>
+  </g>
+ </g>
+ <defs>
+  <clipPath id="pc8756ba19e">
+   <rect x="43.148125" y="10.239375" width="366.235" height="148.84"/>
+  </clipPath>
+ </defs>
+</svg>
+</div><div class='series-legend'><span class='series-legend-item'><i class='series-legend-swatch' style='background:#2563eb; border-color:#2563eb;'></i>Firing rate Hz</span></div></div><div class='item-body item-detail-body' id='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_intrinsic_protocol_executed' data-item-detail-body hidden><div class='item-block'><h4>Check id</h4><p class='check-id'>gc_intrinsic_validation-001.gc_intrinsic_validation.gc_intrinsic_protocol_executed</p></div><div class='item-block criterion-block'><h4>Criterion</h4><p>Run the maintained granule-cell models through the configured intrinsic current-clamp protocol and produce at least one metric row for every requested model.</p></div><div class='item-block'><h4>Description</h4><p>This is the top-level execution sanity check for the granule-cell intrinsic validation path.</p></div><div class='item-block'><h4>Acceptable result</h4><p>At least one audited granule-cell metric record is produced and the evidence lists the current-step family that was executed.</p></div><div class='item-block'><h4>Decision basis</h4><p>This rule is an implementation sanity check rather than a literature tolerance band.</p></div><div class='item-block evidence-block'><h4>Details</h4><dl class='evidence-grid'><div class='evidence-row'><dt>Target vm mV</dt><dd>--</dd></div><div class='evidence-row'><dt>Step duration ms</dt><dd>2,000</dd></div><div class='evidence-row'><dt>Step currents pA</dt><dd>0, 50, 100, 150, 200, 250, 300</dd></div><div class='evidence-row'><dt>Cell models</dt><dd>GC1, GC2, GC3, GC4, GC5</dd></div><div class='evidence-row'><dt>Reference gc subtypes</dt><dd>generic_or_unspecified</dd></div></dl></div></div></article>
 <article class='item-card status-pass item-collapsed' data-item-card data-status='PASS' data-detail-level='detail' data-search='gc_intrinsic_validation-001.gc_intrinsic_validation.gc_resting_potential_recorded resting membrane potential was recorded for every audited granule-cell model every audited granule-cell model should produce a finite resting membrane potential before the literature comparisons are interpreted. this is a prerequisite sanity check that the intrinsic sweep produced usable resting-potential estimates. every audited granule-cell model has a finite resting membrane potential value. a finite resting-potential estimate is required before any direct comparison against the granule-cell reference rows is meaningful. {&quot;cell_count&quot;: 5, &quot;failing_values&quot;: {}, &quot;metric_key&quot;: &quot;resting_potential_mv&quot;}'><header class='item-header'><button class='item-toggle' type='button' data-item-toggle aria-expanded='false' aria-controls='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_resting_potential_recorded' aria-label='Expand Resting membrane potential was recorded for every audited granule-cell model'><span class='item-toggle-icon' aria-hidden='true'>&#9656;</span><span class='item-header-main'><span class='item-group-label'>Granule cell intrinsic validation</span><span class='item-header-row'><span class='item-title'>Resting membrane potential was recorded for every audited granule-cell model</span><span class='status-badge status-pass'><span class='status-icon' aria-hidden='true'>✓</span><span class='status-text'>PASS</span></span></span></span></button></header><div class='item-body item-detail-body' id='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_resting_potential_recorded' data-item-detail-body hidden><div class='item-block'><h4>Check id</h4><p class='check-id'>gc_intrinsic_validation-001.gc_intrinsic_validation.gc_resting_potential_recorded</p></div><div class='item-block criterion-block'><h4>Criterion</h4><p>Every audited granule-cell model should produce a finite resting membrane potential before the literature comparisons are interpreted.</p></div><div class='item-block'><h4>Description</h4><p>This is a prerequisite sanity check that the intrinsic sweep produced usable resting-potential estimates.</p></div><div class='item-block'><h4>Acceptable result</h4><p>Every audited granule-cell model has a finite resting membrane potential value.</p></div><div class='item-block'><h4>Decision basis</h4><p>A finite resting-potential estimate is required before any direct comparison against the granule-cell reference rows is meaningful.</p></div><div class='item-block evidence-block'><h4>Details</h4><dl class='evidence-grid'><div class='evidence-row'><dt>Metric key</dt><dd>resting_potential_mV</dd></div><div class='evidence-row'><dt>Cell count</dt><dd>5</dd></div><div class='evidence-row'><dt>Failing values</dt><dd>{}</dd></div></dl></div></div></article>
 <article class='item-card status-pass item-collapsed' data-item-card data-status='PASS' data-detail-level='detail' data-search='gc_intrinsic_validation-001.gc_intrinsic_validation.gc_zero_current_quiescence granule-cell models remain quiescent during the zero-current step granule-cell models used for these intrinsic comparisons should not spike during the zero-current depolarizing-step condition. \forall i,\ \left|x_i - c\right| \leq \epsilon x_i zero_step_rate_hz value for each audited row c expected value \epsilon tolerance this keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime. every audited model has a zero-current step firing rate of exactly zero hertz within tolerance. this is a regime sanity check for the configured current-clamp protocol rather than a direct literature confidence interval. {&quot;expected&quot;: 0.0, &quot;failing_values&quot;: {}, &quot;metric_key&quot;: &quot;zero_step_rate_hz&quot;, &quot;tolerance&quot;: 1e-09}'><header class='item-header'><button class='item-toggle' type='button' data-item-toggle aria-expanded='false' aria-controls='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_zero_current_quiescence' aria-label='Expand Granule-cell models remain quiescent during the zero-current step'><span class='item-toggle-icon' aria-hidden='true'>&#9656;</span><span class='item-header-main'><span class='item-group-label'>Granule cell intrinsic validation</span><span class='item-header-row'><span class='item-title'>Granule-cell models remain quiescent during the zero-current step</span><span class='status-badge status-pass'><span class='status-icon' aria-hidden='true'>✓</span><span class='status-text'>PASS</span></span></span></span></button></header><div class='item-body item-detail-body' id='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-gc_zero_current_quiescence' data-item-detail-body hidden><div class='item-block'><h4>Check id</h4><p class='check-id'>gc_intrinsic_validation-001.gc_intrinsic_validation.gc_zero_current_quiescence</p></div><div class='item-block criterion-block'><h4>Criterion</h4><div class='criterion-math criterion-katex-display' role='img' aria-label='\forall i,\ \left|x_i - c\right| \leq \epsilon'>\[\forall i,\ \left|x_i - c\right| \leq \epsilon\]</div><div class='criterion-definitions'><div class='criterion-definition'><span class='criterion-definition-symbol criterion-katex-inline' role='img' aria-label='x_i'>\(x_i\)</span> <span class='criterion-definition-meaning'>Zero_step_rate_Hz value for each audited row</span></div><div class='criterion-definition'><span class='criterion-definition-symbol criterion-katex-inline' role='img' aria-label='c'>\(c\)</span> <span class='criterion-definition-meaning'>Expected value</span></div><div class='criterion-definition'><span class='criterion-definition-symbol criterion-katex-inline' role='img' aria-label='\epsilon'>\(\epsilon\)</span> <span class='criterion-definition-meaning'>Tolerance</span></div></div></div><div class='item-block'><h4>Description</h4><p>This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.</p></div><div class='item-block'><h4>Acceptable result</h4><p>Every audited model has a zero-current step firing rate of exactly zero hertz within tolerance.</p></div><div class='item-block'><h4>Decision basis</h4><p>This is a regime sanity check for the configured current-clamp protocol rather than a direct literature confidence interval.</p></div><div class='item-block evidence-block'><h4>Details</h4><dl class='evidence-grid'><div class='evidence-row'><dt>Metric key</dt><dd>zero_step_rate_Hz</dd></div><div class='evidence-row'><dt>Expected</dt><dd>0</dd></div><div class='evidence-row'><dt>Tolerance</dt><dd>0</dd></div><div class='evidence-row'><dt>Failing values</dt><dd>{}</dd></div></dl></div></div></article>
 <article class='item-card status-pass item-collapsed' data-item-card data-status='PASS' data-detail-level='detail' data-search='gc_intrinsic_validation-001.gc_intrinsic_validation.generic_or_unspecified_input_resistance_mohm_within_uploaded_reference_band generic_or_unspecified input resistance stays within the uploaded reference band the generic_or_unspecified mean input resistance should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction. \left|\ln\!\left(\bar{r}_{\mathrm{in}}\right) - \mu_{\log}\right| \leq 2\sigma_{\log} \mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2 \sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)} \bar{r}_{\mathrm{in}} generic_or_unspecified mean input resistance \mu_{\mathrm{ref}} uploaded arithmetic reference mean \sigma_{\mathrm{ref}} uploaded arithmetic reference standard deviation \mu_{\log} reconstructed log-space mean \sigma_{\log} reconstructed log-space standard deviation this is the direct single-cell-type reference check derived from uploaded literature rows for input resistance rather than from a cross-group ordering heuristic. the observed generic_or_unspecified mean must lie between 169.779 and 1572.387 mohm, using the configured lognormal reference interval. derived from the uploaded literature row for input resistance using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. the sigma multiplier comes from &#x27;reference_sigma_multiplier&#x27; when that standard needs one. {&quot;__reference_annotations__&quot;: {&quot;generic_or_unspecified_mean&quot;: &quot;reference: 603.2 +/- 363.4 mohm from burton &amp; urban (2015) (n=32)&quot;}, &quot;accepted_high&quot;: 1572.387, &quot;accepted_interval_mode&quot;: &quot;lognormal_sd&quot;, &quot;accepted_interval_standard&quot;: &quot;lognormal reference interval&quot;, &quot;accepted_low&quot;: 169.779, &quot;accepted_lower_bound&quot;: 0.0, &quot;accepted_sigma_multiplier&quot;: 2.0, &quot;generic_or_unspecified_mean&quot;: 672.154, &quot;reference_mean&quot;: 603.2, &quot;reference_unit&quot;: &quot;mohm&quot;}'><header class='item-header'><button class='item-toggle' type='button' data-item-toggle aria-expanded='false' aria-controls='item-detail-body-gc_intrinsic_validation-001-gc_intrinsic_validation-generic_or_unspecified_input_resistance_mohm_within_uploaded_reference_band' aria-label='Expand Generic_or_unspecified input resistance stays within the uploaded reference band'><span class='item-toggle-icon' aria-hidden='true'>&#9656;</span><span class='item-header-main'><span class='item-group-label'>Granule cell intrinsic validation</span><span class='item-header-row'><span class='item-title'>Generic_or_unspecified input resistance stays within the uploaded reference band</span><span class='status-badge status-pass'><span class='status-icon' aria-hidden='true'>✓</span><span class='status-text'>PASS</span></span></span></span></button></header><div class='item-body-summary'>

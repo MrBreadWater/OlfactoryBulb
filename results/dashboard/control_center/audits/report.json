@@ -395,7 +395,20 @@
           "human_review_reviewer": "",
           "human_review_status": "pending_review",
           "note": "",
-          "series_visuals": [],
+          "series_visuals": [
+            {
+              "backend": "matplotlib",
+              "keys": [
+                "fi_curve_rows"
+              ],
+              "kind": "fi_curve",
+              "style": {
+                "legend_loc": "lower center",
+                "line_width": 1.8,
+                "marker_size": 3.2
+              }
+            }
+          ],
           "status": "PASS",
           "status_reason": "",
           "title": "Granule-cell intrinsic protocol executed"
@@ -1675,7 +1688,20 @@
       "human_review_reviewer": "",
       "human_review_status": "pending_review",
       "note": "",
-      "series_visuals": [],
+      "series_visuals": [
+        {
+          "backend": "matplotlib",
+          "keys": [
+            "fi_curve_rows"
+          ],
+          "kind": "fi_curve",
+          "style": {
+            "legend_loc": "lower center",
+            "line_width": 1.8,
+            "marker_size": 3.2
+          }
+        }
+      ],
       "status": "PASS",
       "status_reason": "",
       "title": "Granule-cell intrinsic protocol executed"

@@ -108,6 +108,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
                     protocol_evidence={
                         "step_duration_ms": protocol_config.get("step_duration_ms", 1000.0),
                         "protocol_label": protocol_config.get("protocol_label", "temporary protocol"),
+                        "fi_curve_rows": [
+                            {"current_pA": 0.0, "firing_rate_Hz": 0.0},
+                            {"current_pA": 50.0, "firing_rate_Hz": 3.0},
+                        ],
                     },
                     group_field="cell_type",
                 )
@@ -225,6 +229,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         temp_items = {item["check_id"]: item for item in temp_payload["items"]}
         assert temp_payload["audit_id"] == "temp_validation"
         assert temp_items["temp_protocol_executed"]["status"] == "PASS"
+        assert temp_items["temp_protocol_executed"]["series_visuals"][0]["keys"] == ["fi_curve_rows"]
         assert temp_items["custom_score_high_enough"]["status"] == "PASS"
         assert temp_items["custom_score_high_enough"]["evidence"]["observed"] == 4.5
 
