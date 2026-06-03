@@ -345,7 +345,7 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
   const defaultAuditArgs = {json.dumps(audit_args)};
   let formDirty = false;
   let suppressFormEvents = false;
-  let manualRunnerExpanded = true;
+  let manualRunnerExpanded = false;
   let runnerStateInitialized = false;
 
   function selectedAuditEntry() {{
@@ -534,6 +534,7 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
   window.addEventListener("dashboard-shell-state", (event) => {{
     const state = event.detail || {{}};
     const auditState = state.audit || {{}};
+    const hasPriorRun = Boolean(String(auditState.generated_at || "").trim()) || String(auditState.status || "") === "running" || String(auditState.status || "") === "ready";
     if (!formDirty && auditState.audit_id) {{
       setFormValues(String(auditState.audit_id), Array.isArray(auditState.audit_args) ? auditState.audit_args : []);
     }}
@@ -541,14 +542,14 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     if (runButton) {{
       runButton.disabled = String(auditState.status || "") === "running";
     }}
-    const hasPriorRun = Boolean(String(auditState.generated_at || "").trim()) || String(auditState.status || "") === "running" || String(auditState.status || "") === "ready";
     if (!runnerStateInitialized && hasPriorRun) {{
       manualRunnerExpanded = false;
       setRunnerMode("compact");
       runnerStateInitialized = true;
     }} else if (String(auditState.status || "") === "idle" && !String(auditState.generated_at || "").trim()) {{
       setRunnerMode("expanded");
-    }} else if (!manualRunnerExpanded) {{
+    }} else if (hasPriorRun && !manualRunnerExpanded) {{
+      manualRunnerExpanded = false;
       setRunnerMode("compact");
     }}
     runnerStateInitialized = true;
@@ -557,7 +558,7 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
 
   setFormValues(defaultAuditId, defaultAuditArgs);
   updateRunnerSummary({{ audit_id: defaultAuditId, audit_args: defaultAuditArgs, message: "No audit has been run in this session." }});
-  setRunnerMode("expanded", {{ manual: true }});
+  setRunnerMode("expanded");
 }})();
 </script>
 """
