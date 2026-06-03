@@ -218,9 +218,24 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
             f"<div class='interval-tick interval-reference' "
             f"style='left:{float(positions['reference_mean']):.2f}%'></div>"
         )
+    def _interval_label_html(class_name: str, key: str, text: str) -> str:
+        position = positions.get(key)
+        if position is None:
+            return ""
+        return (
+            f"<div class='interval-bound-label {class_name}' "
+            f"style='left:{float(position):.2f}%'>{_esc(text)}</div>"
+        )
+
+    lower_bound_label_html = _interval_label_html("lower", "accepted_low", f"Lower bound {low_text}")
+    upper_bound_label_html = _interval_label_html("upper", "accepted_high", f"Upper bound {high_text}")
+    reference_mean_label_html = _interval_label_html(
+        "reference", "reference_mean", f"Reference mean {reference_text}"
+    )
     aria_label = (
-        f"Observed value {observed_text}, {status_text} the accepted range from {low_text} to {high_text}. "
-        f"Reference mean {reference_text}. Standard: {interval_label}."
+        f"Observed value {observed_text}. Lower bound {low_text}. Upper bound {high_text}. "
+        f"Reference mean {reference_text}. The observed value is {status_text} the accepted range. "
+        f"Standard: {interval_label}."
     )
     return f"""
 <div class='item-block interval-block'>
@@ -241,6 +256,11 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
       {reference_tick_html}
       <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
       <span class='interval-marker-label observed-label' style='left:{float(positions["observed_value"] or 0.0):.2f}%'>Observed {observed_text}</span>
+    </div>
+    <div class='interval-bound-labels'>
+      {lower_bound_label_html}
+      {upper_bound_label_html}
+      {reference_mean_label_html}
     </div>
     <div class='interval-legend'>
       <span><i class='legend-swatch accepted'></i>accepted range</span>
@@ -1256,9 +1276,24 @@ def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) 
             f"<div class='interval-tick interval-reference' "
             f"style='left:{float(positions['reference_mean']):.2f}%'></div>"
         )
+    def _interval_label_html(class_name: str, key: str, text: str) -> str:
+        position = positions.get(key)
+        if position is None:
+            return ""
+        return (
+            f"<div class='interval-bound-label {class_name}' "
+            f"style='left:{float(position):.2f}%'>{_esc(text)}</div>"
+        )
+
+    lower_bound_label_html = _interval_label_html("lower", "accepted_low", f"Lower bound {low_text}")
+    upper_bound_label_html = _interval_label_html("upper", "accepted_high", f"Upper bound {high_text}")
+    reference_mean_label_html = _interval_label_html(
+        "reference", "reference_mean", f"Reference mean {reference_text}"
+    )
     aria_label = (
-        f"Observed value {observed_text}, {'inside' if item.status == 'PASS' else 'outside'} the accepted range "
-        f"from {low_text} to {high_text}. Reference mean {reference_text}. Standard: {interval_label}."
+        f"Observed value {observed_text}. Lower bound {low_text}. Upper bound {high_text}. "
+        f"Reference mean {reference_text}. The observed value is {'inside' if item.status == 'PASS' else 'outside'} the accepted range. "
+        f"Standard: {interval_label}."
     )
     return f"""
 <div class='item-compact-interval' data-compact-interval data-interval-visual role='img' aria-label='{_esc(aria_label)}'>
@@ -1267,6 +1302,11 @@ def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) 
     {reference_tick_html}
     <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
     <span class='interval-marker-label observed-label' style='left:{float(positions["observed_value"] or 0.0):.2f}%'>Observed {observed_text}</span>
+  </div>
+  <div class='interval-bound-labels'>
+    {lower_bound_label_html}
+    {upper_bound_label_html}
+    {reference_mean_label_html}
   </div>
   <div class='interval-legend'>
     <span><i class='legend-swatch accepted'></i>accepted range</span>
@@ -2147,6 +2187,32 @@ def render_audit_dashboard_html(
       overflow: visible;
       border: 1px solid #d3ddeb;
     }}
+    .interval-bound-labels {{
+      position: relative;
+      min-height: 18px;
+      margin-top: -2px;
+    }}
+    .interval-bound-label {{
+      position: absolute;
+      top: 0;
+      transform: translateX(-50%);
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid #cfd8e6;
+      background: #ffffff;
+      color: #475569;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      pointer-events: none;
+    }}
+    .interval-bound-label.reference {{
+      border-color: #b8c7dd;
+      background: #f8fbff;
+      color: #1f2937;
+    }}
     .interval-band {{
       position: absolute;
       top: 2px;
@@ -2176,8 +2242,8 @@ def render_audit_dashboard_html(
       height: 14px;
       transform: translate(-50%, -50%);
       border-radius: 999px;
-      border: 2px solid #ffffff;
-      box-shadow: 0 0 0 2px #ffffff, 0 0 0 1px rgba(15, 23, 42, 0.12);
+      border: 1px solid rgba(17, 24, 39, 0.9);
+      box-shadow: none;
       background: var(--blue);
     }}
     .interval-marker-label {{
