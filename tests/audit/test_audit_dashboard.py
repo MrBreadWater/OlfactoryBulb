@@ -113,6 +113,8 @@ with TemporaryDirectory() as tmp:
     assert "data-series-graph" in html
     assert html.count("<circle class='series-point'") >= 4
     assert "Observed sweep" in html
+    gamma_index = html.index("audit_gamma.gamma_curve")
+    assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
     notes_index = html.index("<div class='item-body-notes'>")
     warning_index = html.index("<div class='item-body-warning'>")
     assert notes_index < warning_index

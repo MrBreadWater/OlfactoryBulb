@@ -790,7 +790,7 @@ with TemporaryDirectory() as tmp:
                 "new Promise((resolve) => {"
                 "  const deadline = Date.now() + 8000;"
                 "  const tick = () => {"
-                "    const card = document.querySelector('[data-item-card]');"
+                "    const card = Array.from(document.querySelectorAll('[data-item-card]')).find((entry) => entry.querySelector('[data-series-graph]'));"
                 "    if (card && card.querySelector('[data-item-detail-body]')) { resolve(true); return; }"
                 "    if (Date.now() > deadline) { resolve(false); return; }"
                 "    setTimeout(tick, 100);"
@@ -799,7 +799,25 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert cards_ready is True
-            assert client.eval("Boolean(document.querySelector('[data-series-graph]'))") is True
+            series_visibility = client.eval(
+                "(() => {"
+                "  const graph = document.querySelector('[data-series-graph]');"
+                "  const block = graph ? graph.closest('.series-graph-block') : null;"
+                "  const detail = graph ? graph.closest('[data-item-detail-body]') : null;"
+                "  return {"
+                "    hasGraph: Boolean(graph),"
+                "    persistentBlock: Boolean(block) && Boolean(block.parentElement) && block.parentElement.matches('[data-item-card]'),"
+                "    hiddenDetail: detail === null,"
+                "    blockVisible: Boolean(block) && getComputedStyle(block).display !== 'none'"
+                "  };"
+                "})()"
+            )
+            assert series_visibility == {
+                "hasGraph": True,
+                "persistentBlock": True,
+                "hiddenDetail": True,
+                "blockVisible": True,
+            }
             collapsed = client.eval(
                 "(() => {"
                 "  const group = document.querySelector('[data-group-section]');"

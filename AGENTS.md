@@ -332,6 +332,9 @@ contract for future sessions.
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first and
     keep the key/value grid as fallback metadata rather than the primary
     visual
+  - render explicit series/curve graphics in the persistent card body so they
+    stay visible when the item is collapsed; do not hide them only inside the
+    expanded detail body
   - do not force scalar numeric evidence into a chart; if the evidence is not
     explicitly series-shaped, keep it as metadata or use a dedicated interval
     visual when bounds are present

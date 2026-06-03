@@ -496,25 +496,20 @@ def _render_structured_evidence(evidence: dict[str, Any], *, exclude_keys: set[s
     )
 
 
-def _render_evidence(item: AuditItem) -> str:
+def _render_evidence(item: AuditItem, *, exclude_keys: set[str] | None = None) -> str:
     evidence = dict(item.evidence or {})
     if not evidence:
         return ""
     interval = _extract_interval_visual_data(item)
     rendered_sections: list[str] = []
-    exclude_keys: set[str] = set()
+    excluded_keys: set[str] = set(exclude_keys or set())
     if interval is not None:
         rendered_sections.append(_render_interval_visual(item, interval))
-        exclude_keys.update(_INTERVAL_RESERVED_EVIDENCE_KEYS)
+        excluded_keys.update(_INTERVAL_RESERVED_EVIDENCE_KEYS)
         observed_key = str(interval.get("observed_key", "")).strip()
         if observed_key:
-            exclude_keys.add(observed_key)
-    else:
-        series_graph_html, series_keys = _render_series_graph(item, evidence, exclude_keys=exclude_keys)
-        if series_graph_html:
-            rendered_sections.append(series_graph_html)
-            exclude_keys.update(series_keys)
-    rendered_sections.append(_render_structured_evidence(evidence, exclude_keys=exclude_keys))
+            excluded_keys.add(observed_key)
+    rendered_sections.append(_render_structured_evidence(evidence, exclude_keys=excluded_keys))
     return "".join(section for section in rendered_sections if section)
 
 
@@ -560,6 +555,7 @@ def _item_search_blob(item: AuditItem) -> str:
 
 def _render_item_card(item_payload: dict[str, Any]) -> str:
     item = AuditItem(**item_payload)
+    evidence = dict(item.evidence or {})
     interval = _extract_interval_visual_data(item)
     card_id = _safe_dom_id(item.check_id)
     item_detail_body_id = f"item-detail-body-{card_id}"
@@ -569,6 +565,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         for message in compact_messages
     )
     compact_interval_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
+    series_graph_html, series_graph_keys = _render_series_graph(item, evidence)
     warning_text = status_reason_text(item)
     notes_html = _notes_html(item)
     sections = [
@@ -600,6 +597,8 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
                 "</div>",
             ]
         )
+    if series_graph_html:
+        sections.append(series_graph_html)
     if notes_html:
         sections.extend(notes_html)
     if warning_text:
@@ -624,7 +623,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ),
         ]
     )
-    sections.append(_render_evidence(item))
+    sections.append(_render_evidence(item, exclude_keys=series_graph_keys))
     sections.extend(["</div>", "</article>"])
     return "".join(section for section in sections if section)
 
@@ -1292,6 +1291,7 @@ def render_audit_dashboard_html(
     .legend-swatch.observed.status-warn {{ background: var(--amber); border-color: var(--amber); }}
     .legend-swatch.observed.status-fail {{ background: var(--red); border-color: var(--red); }}
     .series-graph-block {{
+      margin: 12px 16px 12px;
       border: 1px solid #dbe4f0;
       border-radius: 10px;
       padding: 12px;
