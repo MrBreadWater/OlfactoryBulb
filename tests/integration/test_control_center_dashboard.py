@@ -189,6 +189,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "reference_values_Hz": [0.0, 2.0, 5.0, 8.6],
                         "model_values_Hz": [0.0, 1.7, 4.5, 8.1],
                     },
+                    series_visuals=[
+                        {
+                            "kind": "fi_curve",
+                            "keys": ["currents_pA", "reference_values_Hz", "model_values_Hz"],
+                        }
+                    ],
                     group_id="human_review_status",
                     group_title="Human review status",
                     detail_level="summary",
@@ -921,7 +927,7 @@ with TemporaryDirectory() as tmp:
             plain_numeric = client.eval(
                 "(() => {"
                 "  const card = [...document.querySelectorAll('[data-item-card]')].find((node) => node.innerText.includes('Plain numeric item'));"
-                "  return Boolean(card) && !card.querySelector('[data-numeric-strip], [data-numeric-sparkline]');"
+                "  return Boolean(card) && !card.querySelector('[data-series-graph], [data-numeric-strip], [data-numeric-sparkline]');"
                 "})()"
             )
             assert plain_numeric is True

@@ -175,6 +175,7 @@ def _rule_item(
     acceptable: str | None = None,
     acceptable_basis: str | None = None,
     check_id: str | None = None,
+    series_visuals: list[dict[str, Any]] | None = None,
 ) -> AuditItem:
     return AuditItem(
         check_id=str(check_id or rule["check_id"]),
@@ -185,6 +186,7 @@ def _rule_item(
         acceptable=str(acceptable or rule["acceptable"]),
         acceptable_basis=str(acceptable_basis or rule["acceptable_basis"]),
         evidence=evidence or {},
+        series_visuals=list(series_visuals or []),
         note=note,
         status_reason=status_reason,
     )
@@ -1063,7 +1065,19 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
             "maximum_rmse_Hz": max_rmse,
         }
     )
-    return [_rule_item(rule, status=_rule_status(rule, passed), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            series_visuals=[
+                {
+                    "kind": "fi_curve",
+                    "keys": ["currents_pA", "reference_values_Hz", "model_values_Hz"],
+                }
+            ],
+        )
+    ]
 
 
 __all__ = [

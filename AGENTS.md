@@ -329,9 +329,9 @@ contract for future sessions.
     explicit expansion controls
   - keep warnings visible, specific, and non-duplicated
   - when audit evidence contains an explicit series or curve, such as
-    f-I/current-clamp arrays or `fi_curve_rows`, render the curve first and
-    keep the key/value grid as fallback metadata rather than the primary
-    visual
+    f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
+    when the item explicitly opts into a `series_visuals` declaration; do not
+    infer a line graph from array-shaped evidence alone
   - render explicit series/curve graphics in the persistent card body so they
     stay visible when the item is collapsed; do not hide them only inside the
     expanded detail body

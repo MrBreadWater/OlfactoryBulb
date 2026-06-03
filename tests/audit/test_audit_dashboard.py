@@ -65,6 +65,12 @@ sample_report = AuditReport(
                 "model_values_Hz": [0.0, 1.8, 4.6, 8.7],
                 "label": "Observed sweep",
             },
+            series_visuals=[
+                {
+                    "kind": "fi_curve",
+                    "keys": ["currents_pA", "reference_values_Hz", "model_values_Hz"],
+                }
+            ],
             group_id="audit_gamma",
             group_title="Audit gamma",
         ),
@@ -193,6 +199,8 @@ with TemporaryDirectory() as tmp:
     plain_index = html.index("audit_gamma.gamma_plain_numeric")
     strip_item_index = html.index("audit_gamma.gamma_numeric")
     plain_segment = html[plain_index:strip_item_index]
+    assert "data-series-graph" not in plain_segment
+    assert "series-graph-block" not in plain_segment
     assert "data-numeric-strip" not in plain_segment
     assert "data-numeric-sparkline" not in plain_segment
     strip_index = html.index("data-numeric-strip")

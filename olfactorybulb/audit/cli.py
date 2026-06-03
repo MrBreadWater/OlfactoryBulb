@@ -122,6 +122,7 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
             acceptable=item.acceptable,
             acceptable_basis=item.acceptable_basis,
             evidence={"audit_id": report.audit_id, **item.evidence},
+            series_visuals=item.series_visuals,
             companion_visuals=item.companion_visuals,
             note=item.note,
             status_reason=item.status_reason,

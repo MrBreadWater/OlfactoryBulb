@@ -762,6 +762,21 @@ def _render_numeric_companions(
     return "".join(blocks), used_keys
 
 
+def _visual_keys(spec: dict[str, Any]) -> list[str]:
+    raw_keys = spec.get("keys")
+    if raw_keys is None:
+        raw_x_key = spec.get("x_key")
+        raw_y_keys = spec.get("y_keys")
+        if raw_x_key is None or raw_y_keys is None:
+            return []
+        if isinstance(raw_y_keys, str):
+            raw_y_keys = [raw_y_keys]
+        raw_keys = [raw_x_key, *raw_y_keys]
+    elif isinstance(raw_keys, str):
+        raw_keys = [raw_keys]
+    return [str(key).strip() for key in raw_keys if str(key).strip()]
+
+
 def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
     unit = str(interval["reference_unit"])
     observed_text = _format_numeric(interval["observed_value"], unit=unit)
@@ -896,7 +911,17 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         for message in compact_messages
     )
     interval_summary_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
-    series_graph_html, series_graph_keys = _render_series_graph(item, evidence)
+    series_graph_html = ""
+    series_graph_keys: set[str] = set()
+    if item.series_visuals:
+        series_spec = next((spec for spec in item.series_visuals if isinstance(spec, dict)), None)
+        if series_spec:
+            series_keys = _visual_keys(series_spec)
+            if series_keys:
+                series_evidence = {key: evidence[key] for key in series_keys if key in evidence}
+                if str(series_spec.get("kind") or "").strip().lower() == "fi_curve":
+                    series_evidence["series_kind"] = "f-i curve"
+                series_graph_html, series_graph_keys = _render_series_graph(item, series_evidence)
     numeric_companion_html = ""
     numeric_companion_keys: set[str] = set()
     if interval is None and not series_graph_html and item.companion_visuals:
