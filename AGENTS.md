@@ -342,6 +342,9 @@ contract for future sessions.
     expanded states; numeric summaries, notes/caveats, and warning blocks
     should share deliberate spacing/order instead of relying on each block's
     incidental first-child margins
+  - persistent interval summaries should reuse the full interval visual and
+    legend rather than a smaller track-only variant, so collapsed cards keep
+    the same interval semantics as expanded cards
   - when changing audit-card body layout, check representative combinations:
     no persistent body, numeric-only, notes-only, warning-only, notes plus
     warning, and numeric plus notes/warning when applicable

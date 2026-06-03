@@ -107,6 +107,8 @@ with TemporaryDirectory() as tmp:
     assert "evidence-lines" not in html
     assert "Warning" in html
     assert "warning-summary-text" in html
+    assert html.count("data-interval-visual") == 1
+    assert html.count("<div class='interval-legend'>") == 1
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "f-I curve" in html
@@ -115,6 +117,10 @@ with TemporaryDirectory() as tmp:
     assert "Observed sweep" in html
     gamma_index = html.index("audit_gamma.gamma_curve")
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
+    summary_index = html.index("<div class='item-body-summary'>")
+    legend_index = html.index("<div class='interval-legend'>", summary_index)
+    detail_index = html.index("<div class='item-body item-detail-body'")
+    assert legend_index < detail_index
     notes_index = html.index("<div class='item-body-notes'>")
     warning_index = html.index("<div class='item-body-warning'>")
     assert notes_index < warning_index

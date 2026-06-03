@@ -444,31 +444,9 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
 
 
 def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
-    unit = str(interval["reference_unit"])
-    observed_text = _format_numeric(interval["observed_value"], unit=unit)
-    reference_text = _format_numeric(interval["reference_mean"], unit=unit)
-    low_text = _format_numeric(interval["accepted_low"], unit=unit)
-    high_text = _format_numeric(interval["accepted_high"], unit=unit)
-    positions = interval["positions"]
-    band_left = min(float(positions["accepted_low"]), float(positions["accepted_high"]))
-    band_width = max(0.0, abs(float(positions["accepted_high"]) - float(positions["accepted_low"])))
-    reference_tick_html = ""
-    if positions["reference_mean"] is not None:
-        reference_tick_html = (
-            f"<div class='compact-interval-tick' style='left:{float(positions['reference_mean']):.2f}%'></div>"
-        )
     return f"""
 <div class='item-compact-interval' data-compact-interval>
-  <div class='compact-interval-track'>
-    <div class='compact-interval-band' style='left:{band_left:.2f}%; width:{band_width:.2f}%;'></div>
-    {reference_tick_html}
-    <div class='compact-interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
-  </div>
-  <div class='compact-interval-meta'>
-    <span>observed {_esc(observed_text)}</span>
-    <span>reference {_esc(reference_text)}</span>
-    <span>range {_esc(low_text)} to {_esc(high_text)}</span>
-  </div>
+  {_render_interval_visual(item, interval)}
 </div>
 """
 
@@ -496,7 +474,12 @@ def _render_structured_evidence(evidence: dict[str, Any], *, exclude_keys: set[s
     )
 
 
-def _render_evidence(item: AuditItem, *, exclude_keys: set[str] | None = None) -> str:
+def _render_evidence(
+    item: AuditItem,
+    *,
+    exclude_keys: set[str] | None = None,
+    include_interval_visual: bool = True,
+) -> str:
     evidence = dict(item.evidence or {})
     if not evidence:
         return ""
@@ -504,7 +487,8 @@ def _render_evidence(item: AuditItem, *, exclude_keys: set[str] | None = None) -
     rendered_sections: list[str] = []
     excluded_keys: set[str] = set(exclude_keys or set())
     if interval is not None:
-        rendered_sections.append(_render_interval_visual(item, interval))
+        if include_interval_visual:
+            rendered_sections.append(_render_interval_visual(item, interval))
         excluded_keys.update(_INTERVAL_RESERVED_EVIDENCE_KEYS)
         observed_key = str(interval.get("observed_key", "")).strip()
         if observed_key:
@@ -564,7 +548,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         f"<div class='item-summary-message'>{_esc(_expand_terms(message, sentence_case=True))}</div>"
         for message in compact_messages
     )
-    compact_interval_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
+    interval_summary_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
     series_graph_html, series_graph_keys = _render_series_graph(item, evidence)
     warning_text = status_reason_text(item)
     notes_html = _notes_html(item)
@@ -589,11 +573,11 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         "</button>",
         "</header>",
     ]
-    if compact_interval_html:
+    if interval_summary_html:
         sections.extend(
             [
                 "<div class='item-body-summary'>",
-                compact_interval_html,
+                interval_summary_html,
                 "</div>",
             ]
         )
@@ -623,7 +607,9 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ),
         ]
     )
-    sections.append(_render_evidence(item, exclude_keys=series_graph_keys))
+    sections.append(
+        _render_evidence(item, exclude_keys=series_graph_keys, include_interval_visual=interval is None)
+    )
     sections.extend(["</div>", "</article>"])
     return "".join(section for section in sections if section)
 

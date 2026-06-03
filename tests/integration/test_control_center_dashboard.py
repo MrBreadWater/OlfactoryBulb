@@ -823,14 +823,20 @@ with TemporaryDirectory() as tmp:
                 "  const group = document.querySelector('[data-group-section]');"
                 "  const card = document.querySelector('[data-item-card]');"
                 "  const summary = card.querySelector('.item-body-summary');"
+                "  const summaryInterval = card.querySelector('.item-body-summary [data-interval-visual]');"
+                "  const summaryLegend = card.querySelector('.item-body-summary .interval-legend');"
                 "  const detail = card.querySelector('[data-item-detail-body]');"
+                "  const detailInterval = card.querySelector('[data-item-detail-body] [data-interval-visual]');"
                 "  return {"
                 "    groupCollapsed: Boolean(group) && group.classList.contains('group-collapsed'),"
                 "    groupItemsHidden: Boolean(group) && getComputedStyle(group.querySelector('[data-group-items]')).display === 'none',"
                 "    collapsed: card.classList.contains('item-collapsed'),"
                 "    summaryVisible: Boolean(summary) && getComputedStyle(summary).display !== 'none',"
+                "    summaryInterval: Boolean(summaryInterval),"
+                "    summaryLegend: Boolean(summaryLegend),"
                 "    detailHidden: Boolean(detail) && detail.hidden === true,"
                 "    detailDisplay: detail ? getComputedStyle(detail).display : '',"
+                "    detailInterval: Boolean(detailInterval),"
                 "    compactIntervalInHeader: Boolean(card.querySelector('.item-header .item-compact-interval'))"
                 "  };"
                 "})()"
@@ -840,8 +846,11 @@ with TemporaryDirectory() as tmp:
                 "groupItemsHidden": True,
                 "collapsed": True,
                 "summaryVisible": True,
+                "summaryInterval": True,
+                "summaryLegend": True,
                 "detailHidden": True,
                 "detailDisplay": "none",
+                "detailInterval": False,
                 "compactIntervalInHeader": False,
             }
 
