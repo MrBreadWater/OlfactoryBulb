@@ -102,13 +102,14 @@ with TemporaryDirectory() as tmp:
     assert "item-body-summary" in html
     assert "item-body-warning" in html
     assert html.count("<div class='item-body-warning'>") == 1
-    assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html
     assert "Warning" in html
     assert "warning-summary-text" in html
     assert html.count("data-interval-visual") == 1
     assert html.count("<div class='interval-legend'>") == 1
+    assert "<div class='interval-metric-grid'>" not in html
+    assert "<div class='interval-range-labels'>" not in html
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "f-I curve" in html
@@ -119,7 +120,9 @@ with TemporaryDirectory() as tmp:
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
     summary_index = html.index("<div class='item-body-summary'>")
     legend_index = html.index("<div class='interval-legend'>", summary_index)
+    track_index = html.index("<div class='interval-track'>", summary_index)
     detail_index = html.index("<div class='item-body item-detail-body'")
+    assert track_index < legend_index
     assert legend_index < detail_index
     notes_index = html.index("<div class='item-body-notes'>")
     warning_index = html.index("<div class='item-body-warning'>")

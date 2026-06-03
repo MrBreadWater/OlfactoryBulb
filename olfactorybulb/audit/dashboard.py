@@ -444,9 +444,37 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
 
 
 def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
+    unit = str(interval["reference_unit"])
+    observed_text = _format_numeric(interval["observed_value"], unit=unit)
+    reference_text = _format_numeric(interval["reference_mean"], unit=unit)
+    low_text = _format_numeric(interval["accepted_low"], unit=unit)
+    high_text = _format_numeric(interval["accepted_high"], unit=unit)
+    interval_label = str(interval["accepted_interval_standard"] or "reference interval")
+    positions = interval["positions"]
+    band_left = min(float(positions["accepted_low"]), float(positions["accepted_high"]))
+    band_width = max(0.0, abs(float(positions["accepted_high"]) - float(positions["accepted_low"])))
+    reference_tick_html = ""
+    if positions["reference_mean"] is not None:
+        reference_tick_html = (
+            f"<div class='interval-tick interval-reference' "
+            f"style='left:{float(positions['reference_mean']):.2f}%'></div>"
+        )
+    aria_label = (
+        f"Observed value {observed_text}, {'inside' if item.status == 'PASS' else 'outside'} the accepted range "
+        f"from {low_text} to {high_text}. Reference mean {reference_text}. Standard: {interval_label}."
+    )
     return f"""
-<div class='item-compact-interval' data-compact-interval>
-  {_render_interval_visual(item, interval)}
+<div class='item-compact-interval' data-compact-interval data-interval-visual role='img' aria-label='{_esc(aria_label)}'>
+  <div class='interval-track'>
+    <div class='interval-band' style='left:{band_left:.2f}%; width:{band_width:.2f}%;'></div>
+    {reference_tick_html}
+    <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
+  </div>
+  <div class='interval-legend'>
+    <span><i class='legend-swatch accepted'></i>accepted range</span>
+    <span><i class='legend-swatch reference'></i>reference mean</span>
+    <span><i class='legend-swatch observed {_status_class(item.status)}'></i>observed</span>
+  </div>
 </div>
 """
 
@@ -1202,57 +1230,8 @@ def render_audit_dashboard_html(
     .item-compact-interval {{
       display: flex;
       flex-direction: column;
-      gap: 6px;
-    }}
-    .compact-interval-track {{
-      position: relative;
-      height: 10px;
-      border-radius: 999px;
-      background: linear-gradient(180deg, #edf2fa, #dbe5f4);
-      overflow: visible;
-      border: 1px solid #d3ddeb;
-    }}
-    .compact-interval-band {{
-      position: absolute;
-      top: 1px;
-      bottom: 1px;
-      border-radius: 999px;
-      background: rgba(37, 99, 235, 0.18);
-      border: 1px solid rgba(37, 99, 235, 0.26);
-    }}
-    .compact-interval-tick {{
-      position: absolute;
-      top: -2px;
-      width: 2px;
-      height: 14px;
-      transform: translateX(-50%);
-      border-radius: 999px;
-      background: #475569;
-    }}
-    .compact-interval-marker {{
-      position: absolute;
-      top: 50%;
-      width: 10px;
-      height: 10px;
-      transform: translate(-50%, -50%);
-      border-radius: 999px;
-      border: 2px solid #ffffff;
-      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
-      background: var(--blue);
-    }}
-    .compact-interval-marker.status-pass {{ background: var(--green); }}
-    .compact-interval-marker.status-warn {{ background: var(--amber); }}
-    .compact-interval-marker.status-fail {{ background: var(--red); }}
-    .compact-interval-meta {{
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px 12px;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.35;
-    }}
-    .compact-interval-meta span {{
-      white-space: nowrap;
+      gap: 8px;
+      margin: 12px 16px 12px;
     }}
     .legend-swatch {{
       display: inline-block;
@@ -1407,9 +1386,6 @@ def render_audit_dashboard_html(
       }}
       .item-header-row {{
         align-items: flex-start;
-      }}
-      .compact-interval-meta span {{
-        white-space: normal;
       }}
     }}
   </style>

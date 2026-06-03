@@ -824,7 +824,9 @@ with TemporaryDirectory() as tmp:
                 "  const card = document.querySelector('[data-item-card]');"
                 "  const summary = card.querySelector('.item-body-summary');"
                 "  const summaryInterval = card.querySelector('.item-body-summary [data-interval-visual]');"
+                "  const summaryTrack = card.querySelector('.item-body-summary .interval-track');"
                 "  const summaryLegend = card.querySelector('.item-body-summary .interval-legend');"
+                "  const summaryMetrics = card.querySelector('.item-body-summary .interval-metric-grid');"
                 "  const detail = card.querySelector('[data-item-detail-body]');"
                 "  const detailInterval = card.querySelector('[data-item-detail-body] [data-interval-visual]');"
                 "  return {"
@@ -833,7 +835,9 @@ with TemporaryDirectory() as tmp:
                 "    collapsed: card.classList.contains('item-collapsed'),"
                 "    summaryVisible: Boolean(summary) && getComputedStyle(summary).display !== 'none',"
                 "    summaryInterval: Boolean(summaryInterval),"
+                "    summaryTrack: Boolean(summaryTrack),"
                 "    summaryLegend: Boolean(summaryLegend),"
+                "    summaryMetrics: Boolean(summaryMetrics),"
                 "    detailHidden: Boolean(detail) && detail.hidden === true,"
                 "    detailDisplay: detail ? getComputedStyle(detail).display : '',"
                 "    detailInterval: Boolean(detailInterval),"
@@ -847,7 +851,9 @@ with TemporaryDirectory() as tmp:
                 "collapsed": True,
                 "summaryVisible": True,
                 "summaryInterval": True,
+                "summaryTrack": True,
                 "summaryLegend": True,
+                "summaryMetrics": False,
                 "detailHidden": True,
                 "detailDisplay": "none",
                 "detailInterval": False,
