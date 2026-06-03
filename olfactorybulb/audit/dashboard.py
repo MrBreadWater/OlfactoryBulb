@@ -1386,6 +1386,10 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ),
         "<span class='item-toggle-icon' aria-hidden='true'>&#9656;</span>",
         "<span class='item-header-main'>",
+        (
+            f"<span class='item-group-label'>{_esc(item.group_title or item.group_id)}</span>"
+            if item.group_title or item.group_id else ""
+        ),
         "<span class='item-header-row'>",
         f"<span class='item-title'>{_esc(_expand_terms(item.title, sentence_case=True))}</span>",
         _render_status_badge(item.status),
@@ -1841,6 +1845,14 @@ def render_audit_dashboard_html(
       gap: 8px;
       min-width: 0;
       flex: 1 1 auto;
+    }}
+    .item-group-label {{
+      display: block;
+      color: #475569;
+      font-size: 11px;
+      font-style: italic;
+      line-height: 1.2;
+      opacity: 0.85;
     }}
     .item-header-row {{
       display: flex;
