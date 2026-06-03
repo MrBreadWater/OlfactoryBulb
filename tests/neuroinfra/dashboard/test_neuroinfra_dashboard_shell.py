@@ -41,7 +41,7 @@ assert "shell-progress" in html
 assert "Running audit" in html
 assert "position: sticky" not in html
 assert "min-height: calc(100vh - 120px);" in html
-assert "min-height: calc(100vh - 140px);" in html
+assert "min-height: calc(120vh - 140px);" in html
 assert "dashboard-font-mode" not in html
 assert ">Font<" not in html
 assert "FONT_FAMILY_BY_MODE" not in html

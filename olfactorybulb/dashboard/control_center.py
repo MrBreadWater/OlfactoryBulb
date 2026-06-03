@@ -29,7 +29,6 @@ import tools.analysis.hfo_visual_dashboard as hfo_dashboard
 REPO_ROOT = Path(__file__).resolve().parents[2]
 DOCS_ROOT = REPO_ROOT / "docs"
 DEFAULT_OUTPUT_DIR = REPO_ROOT / "results" / "dashboard" / "control_center"
-DEFAULT_STATUS_JSON = (REPO_ROOT / hfo_dashboard.SUMMARY_STATUS_PATH).resolve()
 DEFAULT_OPTIMIZATION_ROOT = REPO_ROOT / "results" / "notebook_runs" / "optimization"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 6006
@@ -242,6 +241,50 @@ def _module_tabs() -> tuple[ShellTabSpec, ...]:
             badge_tone="info",
         ),
     )
+
+
+def _is_selectable_optimization_campaign(path: Path) -> bool:
+    return path.is_dir()
+
+
+def _discover_optimization_campaigns(root: Path | str | None = None) -> list[dict[str, str]]:
+    root_path = Path(DEFAULT_OPTIMIZATION_ROOT if root is None else root).expanduser().resolve()
+    if not root_path.exists():
+        return []
+    candidates = [
+        path
+        for path in root_path.iterdir()
+        if path.is_dir() and (path / "candidate_archive.jsonl").exists() and path.name != "codex_big_hfo_logs"
+    ]
+    candidates.sort(key=lambda path: (path.stat().st_mtime_ns, path.name), reverse=True)
+    return [
+        {
+            "campaign_dir": str(path),
+            "campaign_label": path.name,
+            "campaign_path_text": str(path),
+        }
+        for path in candidates
+    ]
+
+
+def _ensure_selected_optimization_campaign_in_options(
+    options: list[dict[str, str]],
+    selected_campaign: Path | None,
+) -> list[dict[str, str]]:
+    if selected_campaign is None:
+        return list(options)
+    selected_path_text = str(selected_campaign)
+    if any(str(option.get("campaign_dir") or "") == selected_path_text for option in options):
+        return list(options)
+    merged = [
+        {
+            "campaign_dir": selected_path_text,
+            "campaign_label": selected_campaign.name,
+            "campaign_path_text": selected_path_text,
+        }
+    ]
+    merged.extend(dict(option) for option in options)
+    return merged
 
 
 def _available_audit_entries() -> list[dict[str, str]]:
@@ -564,34 +607,184 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
 """
 
 
-def _render_optimization_context_panel(*, campaign_label: str, campaign_path_text: str | None = None) -> str:
-    normalized = str(campaign_path_text or campaign_label or "").strip() or "no active optimization campaign detected"
-    details = (
-        "The optimization tab shows the active campaign path that was auto-detected for this session."
-        if normalized != "no active optimization campaign detected"
-        else "No active optimization campaign could be auto-detected from the maintained status file or optimization results directory."
+def _render_optimization_context_panel(
+    *,
+    campaign_label: str,
+    campaign_path_text: str | None = None,
+    available_campaigns: list[dict[str, str]] | None = None,
+) -> str:
+    available_campaigns = list(available_campaigns or [])
+    normalized_path = str(campaign_path_text or "").strip()
+    normalized_label = str(campaign_label or "").strip()
+    selected_label = normalized_label if normalized_path else "No campaign selected"
+    selected_path = normalized_path if normalized_path else "Choose one of the discovered campaigns below."
+    selected_summary = (
+        f"Loaded campaign: {normalized_label}"
+        if normalized_path
+        else "No campaign is selected yet."
     )
-    campaign_text = html_escape(normalized)
+    options_html = "\n".join(
+        (
+            f"<option value='{html_escape(str(entry['campaign_dir']), quote=True)}'"
+            f"{' selected' if str(entry['campaign_dir']) == normalized_path else ''}"
+            f" title='{html_escape(str(entry.get('campaign_path_text') or entry['campaign_dir']), quote=True)}'>"
+            f"{html_escape(str(entry['campaign_label']))}"
+            "</option>"
+        )
+        for entry in available_campaigns
+    )
+    campaigns_payload = html_escape(_json_script_payload(available_campaigns), quote=False)
     return f"""
 <section class="toolbar-card optimization-context-card">
   <div class="toolbar-card-header">
     <div>
       <h2>Optimization campaign</h2>
-      <p>{html_escape(details)}</p>
+      <p id="optimization-selection-description">Choose a campaign explicitly. The control center no longer auto-selects one on startup.</p>
     </div>
+  </div>
+  <div class="form-grid">
+    <label class="form-field form-field-wide">
+      <span>Campaign</span>
+      <small id="control-center-optimization-campaign-help" class="form-help">Select one of the discovered campaigns under <code>results/notebook_runs/optimization</code>, then load it into the optimization tab.</small>
+      <select id="control-center-optimization-campaign" title="Choose which optimization campaign to load" aria-label="Optimization campaign" aria-describedby="control-center-optimization-campaign-help optimization-selection-description">
+        <option value="">Choose a campaign</option>
+        {options_html}
+      </select>
+    </label>
+  </div>
+  <div class="toolbar-actions optimization-actions">
+    <button class="toolbar-button toolbar-button-primary" type="button" id="control-center-load-campaign">Load campaign</button>
+    <button class="toolbar-button" type="button" id="control-center-clear-campaign">Clear selection</button>
   </div>
   <div class="status-grid">
     <div class="status-card">
-      <span>Campaign</span>
-      <strong>{campaign_text}</strong>
-      <small>{html_escape(details)}</small>
+      <span>Selected</span>
+      <strong id="control-center-optimization-selected">{html_escape(selected_label)}</strong>
+      <small id="control-center-optimization-selected-path">{html_escape(selected_path)}</small>
+    </div>
+    <div class="status-card">
+      <span>Selection</span>
+      <strong id="control-center-optimization-selection-state">{html_escape(selected_summary)}</strong>
+      <small id="control-center-optimization-selection-state-detail">The optimization iframe updates after you load the selected campaign.</small>
     </div>
   </div>
 </section>
+<script id="control-center-optimization-options" type="application/json">{campaigns_payload}</script>
+<script>
+(() => {{
+  const optionsNode = document.getElementById("control-center-optimization-options");
+  const availableCampaigns = optionsNode && optionsNode.textContent ? JSON.parse(optionsNode.textContent) : [];
+  const campaignSelect = document.getElementById("control-center-optimization-campaign");
+  const loadButton = document.getElementById("control-center-load-campaign");
+  const clearButton = document.getElementById("control-center-clear-campaign");
+  const selectedLabel = document.getElementById("control-center-optimization-selected");
+  const selectedPath = document.getElementById("control-center-optimization-selected-path");
+  const selectionState = document.getElementById("control-center-optimization-selection-state");
+  const selectionStateDetail = document.getElementById("control-center-optimization-selection-state-detail");
+
+  function campaignEntryForPath(path) {{
+    return availableCampaigns.find((entry) => String(entry.campaign_dir || "") === String(path || "")) || null;
+  }}
+
+  function updateSelectionSummary(path) {{
+    const selectedEntry = campaignEntryForPath(path);
+    if (selectedLabel) {{
+      selectedLabel.textContent = selectedEntry ? String(selectedEntry.campaign_label || "") : "No campaign selected";
+    }}
+    if (selectedPath) {{
+      selectedPath.textContent = selectedEntry ? String(selectedEntry.campaign_path_text || selectedEntry.campaign_dir || "") : "Choose one of the discovered campaigns below.";
+    }}
+    if (selectionState) {{
+      selectionState.textContent = selectedEntry
+        ? `Loaded campaign: ${{String(selectedEntry.campaign_label || "")}}`
+        : "No campaign is selected yet.";
+    }}
+    if (selectionStateDetail) {{
+      selectionStateDetail.textContent = selectedEntry
+        ? "The optimization iframe updates after you load the selected campaign."
+        : "The optimization tab stays unselected until you choose one.";
+    }}
+  }}
+
+  async function submitSelection(campaignDir) {{
+    const body = JSON.stringify({{ campaign_dir: String(campaignDir || "") }});
+    if (loadButton) {{
+      loadButton.disabled = true;
+    }}
+    if (clearButton) {{
+      clearButton.disabled = true;
+    }}
+    try {{
+      const response = await fetch("/__optimization_select__", {{
+        method: "POST",
+        headers: {{
+          "Content-Type": "application/json",
+        }},
+        body,
+      }});
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) {{
+        throw new Error(String(payload.error || `Optimization selection failed (${{response.status}})`));
+      }}
+      if (payload.state && typeof window.__applyDashboardShellState === "function") {{
+        window.__applyDashboardShellState(payload.state);
+      }}
+      const stateOptimization = payload.state && payload.state.optimization ? payload.state.optimization : {{}};
+      campaignSelect.value = String(stateOptimization.selected_campaign_dir || campaignDir || "");
+      updateSelectionSummary(campaignSelect.value);
+    }} catch (error) {{
+      updateSelectionSummary(campaignSelect.value);
+      if (selectionStateDetail) {{
+        selectionStateDetail.textContent = `Selection failed: ${{String(error && error.message ? error.message : error)}}`;
+      }}
+      throw error;
+    }} finally {{
+      if (loadButton) {{
+        loadButton.disabled = !String(campaignSelect.value || "").trim();
+      }}
+      if (clearButton) {{
+        clearButton.disabled = false;
+      }}
+    }}
+  }}
+
+  campaignSelect?.addEventListener("change", () => {{
+    updateSelectionSummary(campaignSelect.value);
+    if (loadButton) {{
+      loadButton.disabled = !String(campaignSelect.value || "").trim();
+    }}
+  }});
+  loadButton?.addEventListener("click", (event) => {{
+    event.preventDefault();
+    const selected = String(campaignSelect?.value || "").trim();
+    if (!selected) {{
+      return;
+    }}
+    submitSelection(selected).catch(() => null);
+  }});
+  clearButton?.addEventListener("click", (event) => {{
+    event.preventDefault();
+    campaignSelect.value = "";
+    updateSelectionSummary("");
+    submitSelection("").catch(() => null);
+  }});
+  updateSelectionSummary(campaignSelect?.value || "");
+  if (loadButton) {{
+    loadButton.disabled = !String(campaignSelect?.value || "").trim();
+  }}
+}})();
+</script>
 """
 
 
-def _initial_shell_state(*, audit_id: str, audit_args: list[str], campaign_label: str) -> dict[str, Any]:
+def _initial_shell_state(
+    *,
+    audit_id: str,
+    audit_args: list[str],
+    campaign_label: str,
+    campaign_path_text: str | None,
+    available_campaign_count: int,
+) -> dict[str, Any]:
     return {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
         "campaign_label": campaign_label,
@@ -610,14 +803,21 @@ def _initial_shell_state(*, audit_id: str, audit_args: list[str], campaign_label
             "progress_indeterminate": False,
         },
         "optimization": {
-            "status": "loading",
-            "badge": "loading",
-            "badge_tone": "running",
+            "status": "loading" if campaign_path_text else "idle",
+            "badge": "loading" if campaign_path_text else "idle",
+            "badge_tone": "running" if campaign_path_text else "info",
             "message": (
-                "Preparing optimization view"
-                if campaign_label and campaign_label != "no active optimization campaign detected"
-                else "No active optimization campaign detected yet."
+                f"Preparing optimization view for {campaign_label}"
+                if campaign_path_text
+                else (
+                    f"{available_campaign_count} optimization campaign(s) available. Choose one in the optimization panel."
+                    if available_campaign_count > 0
+                    else "No selectable optimization campaigns were found under the maintained results tree."
+                )
             ),
+            "selected_campaign_dir": campaign_path_text or "",
+            "selected_campaign_label": campaign_label if campaign_path_text else "",
+            "available_campaign_count": int(available_campaign_count),
         },
         "docs": {
             "status": "ready",
@@ -664,6 +864,7 @@ def _write_control_center_shell(
     audit_id: str,
     audit_args: list[str],
     shell_state: dict[str, Any],
+    available_campaigns: list[dict[str, str]] | None = None,
     dev_reload: bool = False,
 ) -> None:
     shell_module = importlib.import_module("neuroinfra.dashboard.shell")
@@ -680,6 +881,7 @@ def _write_control_center_shell(
             "optimization": _render_optimization_context_panel(
                 campaign_label=campaign_label,
                 campaign_path_text=campaign_path_text,
+                available_campaigns=available_campaigns,
             ),
         },
         shell_state=shell_state,
@@ -897,15 +1099,32 @@ def _compose_control_center_state(
     if optimization_state.get("status") not in {"loading", "error"} and optimization_manifest:
         placeholder = bool(optimization_manifest.get("placeholder"))
         if placeholder:
-            optimization_state.update(
-                {
-                    "status": "unavailable",
-                    "badge": "unavailable",
-                    "badge_tone": "warn",
-                    "message": str(optimization_manifest.get("reason") or "Optimization dashboard unavailable."),
-                    "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or ""),
-                }
-            )
+            selected_campaign_dir = str(optimization_state.get("selected_campaign_dir") or "").strip()
+            available_campaign_count = int(optimization_state.get("available_campaign_count") or 0)
+            if selected_campaign_dir:
+                optimization_state.update(
+                    {
+                        "status": "unavailable",
+                        "badge": "unavailable",
+                        "badge_tone": "warn",
+                        "message": str(optimization_manifest.get("reason") or "Optimization dashboard unavailable."),
+                        "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or ""),
+                    }
+                )
+            else:
+                optimization_state.update(
+                    {
+                        "status": "idle",
+                        "badge": "idle",
+                        "badge_tone": "info",
+                        "message": (
+                            f"{available_campaign_count} optimization campaign(s) available. Choose one in the optimization panel."
+                            if available_campaign_count > 0
+                            else "No selectable optimization campaigns were found under the maintained results tree."
+                        ),
+                        "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or ""),
+                    }
+                )
         else:
             packet_count = int(optimization_manifest.get("packet_count") or 0)
             optimization_state.update(
@@ -965,30 +1184,41 @@ def _compose_control_center_state(
 
 def resolve_control_center_campaign(
     campaign_dir: str | Path | None = None,
-    *,
-    status_json: str | Path | None = None,
 ) -> Path | None:
     if campaign_dir is not None:
         path = Path(campaign_dir).expanduser().resolve()
-        return path if path.exists() else None
-    status_path = Path(status_json).expanduser().resolve() if status_json is not None else DEFAULT_STATUS_JSON
-    status_payload = _read_json_dict(status_path) if status_path.exists() else {}
-    status_campaign = str(status_payload.get("campaign_dir") or "").strip()
-    if status_campaign:
-        candidate = Path(status_campaign).expanduser().resolve()
-        if candidate.exists():
-            return candidate
-    if DEFAULT_OPTIMIZATION_ROOT.exists():
-        candidates = [
-            path
-            for path in DEFAULT_OPTIMIZATION_ROOT.iterdir()
-            if path.is_dir()
-            and (path / "candidate_archive.jsonl").exists()
-            and path.name != "codex_big_hfo_logs"
-        ]
-        if candidates:
-            return max(candidates, key=lambda path: path.stat().st_mtime)
+        return path if _is_selectable_optimization_campaign(path) else None
     return None
+
+
+def _render_control_center_optimization_dashboard(
+    *,
+    selected_campaign: Path | None,
+    output_dir: Path,
+    top_n: int,
+    refresh_s: float,
+    generate_packets_top_n: int,
+    generate_packet_workers: int,
+    cleanup_stale_packets_before_render: bool,
+    status_json: str | Path | None,
+    asset_url_prefix: str = "/repo",
+    placeholder_reason: str = "No optimization campaign selected yet. Choose one in the optimization panel.",
+) -> tuple[dict[str, Any], str, str | None]:
+    if selected_campaign is None:
+        manifest = _write_optimization_placeholder(output_dir, reason=placeholder_reason)
+        return manifest, "no optimization campaign selected", None
+    manifest = hfo_dashboard.export_visual_dashboard(
+        selected_campaign,
+        output_dir=output_dir,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
+        asset_url_prefix=asset_url_prefix,
+    )
+    return manifest, selected_campaign.name, str(selected_campaign)
 
 
 def _write_optimization_placeholder(output_dir: Path, *, reason: str) -> dict[str, Any]:
@@ -1085,7 +1315,8 @@ def export_control_center(
 ) -> dict[str, Any]:
     log = _progress if progress else (lambda _message: None)
     resolved_audit_args = list(_default_audit_args_for(audit_id) if audit_args is None else audit_args)
-    campaign_path = resolve_control_center_campaign(campaign_dir, status_json=status_json)
+    campaign_path = resolve_control_center_campaign(campaign_dir)
+    available_campaigns = _ensure_selected_optimization_campaign_in_options(_discover_optimization_campaigns(), campaign_path)
     root_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else DEFAULT_OUTPUT_DIR.resolve()
     root_dir.mkdir(parents=True, exist_ok=True)
     optimization_dir = root_dir / "optimization"
@@ -1093,30 +1324,18 @@ def export_control_center(
     optimization_dir.mkdir(parents=True, exist_ok=True)
     audits_dir.mkdir(parents=True, exist_ok=True)
     existing_history = _load_audit_history(audits_dir)
-
-    if campaign_path is None:
-        log("no active optimization campaign detected; using placeholder optimization tab")
-        optimization_manifest = _write_optimization_placeholder(
-            optimization_dir,
-            reason="No active optimization campaign could be auto-detected from the maintained status file or optimization results directory.",
-        )
-        campaign_label = "no active optimization campaign detected"
-        campaign_path_text = None
-    else:
-        log(f"rendering optimization dashboard from {campaign_path}")
-        optimization_manifest = hfo_dashboard.export_visual_dashboard(
-            campaign_path,
-            output_dir=optimization_dir,
-            top_n=top_n,
-            refresh_s=refresh_s,
-            generate_packets_top_n=generate_packets_top_n,
-            generate_packet_workers=generate_packet_workers,
-            cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-            status_json=status_json,
-            asset_url_prefix="/repo",
-        )
-        campaign_label = campaign_path.name
-        campaign_path_text = str(campaign_path)
+    optimization_manifest, campaign_label, campaign_path_text = _render_control_center_optimization_dashboard(
+        selected_campaign=campaign_path,
+        output_dir=optimization_dir,
+        top_n=top_n,
+        refresh_s=refresh_s,
+        generate_packets_top_n=generate_packets_top_n,
+        generate_packet_workers=generate_packet_workers,
+        cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+        status_json=status_json,
+        asset_url_prefix="/repo",
+        placeholder_reason="No optimization campaign selected yet. Choose one in the optimization panel.",
+    )
     if run_audit_on_start:
         log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
         audit_report = run_audit_by_id(audit_id, resolved_audit_args)
@@ -1145,12 +1364,23 @@ def export_control_center(
         refresh_endpoint="/__audit_refresh__",
     )
     log("writing unified dashboard shell")
+    base_state = _initial_shell_state(
+        audit_id=audit_id,
+        audit_args=resolved_audit_args,
+        campaign_label=campaign_label,
+        campaign_path_text=campaign_path_text,
+        available_campaign_count=len(available_campaigns),
+    )
+    if campaign_path_text is not None:
+        base_state["optimization"].update(
+            {
+                "status": "idle",
+                "badge": "idle",
+                "badge_tone": "info",
+            }
+        )
     shell_state = _compose_control_center_state(
-        base_state=_initial_shell_state(
-            audit_id=audit_id,
-            audit_args=resolved_audit_args,
-            campaign_label=campaign_label,
-        ),
+        base_state=base_state,
         audits_dir=audits_dir,
         optimization_dir=optimization_dir,
     )
@@ -1185,6 +1415,7 @@ def export_control_center(
         audit_id=audit_id,
         audit_args=resolved_audit_args,
         shell_state=shell_state,
+        available_campaigns=available_campaigns,
     )
     manifest = {
         "campaign_dir": str(campaign_path) if campaign_path is not None else None,
@@ -1259,7 +1490,8 @@ def serve_control_center(
     dev_reload: bool = True,
 ) -> None:
     resolved_audit_args = list(_default_audit_args_for(audit_id) if audit_args is None else audit_args)
-    campaign_path = resolve_control_center_campaign(campaign_dir, status_json=status_json)
+    campaign_path = resolve_control_center_campaign(campaign_dir)
+    available_campaigns = _ensure_selected_optimization_campaign_in_options(_discover_optimization_campaigns(), campaign_path)
     root_dir = Path(output_dir).expanduser().resolve() if output_dir is not None else DEFAULT_OUTPUT_DIR.resolve()
     requested_port = int(port)
     requested_url = f"http://{host}:{requested_port}/" if requested_port else f"http://{host}:<auto>/"
@@ -1270,16 +1502,20 @@ def serve_control_center(
     state_path = root_dir / "state.json"
     optimization_dir.mkdir(parents=True, exist_ok=True)
     audits_dir.mkdir(parents=True, exist_ok=True)
-    campaign_label = campaign_path.name if campaign_path is not None else "no active optimization campaign detected"
+    campaign_label = campaign_path.name if campaign_path is not None else "no optimization campaign selected"
     campaign_path_text = str(campaign_path) if campaign_path is not None else None
     base_state_lock = threading.RLock()
     base_state = _initial_shell_state(
         audit_id=audit_id,
         audit_args=resolved_audit_args,
         campaign_label=campaign_label,
+        campaign_path_text=campaign_path_text,
+        available_campaign_count=len(available_campaigns),
     )
     audit_thread_holder: dict[str, threading.Thread | None] = {"thread": None}
     audit_thread_lock = threading.Lock()
+    optimization_render_lock = threading.RLock()
+    optimization_watcher_holder: dict[str, Any] = {"thread": None, "stop_event": None, "campaign_dir": None}
     dev_source_paths = _dev_reload_source_paths() if dev_reload else []
     dev_reload_state = {"revision": _source_revision(dev_source_paths) if dev_reload else ""}
 
@@ -1309,15 +1545,17 @@ def serve_control_center(
         refresh_endpoint="/__audit_refresh__",
     )
     _write_audit_history(audits_dir, [])
-    _write_loading_frame(
-        optimization_dir,
-        title="Optimization dashboard starting",
-        message=(
-            f"Preparing optimization view for {campaign_label}"
-            if campaign_path is not None
-            else "No active optimization campaign was detected yet."
-        ),
-    )
+    if campaign_path is None:
+        _write_optimization_placeholder(
+            optimization_dir,
+            reason="No optimization campaign selected yet. Choose one in the optimization panel.",
+        )
+    else:
+        _write_loading_frame(
+            optimization_dir,
+            title="Optimization dashboard starting",
+            message=f"Preparing optimization view for {campaign_label}",
+        )
     _write_control_center_shell(
         root_dir,
         campaign_label=campaign_label,
@@ -1325,12 +1563,10 @@ def serve_control_center(
         audit_id=audit_id,
         audit_args=resolved_audit_args,
         shell_state=base_state,
+        available_campaigns=available_campaigns,
         dev_reload=dev_reload,
     )
     _refresh_state_file()
-    stop_event = threading.Event()
-    watcher_holder: dict[str, threading.Thread | None] = {"thread": None}
-
     root_index = (root_dir / "index.html").resolve()
 
     def _run_audit_render(audit_id_to_run: str, audit_args_to_run: list[str]) -> None:
@@ -1490,13 +1726,29 @@ def serve_control_center(
         reloaded_audit_dashboard = importlib.reload(audit_dashboard_module)
         globals()["export_audit_dashboard"] = reloaded_audit_dashboard.export_audit_dashboard
         current_state = _refresh_state_file()
+        current_campaign_label = str(
+            current_state.get("campaign_label")
+            or current_state.get("optimization", {}).get("selected_campaign_label")
+            or campaign_label
+        )
+        current_campaign_path_text = str(
+            current_state.get("optimization", {}).get("selected_campaign_dir")
+            or campaign_path_text
+            or ""
+        ) or None
+        current_selected_campaign = (
+            Path(current_campaign_path_text).expanduser().resolve()
+            if current_campaign_path_text
+            else None
+        )
         _write_control_center_shell(
             root_dir,
-            campaign_label=campaign_label,
-            campaign_path_text=campaign_path_text,
+            campaign_label=current_campaign_label,
+            campaign_path_text=current_campaign_path_text,
             audit_id=str(current_state.get("audit", {}).get("audit_id") or audit_id),
             audit_args=list(current_state.get("audit", {}).get("audit_args") or resolved_audit_args),
             shell_state=current_state,
+            available_campaigns=_ensure_selected_optimization_campaign_in_options(available_campaigns, current_selected_campaign),
             dev_reload=dev_reload,
         )
         history_entries = _load_audit_history(audits_dir)
@@ -1510,6 +1762,126 @@ def serve_control_center(
         dev_reload_state["revision"] = refreshed_revision
         _progress("dev reload refreshed dashboard shell")
         return refreshed_revision
+
+    def _stop_optimization_watcher() -> None:
+        watcher_thread = optimization_watcher_holder.get("thread")
+        stop_event = optimization_watcher_holder.get("stop_event")
+        if isinstance(stop_event, threading.Event):
+            stop_event.set()
+        if isinstance(watcher_thread, threading.Thread) and watcher_thread.is_alive():
+            watcher_thread.join(timeout=max(float(refresh_s), 1.0) + 2.0)
+        optimization_watcher_holder.update({"thread": None, "stop_event": None, "campaign_dir": None})
+
+    def _start_optimization_watcher(selected_campaign: Path | None) -> None:
+        _stop_optimization_watcher()
+        if not watch_optimization or selected_campaign is None:
+            return
+        watcher_stop_event = threading.Event()
+        watcher_thread = threading.Thread(
+            target=hfo_dashboard.watch_visual_dashboard,
+            kwargs={
+                "campaign_dir": selected_campaign,
+                "output_dir": optimization_dir,
+                "top_n": top_n,
+                "refresh_s": refresh_s,
+                "generate_packets_top_n": generate_packets_top_n,
+                "generate_packet_workers": generate_packet_workers,
+                "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
+                "status_json": status_json,
+                "asset_url_prefix": "/repo",
+                "stop_event": watcher_stop_event,
+            },
+            name="control-center-optimization-watch",
+            daemon=True,
+        )
+        optimization_watcher_holder.update(
+            {
+                "thread": watcher_thread,
+                "stop_event": watcher_stop_event,
+                "campaign_dir": selected_campaign,
+            }
+        )
+        watcher_thread.start()
+
+    def _apply_optimization_selection(selected_campaign: Path | None) -> dict[str, Any]:
+        with optimization_render_lock:
+            if selected_campaign is None:
+                _progress("no optimization campaign selected; using placeholder optimization tab")
+                optimization_manifest = _write_optimization_placeholder(
+                    optimization_dir,
+                    reason="No optimization campaign selected yet. Choose one in the optimization panel.",
+                )
+                _stop_optimization_watcher()
+                selected_campaign_label = "no optimization campaign selected"
+                selected_campaign_path_text = None
+                optimization_patch = {
+                    "status": "idle",
+                    "badge": "idle",
+                    "badge_tone": "info",
+                    "message": str(optimization_manifest.get("reason") or "No optimization campaign selected yet. Choose one in the optimization panel."),
+                    "selected_campaign_dir": "",
+                    "selected_campaign_label": "",
+                    "campaign_label": selected_campaign_label,
+                    "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or time.time_ns()),
+                }
+            else:
+                _progress(f"rendering optimization dashboard from {selected_campaign}")
+                optimization_manifest = hfo_dashboard.export_visual_dashboard(
+                    selected_campaign,
+                    output_dir=optimization_dir,
+                    top_n=top_n,
+                    refresh_s=refresh_s,
+                    generate_packets_top_n=generate_packets_top_n,
+                    generate_packet_workers=generate_packet_workers,
+                    cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
+                    status_json=status_json,
+                    asset_url_prefix="/repo",
+                )
+                packet_count = int(optimization_manifest.get("packet_count") or 0)
+                selected_campaign_label = selected_campaign.name
+                selected_campaign_path_text = str(selected_campaign)
+                optimization_patch = {
+                    "status": "ready",
+                    "badge": f"{packet_count} packets",
+                    "badge_tone": "info",
+                    "message": f"{packet_count} packets from {optimization_manifest.get('candidate_rows', 0)} candidate rows",
+                    "packet_count": packet_count,
+                    "generated_at": optimization_manifest.get("generated_at") or "",
+                    "selected_campaign_dir": selected_campaign_path_text,
+                    "selected_campaign_label": selected_campaign_label,
+                    "campaign_label": selected_campaign_label,
+                    "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or time.time_ns()),
+                }
+                _start_optimization_watcher(selected_campaign)
+            with base_state_lock:
+                base_state["campaign_label"] = selected_campaign_label
+            _update_base_state(optimization_patch=optimization_patch)
+            current_state = _refresh_state_file()
+            shell_campaigns = _ensure_selected_optimization_campaign_in_options(available_campaigns, selected_campaign)
+            _write_control_center_shell(
+                root_dir,
+                campaign_label=selected_campaign_label,
+                campaign_path_text=selected_campaign_path_text,
+                audit_id=str(current_state.get("audit", {}).get("audit_id") or audit_id),
+                audit_args=list(current_state.get("audit", {}).get("audit_args") or resolved_audit_args),
+                shell_state=current_state,
+                available_campaigns=shell_campaigns,
+                dev_reload=dev_reload,
+            )
+            return {
+                "manifest": optimization_manifest,
+                "state": current_state,
+                "campaign_label": selected_campaign_label,
+                "campaign_path_text": selected_campaign_path_text,
+            }
+
+    def _current_selected_optimization_campaign() -> Path | None:
+        with base_state_lock:
+            selected_campaign_dir = str(base_state.get("optimization", {}).get("selected_campaign_dir") or "").strip()
+        if not selected_campaign_dir:
+            return None
+        candidate = Path(selected_campaign_dir).expanduser().resolve()
+        return candidate if _is_selectable_optimization_campaign(candidate) else None
 
     class ControlCenterRequestHandler(http.server.SimpleHTTPRequestHandler):
         def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -1586,14 +1958,15 @@ def serve_control_center(
                 if not candidate_id:
                     self._send_json(400, {"ok": False, "error": "Missing candidate_id"})
                     return
-                if campaign_path is None:
+                selected_campaign = _current_selected_optimization_campaign()
+                if selected_campaign is None:
                     self._send_json(400, {"ok": False, "error": "No optimization campaign is available for packet generation"})
                     return
                 try:
                     result = hfo_dashboard._queue_dashboard_packet_generation(  # type: ignore[attr-defined]
-                        campaign_path,
+                        selected_campaign,
                         candidate_id,
-                        packet_output_dir=campaign_path / "figures" / f"packet_{candidate_id}",
+                        packet_output_dir=selected_campaign / "figures" / f"packet_{candidate_id}",
                         output_dir=optimization_dir,
                         top_n=top_n,
                         refresh_s=refresh_s,
@@ -1607,6 +1980,33 @@ def serve_control_center(
                     self._send_json(500, {"ok": False, "candidate_id": candidate_id, "error": str(exc)})
                     return
                 self._send_json(202, result)
+                return
+            if request_path == "/__optimization_select__":
+                requested_campaign_dir = str((payload or {}).get("campaign_dir") or "").strip()
+                selected_campaign = None
+                if requested_campaign_dir:
+                    candidate = Path(requested_campaign_dir).expanduser().resolve()
+                    if not _is_selectable_optimization_campaign(candidate):
+                        self._send_json(
+                            400,
+                            {
+                                "ok": False,
+                                "error": f"Campaign is not selectable: {candidate}",
+                                "state": _refresh_state_file(),
+                            },
+                        )
+                        return
+                    selected_campaign = candidate
+                result = _apply_optimization_selection(selected_campaign)
+                self._send_json(
+                    202,
+                    {
+                        "ok": True,
+                        "campaign_dir": str(selected_campaign) if selected_campaign is not None else None,
+                        "state": result["state"],
+                        "optimization": result["manifest"],
+                    },
+                )
                 return
             if request_path == "/__audit_run__":
                 requested_audit_id = str((payload or {}).get("audit_id") or "").strip() or DEFAULT_AUDIT_ID
@@ -1662,69 +2062,11 @@ def serve_control_center(
 
     def _render_initial_content() -> None:
         try:
-            if campaign_path is None:
-                _progress("no active optimization campaign detected; using placeholder optimization tab")
-                optimization_manifest = _write_optimization_placeholder(
-                    optimization_dir,
-                    reason="No active optimization campaign could be auto-detected from the maintained status file or optimization results directory.",
-                )
-                _update_base_state(
-                    optimization_patch={
-                        "status": "unavailable",
-                        "badge": "unavailable",
-                        "badge_tone": "warn",
-                        "message": str(optimization_manifest.get("reason") or ""),
-                        "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or ""),
-                    }
-                )
-            else:
-                _progress(f"rendering optimization dashboard from {campaign_path}")
-                optimization_manifest = hfo_dashboard.export_visual_dashboard(
-                    campaign_path,
-                    output_dir=optimization_dir,
-                    top_n=top_n,
-                    refresh_s=refresh_s,
-                    generate_packets_top_n=generate_packets_top_n,
-                    generate_packet_workers=generate_packet_workers,
-                    cleanup_stale_packets_before_render=cleanup_stale_packets_before_render,
-                    status_json=status_json,
-                    asset_url_prefix="/repo",
-                )
-                packet_count = int(optimization_manifest.get("packet_count") or 0)
-                _update_base_state(
-                    optimization_patch={
-                        "status": "ready",
-                        "badge": f"{packet_count} packets",
-                        "badge_tone": "info",
-                        "message": f"{packet_count} packets from {optimization_manifest.get('candidate_rows', 0)} candidate rows",
-                        "generated_at": optimization_manifest.get("generated_at") or "",
-                        "revision": str(optimization_manifest.get("manifest_revision") or optimization_manifest.get("generated_at") or ""),
-                    }
-                )
+            _apply_optimization_selection(campaign_path)
             if run_audit_on_start:
                 ok, _message = _queue_audit_render(audit_id, resolved_audit_args)
                 if not ok:
                     raise RuntimeError(_message)
-            if watch_optimization and campaign_path is not None and not bool(optimization_manifest.get("placeholder")):
-                watcher_thread = threading.Thread(
-                    target=hfo_dashboard.watch_visual_dashboard,
-                    kwargs={
-                        "campaign_dir": campaign_path,
-                        "output_dir": optimization_dir,
-                        "top_n": top_n,
-                        "refresh_s": refresh_s,
-                        "generate_packets_top_n": generate_packets_top_n,
-                        "generate_packet_workers": generate_packet_workers,
-                        "cleanup_stale_packets_before_render": cleanup_stale_packets_before_render,
-                        "status_json": status_json,
-                        "asset_url_prefix": "/repo",
-                        "stop_event": stop_event,
-                    },
-                    name="control-center-optimization-watch",
-                    daemon=True,
-                )
-                watcher_holder["thread"] = watcher_thread
-                watcher_thread.start()
         except Exception as exc:
             _progress(f"startup render failed: {exc}")
             _write_error_frame(
@@ -1763,15 +2105,12 @@ def serve_control_center(
     try:
         server.serve_forever()
     finally:
-        stop_event.set()
+        _stop_optimization_watcher()
         if render_thread.is_alive():
             render_thread.join(timeout=max(float(refresh_s), 1.0) + 2.0)
         audit_thread = audit_thread_holder["thread"]
         if audit_thread is not None:
             audit_thread.join(timeout=max(float(refresh_s), 1.0) + 2.0)
-        watcher_thread = watcher_holder["thread"]
-        if watcher_thread is not None:
-            watcher_thread.join(timeout=max(float(refresh_s), 1.0) + 2.0)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1787,7 +2126,7 @@ def main(argv: list[str] | None = None) -> int:
         "campaign_dir",
         nargs="?",
         default="",
-        help="Campaign directory to use for the optimization dashboard. Omit to auto-detect the active maintained campaign.",
+        help="Campaign directory to load at startup. Omit to start with no optimization campaign selected.",
     )
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR), help="Control-center output directory.")
     parser.add_argument("--audit-id", default=DEFAULT_AUDIT_ID, help="Audit id to render inside the audit dashboard.")

@@ -52,8 +52,7 @@ python -m olfactorybulb.dashboard.control_center
 That command:
 
 - defaults to `serve`
-- auto-detects the active optimization campaign from the maintained status file
-  or optimization results tree
+- starts with no optimization campaign selected unless you pass one explicitly
 - starts with the audit tab idle; no audit is run until you ask for one
 - defaults the audit runner selection to `all`, matching `python tools/run_audit.py`
 - opens on the audit tab first
@@ -119,6 +118,9 @@ Once the shell is open:
 - the selector also exposes:
   - `default` -> maintained repo-health profile
   - `all` -> full registered audit sweep
+- use the `Optimization campaign` selector to choose one of the discovered
+  campaigns under `results/notebook_runs/optimization/`; the shell no longer
+  picks one automatically
 - use `Audit arguments` for audit-specific flags such as:
   - `--profile maintained`
   - `--suite reference_bundles --details`
@@ -151,6 +153,9 @@ source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.dashboard.control_center serve \
   results/notebook_runs/optimization/codex_big_hfo_logs
 ```
+
+If you omit the campaign path, the control center starts unselected and you
+choose a campaign from the optimization-tab selector.
 
 Render only the audit dashboard:
 

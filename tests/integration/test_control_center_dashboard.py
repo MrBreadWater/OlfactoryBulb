@@ -72,27 +72,18 @@ def _fake_export_visual_dashboard(campaign_dir: Path, *, output_dir: Path, **kwa
     _export_call_kwargs.update(kwargs)
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "index.html").write_text("<html><body>optimization</body></html>")
-    (output_dir / "manifest.json").write_text(
-        json.dumps(
-            {
-                "packet_count": 7,
-                "candidate_rows": 3,
-                "generated_at": "now",
-                "manifest_revision": 1,
-                "output_dir": str(output_dir),
-            }
-        )
-    )
-    return {
+    manifest = {
         "campaign_dir": str(campaign_dir),
-        "output_dir": str(output_dir),
-        "index_html": str(output_dir / "index.html"),
-        "entrypoint_html": str(output_dir / "index.html"),
         "packet_count": 7,
         "candidate_rows": 3,
         "generated_at": "now",
         "manifest_revision": 1,
+        "output_dir": str(output_dir),
+        "index_html": str(output_dir / "index.html"),
+        "entrypoint_html": str(output_dir / "index.html"),
     }
+    (output_dir / "manifest.json").write_text(json.dumps(manifest))
+    return manifest
 
 
 def _json_post(url: str, payload: dict[str, object]) -> tuple[int, dict[str, object]]:
@@ -461,6 +452,8 @@ with TemporaryDirectory() as tmp:
     assert "control-center-audit-args-help" in html
     assert 'aria-describedby="control-center-audit-id-help audit-selection-description"' in html
     assert 'aria-describedby="control-center-audit-args-help audit-selection-description"' in html
+    assert 'id="control-center-optimization-campaign"' in html
+    assert "Choose a campaign explicitly" in html
     assert 'id="control-center-audit-args" type="text" value=""' in html
     assert "No audit has been run yet." in html
     assert "/audits/index.html?__rev=" in html
@@ -543,16 +536,20 @@ with TemporaryDirectory() as tmp:
     root = Path(tmp)
     campaign_dir = root / "campaign"
     campaign_dir.mkdir()
-    status_path = root / "status.json"
-    status_path.write_text(json.dumps({"campaign_dir": str(campaign_dir)}))
-    assert resolve_control_center_campaign(status_json=status_path) == campaign_dir.resolve()
+    assert resolve_control_center_campaign(campaign_dir) == campaign_dir.resolve()
+    assert resolve_control_center_campaign(None) is None
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
-    with patch("olfactorybulb.dashboard.control_center.DEFAULT_STATUS_JSON", root / "missing.json"), patch(
-        "olfactorybulb.dashboard.control_center.DEFAULT_OPTIMIZATION_ROOT",
-        root,
-    ), patch("olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report()):
+    campaign_a = root / "campaign_a"
+    campaign_b = root / "campaign_b"
+    campaign_a.mkdir(parents=True)
+    campaign_b.mkdir(parents=True)
+    (campaign_a / "candidate_archive.jsonl").write_text("{}\n")
+    (campaign_b / "candidate_archive.jsonl").write_text("{}\n")
+    with patch("olfactorybulb.dashboard.control_center.DEFAULT_OPTIMIZATION_ROOT", root), patch(
+        "olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report()
+    ):
         manifest = export_control_center(None, output_dir=root / "control_center", run_audit_on_start=True)
     output_dir = Path(manifest["output_dir"])
     assert manifest["campaign_dir"] is None
@@ -576,6 +573,11 @@ with TemporaryDirectory() as tmp:
     assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
     assert placeholder["placeholder"] is True
+    html = (output_dir / "index.html").read_text()
+    assert "Choose a campaign explicitly" in html
+    assert "control-center-optimization-campaign" in html
+    assert "campaign_a" in html
+    assert "campaign_b" in html
 
 print("control_center_dashboard_export: OK")
 
@@ -1351,3 +1353,84 @@ with TemporaryDirectory() as tmp:
             assert not thread.is_alive()
 
 print("control_center_dashboard_browser: OK")
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    campaigns_root = root / "optimization_campaigns"
+    campaign_a = campaigns_root / "campaign_a"
+    campaign_b = campaigns_root / "campaign_b"
+    campaign_a.mkdir(parents=True)
+    campaign_b.mkdir(parents=True)
+    (campaign_a / "candidate_archive.jsonl").write_text("{}\n")
+    (campaign_b / "candidate_archive.jsonl").write_text("{}\n")
+    server_holder: dict[str, http.server.ThreadingHTTPServer] = {}
+
+    class CapturingServer(http.server.ThreadingHTTPServer):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            server_holder["server"] = self
+
+    thread = threading.Thread(
+        target=serve_control_center,
+        kwargs={
+            "campaign_dir": None,
+            "output_dir": root / "control_center_selectable",
+            "port": 0,
+            "watch_optimization": False,
+        },
+        daemon=True,
+    )
+    with (
+        patch("olfactorybulb.dashboard.control_center.DEFAULT_OPTIMIZATION_ROOT", campaigns_root),
+        patch("olfactorybulb.dashboard.control_center.http.server.ThreadingHTTPServer", CapturingServer),
+        patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report("repo_health", "repo_health report")),
+    ):
+        thread.start()
+        deadline = time.time() + 5.0
+        while "server" not in server_holder and time.time() < deadline:
+            time.sleep(0.05)
+        assert "server" in server_holder
+        server = server_holder["server"]
+        base_url = f"http://127.0.0.1:{server.server_port}"
+
+        root_html = urlopen(f"{base_url}/", timeout=3).read().decode("utf-8")
+        assert "Choose a campaign explicitly" in root_html
+        assert "control-center-optimization-campaign" in root_html
+        assert "campaign_a" in root_html
+        assert "campaign_b" in root_html
+
+        initial_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+        assert initial_state["optimization"]["status"] == "idle"
+        assert initial_state["optimization"]["selected_campaign_dir"] == ""
+
+        selection_status, selection_payload = _json_post(
+            f"{base_url}/__optimization_select__",
+            {"campaign_dir": str(campaign_b)},
+        )
+        assert selection_status == 202
+        assert selection_payload["ok"] is True
+
+        selected_deadline = time.time() + 6.0
+        selected_state = initial_state
+        while time.time() < selected_deadline:
+            selected_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+            if (
+                selected_state["optimization"]["selected_campaign_dir"] == str(campaign_b)
+                and selected_state["optimization"]["status"] == "ready"
+            ):
+                break
+            time.sleep(0.1)
+        assert selected_state["optimization"]["selected_campaign_dir"] == str(campaign_b)
+        assert selected_state["optimization"]["status"] == "ready"
+        assert selected_state["optimization"]["badge"] == "7 packets"
+
+        selected_manifest = json.loads((root / "control_center_selectable" / "optimization" / "manifest.json").read_text())
+        assert selected_manifest["campaign_dir"] == str(campaign_b)
+        assert selected_manifest["packet_count"] == 7
+
+        server.shutdown()
+        thread.join(timeout=6.0)
+        assert not thread.is_alive()
+
+print("control_center_optimization_selection: OK")

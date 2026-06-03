@@ -55,16 +55,18 @@ use:
 
 - `python -m olfactorybulb.dashboard.control_center`
 
-That maintained command auto-detects the active optimization campaign when it
-can, serves immediately at `http://127.0.0.1:6006/` by default, falls forward
-to the next available local port if `6006` is already occupied, and leaves the
-audit tab idle until you explicitly run an audit. The default audit selection
-matches bare `python tools/run_audit.py` (`all` / new sweep), and the page now
-includes an audit runner for choosing any registered audit plus explicit audit
-arguments. It does not regenerate missing optimization packets during default
-startup. Use `--run-audit-on-start` if you explicitly want immediate audit
-execution, or `--open-browser` if you want it to launch a local browser
-automatically.
+That maintained command serves immediately at `http://127.0.0.1:6006/` by
+default, falls forward to the next available local port if `6006` is already
+occupied, and leaves the audit tab idle until you explicitly run an audit. The
+default audit selection matches bare `python tools/run_audit.py` (`all` / new
+sweep), and the page now includes an audit runner for choosing any registered
+audit plus explicit audit arguments. The optimization tab starts unselected
+unless you pass an explicit campaign path; use the on-page optimization
+selector to choose among discovered campaigns under
+`results/notebook_runs/optimization/`. It does not regenerate missing
+optimization packets during default startup. Use `--run-audit-on-start` if you
+explicitly want immediate audit execution, or `--open-browser` if you want it
+to launch a local browser automatically.
 
 For a local docs portal that points at the rendered maintained docs first and
 historical generated pages second, open:

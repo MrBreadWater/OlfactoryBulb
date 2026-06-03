@@ -746,6 +746,7 @@ def render_dashboard_shell(
         }}
         window.dispatchEvent(new CustomEvent("dashboard-shell-state", {{ detail: state }}));
       }}
+      window.__applyDashboardShellState = applyState;
       async function pollState() {{
         const endpoint = String(document.body.dataset.stateEndpoint || "").trim();
         if (!endpoint || pollState.inFlight) return;
