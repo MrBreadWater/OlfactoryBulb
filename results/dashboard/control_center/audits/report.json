@@ -451,7 +451,7 @@
             }
           ],
           "criterion_formulae": [],
-          "criterion_latex": "\\forall i,\\ \\lvert x_i - 0 \\rvert \\leq 1e-09",
+          "criterion_latex": "\\forall i,\\ c - \\epsilon \\leq x_i \\leq c + \\epsilon",
           "description": "This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.",
           "detail_level": "detail",
           "evidence": {
@@ -499,8 +499,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{R}_{\\mathrm{in}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{R}_{\\mathrm{in}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -556,8 +559,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{\\tau}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{\\tau}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -613,8 +619,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{C}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{C}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -671,9 +680,10 @@
             }
           ],
           "criterion_formulae": [
-            "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{rest}} \\leq \\mu + k\\sigma"
+            "\\mu - 2\\sigma",
+            "\\mu + 2\\sigma"
           ],
-          "criterion_latex": "\\lvert \\bar{V}_{\\mathrm{rest}} - \\mu \\rvert \\leq 2\\sigma",
+          "criterion_latex": "\\mu - 2\\sigma \\leq \\bar{V}_{\\mathrm{rest}} \\leq \\mu + 2\\sigma",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Resting Voltage rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -729,9 +739,10 @@
             }
           ],
           "criterion_formulae": [
-            "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{th}} \\leq \\mu + k\\sigma"
+            "\\mu - 2\\sigma",
+            "\\mu + 2\\sigma"
           ],
-          "criterion_latex": "\\lvert \\bar{V}_{\\mathrm{th}} - \\mu \\rvert \\leq 2\\sigma",
+          "criterion_latex": "\\mu - 2\\sigma \\leq \\bar{V}_{\\mathrm{th}} \\leq \\mu + 2\\sigma",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Threshold rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -786,8 +797,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{A}_{\\mathrm{AP}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{A}_{\\mathrm{AP}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -843,8 +857,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\overline{\\mathrm{FWHM}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\overline{\\mathrm{FWHM}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -900,8 +917,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{s}_{\\mathrm{rise}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{s}_{\\mathrm{rise}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -958,9 +978,10 @@
             }
           ],
           "criterion_formulae": [
-            "\\mu - k\\sigma \\leq \\bar{s}_{\\mathrm{fall}} \\leq \\mu + k\\sigma"
+            "\\mu - 2\\sigma",
+            "\\mu + 2\\sigma"
           ],
-          "criterion_latex": "\\lvert \\bar{s}_{\\mathrm{fall}} - \\mu \\rvert \\leq 2\\sigma",
+          "criterion_latex": "\\mu - 2\\sigma \\leq \\bar{s}_{\\mathrm{fall}} \\leq \\mu + 2\\sigma",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Falling Slope rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1015,8 +1036,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{I}_{\\mathrm{rh}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{I}_{\\mathrm{rh}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1072,8 +1096,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{t}_{\\mathrm{lat}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{t}_{\\mathrm{lat}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1129,8 +1156,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{g}_{\\mathrm{FI}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{g}_{\\mathrm{FI}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1186,8 +1216,11 @@
               "unit": ""
             }
           ],
-          "criterion_formulae": [],
-          "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{f}_{\\max}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+          "criterion_formulae": [
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+            "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+          ],
+          "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{f}_{\\max}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
           "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
           "detail_level": "detail",
           "evidence": {
@@ -1672,7 +1705,7 @@
         }
       ],
       "criterion_formulae": [],
-      "criterion_latex": "\\forall i,\\ \\lvert x_i - 0 \\rvert \\leq 1e-09",
+      "criterion_latex": "\\forall i,\\ c - \\epsilon \\leq x_i \\leq c + \\epsilon",
       "description": "This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.",
       "detail_level": "detail",
       "evidence": {
@@ -1720,8 +1753,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{R}_{\\mathrm{in}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{R}_{\\mathrm{in}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1777,8 +1813,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{\\tau}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{\\tau}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1834,8 +1873,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{C}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{C}_m) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1892,9 +1934,10 @@
         }
       ],
       "criterion_formulae": [
-        "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{rest}} \\leq \\mu + k\\sigma"
+        "\\mu - 2\\sigma",
+        "\\mu + 2\\sigma"
       ],
-      "criterion_latex": "\\lvert \\bar{V}_{\\mathrm{rest}} - \\mu \\rvert \\leq 2\\sigma",
+      "criterion_latex": "\\mu - 2\\sigma \\leq \\bar{V}_{\\mathrm{rest}} \\leq \\mu + 2\\sigma",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Resting Voltage rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -1950,9 +1993,10 @@
         }
       ],
       "criterion_formulae": [
-        "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{th}} \\leq \\mu + k\\sigma"
+        "\\mu - 2\\sigma",
+        "\\mu + 2\\sigma"
       ],
-      "criterion_latex": "\\lvert \\bar{V}_{\\mathrm{th}} - \\mu \\rvert \\leq 2\\sigma",
+      "criterion_latex": "\\mu - 2\\sigma \\leq \\bar{V}_{\\mathrm{th}} \\leq \\mu + 2\\sigma",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Threshold rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2007,8 +2051,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{A}_{\\mathrm{AP}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{A}_{\\mathrm{AP}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2064,8 +2111,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\overline{\\mathrm{FWHM}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\overline{\\mathrm{FWHM}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2121,8 +2171,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{s}_{\\mathrm{rise}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{s}_{\\mathrm{rise}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2179,9 +2232,10 @@
         }
       ],
       "criterion_formulae": [
-        "\\mu - k\\sigma \\leq \\bar{s}_{\\mathrm{fall}} \\leq \\mu + k\\sigma"
+        "\\mu - 2\\sigma",
+        "\\mu + 2\\sigma"
       ],
-      "criterion_latex": "\\lvert \\bar{s}_{\\mathrm{fall}} - \\mu \\rvert \\leq 2\\sigma",
+      "criterion_latex": "\\mu - 2\\sigma \\leq \\bar{s}_{\\mathrm{fall}} \\leq \\mu + 2\\sigma",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Falling Slope rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2236,8 +2290,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{I}_{\\mathrm{rh}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{I}_{\\mathrm{rh}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2293,8 +2350,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{t}_{\\mathrm{lat}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{t}_{\\mathrm{lat}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2350,8 +2410,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{g}_{\\mathrm{FI}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{g}_{\\mathrm{FI}}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {
@@ -2407,8 +2470,11 @@
           "unit": ""
         }
       ],
-      "criterion_formulae": [],
-      "criterion_latex": "\\lvert \\ln\\!\\left(\\frac{\\bar{f}_{\\max}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\rvert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+      "criterion_formulae": [
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
+        "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}"
+      ],
+      "criterion_latex": "\\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) - 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)} \\leq \\ln(\\bar{f}_{\\max}) \\leq \\ln(\\mu) - \\frac{1}{2}\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right) + 2\\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma}{\\mu}\\right)^2\\right)}",
       "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
       "detail_level": "detail",
       "evidence": {

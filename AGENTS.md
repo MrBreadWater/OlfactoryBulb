@@ -359,17 +359,18 @@ contract for future sessions.
   - for math-rendered criteria, prefer one headline inequality or equality in
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
-  - when a reference-band check is centered around a mean, prefer an absolute-
-    value criterion such as `\lvert \bar{x} - \mu \rvert \le k\sigma`; use a
-    metric-specific observed symbol when the quantity has a common notation
-    such as `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or
-    `\bar{I}_{\mathrm{rh}}`, and keep `\bar{x}` as the fallback only when no
-    clearer symbol exists. Render the selected sigma multiplier numerically in
-    the headline inequality rather than leaving a literal `k` in the display.
-    For lognormal reconstructions, prefer the algebraically simplified directly
-    substituted log-space inequality over introducing auxiliary symbols like
-    `\mu_\ell` or `\sigma_\ell` when the substituted form stays readable.
-    Reserve explicit `L/U` endpoints for asymmetric or non-centered modes
+  - when a reference-band check is centered around a mean, prefer a direct
+    two-sided inequality such as `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
+    rather than an absolute-value shorthand; use a metric-specific observed
+    symbol when the quantity has a common notation such as
+    `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or `\bar{I}_{\mathrm{rh}}`, and
+    keep `\bar{x}` as the fallback only when no clearer symbol exists. Render
+    the selected sigma multiplier numerically in the headline inequality
+    rather than leaving a literal `k` in the display. For lognormal
+    reconstructions, prefer the explicit centered log-space inequality with the
+    substituted mean/variance terms rather than introducing auxiliary symbols
+    like `\mu_\ell` or `\sigma_\ell` or `L/U` endpoints unless the paper
+    actually defines those quantities
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
       dicts when possible

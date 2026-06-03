@@ -56,9 +56,10 @@ sample_report = AuditReport(
             status="PASS",
             title="Alpha math",
             criterion="The observed mean should stay within the accepted interval.",
-            criterion_latex=r"\lvert \bar{x} - \mu \rvert \leq k\sigma",
+            criterion_latex=r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             criterion_formulae=[
-                r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
+                r"\mu - k\sigma",
+                r"\mu + k\sigma",
             ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
@@ -251,8 +252,11 @@ with TemporaryDirectory() as tmp:
     assert "./assets/katex/katex.min.js" in html
     assert "./assets/katex/contrib/auto-render.min.js" in html
     assert "cdn.jsdelivr.net" not in html
-    assert r"\lvert \bar{x} - \mu \rvert \leq k\sigma" in html
+    assert r"\lvert" not in html
+    assert r"\rvert" not in html
     assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in html
+    assert "justify-content: center" in html
+    assert "color: #000" in html
     assert "observed group mean" in html
     assert "f-I curve" in html
     assert "data-series-graph" in html

@@ -208,9 +208,9 @@ needs a different shape.
 If a numerical criterion should render compactly in the dashboard, make it
 explicit with `criterion_latex`, optional `criterion_formulae`, and
 `criterion_definitions`. The audit dashboard uses the bundled KaTeX runtime
-in the browser, so standard LaTeX delimiters such as `\lvert` and `\rvert`
-render correctly. Keep `criterion` as the plain-language fallback for items
-that do not opt into math rendering:
+in the browser, so direct inequalities and ordinary LaTeX math render
+correctly. Keep `criterion` as the plain-language fallback for items that do
+not opt into math rendering:
 
 ```toml
 [[checks]]
@@ -221,9 +221,10 @@ minimum = 8.0
 maximum = 12.0
 title = "Soma diameter stays inside the accepted range"
 criterion = "The observed soma diameter should remain inside the accepted range."
-criterion_latex = '\lvert \bar{x} - \mu \rvert \leq k\sigma'
+criterion_latex = '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma'
 criterion_formulae = [
-  '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
+  '\mu - k\sigma',
+  '\mu + k\sigma',
 ]
 criterion_definitions = [
   { symbol = '\bar{x}', definition = 'observed group mean' },
@@ -233,14 +234,14 @@ criterion_definitions = [
 ]
 ```
 
-For reference-band rows, prefer a compact centered inequality when the rule is
+For reference-band rows, prefer a compact two-sided inequality when the rule is
 centered around a mean, and keep explicit endpoint notation only for modes that
 really need asymmetric bounds. The rendered headline inequality substitutes the
 configured sigma multiplier numerically, so a `reference_sigma_multiplier = 2`
 setting will show `2\sigma` in the display. For example:
 
-- symmetric bands: `\lvert \bar{x} - \mu \rvert \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
-- lognormal bands: `\lvert \ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
+- symmetric bands: `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
+- lognormal bands: `\ln(\mu) - \frac{1}{2}\ln(1 + (\sigma / \mu)^2) - k\sqrt{\ln(1 + (\sigma / \mu)^2)} \leq \ln(\bar{x}) \leq \ln(\mu) - \frac{1}{2}\ln(1 + (\sigma / \mu)^2) + k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
 
 If a log-space criterion can be reduced algebraically without obscuring the
 reference quantities, prefer that reduced form over a longer expanded sum of

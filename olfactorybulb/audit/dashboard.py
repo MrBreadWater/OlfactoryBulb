@@ -2310,9 +2310,11 @@ def render_audit_dashboard_html(
     .criterion-math {{
       margin-top: 2px;
       display: flex;
+      justify-content: center;
       align-items: center;
       overflow-x: auto;
       overflow-y: hidden;
+      color: #000;
       padding-bottom: 2px;
     }}
     .criterion-formulae {{
@@ -2327,19 +2329,19 @@ def render_audit_dashboard_html(
       align-items: center;
       overflow-x: auto;
       overflow-y: hidden;
-      color: #334155;
+      color: #000;
     }}
     .criterion-math .katex-display,
     .criterion-formula .katex,
     .criterion-definition-symbol .katex {{
       background: transparent !important;
-      color: inherit;
+      color: #000;
     }}
     .criterion-math .katex-display {{
       display: block;
       min-width: max-content;
       max-width: none;
-      margin: 0;
+      margin: 0 auto;
     }}
     .criterion-formula .katex {{
       display: block;
@@ -2369,7 +2371,7 @@ def render_audit_dashboard_html(
       min-height: 0;
       min-width: 34px;
       padding: 0;
-      color: #1f2937;
+      color: #000;
       white-space: nowrap;
     }}
     .criterion-definition-meaning {{
