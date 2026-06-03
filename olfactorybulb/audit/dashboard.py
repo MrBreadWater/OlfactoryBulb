@@ -1341,6 +1341,20 @@ def _item_search_blob(item: AuditItem) -> str:
     return " ".join(_expand_terms(field, sentence_case=True) for field in fields if field).lower()
 
 
+def _clean_item_title_for_card(item: AuditItem) -> str:
+    title = str(item.title or "").strip()
+    if not title:
+        return title
+
+    title = re.sub(r"^\s*audit\s*group\s*:\s*", "", title, count=1, flags=re.IGNORECASE)
+    group_hint = str(item.group_title or item.group_id or "").strip()
+    if group_hint:
+        stripped_with_group = re.sub(rf"^\s*{re.escape(group_hint)}\s*:\s*", "", title, count=1)
+        if stripped_with_group and stripped_with_group.strip():
+            title = stripped_with_group
+    return title.strip()
+
+
 def _render_item_card(item_payload: dict[str, Any]) -> str:
     item = AuditItem(**item_payload)
     evidence = dict(item.evidence or {})
@@ -1391,7 +1405,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
             if item.group_title or item.group_id else ""
         ),
         "<span class='item-header-row'>",
-        f"<span class='item-title'>{_esc(_expand_terms(item.title, sentence_case=True))}</span>",
+        f"<span class='item-title'>{_esc(_expand_terms(_clean_item_title_for_card(item), sentence_case=True))}</span>",
         _render_status_badge(item.status),
         "</span>",
         (f"<span class='item-summary-text'>{compact_messages_html}</span>" if compact_messages_html else ""),
