@@ -110,6 +110,18 @@
 - Recommendation:
   - Narrow cancellation triggers to terminal remote-state conditions or explicit user-cancel signals; keep non-terminal local errors as warnings and continue monitoring with backoff/retry.
 
+### 11) Medium — notebook utility scripts hard-code absolute checkout paths
+
+- Location: `notebooks/website_header_blenderneuron_style.py:16-19`, `notebooks/website_header_animated_concepts.py:18-19`, `notebooks/website_header_animated_concepts.py:132`, `notebooks/website_header_concepts.py:533-539`
+- Evidence:
+  - `REPO = Path("/home/alek/OlfactoryBulb")`
+  - `SWEEP_INFO = "/home/alek/OlfactoryBulb/results/sweeps/.../sweep_info.json"`
+  - `--run-dir` and `--output-dir` defaults hardcode `/home/alek/OlfactoryBulb/...`
+- Why suboptimal:
+  - These scripts fail on non-`/home/alek` checkouts and silently capture stale artifact paths from a past environment.
+- Recommendation:
+  - Derive repository and default directories from script location (or `Path(__file__).resolve()`), and require explicit artifact/run inputs for reproducible CLI execution.
+
 ## Suggested Next Step
 
 - Prioritize the three High findings first (remote defaults, campaign path, and monitor cancellation behavior), then parsing/observability Medium items that affect campaign correctness and live monitoring.
