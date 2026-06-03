@@ -338,7 +338,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
     item = AuditItem(**item_payload)
     interval = _extract_interval_visual_data(item)
     card_id = _safe_dom_id(item.check_id)
-    item_body_id = f"item-body-{card_id}"
+    item_detail_body_id = f"item-detail-body-{card_id}"
     compact_messages = _collapsed_summary_messages(item)
     compact_messages_html = "".join(
         f"<div class='item-summary-message'>{_esc(_expand_terms(message, sentence_case=True))}</div>"
@@ -353,7 +353,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         "<header class='item-header'>",
         (
             f"<button class='item-toggle' type='button' data-item-toggle aria-expanded='false' "
-            f"aria-controls='{_esc(item_body_id)}' aria-label='Expand {_esc(_expand_terms(item.title, sentence_case=True))}'>"
+            f"aria-controls='{_esc(item_detail_body_id)}' aria-label='Expand {_esc(_expand_terms(item.title, sentence_case=True))}'>"
         ),
         "<span class='item-toggle-icon' aria-hidden='true'>&#9656;</span>",
         "<span class='item-header-main'>",
@@ -362,11 +362,21 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         _render_status_badge(item.status),
         "</span>",
         (f"<span class='item-summary-text'>{compact_messages_html}</span>" if compact_messages_html else ""),
-        (f"<span class='item-summary-interval'>{compact_interval_html}</span>" if compact_interval_html else ""),
         "</span>",
         "</button>",
         "</header>",
-        f"<div class='item-body' id='{_esc(item_body_id)}' hidden>",
+    ]
+    if compact_interval_html:
+        sections.extend(
+            [
+                "<div class='item-body-summary'>",
+                compact_interval_html,
+                "</div>",
+            ]
+        )
+    sections.extend(
+        [
+            f"<div class='item-body item-detail-body' id='{_esc(item_detail_body_id)}' data-item-detail-body hidden>",
         f"<div class='item-block'><h4>Check id</h4><p class='check-id'>{_esc(item.check_id)}</p></div>",
         f"<div class='item-block'><h4>Criterion</h4><p>{_esc(_expand_terms(item.criterion, sentence_case=True))}</p></div>",
         f"<div class='item-block'><h4>Description</h4><p>{_esc(_expand_terms(item.description, sentence_case=True))}</p></div>",
@@ -375,7 +385,8 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
             "<div class='item-block'><h4>Decision basis</h4>"
             f"<p>{_esc(_expand_terms(item.acceptable_basis, sentence_case=True))}</p></div>"
         ),
-    ]
+        ]
+    )
     status_reason = status_reason_text(item)
     if status_reason:
         sections.append(
@@ -804,11 +815,15 @@ def render_audit_dashboard_html(
     .item-summary-message {{
       overflow-wrap: anywhere;
     }}
-    .item-summary-interval {{
-      display: block;
+    .item-body-summary {{
+      padding: 0 16px 14px 46px;
+      background: #ffffff;
     }}
     .check-id {{ margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
     .item-body {{ padding: 16px; display: flex; flex-direction: column; gap: 12px; }}
+    .item-detail-body[hidden] {{
+      display: none !important;
+    }}
     .item-block h4 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); }}
     .item-block p {{ margin: 0; }}
     .status-reason-block {{
@@ -1149,7 +1164,7 @@ def render_audit_dashboard_html(
         if (!item) return;
         item.classList.toggle("item-collapsed", Boolean(collapse));
         const button = item.querySelector("[data-item-toggle]");
-        const body = item.querySelector(".item-body");
+        const body = item.querySelector("[data-item-detail-body]");
         if (button) {{
           button.setAttribute("aria-expanded", collapse ? "false" : "true");
           button.setAttribute("aria-label", collapse ? "Expand item" : "Collapse item");

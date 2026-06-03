@@ -74,9 +74,11 @@ with TemporaryDirectory() as tmp:
     assert "group-link-label" in html
     assert "data-item-card" in html
     assert "data-item-toggle" in html
+    assert "data-item-detail-body" in html
     assert "item-collapsed" in html
     assert "data-interval-visual" in html
     assert "item-compact-interval" in html
+    assert "item-body-summary" in html
     assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html

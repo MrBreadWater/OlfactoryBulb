@@ -376,6 +376,9 @@ contract for future sessions.
     - audit item cards should remain compact by default, with item-level
       expand/collapse plus global expand/collapse controls that affect both
       groups and items
+    - collapsed audit item cards should show only the title/status summary and
+      any compact numeric strip; the full detail body must stay hidden until
+      expanded
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed

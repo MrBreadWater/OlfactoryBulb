@@ -33,6 +33,15 @@ def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> Aud
                 description="Description",
                 acceptable="Acceptable",
                 acceptable_basis="Configured",
+                evidence={
+                    "MC_mean": 0.21,
+                    "reference_mean": 0.45,
+                    "reference_unit": "Hz",
+                    "accepted_low": 0.12,
+                    "accepted_high": 1.03,
+                    "accepted_interval_mode": "lognormal_sd",
+                    "accepted_interval_standard": "lognormal reference interval",
+                },
                 group_id=audit_id,
                 group_title=title,
                 detail_level="summary",
@@ -641,6 +650,63 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert preserved == {"auditId": "human_review_status", "auditArgs": "--custom-check"}
+
+            status, _payload = _json_post(
+                f"{base_url.rstrip('/')}/__audit_run__",
+                {"audit_id": "human_review_status", "audit_args_text": ""},
+            )
+            assert status == 202
+            audit_ready = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 8000;"
+                "  const tick = async () => {"
+                "    try {"
+                "      const response = await fetch('/__control_center_state__', { cache: 'no-store' });"
+                "      const state = await response.json();"
+                "      if (state.audit && state.audit.status === 'ready' && state.audit.audit_id === 'human_review_status') { resolve(true); return; }"
+                "    } catch (_error) {}"
+                "    if (Date.now() > deadline) { resolve(false); return; }"
+                "    setTimeout(tick, 125);"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert audit_ready is True
+            client.call("Page.navigate", {"url": f"{base_url}audits/index.html"})
+            cards_ready = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 8000;"
+                "  const tick = () => {"
+                "    const card = document.querySelector('[data-item-card]');"
+                "    if (card && card.querySelector('[data-item-detail-body]')) { resolve(true); return; }"
+                "    if (Date.now() > deadline) { resolve(false); return; }"
+                "    setTimeout(tick, 100);"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert cards_ready is True
+            collapsed = client.eval(
+                "(() => {"
+                "  const card = document.querySelector('[data-item-card]');"
+                "  const summary = card.querySelector('.item-body-summary');"
+                "  const detail = card.querySelector('[data-item-detail-body]');"
+                "  return {"
+                "    collapsed: card.classList.contains('item-collapsed'),"
+                "    summaryVisible: Boolean(summary) && getComputedStyle(summary).display !== 'none',"
+                "    detailHidden: Boolean(detail) && detail.hidden === true,"
+                "    detailDisplay: detail ? getComputedStyle(detail).display : '',"
+                "    compactIntervalInHeader: Boolean(card.querySelector('.item-header .item-compact-interval'))"
+                "  };"
+                "})()"
+            )
+            assert collapsed == {
+                "collapsed": True,
+                "summaryVisible": True,
+                "detailHidden": True,
+                "detailDisplay": "none",
+                "compactIntervalInHeader": False,
+            }
         finally:
             client.close()
             proc.terminate()
