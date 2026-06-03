@@ -178,6 +178,10 @@ contract for future sessions.
   - For interactive dashboard changes, verify the actual control behavior
     (draft preservation, reruns, loading/progress states, and tab content) in
     the served page, not only exported HTML or static snapshots.
+  - For visual/layout dashboard changes, verify at least one rendered
+    post-CSS state that exercises the changed layout. DOM presence/order tests
+    are not enough when the task is spacing, overflow, collapse behavior,
+    z-order, or responsive fit.
 - For notebook-facing defaults, verify the actual notebook/runtime paths that
   consume them.
   - If a user reports that a just-delivered change failed, reproduce that exact
@@ -324,6 +328,13 @@ contract for future sessions.
   - make audit reports glanceable by default, with collapsed groups/items and
     explicit expansion controls
   - keep warnings visible, specific, and non-duplicated
+  - keep persistent audit-card body regions visually coherent in collapsed and
+    expanded states; numeric summaries, notes/caveats, and warning blocks
+    should share deliberate spacing/order instead of relying on each block's
+    incidental first-child margins
+  - when changing audit-card body layout, check representative combinations:
+    no persistent body, numeric-only, notes-only, warning-only, notes plus
+    warning, and numeric plus notes/warning when applicable
   - prefer responsive spacing such as `clamp()` over fixed desktop-only values
 
 - Audit dashboard behavior that should stay stable:
