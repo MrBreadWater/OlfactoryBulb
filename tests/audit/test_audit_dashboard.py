@@ -81,10 +81,12 @@ with TemporaryDirectory() as tmp:
     assert "data-interval-visual" in html
     assert "item-compact-interval" in html
     assert "item-body-summary" in html
+    assert "item-body-warning" in html
     assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html
     assert "Warning" in html
+    assert "warning-summary-text" in html
     assert "Human review" not in html
     assert "reviewer: human" not in html
 

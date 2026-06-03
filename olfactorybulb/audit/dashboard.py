@@ -302,12 +302,9 @@ def _render_evidence(item: AuditItem) -> str:
 
 def _collapsed_summary_messages(item: AuditItem) -> list[str]:
     messages: list[str] = []
-    status_reason = str(status_reason_text(item)).strip()
-    if status_reason:
-        messages.append(status_reason)
     if item.note:
         note_text = str(item.note).strip()
-        if note_text and note_text not in messages:
+        if note_text:
             messages.append(note_text)
     notes_list = item.evidence.get("notes") if isinstance(item.evidence, dict) else None
     if isinstance(notes_list, list):
@@ -316,7 +313,7 @@ def _collapsed_summary_messages(item: AuditItem) -> list[str]:
             if rendered and rendered not in messages:
                 messages.append(rendered)
                 break
-    return messages[:2]
+    return messages[:1]
 
 
 def _item_search_blob(item: AuditItem) -> str:
@@ -345,6 +342,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         for message in compact_messages
     )
     compact_interval_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
+    warning_text = status_reason_text(item)
     sections = [
         (
             f"<article class='item-card {_status_class(item.status)} item-collapsed' data-item-card data-status='{_esc(item.status)}' "
@@ -374,6 +372,15 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
                 "</div>",
             ]
         )
+    if warning_text:
+        sections.extend(
+            [
+                "<div class='item-body-warning'>",
+                "<div class='warning-summary-label'>Warning</div>",
+                f"<div class='warning-summary-text'>{_esc(_expand_terms(warning_text, sentence_case=True))}</div>",
+                "</div>",
+            ]
+        )
     sections.extend(
         [
             f"<div class='item-body item-detail-body' id='{_esc(item_detail_body_id)}' data-item-detail-body hidden>",
@@ -387,11 +394,10 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ),
         ]
     )
-    status_reason = status_reason_text(item)
-    if status_reason:
+    if warning_text:
         sections.append(
             "<div class='item-block status-reason-block'><h4>Warning</h4>"
-            f"<p>{_esc(_expand_terms(status_reason, sentence_case=True))}</p></div>"
+            f"<p>{_esc(_expand_terms(warning_text, sentence_case=True))}</p></div>"
         )
     sections.append(_render_evidence(item))
     if item.note:
@@ -829,6 +835,26 @@ def render_audit_dashboard_html(
     .item-body-summary {{
       padding: clamp(12px, 1vw, 16px) clamp(16px, 3vw, 60px);
       background: #ffffff;
+    }}
+    .item-body-warning {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 12px clamp(16px, 3vw, 60px) 0;
+      background: #ffffff;
+    }}
+    .warning-summary-label {{
+      color: #8a4b00;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }}
+    .warning-summary-text {{
+      color: #8a4b00;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
     }}
     .check-id {{ margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
     .item-body {{ padding: 16px; display: flex; flex-direction: column; gap: 12px; }}

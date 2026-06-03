@@ -84,6 +84,7 @@ assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
 assert "Warning" in plain
 assert "Warning surfaced for an unresolved caveat or condition" in plain
+assert "Why This Is A Warning" not in plain
 assert "Human Review" not in plain
 assert "Accepted | reviewer: human | Manually reviewed and accepted." not in plain
 

@@ -381,6 +381,9 @@ contract for future sessions.
     - collapsed audit item cards should show only the title/status summary and
       any compact numeric strip; the full detail body must stay hidden until
       expanded
+    - warning text should be rendered in its own persistent collapsed block,
+      not mixed into the title/status summary area; the header should stay
+      clean and the warning block should collapse alongside the card body
     - when tuning dashboard spacing or summary-strip padding, prefer responsive
       `clamp()`-based values that scale across window sizes and monitor
       resolutions over fixed desktop-only padding
