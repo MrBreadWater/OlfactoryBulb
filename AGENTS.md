@@ -368,6 +368,9 @@ contract for future sessions.
       the top banner on the right, not as oversized tab content; tab buttons
       should stay compact and the banner chips should carry the label, status
       badge, and short state/detail text
+    - the full optimization campaign path should appear only inside the
+      optimization tab panel, not in the top banner subtitle or other banner
+      chrome
     - running audit/optimization banner chips should be visually
       distinguishable with a subtle animated aura around the chip outline, but
       the header should stay clean and uncluttered

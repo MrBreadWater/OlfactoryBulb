@@ -285,6 +285,9 @@ with TemporaryDirectory() as tmp:
     assert "/__control_center_state__" in html
     assert "shell-status-strip" in html
     assert "shell-status-chip" in html
+    assert "Optimization campaign" in html
+    assert str(campaign_dir) not in html.split("<nav class=\"tab-bar\"", 1)[0]
+    assert str(campaign_dir) in html
     assert "No audit is running yet." in html
     assert ">default<" in html
     assert ">all<" in html

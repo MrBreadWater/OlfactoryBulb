@@ -400,6 +400,33 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
 """
 
 
+def _render_optimization_context_panel(*, campaign_label: str, campaign_path_text: str | None = None) -> str:
+    normalized = str(campaign_path_text or campaign_label or "").strip() or "no active optimization campaign detected"
+    details = (
+        "The optimization tab shows the active campaign path that was auto-detected for this session."
+        if normalized != "no active optimization campaign detected"
+        else "No active optimization campaign could be auto-detected from the maintained status file or optimization results directory."
+    )
+    campaign_text = html_escape(normalized)
+    return f"""
+<section class="toolbar-card optimization-context-card">
+  <div class="toolbar-card-header">
+    <div>
+      <h2>Optimization campaign</h2>
+      <p>{html_escape(details)}</p>
+    </div>
+  </div>
+  <div class="status-grid">
+    <div class="status-card">
+      <span>Campaign</span>
+      <strong>{campaign_text}</strong>
+      <small>{html_escape(details)}</small>
+    </div>
+  </div>
+</section>
+"""
+
+
 def _initial_shell_state(*, audit_id: str, audit_args: list[str], campaign_label: str) -> dict[str, Any]:
     return {
         "updated_at": datetime.now().isoformat(timespec="seconds"),
@@ -423,7 +450,7 @@ def _initial_shell_state(*, audit_id: str, audit_args: list[str], campaign_label
             "badge": "loading",
             "badge_tone": "running",
             "message": (
-                f"Preparing optimization view for {campaign_label}"
+                "Preparing optimization view"
                 if campaign_label and campaign_label != "no active optimization campaign detected"
                 else "No active optimization campaign detected yet."
             ),
@@ -469,20 +496,25 @@ def _write_control_center_shell(
     root_dir: Path,
     *,
     campaign_label: str,
+    campaign_path_text: str | None,
     audit_id: str,
     audit_args: list[str],
     shell_state: dict[str, Any],
 ) -> None:
     shell_html = render_dashboard_shell(
         title="OlfactoryBulb Control Center",
-        subtitle=f"{campaign_label} | docs, audits, and optimization in one maintained shell",
+        subtitle="docs, audits, and optimization in one maintained shell",
         tabs=_module_tabs(),
         initial_tab="audits",
         panel_toolbar_html_by_key={
             "audits": _render_audit_runner_panel(
                 audit_id=audit_id,
                 audit_args=audit_args,
-            )
+            ),
+            "optimization": _render_optimization_context_panel(
+                campaign_label=campaign_label,
+                campaign_path_text=campaign_path_text,
+            ),
         },
         shell_state=shell_state,
         state_endpoint="/__control_center_state__",
@@ -895,6 +927,7 @@ def export_control_center(
             reason="No active optimization campaign could be auto-detected from the maintained status file or optimization results directory.",
         )
         campaign_label = "no active optimization campaign detected"
+        campaign_path_text = None
     else:
         log(f"rendering optimization dashboard from {campaign_path}")
         optimization_manifest = hfo_dashboard.export_visual_dashboard(
@@ -908,7 +941,8 @@ def export_control_center(
             status_json=status_json,
             asset_url_prefix="/repo",
         )
-        campaign_label = str(campaign_path)
+        campaign_label = campaign_path.name
+        campaign_path_text = str(campaign_path)
     _write_audit_history(audits_dir, [])
     if run_audit_on_start:
         log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
@@ -968,6 +1002,7 @@ def export_control_center(
     _write_control_center_shell(
         root_dir,
         campaign_label=campaign_label,
+        campaign_path_text=campaign_path_text,
         audit_id=audit_id,
         audit_args=resolved_audit_args,
         shell_state=shell_state,
@@ -1055,7 +1090,8 @@ def serve_control_center(
     state_path = root_dir / "state.json"
     optimization_dir.mkdir(parents=True, exist_ok=True)
     audits_dir.mkdir(parents=True, exist_ok=True)
-    campaign_label = str(campaign_path) if campaign_path is not None else "no active optimization campaign detected"
+    campaign_label = campaign_path.name if campaign_path is not None else "no active optimization campaign detected"
+    campaign_path_text = str(campaign_path) if campaign_path is not None else None
     base_state_lock = threading.RLock()
     base_state = _initial_shell_state(
         audit_id=audit_id,
@@ -1103,6 +1139,7 @@ def serve_control_center(
     _write_control_center_shell(
         root_dir,
         campaign_label=campaign_label,
+        campaign_path_text=campaign_path_text,
         audit_id=audit_id,
         audit_args=resolved_audit_args,
         shell_state=base_state,
