@@ -373,6 +373,8 @@ contract for future sessions.
       of duplicating those controls in a global page toolbar
     - the tab content area should read as one full working surface rather than
       a card nested inside another card
+    - audit groups should default to collapsed in the rendered report, with
+      explicit expand controls for the group list and the item cards
     - audit item cards should remain compact by default, with item-level
       expand/collapse plus global expand/collapse controls that affect both
       groups and items

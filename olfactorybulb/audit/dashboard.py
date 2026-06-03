@@ -407,14 +407,14 @@ def _render_group(group: dict[str, Any]) -> str:
     items_html = "\n".join(_render_item_card(item) for item in group["items"])
     return "".join(
         [
-            f"<section id='group-{_esc(group['group_id'])}' class='group-section' data-group-section "
+            f"<section id='group-{_esc(group['group_id'])}' class='group-section group-collapsed' data-group-section "
             f"data-group-id='{_esc(group['group_id'])}' data-worst-status='{_esc(group['worst_status'])}'>",
             "<header class='group-header'>",
             f"<div class='group-heading'><h2>{_esc(_expand_terms(group['title'], sentence_case=True))}</h2>",
             "</div>",
             "<div class='group-header-actions'>",
             f"<div class='summary-row'>{_render_summary(group['summary'])}</div>",
-            "<button class='action-button group-toggle' type='button' data-group-toggle>Collapse</button>",
+            "<button class='action-button group-toggle' type='button' data-group-toggle>Expand</button>",
             "</div>",
             "</header>",
             f"<div class='items-grid' data-group-items>{items_html}</div>",
@@ -1247,6 +1247,7 @@ def render_audit_dashboard_html(
       }});
       searchInput?.addEventListener("input", applyFilters);
       searchInput?.addEventListener("change", applyFilters);
+      groupSections.forEach((section) => toggleGroup(section, true));
       itemCards.forEach((item) => toggleItem(item, true));
       applyFilters();
     }})();

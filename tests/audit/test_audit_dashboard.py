@@ -70,6 +70,8 @@ with TemporaryDirectory() as tmp:
     assert "Failures and warnings only" in html
     assert "Collapse all groups" in html
     assert "aria-pressed=\"false\"" in html
+    assert "group-collapsed" in html
+    assert ">Expand<" in html
     assert "Show detail items" not in html
     assert "group-link-label" in html
     assert "data-item-card" in html

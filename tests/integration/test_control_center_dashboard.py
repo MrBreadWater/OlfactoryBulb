@@ -688,10 +688,13 @@ with TemporaryDirectory() as tmp:
             assert cards_ready is True
             collapsed = client.eval(
                 "(() => {"
+                "  const group = document.querySelector('[data-group-section]');"
                 "  const card = document.querySelector('[data-item-card]');"
                 "  const summary = card.querySelector('.item-body-summary');"
                 "  const detail = card.querySelector('[data-item-detail-body]');"
                 "  return {"
+                "    groupCollapsed: Boolean(group) && group.classList.contains('group-collapsed'),"
+                "    groupItemsHidden: Boolean(group) && getComputedStyle(group.querySelector('[data-group-items]')).display === 'none',"
                 "    collapsed: card.classList.contains('item-collapsed'),"
                 "    summaryVisible: Boolean(summary) && getComputedStyle(summary).display !== 'none',"
                 "    detailHidden: Boolean(detail) && detail.hidden === true,"
@@ -701,6 +704,8 @@ with TemporaryDirectory() as tmp:
                 "})()"
             )
             assert collapsed == {
+                "groupCollapsed": True,
+                "groupItemsHidden": True,
                 "collapsed": True,
                 "summaryVisible": True,
                 "detailHidden": True,
