@@ -31,7 +31,7 @@ def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> Aud
             status="PASS",
             title="Alpha pass",
             criterion="Alpha should pass.",
-            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+            criterion_latex=r"\lvert \bar{x} - \mu \rvert \leq k\sigma",
             criterion_formulae=[
                 r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
@@ -116,7 +116,7 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Environment pass",
                     criterion="Criterion",
-                    criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+                    criterion_latex=r"\lvert \bar{x} - \mu \rvert \leq k\sigma",
                     criterion_formulae=[r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
@@ -155,7 +155,7 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Short item",
                     criterion="Criterion",
-                    criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+                    criterion_latex=r"\lvert \bar{x} - \mu \rvert \leq k\sigma",
                     criterion_formulae=[r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
@@ -496,7 +496,7 @@ with TemporaryDirectory() as tmp:
     output_dir = Path(manifest["output_dir"])
     preserved_audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert len(preserved_audit_report["groups"]) == 1
-    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
+    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\lvert \bar{x} - \mu \rvert \leq k\sigma"
     assert preserved_audit_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     preserved_audits_html = (output_dir / "audits" / "index.html").read_text()
     assert "./assets/mathjax/tex-svg.js" in preserved_audits_html
@@ -542,7 +542,7 @@ with TemporaryDirectory() as tmp:
     assert "./assets/mathjax/tex-svg.js" in audits_html
     assert "cdn.jsdelivr.net" not in audits_html
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
-    assert audit_report["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
+    assert audit_report["items"][0]["criterion_latex"] == r"\lvert \bar{x} - \mu \rvert \leq k\sigma"
     assert audit_report["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
@@ -744,7 +744,7 @@ with TemporaryDirectory() as tmp:
         first_run_titles = {group["title"] for group in first_run_report["groups"]}
         assert "Environment/install audit" in first_run_titles
         assert "Scratch boundary audit" in first_run_titles
-        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
+        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\lvert \bar{x} - \mu \rvert \leq k\sigma"
         assert first_run_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
         assert first_run_report["groups"][0]["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
 
@@ -967,32 +967,28 @@ with TemporaryDirectory() as tmp:
             math_render = client.eval(
                 "new Promise((resolve) => {"
                 "  const deadline = Date.now() + 12000;"
-                "  const tick = () => {"
+                "  const tick = async () => {"
+                "    try {"
+                "      if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {"
+                "        await window.MathJax.startup.promise;"
+                "      }"
+                "    } catch (_error) {}"
                 "    const equation = document.querySelector('.criterion-math');"
-                "    const equationSvg = equation ? equation.querySelector('svg') : null;"
-                "    const formulaSvgCount = document.querySelectorAll('.criterion-formula svg').length;"
+                "    const equationRendered = Boolean(equation && equation.querySelector('mjx-container'));"
+                "    const formulaRows = Array.from(document.querySelectorAll('.criterion-formula'));"
+                "    const formulaRendered = formulaRows.length >= 1 && formulaRows.every((row) => row.querySelector('mjx-container'));"
                 "    const definitions = Array.from(document.querySelectorAll('.criterion-definition'));"
-                "    const definitionSvgCount = definitions.filter((row) => row.querySelector('.criterion-definition-symbol svg')).length;"
+                "    const definitionRendered = definitions.length >= 3 && definitions.every((row) => row.querySelector('.criterion-definition-symbol mjx-container'));"
                 "    const definitionTexts = definitions.map((row) => ({"
                 "      meaning: row.querySelector('.criterion-definition-meaning')?.textContent?.trim() || '',"
                 "      symbolText: row.querySelector('.criterion-definition-symbol')?.textContent?.trim() || ''"
                 "    }));"
-                "    if (equationSvg && formulaSvgCount >= 1 && definitionSvgCount >= 3 && definitions.length >= 3) {"
-                "      resolve({"
-                "        equationRendered: true,"
-                "        formulaSvgCount,"
-                "        definitionSvgCount,"
-                "        definitionTexts,"
-                "      });"
+                "    if (equationRendered && formulaRendered && definitionRendered) {"
+                "      resolve({ equationRendered, formulaRendered, definitionRendered, definitionTexts });"
                 "      return;"
                 "    }"
                 "    if (Date.now() > deadline) {"
-                "      resolve({"
-                "        equationRendered: Boolean(equationSvg),"
-                "        formulaSvgCount,"
-                "        definitionSvgCount,"
-                "        definitionTexts,"
-                "      });"
+                "      resolve({ equationRendered, formulaRendered, definitionRendered, definitionTexts });"
                 "      return;"
                 "    }"
                 "    setTimeout(tick, 100);"
@@ -1001,8 +997,8 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert math_render["equationRendered"] is True
-            assert math_render["formulaSvgCount"] >= 1
-            assert math_render["definitionSvgCount"] >= 3
+            assert math_render["formulaRendered"] is True
+            assert math_render["definitionRendered"] is True
             definition_meanings = [entry["meaning"] for entry in math_render["definitionTexts"]]
             assert "Observed group mean" in definition_meanings
             assert "Uploaded reference mean" in definition_meanings

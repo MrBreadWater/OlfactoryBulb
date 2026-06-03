@@ -9,8 +9,6 @@ import json
 import os
 import re
 import shutil
-from functools import lru_cache
-from io import BytesIO
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -27,55 +25,34 @@ def _esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
-@lru_cache(maxsize=512)
-def _render_math_svg_fragment(expression: str, *, display: bool) -> str:
-    source = str(expression or "").strip()
-    if not source:
-        return ""
-    try:
-        from matplotlib.font_manager import FontProperties
-        from matplotlib.mathtext import math_to_image
-    except Exception:
-        return ""
-    wrapped = source if source.startswith("$") and source.endswith("$") else f"${source}$"
-    buffer = BytesIO()
-    font_size = 15 if display else 12
-    try:
-        math_to_image(
-            wrapped,
-            buffer,
-            prop=FontProperties(size=font_size),
-            dpi=180,
-            format="svg",
-            color="#1f2937",
-        )
-    except Exception:
-        return ""
-    svg_text = buffer.getvalue().decode("utf-8", errors="ignore")
-    svg_start = svg_text.find("<svg")
-    svg_end = svg_text.rfind("</svg>")
-    if svg_start < 0 or svg_end < 0:
-        return ""
-    svg_markup = svg_text[svg_start : svg_end + len("</svg>")]
-    svg_markup = re.sub(r'style="fill:\s*#ffffff"', 'style="fill: none"', svg_markup, count=1)
-    svg_class = "criterion-svg criterion-svg-display" if display else "criterion-svg criterion-svg-inline"
-    if "class=" in svg_markup.partition(">")[0]:
-        svg_markup = re.sub(r'class="([^"]*)"', lambda match: f'class="{match.group(1)} {svg_class}"', svg_markup, count=1)
-    else:
-        svg_markup = svg_markup.replace("<svg ", f"<svg class=\"{svg_class}\" ", 1)
-    return svg_markup
-
-
 def _render_math_markup(expression: str, *, display: bool) -> str:
     source = str(expression or "").strip()
     if not source:
         return ""
-    svg_markup = _render_math_svg_fragment(source, display=display)
-    if svg_markup:
-        return svg_markup
     if display:
         return f"\\[{_esc(source)}\\]"
     return f"\\({_esc(source)}\\)"
+
+
+def _item_uses_mathjax(item: dict[str, Any]) -> bool:
+    if str(item.get("criterion_latex") or "").strip():
+        return True
+    if any(str(formula).strip() for formula in list(item.get("criterion_formulae") or [])):
+        return True
+    if item.get("criterion_definitions"):
+        return True
+    return False
+
+
+def _payload_items(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    groups = list(payload.get("groups") or [])
+    if groups:
+        return [
+            dict(item)
+            for group in groups
+            for item in list(group.get("items") or [])
+        ]
+    return [dict(item) for item in list(payload.get("items") or [])]
 
 
 def _status_class(status: str) -> str:
@@ -1481,7 +1458,7 @@ def _criterion_definition_html(definition: dict[str, Any]) -> str:
     parts: list[str] = []
     if symbol:
         parts.append(
-            f"<span class='criterion-definition-symbol' role='img' aria-label='{_esc(symbol)}'>"
+            f"<span class='criterion-definition-symbol criterion-mathjax-inline' role='img' aria-label='{_esc(symbol)}'>"
             f"{_render_math_markup(symbol, display=False)}"
             "</span>"
         )
@@ -1497,7 +1474,7 @@ def _criterion_formulae_html(formulae: list[str]) -> str:
     if not normalized:
         return ""
     rows = "".join(
-        f"<div class='criterion-formula' role='img' aria-label='{_esc(formula)}'>{_render_math_markup(formula, display=False)}</div>"
+        f"<div class='criterion-formula criterion-mathjax-inline' role='img' aria-label='{_esc(formula)}'>{_render_math_markup(formula, display=False)}</div>"
         for formula in normalized
     )
     return f"<div class='criterion-formulae'>{rows}</div>"
@@ -1519,7 +1496,7 @@ def _criterion_body_html(item: AuditItem) -> str:
         return (
             "<div class='item-block criterion-block'>"
             "<h4>Criterion</h4>"
-            f"<div class='criterion-math' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
+            f"<div class='criterion-math criterion-mathjax-display' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
             f"{formulae_html}"
             f"{definitions_html}"
             "</div>"
@@ -1705,9 +1682,8 @@ def render_audit_dashboard_html(
     groups = list(payload.get("groups") or [])
     has_results = bool(groups)
     has_math_criteria = any(
-        str(item.get("criterion_latex") or "").strip()
-        for group in groups
-        for item in list(group.get("items") or [])
+        _item_uses_mathjax(item)
+        for item in _payload_items(payload)
     )
     has_non_detail_items = any(
         str(item.get("detail_level") or "detail") != "detail"
@@ -1797,7 +1773,7 @@ def render_audit_dashboard_html(
     """
     refresh_button = ""
     refresh_script = ""
-    if refresh_endpoint and payload.get("items"):
+    if refresh_endpoint and _payload_items(payload):
         refresh_button = "<button id='refresh-audit-button' class='action-button' type='button'>Rerun current audit</button>"
         refresh_script = f"""
       const button = document.getElementById("refresh-audit-button");
@@ -2345,23 +2321,25 @@ def render_audit_dashboard_html(
       overflow-y: hidden;
       color: #334155;
     }}
-    .criterion-svg {{
-      display: block;
-      max-width: 100%;
-      height: auto;
+    .criterion-math mjx-container,
+    .criterion-formula mjx-container,
+    .criterion-definition-symbol mjx-container {{
+      background: transparent !important;
       fill: currentColor;
-      background: transparent;
     }}
-    .criterion-svg-display {{
+    .criterion-math mjx-container {{
+      display: block;
       min-width: max-content;
-    }}
-    .criterion-svg-inline {{
-      height: 1.15em;
-      width: auto;
-    }}
-    .criterion-formula .criterion-svg-inline {{
-      height: 1.4em;
       max-width: none;
+    }}
+    .criterion-formula mjx-container {{
+      display: block;
+      max-width: none;
+    }}
+    .criterion-definition-symbol mjx-container {{
+      display: inline-block;
+      max-width: none;
+      white-space: nowrap;
     }}
     .criterion-definitions {{
       display: grid;
@@ -2384,10 +2362,6 @@ def render_audit_dashboard_html(
       padding: 0;
       color: #1f2937;
       white-space: nowrap;
-    }}
-    .criterion-definition-symbol .criterion-svg-inline {{
-      display: block;
-      max-width: none;
     }}
     .criterion-definition-meaning {{
       color: #475569;
@@ -2946,9 +2920,8 @@ def export_audit_dashboard(
 ) -> dict[str, Any]:
     def _report_has_math(payload_dict: dict[str, Any]) -> bool:
         return any(
-            str(item.get("criterion_latex") or "").strip()
-            for group in list(payload_dict.get("groups") or [])
-            for item in list(group.get("items") or [])
+            _item_uses_mathjax(item)
+            for item in _payload_items(payload_dict)
         )
 
     def _ensure_mathjax_bundle(output_root: Path) -> str:

@@ -627,7 +627,7 @@ def _criterion_math_for_band(
         latex = r"{obs} = b".format(obs=observed_symbol)
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        latex = rf"\vert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \vert \leq {sigma_multiplier}\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
+        latex = rf"\lvert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \rvert \leq {sigma_multiplier}\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -636,7 +636,7 @@ def _criterion_math_for_band(
             ]
         )
     else:
-        latex = rf"\vert {observed_symbol} - \mu \vert \leq {sigma_multiplier}\sigma"
+        latex = rf"\lvert {observed_symbol} - \mu \rvert \leq {sigma_multiplier}\sigma"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -809,7 +809,7 @@ def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> l
     entity_key = str(rule.get("entity_key", "cell_name"))
     expected = float(rule.get("expected", 0.0))
     tolerance = float(rule.get("tolerance", 1e-9))
-    criterion_latex = rf"\forall i,\ \vert x_i - {_latex_number(expected)} \vert \leq {_latex_number(tolerance)}"
+    criterion_latex = rf"\forall i,\ \lvert x_i - {_latex_number(expected)} \rvert \leq {_latex_number(tolerance)}"
     criterion_definitions = [
         {"symbol": r"x_i", "definition": f"{metric_key} value for each audited row"},
         {"symbol": "c", "definition": "expected value"},
@@ -901,7 +901,7 @@ def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) ->
             rule,
             status=_rule_status(rule, difference <= max_difference),
             evidence=evidence,
-            criterion_latex=rf"\vert {right_symbol} - {left_symbol} \vert \leq {_latex_number(max_difference)}",
+            criterion_latex=rf"\lvert {right_symbol} - {left_symbol} \rvert \leq {_latex_number(max_difference)}",
             criterion_definitions=[
                 {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
                 {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},

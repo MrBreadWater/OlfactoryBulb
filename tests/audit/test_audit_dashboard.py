@@ -8,7 +8,7 @@ from tempfile import TemporaryDirectory
 
 from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import AuditItem, AuditReport
-from olfactorybulb.audit.dashboard import _render_math_svg_fragment, export_audit_dashboard
+from olfactorybulb.audit.dashboard import export_audit_dashboard
 
 
 sample_report = AuditReport(
@@ -56,7 +56,7 @@ sample_report = AuditReport(
             status="PASS",
             title="Alpha math",
             criterion="The observed mean should stay within the accepted interval.",
-            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+            criterion_latex=r"\lvert \bar{x} - \mu \rvert \leq k\sigma",
             criterion_formulae=[
                 r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
@@ -237,12 +237,12 @@ with TemporaryDirectory() as tmp:
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "criterion-math" in html
+    assert "criterion-mathjax-display" in html
     assert "criterion-formulae" in html
     assert "criterion-formula" in html
+    assert "criterion-mathjax-inline" in html
     assert "criterion-definitions" in html
     assert "criterion-definition-symbol" in html
-    assert "criterion-svg-display" in html
-    assert "criterion-svg-inline" in html
     assert "Delta formulae only" in html
     assert r"x \leq y" in html
     assert "criterion-variables" not in html
@@ -250,9 +250,8 @@ with TemporaryDirectory() as tmp:
     assert "MathJax" in html
     assert "./assets/mathjax/tex-svg.js" in html
     assert "cdn.jsdelivr.net" not in html
-    assert r"\left|\bar{x} - \mu\right| \leq k\sigma" in html
+    assert r"\lvert \bar{x} - \mu \rvert \leq k\sigma" in html
     assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in html
-    assert html.count("<svg") >= 3
     assert "observed group mean" in html
     assert "f-I curve" in html
     assert "data-series-graph" in html
@@ -270,9 +269,6 @@ with TemporaryDirectory() as tmp:
     assert "Observed scalar metrics" in html
     assert "Observed sequence" in html
     assert "Plain scalar metrics" in html
-    math_svg = _render_math_svg_fragment(r"\left|\ln(\bar{x})\right|", display=True)
-    assert 'style="fill: none"' in math_svg
-    assert 'style="fill: #ffffff"' not in math_svg
     gamma_index = html.index("audit_gamma.gamma_curve")
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
     plain_index = html.index("audit_gamma.gamma_plain_numeric")

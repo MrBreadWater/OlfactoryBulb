@@ -348,10 +348,11 @@ contract for future sessions.
   - keep warnings visible, specific, and non-duplicated
   - keep core maintained dashboard rendering self-contained; do not depend on
     third-party CDN runtime assets for features such as math rendering
-  - prefer server-rendered criterion math in exported audit HTML so the
-    critical readability path does not depend on client-side JavaScript
-  - keep rendered criterion SVG backgrounds transparent; do not rely on the
-    default Matplotlib white patch around math fragments
+  - use the bundled local MathJax runtime to typeset criterion math in the
+    browser, and verify the served page actually renders `mjx-container`
+    output
+  - keep rendered math backgrounds transparent; do not rely on opaque wrapper
+    backgrounds around math fragments
   - when audit evidence contains an explicit series or curve, such as
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
     when the item explicitly opts into a `series_visuals` declaration; do not
@@ -360,7 +361,7 @@ contract for future sessions.
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
   - when a reference-band check is centered around a mean, prefer an absolute-
-    value criterion such as `\vert \bar{x} - \mu \vert \le k\sigma`; use a
+    value criterion such as `\lvert \bar{x} - \mu \rvert \le k\sigma`; use a
     metric-specific observed symbol when the quantity has a common notation
     such as `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or
     `\bar{I}_{\mathrm{rh}}`, and keep `\bar{x}` as the fallback only when no
