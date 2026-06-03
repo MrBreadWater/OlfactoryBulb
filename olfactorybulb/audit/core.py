@@ -128,6 +128,113 @@ class AuditReport:
         return json.dumps(self.to_dict(), indent=2, sort_keys=True)
 
 
+def _normalize_visual_keys(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        text = value.strip()
+        return [text] if text else []
+    if isinstance(value, Iterable):
+        normalized = [str(entry).strip() for entry in value if str(entry).strip()]
+        return normalized
+    text = str(value).strip()
+    return [text] if text else []
+
+
+def make_visual_spec(
+    kind: str,
+    *,
+    backend: str = "svg",
+    title: str | None = None,
+    label: str | None = None,
+    keys: Iterable[str] | str | None = None,
+    key: str | None = None,
+    x_key: str | None = None,
+    y_keys: Iterable[str] | str | None = None,
+    style: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    spec: dict[str, Any] = {
+        "kind": str(kind).strip(),
+        "backend": str(backend).strip().lower() or "svg",
+    }
+    if title is not None and str(title).strip():
+        spec["title"] = str(title).strip()
+    if label is not None and str(label).strip():
+        spec["label"] = str(label).strip()
+    if x_key is not None and str(x_key).strip():
+        spec["x_key"] = str(x_key).strip()
+    normalized_keys = _normalize_visual_keys(keys if keys is not None else key)
+    if normalized_keys:
+        spec["keys"] = normalized_keys
+    normalized_y_keys = _normalize_visual_keys(y_keys)
+    if normalized_y_keys:
+        spec["y_keys"] = normalized_y_keys
+    if style:
+        spec["style"] = dict(style)
+    for key_name, value in kwargs.items():
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        spec[key_name] = value
+    return spec
+
+
+def series_visual_spec(
+    kind: str = "fi_curve",
+    *,
+    backend: str = "matplotlib",
+    title: str | None = None,
+    label: str | None = None,
+    keys: Iterable[str] | str | None = None,
+    key: str | None = None,
+    x_key: str | None = None,
+    y_keys: Iterable[str] | str | None = None,
+    style: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    return make_visual_spec(
+        kind,
+        backend=backend,
+        title=title,
+        label=label,
+        keys=keys,
+        key=key,
+        x_key=x_key,
+        y_keys=y_keys,
+        style=style,
+        **kwargs,
+    )
+
+
+def companion_visual_spec(
+    kind: str = "numeric_strip",
+    *,
+    backend: str = "svg",
+    title: str | None = None,
+    label: str | None = None,
+    keys: Iterable[str] | str | None = None,
+    key: str | None = None,
+    x_key: str | None = None,
+    y_keys: Iterable[str] | str | None = None,
+    style: dict[str, Any] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    return make_visual_spec(
+        kind,
+        backend=backend,
+        title=title,
+        label=label,
+        keys=keys,
+        key=key,
+        x_key=x_key,
+        y_keys=y_keys,
+        style=style,
+        **kwargs,
+    )
+
+
 def rounded(value: float | None, digits: int = 3) -> float | None:
     if value is None:
         return None

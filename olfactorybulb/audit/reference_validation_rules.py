@@ -10,7 +10,8 @@ import math
 import numpy as np
 from scipy.stats import beta as beta_distribution
 
-from olfactorybulb.audit.core import AuditItem, rounded
+from olfactorybulb.audit import AuditItem, series_visual_spec
+from olfactorybulb.audit.core import rounded
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
     csv_rows,
@@ -176,6 +177,7 @@ def _rule_item(
     acceptable_basis: str | None = None,
     check_id: str | None = None,
     series_visuals: list[dict[str, Any]] | None = None,
+    companion_visuals: list[dict[str, Any]] | None = None,
 ) -> AuditItem:
     return AuditItem(
         check_id=str(check_id or rule["check_id"]),
@@ -187,6 +189,7 @@ def _rule_item(
         acceptable_basis=str(acceptable_basis or rule["acceptable_basis"]),
         evidence=evidence or {},
         series_visuals=list(series_visuals or []),
+        companion_visuals=list(companion_visuals or []),
         note=note,
         status_reason=status_reason,
     )
@@ -1071,10 +1074,14 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
             status=_rule_status(rule, passed),
             evidence=evidence,
             series_visuals=[
-                {
-                    "kind": "fi_curve",
-                    "keys": ["currents_pA", "reference_values_Hz", "model_values_Hz"],
-                }
+                series_visual_spec(
+                    keys=["currents_pA", "reference_values_Hz", "model_values_Hz"],
+                    style={
+                        "line_width": 1.8,
+                        "marker_size": 3.2,
+                        "legend_loc": "lower center",
+                    },
+                )
             ],
         )
     ]

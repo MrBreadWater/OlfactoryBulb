@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.audit.dashboard import export_audit_dashboard
 
@@ -66,10 +67,7 @@ sample_report = AuditReport(
                 "label": "Observed sweep",
             },
             series_visuals=[
-                {
-                    "kind": "fi_curve",
-                    "keys": ["currents_pA", "reference_values_Hz", "model_values_Hz"],
-                }
+                series_visual_spec(keys=["currents_pA", "reference_values_Hz", "model_values_Hz"]),
             ],
             group_id="audit_gamma",
             group_title="Audit gamma",
@@ -181,11 +179,12 @@ with TemporaryDirectory() as tmp:
     assert "Evidence caveat from protocol matching." in html
     assert "f-I curve" in html
     assert "data-series-graph" in html
+    assert "data-visual-backend='matplotlib'" in html
     assert "Current (pA)" in html
     assert "Firing rate (Hz)" in html
-    assert html.count("series-axis-tick") >= 4
-    assert html.count("series-tick-label") >= 4
-    assert html.count("<circle class='series-point'") >= 4
+    assert html.count("series-graph-meta") >= 1
+    assert html.count("<text") >= 8
+    assert html.count("<path") >= 1
     assert "Observed sweep" in html
     assert "data-numeric-strip" in html
     assert "data-numeric-sparkline" in html

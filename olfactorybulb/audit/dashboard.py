@@ -326,7 +326,446 @@ def _series_color_for_key(key: str, index: int, *, status: str) -> dict[str, str
     return {"stroke": color, "fill": color, "dash": ""}
 
 
-def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> tuple[str, set[str]]:
+def _visual_backend(spec: dict[str, Any] | None) -> str:
+    if not isinstance(spec, dict):
+        return "svg"
+    backend = str(spec.get("backend") or "svg").strip().lower()
+    return backend or "svg"
+
+
+def _visual_kind(spec: dict[str, Any] | None) -> str:
+    if not isinstance(spec, dict):
+        return ""
+    return str(spec.get("kind") or "").strip().lower()
+
+
+def _figure_to_inline_svg(fig: Any) -> str:
+    from io import StringIO
+
+    buffer = StringIO()
+    fig.savefig(buffer, format="svg", bbox_inches="tight")
+    svg = buffer.getvalue()
+    start = svg.find("<svg")
+    return svg[start:] if start >= 0 else svg
+
+
+def _series_graph_payload(
+    evidence: dict[str, Any],
+    *,
+    exclude_keys: set[str] | None = None,
+) -> tuple[dict[str, Any], set[str]] | tuple[None, set[str]]:
+    exclude = set(exclude_keys or set())
+    if not evidence:
+        return None, set()
+
+    series_kind = str(evidence.get("series_kind", "")).strip().lower()
+    x_key = ""
+    x_values: list[float] | None = None
+    series_entries: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+
+    row_source = evidence.get("fi_curve_rows")
+    if isinstance(row_source, list) and row_source:
+        row_points: list[tuple[float, float]] = []
+        for row in row_source:
+            if not isinstance(row, dict):
+                continue
+            x_value = _float_or_none(row.get("current_pA"))
+            y_value = _float_or_none(row.get("firing_rate_Hz"))
+            if x_value is None or y_value is None:
+                continue
+            row_points.append((x_value, y_value))
+        if row_points:
+            row_points.sort(key=lambda pair: pair[0])
+            x_values = [point[0] for point in row_points]
+            x_key = "current_pA"
+            series_entries.append(
+                {
+                    "key": "firing_rate_Hz",
+                    "label": _evidence_label("firing_rate_Hz"),
+                    "points": row_points,
+                }
+            )
+            used_keys.update({"fi_curve_rows", "current_pA", "firing_rate_Hz"})
+            if not series_kind:
+                series_kind = "f-i curve"
+
+    if x_values is None:
+        for candidate in _SERIES_X_KEY_CANDIDATES:
+            if candidate in exclude or candidate == "fi_curve_rows":
+                continue
+            candidate_values = _float_list_or_none(evidence.get(candidate))
+            if candidate_values is not None and len(candidate_values) >= 2:
+                x_key = candidate
+                x_values = candidate_values
+                used_keys.add(candidate)
+                break
+
+    if x_values is None:
+        return None, set()
+
+    x_len = len(x_values)
+    for candidate in _SERIES_Y_KEY_CANDIDATES:
+        if candidate in exclude or candidate == x_key:
+            continue
+        candidate_values = _float_list_or_none(evidence.get(candidate))
+        if candidate_values is None or len(candidate_values) != x_len:
+            continue
+        ordered_pairs = sorted(zip(x_values, candidate_values), key=lambda pair: pair[0])
+        series_entries.append(
+            {
+                "key": candidate,
+                "label": _evidence_label(candidate),
+                "points": ordered_pairs,
+            }
+        )
+        used_keys.add(candidate)
+
+    if not series_entries:
+        return None, set()
+
+    has_rate_series = any("rate" in entry["key"].lower() or entry["key"].lower().endswith("_hz") for entry in series_entries)
+    is_fi_curve = series_kind == "f-i curve" or ("current" in x_key.lower() and has_rate_series)
+    if not series_kind:
+        series_kind = "f-i curve" if is_fi_curve else "series graph"
+
+    x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
+    y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
+    return (
+        {
+            "series_kind": series_kind,
+            "x_key": x_key,
+            "x_values": x_values,
+            "series_entries": series_entries,
+            "x_axis_label": x_axis_label,
+            "y_axis_label": y_axis_label,
+        },
+        used_keys,
+    )
+
+
+def _render_series_graph_matplotlib(
+    item: AuditItem,
+    evidence: dict[str, Any],
+    *,
+    spec: dict[str, Any] | None = None,
+    exclude_keys: set[str] | None = None,
+) -> tuple[str, set[str]]:
+    kind = _visual_kind(spec) or "fi_curve"
+    style = dict(spec.get("style") or {}) if isinstance(spec, dict) else {}
+
+    if kind == "bar":
+        values_key = str(spec.get("values_key") or spec.get("y_key") or "").strip()
+        if not values_key and isinstance(spec.get("keys"), (list, tuple)) and spec["keys"]:
+            values_key = str(spec["keys"][0]).strip()
+        if not values_key:
+            return "", set()
+        values = _float_list_or_none(evidence.get(values_key))
+        if values is None or not values:
+            return "", set()
+        labels: list[str] = []
+        raw_labels = spec.get("labels")
+        if raw_labels is None:
+            labels_key = str(spec.get("labels_key") or "").strip()
+            if labels_key:
+                raw_labels = evidence.get(labels_key)
+        if isinstance(raw_labels, str):
+            labels = [part.strip() for part in raw_labels.split(",") if part.strip()]
+        elif isinstance(raw_labels, (list, tuple)):
+            labels = [str(part).strip() for part in raw_labels if str(part).strip()]
+        if len(labels) != len(values):
+            labels = [str(index + 1) for index in range(len(values))]
+
+        import matplotlib
+
+        matplotlib.use("Agg")
+        matplotlib.rcParams["svg.fonttype"] = "none"
+        import matplotlib.pyplot as plt
+
+        figsize = tuple(style.get("figsize") or (6.0, 2.8))
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.patch.set_facecolor("#f8fafc")
+        ax.set_facecolor("#f8fafc")
+        ax.set_axisbelow(True)
+        ax.grid(True, axis="y", color="#cbd5e1", linewidth=0.6, alpha=0.35)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        ax.spines["left"].set_color("#94a3b8")
+        ax.spines["bottom"].set_color("#94a3b8")
+        ax.tick_params(axis="both", labelsize=8, colors="#334155")
+        positions = list(range(len(values)))
+        ax.bar(positions, values, color=str(style.get("bar_color") or "#2563eb"), alpha=float(style.get("alpha") or 0.9))
+        ax.set_xticks(positions)
+        ax.set_xticklabels(labels, rotation=float(style.get("x_label_rotation") or 25.0), ha=str(style.get("x_label_ha") or "right"))
+        ax.set_ylabel(str(style.get("y_label") or _evidence_label(values_key)))
+        if style.get("title"):
+            ax.set_title(str(style["title"]), fontsize=9, pad=8)
+        fig.tight_layout()
+        svg = _figure_to_inline_svg(fig)
+        plt.close(fig)
+        svg = svg.replace(
+            "<svg ",
+            f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(str(style.get('title') or 'Bar chart'))}' ",
+            1,
+        )
+        return (
+            (
+                f"<div class='item-block series-graph-block' data-visual-backend='matplotlib' "
+                f"data-visual-kind='bar'>"
+                f"<h4>{_esc(str(style.get('title') or 'Bar chart'))}</h4>"
+                f"<div class='series-graph-meta'><span>{_esc(str(style.get('x_label') or 'Category'))}</span>"
+                f"<span>{_esc(str(style.get('y_label') or _evidence_label(values_key)))}</span></div>"
+                f"<div class='series-graph-shell'>{svg}</div>"
+                f"</div>"
+            ),
+            {values_key},
+        )
+
+    if kind in {"scatter", "regression"}:
+        x_key = str(spec.get("x_key") or "").strip()
+        y_key = str(spec.get("y_key") or "").strip()
+        raw_keys = spec.get("keys")
+        if (not x_key or not y_key) and isinstance(raw_keys, (list, tuple)) and len(raw_keys) >= 2:
+            x_key = x_key or str(raw_keys[0]).strip()
+            y_key = y_key or str(raw_keys[1]).strip()
+        if not x_key or not y_key:
+            return "", set()
+        x_values = _float_list_or_none(evidence.get(x_key))
+        y_values = _float_list_or_none(evidence.get(y_key))
+        if x_values is None or y_values is None:
+            return "", set()
+        point_pairs = [(x_value, y_value) for x_value, y_value in zip(x_values, y_values) if _float_or_none(x_value) is not None and _float_or_none(y_value) is not None]
+        if len(point_pairs) < 2:
+            return "", set()
+        x_points = [pair[0] for pair in point_pairs]
+        y_points = [pair[1] for pair in point_pairs]
+
+        import matplotlib
+
+        matplotlib.use("Agg")
+        matplotlib.rcParams["svg.fonttype"] = "none"
+        import matplotlib.pyplot as plt
+
+        figsize = tuple(style.get("figsize") or (6.0, 2.8))
+        fig, ax = plt.subplots(figsize=figsize)
+        fig.patch.set_facecolor("#f8fafc")
+        ax.set_facecolor("#f8fafc")
+        ax.set_axisbelow(True)
+        ax.grid(True, axis="y", color="#cbd5e1", linewidth=0.6, alpha=0.35)
+        ax.grid(True, axis="x", color="#e2e8f0", linewidth=0.4, alpha=0.25)
+        for spine in ("top", "right"):
+            ax.spines[spine].set_visible(False)
+        ax.spines["left"].set_color("#94a3b8")
+        ax.spines["bottom"].set_color("#94a3b8")
+        ax.tick_params(axis="both", labelsize=8, colors="#334155")
+        color = str(style.get("color") or "#2563eb")
+        ax.scatter(
+            x_points,
+            y_points,
+            s=float(style.get("marker_size") or 3.4) ** 2 * 6.0,
+            color=color,
+            edgecolors=str(style.get("edge_color") or color),
+            linewidths=0.8,
+            alpha=float(style.get("alpha") or 0.9),
+        )
+        if kind == "regression":
+            point_count = len(x_points)
+            x_mean = sum(x_points) / point_count
+            y_mean = sum(y_points) / point_count
+            denom = sum((value - x_mean) ** 2 for value in x_points)
+            if denom > 0.0:
+                slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_points, y_points)) / denom
+                intercept = y_mean - slope * x_mean
+                fit_x = [min(x_points), max(x_points)]
+                fit_y = [slope * x_value + intercept for x_value in fit_x]
+                ax.plot(
+                    fit_x,
+                    fit_y,
+                    color=str(style.get("fit_color") or "#0f172a"),
+                    linewidth=float(style.get("line_width") or 1.6),
+                    linestyle="--",
+                    alpha=0.75,
+                )
+        ax.set_xlabel(str(style.get("x_label") or _evidence_label(x_key)))
+        ax.set_ylabel(str(style.get("y_label") or _evidence_label(y_key)))
+        if style.get("title"):
+            ax.set_title(str(style["title"]), fontsize=9, pad=8)
+        fig.tight_layout()
+        svg = _figure_to_inline_svg(fig)
+        plt.close(fig)
+        svg = svg.replace(
+            "<svg ",
+            f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(str(style.get('title') or ('Regression' if kind == 'regression' else 'Scatter plot')))}' ",
+            1,
+        )
+        return (
+            (
+                f"<div class='item-block series-graph-block' data-visual-backend='matplotlib' "
+                f"data-visual-kind='{_esc(kind)}'>"
+                f"<h4>{_esc(str(style.get('title') or ('Regression' if kind == 'regression' else 'Scatter plot')))}</h4>"
+                f"<div class='series-graph-meta'><span>{_esc(str(style.get('x_label') or _evidence_label(x_key)))}</span>"
+                f"<span>{_esc(str(style.get('y_label') or _evidence_label(y_key)))}</span></div>"
+                f"<div class='series-graph-shell'>{svg}</div>"
+                f"</div>"
+            ),
+            {x_key, y_key},
+        )
+
+    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude_keys)
+    if payload is None:
+        return "", set()
+
+    import matplotlib
+
+    matplotlib.use("Agg")
+    matplotlib.rcParams["svg.fonttype"] = "none"
+    import matplotlib.pyplot as plt
+
+    figsize = tuple(style.get("figsize") or (6.0, 2.8))
+    fig, ax = plt.subplots(figsize=figsize)
+    fig.patch.set_facecolor("#f8fafc")
+    ax.set_facecolor("#f8fafc")
+    ax.set_axisbelow(True)
+    ax.grid(True, axis="y", color="#cbd5e1", linewidth=0.6, alpha=0.35)
+    ax.grid(True, axis="x", color="#e2e8f0", linewidth=0.4, alpha=0.25)
+    for spine in ("top", "right"):
+        ax.spines[spine].set_visible(False)
+    ax.spines["left"].set_color("#94a3b8")
+    ax.spines["bottom"].set_color("#94a3b8")
+    ax.tick_params(axis="both", labelsize=8, colors="#334155")
+
+    x_axis_label = str(style.get("x_label") or payload["x_axis_label"])
+    y_axis_label = str(style.get("y_label") or payload["y_axis_label"])
+    series_entries = list(payload["series_entries"])
+    x_domain = _series_domain([point[0] for series in series_entries for point in series["points"]])
+    y_domain = _series_domain([point[1] for series in series_entries for point in series["points"]])
+    x_low, x_high = x_domain
+    y_low, y_high = y_domain
+    ax.set_xlim(x_low, x_high)
+    ax.set_ylim(y_low, y_high)
+    x_ticks = _series_tick_values(x_low, x_high, target_ticks=5)
+    y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
+    ax.set_xticks(x_ticks)
+    ax.set_xticklabels([_series_tick_label(tick) for tick in x_ticks])
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([_series_tick_label(tick) for tick in y_ticks])
+    if x_low <= 0.0 <= x_high:
+        ax.axvline(0.0, color="#94a3b8", linewidth=0.8, alpha=0.35, zorder=0)
+    if y_low <= 0.0 <= y_high:
+        ax.axhline(0.0, color="#94a3b8", linewidth=0.8, alpha=0.35, zorder=0)
+
+    legend_items: list[str] = []
+    line_width = float(style.get("line_width") or 1.8)
+    marker_size = float(style.get("marker_size") or 3.4)
+    for index, series in enumerate(series_entries):
+        color = _series_color_for_key(series["key"], index, status=str(item.status))
+        x_points = [point[0] for point in series["points"]]
+        y_points = [point[1] for point in series["points"]]
+        dash_style = (0, (6, 4)) if color["dash"] else None
+        if kind == "scatter":
+            ax.scatter(
+                x_points,
+                y_points,
+                s=(marker_size**2) * 6.0,
+                color=color["fill"],
+                edgecolors=color["stroke"],
+                linewidths=0.8,
+                alpha=float(style.get("alpha") or 0.9),
+                label=series["label"],
+            )
+        elif kind == "regression":
+            ax.scatter(
+                x_points,
+                y_points,
+                s=(marker_size**2) * 6.0,
+                color=color["fill"],
+                edgecolors=color["stroke"],
+                linewidths=0.8,
+                alpha=float(style.get("alpha") or 0.9),
+                label=series["label"],
+            )
+            point_count = len(x_points)
+            if point_count >= 2:
+                x_mean = sum(x_points) / point_count
+                y_mean = sum(y_points) / point_count
+                denom = sum((value - x_mean) ** 2 for value in x_points)
+                if denom > 0.0:
+                    slope = sum((x - x_mean) * (y - y_mean) for x, y in zip(x_points, y_points)) / denom
+                    intercept = y_mean - slope * x_mean
+                    fit_x = [x_low, x_high]
+                    fit_y = [slope * x_value + intercept for x_value in fit_x]
+                    ax.plot(
+                        fit_x,
+                        fit_y,
+                        color="#0f172a",
+                        linewidth=max(1.2, line_width - 0.2),
+                        linestyle="--",
+                        alpha=0.75,
+                    )
+        else:
+            ax.plot(
+                x_points,
+                y_points,
+                color=color["stroke"],
+                linewidth=line_width,
+                linestyle="--" if dash_style else "-",
+                marker="o",
+                markersize=marker_size,
+                markerfacecolor=color["fill"],
+                markeredgecolor=color["stroke"],
+                label=series["label"],
+            )
+        legend_items.append(
+            f"<span class='series-legend-item'><i class='series-legend-swatch' style='background:{color['fill']}; border-color:{color['stroke']};"
+            f"{' border-style:dashed;' if color['dash'] else ''}'></i>{_esc(series['label'])}</span>"
+        )
+
+    ax.set_xlabel(x_axis_label)
+    ax.set_ylabel(y_axis_label)
+    if style.get("title"):
+        ax.set_title(str(style["title"]), fontsize=9, pad=8)
+    fig.tight_layout()
+    svg = _figure_to_inline_svg(fig)
+    plt.close(fig)
+    svg = svg.replace(
+        "<svg ",
+        f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(str(style.get('title') or ('f-I curve' if payload['series_kind'] == 'f-i curve' else 'Series graph')))}' ",
+        1,
+    )
+
+    visual_kind = kind or str(payload["series_kind"])
+    return (
+        (
+            f"<div class='item-block series-graph-block' data-visual-backend='matplotlib' "
+            f"data-visual-kind='{_esc(visual_kind)}'>"
+            f"<h4>{_esc('f-I curve' if payload['series_kind'] == 'f-i curve' else 'Series graph')}</h4>"
+            f"<div class='series-graph-meta'><span>{_esc(x_axis_label)}</span><span>{_esc(y_axis_label)}</span></div>"
+            f"<div class='series-graph-shell'>"
+            f"{svg}"
+            f"</div>"
+            f"<div class='series-legend'>{''.join(legend_items)}</div>"
+            f"</div>"
+        ),
+        used_keys,
+    )
+
+
+def _render_series_graph(
+    item: AuditItem,
+    evidence: dict[str, Any],
+    *,
+    exclude_keys: set[str] | None = None,
+    spec: dict[str, Any] | None = None,
+) -> tuple[str, set[str]]:
+    if _visual_backend(spec) == "matplotlib":
+        block_html, used_keys = _render_series_graph_matplotlib(
+            item,
+            evidence,
+            spec=spec,
+            exclude_keys=exclude_keys,
+        )
+        if block_html:
+            return block_html, used_keys
     exclude = set(exclude_keys or set())
     if not evidence:
         return "", set()
@@ -484,6 +923,8 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
         )
 
     legend_items: list[str] = []
+    visual_backend = _visual_backend(spec)
+    visual_kind = _visual_kind(spec) or series_kind
     for index, series in enumerate(series_entries):
         color = _series_color_for_key(series["key"], index, status=str(item.status))
         dash_attr = f" stroke-dasharray='{color['dash']}'" if color["dash"] else ""
@@ -502,7 +943,8 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
         )
 
     return (
-        f"<div class='item-block series-graph-block'>"
+        f"<div class='item-block series-graph-block' data-visual-backend='{_esc(visual_backend)}' "
+        f"data-visual-kind='{_esc(visual_kind)}'>"
         f"<h4>{_esc('f-I curve' if series_kind == 'f-i curve' else 'Series graph')}</h4>"
         f"<div class='series-graph-meta'><span>{_esc(x_axis_label)}</span><span>{_esc(y_axis_label)}</span></div>"
         f"<div class='series-graph-shell'>"
@@ -921,7 +1363,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
                 series_evidence = {key: evidence[key] for key in series_keys if key in evidence}
                 if str(series_spec.get("kind") or "").strip().lower() == "fi_curve":
                     series_evidence["series_kind"] = "f-i curve"
-                series_graph_html, series_graph_keys = _render_series_graph(item, series_evidence)
+                series_graph_html, series_graph_keys = _render_series_graph(item, series_evidence, spec=series_spec)
     numeric_companion_html = ""
     numeric_companion_keys: set[str] = set()
     if interval is None and not series_graph_html and item.companion_visuals:

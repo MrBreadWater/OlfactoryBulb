@@ -180,6 +180,25 @@ That boundary matters.
 If you need a new measured quantity, add it to the protocol runner output.
 If you need a new decision rule, add a new rule kind.
 
+If a result should also render as a chart, declare that in the rule output
+instead of letting the dashboard guess from array-shaped evidence. Use the
+helper builders in `olfactorybulb.audit` so the visual contract stays explicit:
+
+```python
+from olfactorybulb.audit import series_visual_spec
+
+series_visuals = [
+    series_visual_spec(
+        keys=["currents_pA", "reference_values_Hz", "model_values_Hz"],
+        backend="matplotlib",
+        style={"line_width": 1.8, "marker_size": 3.2},
+    )
+]
+```
+
+Use `backend="matplotlib"` for the standard plots and reserve `backend="svg"`
+for compact bespoke renderers that really need hand-tuned HTML/SVG behavior.
+
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as

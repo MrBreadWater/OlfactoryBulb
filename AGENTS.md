@@ -332,6 +332,13 @@ contract for future sessions.
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
     when the item explicitly opts into a `series_visuals` declaration; do not
     infer a line graph from array-shaped evidence alone
+  - make the plot declaration explicit at registration time:
+    - use the helper builders in `olfactorybulb.audit` rather than hand-built
+      dicts when possible
+    - choose the backend per visual (`matplotlib` for the standard plots,
+      `svg` only for compact bespoke renderers that really need it)
+    - keep plot style knobs in the visual spec so the dashboard does not need
+      to infer them from raw data shape
   - render explicit series/curve graphics in the persistent card body so they
     stay visible when the item is collapsed; do not hide them only inside the
     expanded detail body
@@ -465,8 +472,9 @@ contract for future sessions.
   - Do not let helper wrappers or notebooks become the only place a new
     user-facing knob exists.
   - When wrappers clone or prefix `AuditItem` instances, preserve
-    `companion_visuals` and the other item-level presentation fields; do not
-    rebuild audit items from a partial field subset.
+    `series_visuals`, `companion_visuals`, and the other item-level
+    presentation fields; do not rebuild audit items from a partial field
+    subset.
 
 - For HFO-facing parameter and visualization surfaces:
   - use the current contract/registry path rather than ad hoc whitelists

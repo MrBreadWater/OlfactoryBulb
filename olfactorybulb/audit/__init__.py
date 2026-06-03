@@ -8,14 +8,24 @@ Audits in this package are intended to be:
    rewriting the entrypoint every time.
 """
 
-from .core import AuditItem, AuditReport, format_report
+from .core import (
+    AuditItem,
+    AuditReport,
+    companion_visual_spec,
+    format_report,
+    make_visual_spec,
+    series_visual_spec,
+)
 from .registry import AUDITS, get_audit_spec, iter_audit_specs
 
 __all__ = [
     "AUDITS",
     "AuditItem",
     "AuditReport",
+    "companion_visual_spec",
     "format_report",
+    "make_visual_spec",
     "get_audit_spec",
     "iter_audit_specs",
+    "series_visual_spec",
 ]

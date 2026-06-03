@@ -15,6 +15,7 @@ from urllib.parse import quote, urlparse
 from urllib.request import Request, urlopen
 from unittest.mock import patch
 
+from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.dashboard.control_center import export_control_center, resolve_control_center_campaign, serve_control_center
 from websocket import create_connection
@@ -190,10 +191,7 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "model_values_Hz": [0.0, 1.7, 4.5, 8.1],
                     },
                     series_visuals=[
-                        {
-                            "kind": "fi_curve",
-                            "keys": ["currents_pA", "reference_values_Hz", "model_values_Hz"],
-                        }
+                        series_visual_spec(keys=["currents_pA", "reference_values_Hz", "model_values_Hz"]),
                     ],
                     group_id="human_review_status",
                     group_title="Human review status",
@@ -411,8 +409,8 @@ with TemporaryDirectory() as tmp:
     assert "/__control_center_state__" in html
     assert "shell-status-strip" in html
     assert "shell-status-chip" in html
+    assert "tab-bar" not in html
     assert "Optimization campaign" in html
-    assert str(campaign_dir) not in html.split("<nav class=\"tab-bar\"", 1)[0]
     assert str(campaign_dir) in html
     assert "No audit is running yet." in html
     assert ">default<" in html
@@ -595,8 +593,12 @@ with TemporaryDirectory() as tmp:
         docs_html = urlopen(f"{base_url}/docs/index.html", timeout=3).read().decode("utf-8")
         rendered_doc_html = urlopen(f"{base_url}/docs/maintained/readme.html", timeout=3).read().decode("utf-8")
         initial_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
+        dev_state = json.loads(urlopen(f"{base_url}/__control_center_dev_state__", timeout=3).read().decode("utf-8"))
         assert "Run selected audit" in root_html
         assert "__control_center_state__" in root_html
+        assert "__control_center_dev_state__" in root_html
+        assert dev_state["ok"] is True
+        assert dev_state["revision"]
         assert "Display controls" in initial_audit_html
         assert "No audit results yet" in initial_audit_html
         assert "maintained/readme.html" in docs_html
@@ -876,6 +878,7 @@ with TemporaryDirectory() as tmp:
                 "  const detail = graph ? graph.closest('[data-item-detail-body]') : null;"
                 "  return {"
                 "    hasGraph: Boolean(graph),"
+                "    backend: block ? block.getAttribute('data-visual-backend') : null,"
                 "    persistentBlock: Boolean(block) && Boolean(block.parentElement) && block.parentElement.matches('[data-item-card]'),"
                 "    hiddenDetail: detail === null,"
                 "    blockVisible: Boolean(block) && getComputedStyle(block).display !== 'none'"
@@ -884,6 +887,7 @@ with TemporaryDirectory() as tmp:
             )
             assert series_visibility == {
                 "hasGraph": True,
+                "backend": "matplotlib",
                 "persistentBlock": True,
                 "hiddenDetail": True,
                 "blockVisible": True,
@@ -892,20 +896,19 @@ with TemporaryDirectory() as tmp:
                 "(() => {"
                 "  const graph = document.querySelector('[data-series-graph]');"
                 "  const block = graph ? graph.closest('.series-graph-block') : null;"
+                "  const svg = block ? block.querySelector('svg') : null;"
                 "  const meta = block ? block.querySelector('.series-graph-meta') : null;"
                 "  return {"
                 "    metaText: meta ? meta.textContent || '' : '',"
-                "    xTicks: block ? block.querySelectorAll('.series-axis-x').length : 0,"
-                "    yTicks: block ? block.querySelectorAll('.series-axis-y').length : 0,"
-                "    tickLabels: block ? block.querySelectorAll('.series-tick-label').length : 0"
+                "    textCount: svg ? svg.querySelectorAll('text').length : 0,"
+                "    pathCount: svg ? svg.querySelectorAll('path').length : 0"
                 "  };"
                 "})()"
             )
             assert "Current (pA)" in series_scale["metaText"]
             assert "Firing rate (Hz)" in series_scale["metaText"]
-            assert series_scale["xTicks"] >= 4
-            assert series_scale["yTicks"] >= 4
-            assert series_scale["tickLabels"] >= 8
+            assert series_scale["textCount"] >= 8
+            assert series_scale["pathCount"] >= 1
             numeric_visuals = client.eval(
                 "(() => {"
                 "  const strip = document.querySelector('[data-numeric-strip]');"
