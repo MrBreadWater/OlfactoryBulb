@@ -90,6 +90,26 @@
 - Recommendation:
   - Return a structured warning/failure payload or emit a logged warning; keep rendering robust but observable for debugging and reproducibility checks.
 
+### 9) Medium — docs portal link resolution hard-codes specific user homepaths
+
+- Location: `tools/build_maintained_docs_portal.py:105-107`
+- Evidence:
+  - `_resolve_repo_target()` checks `raw_path.startswith("/home/michael/OlfactoryBulb/") or raw_path.startswith("/home/alek/OlfactoryBulb/")`.
+- Why suboptimal:
+  - Absolute developer-machine prefixes are treated as valid repo anchors, which breaks docs-link conversion for any checkout outside those two home directories.
+- Recommendation:
+  - Normalize docs inputs to repo-relative paths or resolve absolute inputs against `REPO_ROOT` via a path-prefix table derived from environment, then emit an explicit warning for unsupported external prefixes.
+
+### 10) High — broad monitoring exceptions can cancel remote jobs unnecessarily
+
+- Location: `neuroinfra/remote/run_monitor.py:331-333`
+- Evidence:
+  - The `except Exception` branch in `monitor_remote_run()` unconditionally calls `cancel_remote_job_and_sync("Local notebook error while monitoring remote run")`.
+- Why suboptimal:
+  - Any non-critical local error (for example, transient poll rendering, status-parsing, or hook side effect failures) can force cancellation of a legitimate running remote job.
+- Recommendation:
+  - Narrow cancellation triggers to terminal remote-state conditions or explicit user-cancel signals; keep non-terminal local errors as warnings and continue monitoring with backoff/retry.
+
 ## Suggested Next Step
 
-- Prioritize the two High findings first (remote defaults + campaign path), then parsing/observability Medium items that can affect campaign correctness and live monitoring.
+- Prioritize the three High findings first (remote defaults, campaign path, and monitor cancellation behavior), then parsing/observability Medium items that affect campaign correctness and live monitoring.
