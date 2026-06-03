@@ -364,6 +364,12 @@ contract for future sessions.
       progress; for `all` / new sweep that means determinate
       `progress_current/progress_total` updates as constituent audits complete,
       not a permanent indeterminate running state
+    - the audits/optimization/docs module status should live in the tab
+      buttons themselves, not in a separate header status strip; the buttons
+      should carry the label, status badge, and short state/detail text
+    - running audit/optimization tabs should be visually distinguishable in the
+      tab bar with a subtle animated aura around the button outline, but the
+      header should stay clean and uncluttered
     - editing the audit-runner form must preserve the local draft across
       background state polling; changing the audit id should not snap back to
       the previous state-selected audit, and default-only audit arguments
