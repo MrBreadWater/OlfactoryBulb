@@ -30,12 +30,27 @@ def _status_class(status: str) -> str:
 
 
 def _render_status_badge(status: str) -> str:
-    return f"<span class='status-badge {_status_class(status)}'>{_esc(status)}</span>"
+    status = str(status or "").upper()
+    icon = {
+        "PASS": "✓",
+        "WARN": "!",
+        "FAIL": "✕",
+    }.get(status, "•")
+    return f"<span class='status-badge {_status_class(status)}'><span class='status-icon' aria-hidden='true'>{_esc(icon)}</span>{_esc(status)}</span>"
 
 
 def _render_summary(summary: dict[str, int]) -> str:
+    def _count_label(status: str, count: int) -> str:
+        if status == "FAIL":
+            suffix = "Failure" if count == 1 else "Failures"
+        elif status == "WARN":
+            suffix = "Warning" if count == 1 else "Warnings"
+        else:
+            suffix = "Pass" if count == 1 else "Passes"
+        return f"{int(count)} {suffix}"
+
     return "".join(
-        f"<span class='summary-chip {_status_class(status)}'>{_esc(status)}={int(summary.get(status, 0))}</span>"
+        f"<span class='summary-chip {_status_class(status)}'>{_esc(_count_label(status, int(summary.get(status, 0))))}</span>"
         for status in ("FAIL", "WARN", "PASS")
     )
 
@@ -220,6 +235,7 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
       <div class='interval-band' style='left:{band_left:.2f}%; width:{band_width:.2f}%;'></div>
       {reference_tick_html}
       <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
+      <span class='interval-marker-label observed-label' style='left:{float(positions["observed_value"] or 0.0):.2f}%'>Observed {observed_text}</span>
     </div>
     <div class='interval-legend'>
       <span><i class='legend-swatch accepted'></i>accepted range</span>
@@ -1245,6 +1261,7 @@ def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) 
     <div class='interval-band' style='left:{band_left:.2f}%; width:{band_width:.2f}%;'></div>
     {reference_tick_html}
     <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
+    <span class='interval-marker-label observed-label' style='left:{float(positions["observed_value"] or 0.0):.2f}%'>Observed {observed_text}</span>
   </div>
   <div class='interval-legend'>
     <span><i class='legend-swatch accepted'></i>accepted range</span>
@@ -1486,30 +1503,70 @@ def render_audit_dashboard_html(
     refresh_endpoint: str | None = None,
 ) -> str:
     groups = list(payload.get("groups") or [])
+    has_results = bool(groups)
     has_non_detail_items = any(
         str(item.get("detail_level") or "detail") != "detail"
         for group in groups
         for item in list(group.get("items") or [])
     )
+    detail_toggle_html = ""
+    if has_non_detail_items:
+        detail_toggle_html = '<button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>'
     generated_at = datetime.now().isoformat(timespec="seconds")
-    group_nav = "\n".join(
-        (
-            f"<button type='button' class='group-link' data-group-target='group-{_esc(group['group_id'])}'>"
-            f"<span class='group-link-label'>{_esc(_expand_terms(group['title'], sentence_case=True))}</span>"
-            "<span class='group-link-meta'>"
-            f"<small>{int(group.get('item_count', 0))} items</small>"
-            f"{_render_status_badge(str(group['worst_status']))}"
-            "</span>"
-            "</button>"
+    group_nav_items: list[str] = []
+    for group in groups:
+        status_class = _status_class(str(group.get("worst_status", "PASS")))
+        group_nav_items.append(
+            (
+                f"<button type='button' class='group-link {status_class}' data-group-target='group-{_esc(group['group_id'])}'>"
+                "<div class='group-link-main'>"
+                f"<span class='group-link-label'>{_esc(_expand_terms(group['title'], sentence_case=True))}</span>"
+                f"<span class='group-link-count'>{int(group.get('item_count', 0))} items</span>"
+                "</div>"
+                "<span class='group-link-meta'>"
+                f"<span class='status-dot {_esc(status_class)}'></span>"
+                f"{_render_status_badge(str(group['worst_status']))}"
+                "</span>"
+                "</button>"
+            )
         )
-        for group in groups
-    )
+    group_nav = "\n".join(group_nav_items)
     group_sections = "\n".join(_render_group(group) for group in groups)
     empty_message = (
         "No audit results yet. Use the audit runner in the Audits tab to start one."
         if not groups
         else "No audit items match the current filters."
     )
+    control_strip_html = ""
+    if has_results:
+        control_strip_html = f"""
+      <section class="control-strip">
+        <div class="control-card">
+          <h2>Display controls</h2>
+          <div class="control-grid">
+            <div class="control-field">
+              <label for="audit-search">Search findings</label>
+              <input id="audit-search" type="search" placeholder="Search titles, criteria, notes, and evidence">
+            </div>
+            <div class="control-field">
+              <label>Filters</label>
+              <div class="toggle-row">
+                <button class="toggle-button" type="button" id="failures-only-toggle" aria-pressed="false">Failures and warnings only</button>
+                <button class="toggle-button" type="button" id="hide-passed-groups-toggle" aria-pressed="false">Hide fully passing groups</button>
+                {detail_toggle_html}
+              </div>
+            </div>
+            <div class="control-field">
+              <label>Group view</label>
+              <div class="toggle-row">
+                <button class="action-button" type="button" id="expand-all-groups">Expand all groups</button>
+                <button class="action-button" type="button" id="collapse-all-groups">Collapse all groups</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    """
     refresh_button = ""
     refresh_script = ""
     if refresh_endpoint and payload.get("items"):
@@ -1535,9 +1592,6 @@ def render_audit_dashboard_html(
         }});
       }}
 """
-    detail_toggle_html = ""
-    if has_non_detail_items:
-        detail_toggle_html = '<button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>'
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1865,7 +1919,6 @@ def render_audit_dashboard_html(
       display: block;
       color: #475569;
       font-size: 11px;
-      font-style: italic;
       line-height: 1.2;
       opacity: 0.85;
     }}
@@ -2262,32 +2315,7 @@ def render_audit_dashboard_html(
     </div>
   </header>
   <main>
-    <section class="control-strip">
-      <div class="control-card">
-        <h2>Display controls</h2>
-        <div class="control-grid">
-          <div class="control-field">
-            <label for="audit-search">Search findings</label>
-            <input id="audit-search" type="search" placeholder="Search titles, criteria, notes, and evidence">
-          </div>
-          <div class="control-field">
-            <label>Filters</label>
-            <div class="toggle-row">
-              <button class="toggle-button" type="button" id="failures-only-toggle" aria-pressed="false">Failures and warnings only</button>
-              <button class="toggle-button" type="button" id="hide-passed-groups-toggle" aria-pressed="false">Hide fully passing groups</button>
-              {detail_toggle_html}
-            </div>
-          </div>
-          <div class="control-field">
-            <label>Group view</label>
-            <div class="toggle-row">
-              <button class="action-button" type="button" id="expand-all-groups">Expand all groups</button>
-              <button class="action-button" type="button" id="collapse-all-groups">Collapse all groups</button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
+    {control_strip_html}
     <div class="layout">
       <aside class="sidebar">
         <h2>Audit groups</h2>
@@ -2297,7 +2325,11 @@ def render_audit_dashboard_html(
       </aside>
       <div class="content">
         {group_sections}
-        <div class="empty-state" id="audit-empty-state">{_esc(empty_message)}</div>
+        <div class="empty-state" id="audit-empty-state">
+          <p class="empty-state-title" id="audit-empty-state-title">{_esc("No audit results yet")}</p>
+          <p class="empty-state-subtitle" id="audit-empty-state-subtitle">{_esc("Run an audit to populate findings, groups, filters, and evidence.")}</p>
+          <button class="action-button" type="button" id="audit-empty-state-run">Run selected audit</button>
+        </div>
       </div>
     </div>
   </main>
@@ -2310,9 +2342,12 @@ def render_audit_dashboard_html(
       const showDetailToggle = document.getElementById("show-detail-toggle");
       const resultsMeta = document.getElementById("results-meta");
       const emptyState = document.getElementById("audit-empty-state");
+      const emptyStateTitle = document.getElementById("audit-empty-state-title");
+      const emptyStateSubtitle = document.getElementById("audit-empty-state-subtitle");
       const emptyStateDefaultText = {json.dumps(empty_message)};
       const groupSections = Array.from(document.querySelectorAll("[data-group-section]"));
       const itemCards = Array.from(document.querySelectorAll("[data-item-card]"));
+      const emptyStateRunButton = document.getElementById("audit-empty-state-run");
 
       function togglePressed(button) {{
         if (!button) return false;
@@ -2385,11 +2420,23 @@ def render_audit_dashboard_html(
         if (emptyState) {{
           emptyState.style.display = visibleItems > 0 ? "none" : "block";
           if (visibleItems === 0) {{
-            emptyState.textContent = groupSections.length === 0 ? emptyStateDefaultText : "No audit items match the current filters.";
+            if (emptyStateTitle) {{
+              emptyStateTitle.textContent = groupSections.length === 0 ? "No audit results yet" : "No audit items match the current filters.";
+            }}
+            if (emptyStateSubtitle) {{
+              emptyStateSubtitle.textContent = groupSections.length === 0
+                ? emptyStateDefaultText
+                : "Adjust the filters, or rerun the selected audit if you need a fresh result set.";
+            }}
           }}
         }}
         if (resultsMeta) {{
-          resultsMeta.textContent = `${{visibleItems}} visible items across ${{visibleGroups}} visible groups`;
+          if (groupSections.length === 0) {{
+            resultsMeta.hidden = true;
+          }} else {{
+            resultsMeta.hidden = false;
+            resultsMeta.textContent = `${{visibleItems}} visible items across ${{visibleGroups}} visible groups`;
+          }}
         }}
       }}
 
@@ -2398,6 +2445,12 @@ def render_audit_dashboard_html(
           const section = button.closest("[data-group-section]");
           toggleGroup(section, !section?.classList.contains("group-collapsed"));
         }});
+      }});
+      emptyStateRunButton?.addEventListener("click", () => {{
+        window.parent?.postMessage({{
+          type: "control-center-run-audit",
+          source: "audit-dashboard-empty-state",
+        }}, "*");
       }});
       document.querySelectorAll(".group-link").forEach((link) => {{
         link.addEventListener("click", () => {{

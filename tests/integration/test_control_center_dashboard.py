@@ -406,13 +406,14 @@ with TemporaryDirectory() as tmp:
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert "OlfactoryBulb Control Center" in html
     assert "Run selected audit" in html
+    assert "control-center-run-audit" in html
     assert "/__control_center_state__" in html
     assert "shell-status-strip" in html
     assert "shell-status-chip" in html
     assert "tab-bar" not in html
     assert "Optimization campaign" in html
     assert str(campaign_dir) in html
-    assert "No audit is running yet." in html
+    assert "No audit has been run yet." in html
     assert ">default<" in html
     assert ">all<" in html
     assert "control-center-audit-id-help" in html
@@ -599,8 +600,10 @@ with TemporaryDirectory() as tmp:
         assert "__control_center_dev_state__" in root_html
         assert dev_state["ok"] is True
         assert dev_state["revision"]
-        assert "Display controls" in initial_audit_html
+        assert "Display controls" not in initial_audit_html
         assert "No audit results yet" in initial_audit_html
+        assert "audit-empty-state-run" in initial_audit_html
+        assert "audit-empty-state-title" in initial_audit_html
         assert "maintained/readme.html" in docs_html
         assert "View source markdown" in rendered_doc_html
         assert initial_state["audit"]["status"] == "idle"
@@ -618,7 +621,7 @@ with TemporaryDirectory() as tmp:
         assert ready_state["optimization"]["badge"] == "5 packets"
 
         audits_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
-        assert "Display controls" in audits_html
+        assert "Display controls" not in audits_html
         assert "No audit results yet" in audits_html
 
         run_status, run_payload = _json_post(

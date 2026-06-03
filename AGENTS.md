@@ -333,6 +333,7 @@ contract for future sessions.
   - keep tab panels as full working surfaces, not card-in-card layouts
   - keep global status/progress compact and truthful
   - preserve local form drafts across background polling
+  - when a dashboard iframe needs to trigger a shell-side action such as rerunning an audit from an empty state, use a small postMessage bridge to the shell rather than duplicating a second control surface inside the iframe
   - make audit reports glanceable by default, with collapsed groups/items and
     explicit expansion controls
   - keep warnings visible, specific, and non-duplicated

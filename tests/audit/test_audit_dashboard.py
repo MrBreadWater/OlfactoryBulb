@@ -157,6 +157,10 @@ with TemporaryDirectory() as tmp:
     assert "group-collapsed" in html
     assert ">Expand<" in html
     assert "Show detail items" not in html
+    assert "audit-empty-state-run" in html
+    assert "audit-empty-state-title" in html
+    assert "audit-empty-state-subtitle" in html
+    assert "control-center-run-audit" in html
     assert "group-link-label" in html
     assert "data-item-card" in html
     assert "data-item-toggle" in html

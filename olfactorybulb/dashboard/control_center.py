@@ -278,31 +278,40 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     audits_payload = html_escape(_json_script_payload(_available_audit_entries()), quote=False)
     audit_args_text = html_escape(_display_audit_args(audit_id, audit_args))
     return f"""
-<section class="toolbar-card audit-runner-card">
+<section class="toolbar-card audit-runner-card" id="control-center-audit-runner">
   <div class="toolbar-card-header">
     <div>
       <h2>Audit runner</h2>
-      <p id="audit-selection-description">Choose any registered audit, pass explicit arguments, and run it without leaving the audit tab.</p>
+      <p id="audit-selection-description">Run a new sweep across every registered audit.</p>
     </div>
+  </div>
+  <div class="audit-runner-summary" id="audit-runner-summary" aria-live="polite">
+    <div class="audit-runner-summary-row">
+      <span>Audit: </span><strong id="audit-runner-summary-audit">—</strong>
+      <span class="summary-kv-sep">|</span>
+      <span>Args: </span><strong id="audit-runner-summary-args">none</strong>
+    </div>
+    <div class="audit-runner-summary-meta" id="audit-runner-summary-meta">No audit has been run in this session.</div>
   </div>
   <div class="form-grid">
     <label class="form-field">
       <span>Audit id</span>
-      <small id="control-center-audit-id-help" class="form-help">Choose a registered audit. <code>all</code> matches bare <code>python tools/run_audit.py</code> and runs the full sweep.</small>
+      <small id="control-center-audit-id-help" class="form-help">Use <code>all</code> to run every registered audit.</small>
       <select id="control-center-audit-id" title="Choose a registered audit to run from this page" aria-label="Audit id" aria-describedby="control-center-audit-id-help audit-selection-description">
         {options_html}
       </select>
     </label>
-    <label class="form-field form-field-wide">
+    <label class="form-field">
       <span>Audit arguments</span>
-      <small id="control-center-audit-args-help" class="form-help">Optional extra flags for the selected audit, using the same syntax you would pass on the command line.</small>
-      <input id="control-center-audit-args" type="text" value="{audit_args_text}" title="Optional extra command-line flags for the selected audit" aria-label="Audit arguments" aria-describedby="control-center-audit-args-help audit-selection-description" placeholder="Leave blank for the audit default, or pass explicit args like --suite maintained_core --details">
+      <small id="control-center-audit-args-help" class="form-help">Optional command-line flags for the selected audit.</small>
+      <input id="control-center-audit-args" type="text" value="{audit_args_text}" title="Optional extra command-line flags for the selected audit" aria-label="Audit arguments" aria-describedby="control-center-audit-args-help audit-selection-description" placeholder="--suite maintained_core --details">
     </label>
   </div>
   <div class="toolbar-actions">
     <button class="toolbar-button toolbar-button-primary" type="button" id="control-center-run-audit">Run selected audit</button>
     <button class="toolbar-button" type="button" id="control-center-reset-audit">Reset defaults</button>
-    <span class="toolbar-meta" id="control-center-audit-runner-status">No audit is running yet.</span>
+    <button class="toolbar-button toolbar-button-compact" type="button" id="control-center-run-again">Run again</button>
+    <span class="toolbar-meta" id="control-center-audit-runner-status">No audit has been run yet.</span>
   </div>
 </section>
 <script id="control-center-audit-options" type="application/json">{audits_payload}</script>
@@ -427,6 +436,13 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     setFormValues(defaultAuditId, defaultAuditArgs);
   }});
   runButton?.addEventListener("click", runSelectedAudit);
+  window.addEventListener("message", (event) => {{
+    const data = event && typeof event.data === "object" ? event.data : null;
+    if (!data || data.type !== "control-center-run-audit") {{
+      return;
+    }}
+    runSelectedAudit();
+  }});
   auditArgsInput?.addEventListener("input", () => {{
     if (suppressFormEvents) return;
     formDirty = true;
