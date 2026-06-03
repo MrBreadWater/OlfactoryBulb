@@ -151,6 +151,7 @@ with TemporaryDirectory() as tmp:
     assert "Audit beta" in html
     assert "/__audit_refresh__" in html
     assert "Display controls" in html
+    assert "overall-status" in html
     assert "Failures and warnings only" in html
     assert "Collapse all groups" in html
     assert "aria-pressed=\"false\"" in html
@@ -162,6 +163,8 @@ with TemporaryDirectory() as tmp:
     assert "audit-empty-state-subtitle" in html
     assert "control-center-run-audit" in html
     assert "group-link-label" in html
+    assert "group-link-count" in html
+    assert "group-link-main" in html
     assert "data-item-card" in html
     assert "data-item-toggle" in html
     assert "data-item-detail-body" in html
@@ -177,6 +180,8 @@ with TemporaryDirectory() as tmp:
     assert "warning-summary-text" in html
     assert html.count("data-interval-visual") == 1
     assert html.count("<div class='interval-legend'>") == 1
+    assert "interval-marker-label" in html
+    assert "observed-label" in html
     assert "<div class='interval-metric-grid'>" not in html
     assert "<div class='interval-range-labels'>" not in html
     assert "Protocol caveat exists in this item." in html

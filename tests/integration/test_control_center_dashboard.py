@@ -407,6 +407,10 @@ with TemporaryDirectory() as tmp:
     assert "OlfactoryBulb Control Center" in html
     assert "Run selected audit" in html
     assert "control-center-run-audit" in html
+    assert "control-center-edit-audit" in html
+    assert "audit-runner-summary-last-run" in html
+    assert "audit-runner-summary-meta" in html
+    assert "audit-runner-form" in html
     assert "/__control_center_state__" in html
     assert "shell-status-strip" in html
     assert "shell-status-chip" in html
@@ -421,6 +425,7 @@ with TemporaryDirectory() as tmp:
     assert 'aria-describedby="control-center-audit-id-help audit-selection-description"' in html
     assert 'aria-describedby="control-center-audit-args-help audit-selection-description"' in html
     assert 'id="control-center-audit-args" type="text" value=""' in html
+    assert "No audit has been run yet." in html
     assert audit_report["audit_id"] == "control_center_audits"
     assert len(audit_report["groups"]) == 0
     assert _export_call_kwargs["generate_packets_top_n"] == 0
@@ -604,6 +609,7 @@ with TemporaryDirectory() as tmp:
         assert "No audit results yet" in initial_audit_html
         assert "audit-empty-state-run" in initial_audit_html
         assert "audit-empty-state-title" in initial_audit_html
+        assert "interval-marker-label" in initial_audit_html
         assert "maintained/readme.html" in docs_html
         assert "View source markdown" in rendered_doc_html
         assert initial_state["audit"]["status"] == "idle"

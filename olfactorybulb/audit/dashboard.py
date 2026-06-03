@@ -1601,16 +1601,17 @@ def render_audit_dashboard_html(
   <style>
     :root {{
       color-scheme: light;
-      --bg: #f7f8fb;
-      --ink: #17202a;
-      --muted: #667085;
-      --line: #d9dee8;
+      --bg: #f5f7fb;
+      --ink: #172033;
+      --muted: #64748b;
+      --line: #d8e1ef;
       --panel: #ffffff;
+      --panel-alt: #f8fafd;
       --blue: #2563eb;
       --red: #dc2626;
       --amber: #d97706;
-      --green: #15803d;
-      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --green: #16a34a;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
       --ui-font-stack: Verdana, sans-serif;
     }}
     * {{ box-sizing: border-box; }}
@@ -1624,8 +1625,8 @@ def render_audit_dashboard_html(
       padding: 14px clamp(18px, 2vw, 30px) 12px;
       backdrop-filter: blur(8px);
     }}
-    h1 {{ margin: 0 0 4px; font-size: 18px; }}
-    main {{ width: 100%; max-width: none; margin: 0; padding: 18px clamp(18px, 2vw, 30px) 40px; }}
+    h1 {{ margin: 0 0 4px; font-size: 24px; font-weight: 700; }}
+    main {{ width: 100%; max-width: none; margin: 0; padding: 24px clamp(18px, 2vw, 24px) 32px; }}
     .subtle {{ color: var(--muted); font-size: 13px; }}
     .stats {{
       display: grid;
@@ -1655,6 +1656,17 @@ def render_audit_dashboard_html(
       border: 1px solid transparent;
       white-space: nowrap;
       line-height: 1.2;
+      font-variant-numeric: tabular-nums;
+    }}
+    .summary-chip:focus-visible,
+    .status-badge:focus-visible,
+    .action-button:focus-visible,
+    .toggle-button:focus-visible,
+    .group-link:focus-visible,
+    .item-toggle:focus-visible,
+    .control-field input:focus-visible {{
+      outline: 2px solid rgba(37, 99, 235, 0.45);
+      outline-offset: 2px;
     }}
     .status-pass {{ color: var(--green); background: #ecfdf3; border-color: #a7f3d0; }}
     .status-warn {{ color: var(--amber); background: #fff7ed; border-color: #fed7aa; }}
@@ -1666,22 +1678,42 @@ def render_audit_dashboard_html(
       margin-top: 10px;
       flex-wrap: wrap;
     }}
+    .overall-status {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-left: 2px;
+      padding: 4px 10px;
+      border: 1px solid #dbe3ef;
+      border-radius: 999px;
+      background: #f8fbff;
+    }}
+    .overall-status-label {{
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }}
+    .overall-status .status-badge {{
+      padding: 4px 10px;
+      font-size: 13px;
+    }}
     .action-button {{
       appearance: none;
       border: 1px solid #dbe3ef;
       background: #ffffff;
       color: #334155;
       border-radius: 8px;
-      padding: 8px 12px;
+      height: 44px;
+      padding: 0 16px;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
     }}
-    .action-button:hover {{ background: #eff6ff; border-color: #93c5fd; color: #1d4ed8; }}
+    .action-button:hover {{ background: #f8fbff; border-color: #b8c9df; color: #1d4ed8; }}
     .control-strip {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 10px;
+      display: block;
       margin-bottom: 16px;
     }}
     .control-card {{
@@ -1689,17 +1721,18 @@ def render_audit_dashboard_html(
       border: 1px solid var(--line);
       border-radius: 8px;
       box-shadow: var(--shadow);
-      padding: 12px;
+      padding: 20px;
       overflow: visible;
     }}
     .control-card h2 {{
       margin: 0 0 10px;
-      font-size: 14px;
+      font-size: 16px;
     }}
     .control-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 10px;
+      grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 0.9fr);
+      gap: 16px;
+      align-items: start;
     }}
     .control-field {{
       display: flex;
@@ -1716,7 +1749,8 @@ def render_audit_dashboard_html(
       width: 100%;
       border: 1px solid #dbe3ef;
       border-radius: 8px;
-      padding: 8px 10px;
+      height: 44px;
+      padding: 0 12px;
       font: inherit;
       background: #fff;
       color: var(--ink);
@@ -1732,7 +1766,8 @@ def render_audit_dashboard_html(
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 7px 12px;
+      height: 36px;
+      padding: 0 12px;
       border: 1px solid #d5deeb;
       border-radius: 999px;
       background: #f9fbff;
@@ -1773,13 +1808,13 @@ def render_audit_dashboard_html(
       top: 126px;
       z-index: 1;
       align-self: start;
-      padding: 16px;
+      padding: 20px;
     }}
     .sidebar h2 {{ margin: 0 0 10px; font-size: 16px; }}
     .group-links {{
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       max-height: calc(100vh - 160px);
       overflow-y: auto;
       overscroll-behavior: contain;
@@ -1789,8 +1824,10 @@ def render_audit_dashboard_html(
       display: flex;
       flex-direction: column;
       gap: 6px;
-      padding: 8px 10px;
+      padding: 10px 12px;
       border: 1px solid #e6eaf1;
+      border-left-width: 4px;
+      border-left-style: solid;
       border-radius: 8px;
       color: inherit;
       background: #fbfcfe;
@@ -1803,11 +1840,34 @@ def render_audit_dashboard_html(
       border-color: #c7d4e6;
       background: #f7faff;
     }}
+    .group-link[aria-current="true"] {{
+      border-color: #91aed6;
+      background: #eff5ff;
+      box-shadow: inset 4px 0 0 rgba(37, 99, 235, 0.78);
+    }}
+    .group-link.status-pass {{ border-left-color: rgba(22, 163, 74, 0.56); }}
+    .group-link.status-warn {{ border-left-color: rgba(217, 119, 6, 0.68); }}
+    .group-link.status-fail {{ border-left-color: rgba(220, 38, 38, 0.78); }}
+    .group-link-main {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }}
     .group-link-label {{
       min-width: 0;
-      overflow-wrap: anywhere;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
       font-weight: 700;
-      line-height: 1.25;
+      line-height: 1.3;
+    }}
+    .group-link-count {{
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }}
     .group-link-meta {{
       display: flex;
@@ -1829,12 +1889,15 @@ def render_audit_dashboard_html(
     .group-section {{
       scroll-margin-top: 24px;
     }}
+    .group-section.status-pass {{ border-left: 4px solid rgba(22, 163, 74, 0.22); }}
+    .group-section.status-warn {{ border-left: 4px solid rgba(217, 119, 6, 0.30); }}
+    .group-section.status-fail {{ border-left: 4px solid rgba(220, 38, 38, 0.34); }}
     .group-header {{
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
-      padding: 13px 16px;
+      padding: 16px 18px;
       border-bottom: 1px solid var(--line);
       background: #fbfcfe;
       scroll-margin-top: 126px;
@@ -1843,7 +1906,7 @@ def render_audit_dashboard_html(
       min-width: 0;
       flex: 1 1 auto;
     }}
-    .group-header h2 {{ margin: 0; font-size: 16px; }}
+    .group-header h2 {{ margin: 0; font-size: 16px; font-weight: 700; }}
     .group-header-actions {{
       display: flex;
       flex-wrap: wrap;
@@ -1875,7 +1938,12 @@ def render_audit_dashboard_html(
       background: #ffffff;
       align-self: start;
       overflow: hidden;
+      box-shadow: var(--shadow);
+      border-left: 4px solid transparent;
     }}
+    .item-card.status-fail {{ border-left-color: var(--red); }}
+    .item-card.status-warn {{ border-left-color: var(--amber); }}
+    .item-card.status-pass {{ border-left-color: rgba(22, 163, 74, 0.32); }}
     .item-header {{
       display: block;
       border-bottom: 1px solid var(--line);
@@ -1887,14 +1955,14 @@ def render_audit_dashboard_html(
       align-items: flex-start;
       gap: 12px;
       width: 100%;
-      padding: 14px 16px;
+      padding: 16px 18px;
       border: 0;
       background: transparent;
       text-align: left;
       cursor: pointer;
     }}
     .item-toggle:hover {{
-      background: rgba(239, 246, 255, 0.55);
+      background: #f8fbff;
     }}
     .item-toggle-icon {{
       flex: 0 0 auto;
@@ -1917,8 +1985,11 @@ def render_audit_dashboard_html(
     }}
     .item-group-label {{
       display: block;
-      color: #475569;
+      color: var(--muted);
       font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
       line-height: 1.2;
       opacity: 0.85;
     }}
@@ -1953,7 +2024,7 @@ def render_audit_dashboard_html(
     }}
     .item-body-notes {{
       margin: 12px 16px 12px;
-      padding: 10px 12px;
+      padding: 12px 14px;
       border: 1px solid #e5e7eb;
       border-radius: 8px;
       background: #f8fafc;
@@ -1988,14 +2059,18 @@ def render_audit_dashboard_html(
       flex-direction: column;
       gap: 6px;
       margin: 12px 16px 12px;
-      padding: 10px 12px;
+      padding: 12px 14px;
       border: 1px solid #f3d8a2;
       border-left: 4px solid #f59e0b;
       border-radius: 8px;
       background: #fffbeb;
     }}
     .warning-summary-label {{
-      display: none;
+      color: #92400e;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
     }}
     .warning-summary-text {{
       color: #334155;
@@ -2004,7 +2079,7 @@ def render_audit_dashboard_html(
       overflow-wrap: anywhere;
     }}
     .check-id {{ margin: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }}
-    .item-body {{ padding: 16px; display: flex; flex-direction: column; gap: 12px; }}
+    .item-body {{ padding: 18px 18px 20px; display: flex; flex-direction: column; gap: 12px; }}
     .item-detail-body[hidden] {{
       display: none !important;
     }}
@@ -2013,7 +2088,7 @@ def render_audit_dashboard_html(
     .interval-block {{
       border: 1px solid #e2e8f0;
       border-radius: 10px;
-      padding: 12px;
+      padding: 14px 14px 12px;
       background: #f8fbff;
     }}
     .interval-metric-grid {{
@@ -2057,9 +2132,9 @@ def render_audit_dashboard_html(
     }}
     .interval-track {{
       position: relative;
-      height: 16px;
+      height: 18px;
       border-radius: 999px;
-      background: linear-gradient(180deg, #edf2fa, #dbe5f4);
+      background: linear-gradient(180deg, #eef3fb, #d9e3f0);
       overflow: visible;
       border: 1px solid #d3ddeb;
     }}
@@ -2068,29 +2143,53 @@ def render_audit_dashboard_html(
       top: 2px;
       bottom: 2px;
       border-radius: 999px;
-      background: rgba(37, 99, 235, 0.18);
-      border: 1px solid rgba(37, 99, 235, 0.28);
+      background: rgba(37, 99, 235, 0.22);
+      border: 1px solid rgba(37, 99, 235, 0.35);
     }}
     .interval-tick {{
       position: absolute;
-      top: -3px;
+      top: -4px;
       width: 2px;
-      height: 22px;
+      height: 24px;
       transform: translateX(-50%);
       border-radius: 999px;
       background: #475569;
       box-shadow: 0 0 0 1px rgba(255,255,255,0.8);
     }}
+    .interval-tick.interval-reference {{
+      width: 3px;
+      background: #334155;
+    }}
     .interval-marker {{
       position: absolute;
       top: 50%;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       transform: translate(-50%, -50%);
       border-radius: 999px;
       border: 2px solid #ffffff;
-      box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.14);
+      box-shadow: 0 0 0 2px #ffffff, 0 0 0 1px rgba(15, 23, 42, 0.12);
       background: var(--blue);
+    }}
+    .interval-marker-label {{
+      position: absolute;
+      top: -23px;
+      transform: translateX(-50%);
+      padding: 1px 6px;
+      border-radius: 999px;
+      border: 1px solid #dbe3ef;
+      background: #ffffff;
+      color: #475569;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1.2;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      pointer-events: none;
+    }}
+    .interval-marker-label.observed-label {{
+      border-color: #c9d5e5;
+      color: #1f2937;
     }}
     .interval-marker.status-pass {{ background: var(--green); }}
     .interval-marker.status-warn {{ background: var(--amber); }}
@@ -2098,7 +2197,7 @@ def render_audit_dashboard_html(
     .interval-legend {{
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 12px 16px;
       color: var(--muted);
       font-size: 11px;
     }}
@@ -2111,7 +2210,7 @@ def render_audit_dashboard_html(
       display: flex;
       flex-direction: column;
       gap: 8px;
-      margin: 12px 16px 12px;
+      margin: 14px 18px 12px;
     }}
     .legend-swatch {{
       display: inline-block;
@@ -2138,7 +2237,7 @@ def render_audit_dashboard_html(
     .series-graph-block,
     .numeric-strip-block,
     .numeric-sparkline-block {{
-      margin: 12px 16px 12px;
+      margin: 14px 18px 12px;
       border: 1px solid #dbe4f0;
       border-radius: 10px;
       padding: 12px;
@@ -2277,8 +2376,14 @@ def render_audit_dashboard_html(
     @media (max-width: 980px) {{
       header {{ padding: 14px 16px; }}
       main {{ padding: 16px; }}
+      .control-grid {{
+        grid-template-columns: 1fr;
+      }}
       .layout {{ grid-template-columns: 1fr; }}
       .sidebar {{ position: static; }}
+      .group-link[aria-current="true"] {{
+        box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.78);
+      }}
       .group-header-actions {{
         width: 100%;
         justify-content: flex-start;
@@ -2309,7 +2414,7 @@ def render_audit_dashboard_html(
     <div class="subtle">audit_id={_esc(payload['audit_id'])} | generated {generated_at}</div>
     <div class="actions">
       {_render_summary(payload['summary'])}
-      {_render_status_badge(str(payload['worst_status']))}
+      <span class="overall-status"><span class="overall-status-label">Overall</span>{_render_status_badge(str(payload['worst_status']))}</span>
       {refresh_button}
       <span class="results-meta" id="results-meta">Loading visible-item summary...</span>
     </div>
@@ -2346,6 +2451,7 @@ def render_audit_dashboard_html(
       const emptyStateSubtitle = document.getElementById("audit-empty-state-subtitle");
       const emptyStateDefaultText = {json.dumps(empty_message)};
       const groupSections = Array.from(document.querySelectorAll("[data-group-section]"));
+      const groupLinks = Array.from(document.querySelectorAll(".group-link"));
       const itemCards = Array.from(document.querySelectorAll("[data-item-card]"));
       const emptyStateRunButton = document.getElementById("audit-empty-state-run");
 
@@ -2358,6 +2464,23 @@ def render_audit_dashboard_html(
 
       function isPressed(button) {{
         return String(button?.getAttribute("aria-pressed") || "false") === "true";
+      }}
+
+      function setActiveGroupLink(activeLink) {{
+        groupLinks.forEach((link) => {{
+          link.setAttribute("aria-current", link === activeLink ? "true" : "false");
+        }});
+      }}
+
+      function ensureActiveGroupLink() {{
+        const current = groupLinks.find((link) => link.getAttribute("aria-current") === "true" && !link.hidden);
+        if (current) {{
+          return;
+        }}
+        const firstVisible = groupLinks.find((link) => !link.hidden);
+        if (firstVisible) {{
+          setActiveGroupLink(firstVisible);
+        }}
       }}
 
       function toggleGroup(section, collapse) {{
@@ -2438,6 +2561,7 @@ def render_audit_dashboard_html(
             resultsMeta.textContent = `${{visibleItems}} visible items across ${{visibleGroups}} visible groups`;
           }}
         }}
+        ensureActiveGroupLink();
       }}
 
       document.querySelectorAll("[data-group-toggle]").forEach((button) => {{
@@ -2454,6 +2578,7 @@ def render_audit_dashboard_html(
       }});
       document.querySelectorAll(".group-link").forEach((link) => {{
         link.addEventListener("click", () => {{
+          setActiveGroupLink(link);
           const target = document.getElementById(String(link.dataset.groupTarget || ""));
           if (!target) {{
             return;
@@ -2476,6 +2601,9 @@ def render_audit_dashboard_html(
           window.setTimeout(alignGroupHeader, 500);
         }});
       }});
+      if (groupLinks.length > 0) {{
+        setActiveGroupLink(groupLinks[0]);
+      }}
       document.querySelectorAll("[data-item-toggle]").forEach((button) => {{
         button.addEventListener("click", () => {{
           const item = button.closest("[data-item-card]");

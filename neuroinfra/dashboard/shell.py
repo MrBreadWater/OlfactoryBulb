@@ -104,8 +104,8 @@ def render_dashboard_shell(
       --panel-alt: #f8fbff;
       --blue: #2b5fb8;
       --blue-soft: #e6edff;
-      --blue-chip-active: #dce8f8;
-      --blue-chip-active-border: #7d98be;
+      --blue-chip-active: #f4f9ff;
+      --blue-chip-active-border: #8aa8d0;
       --blue-chip-active-ink: #173a7a;
       --blue-running-chip: #edf2ff;
       --blue-running-border: #9cb4ef;
@@ -132,52 +132,61 @@ def render_dashboard_shell(
       backdrop-filter: blur(8px);
     }}
     .shell-header {{
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(640px, 1.15fr);
+      grid-template-areas:
+        "heading status"
+        "heading controls";
+      gap: 12px 16px;
+      align-items: start;
     }}
     .shell-heading {{
+      grid-area: heading;
       min-width: 0;
       flex: 1 1 auto;
     }}
     .shell-controls {{
+      grid-area: controls;
       display: flex;
-      align-items: flex-end;
+      justify-content: flex-end;
+      align-items: flex-start;
       min-width: 0;
-      width: 100%;
-      max-width: 220px;
-      margin-left: auto;
+      width: auto;
+      max-width: none;
+      margin-left: 0;
     }}
     .font-mode-control {{
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      min-width: 170px;
+      gap: 4px;
+      min-width: 160px;
+      width: 180px;
     }}
     .font-mode-control span {{
       color: var(--muted);
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
     }}
     .font-mode-control select {{
       appearance: none;
       width: 100%;
       border: 1px solid #d6deea;
       border-radius: 8px;
-      padding: 9px 11px;
+      padding: 8px 10px;
       font: inherit;
       background: #fff;
       color: var(--ink);
     }}
-    h1 {{ margin: 0 0 2px; font-size: 18px; letter-spacing: 0; }}
+    h1 {{ margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: 0; }}
     .subtle {{ color: var(--muted); font-size: 12px; }}
     .shell-status-strip {{
+      grid-area: status;
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-      gap: 10px;
-      flex: 1 1 620px;
-      max-width: 820px;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      min-width: 0;
       align-self: stretch;
     }}
     .shell-status-chip {{
@@ -185,8 +194,8 @@ def render_dashboard_shell(
       position: relative;
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      padding: 14px 12px 12px;
+      gap: 8px;
+      padding: 12px;
       border: 1px solid var(--line);
       border-radius: 10px;
       background: #ffffff;
@@ -201,38 +210,51 @@ def render_dashboard_shell(
     }}
     .shell-status-chip[aria-selected="true"] {{
       border-color: var(--blue-chip-active-border);
-      background: var(--blue-chip-active);
+      background: linear-gradient(180deg, #ffffff 0%, var(--blue-chip-active) 100%);
       color: var(--blue-chip-active-ink);
-      box-shadow: inset 0 0 0 1px rgba(47, 133, 211, 0.22), inset 0 -2px 0 0 rgba(47, 133, 211, 0.14);
+      box-shadow: inset 4px 0 0 rgba(47, 133, 211, 0.85), 0 10px 24px rgba(15, 23, 42, 0.05);
+    }}
+    .shell-status-chip:focus-visible,
+    .toolbar-button:focus-visible,
+    .form-field input:focus-visible,
+    .form-field select:focus-visible,
+    .font-mode-control select:focus-visible {{
+      outline: 2px solid rgba(43, 95, 184, 0.45);
+      outline-offset: 2px;
     }}
     .shell-status-chip[aria-selected="false"] {{
       background: #ffffff;
     }}
     .shell-status-chip span {{
       color: var(--ink);
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0;
+      letter-spacing: 0.03em;
       line-height: 1.2;
     }}
     .shell-status-chip strong {{
       position: absolute;
-      top: 12px;
-      right: 12px;
-      font-size: 13px;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
       line-height: 1.3;
       border-radius: 999px;
       padding: 2px 8px;
       border: 1px solid transparent;
       font-style: normal;
       font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }}
     .shell-status-chip small {{
       color: var(--muted);
       font-size: 11px;
       line-height: 1.35;
       overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }}
     .shell-status-chip[aria-selected="true"][data-tab-tone="running"] {{
       animation: shell-status-aura 1.8s ease-in-out infinite;
@@ -296,12 +318,12 @@ def render_dashboard_shell(
       width: 100%;
       max-width: max(95%, 1700px);
       margin: 0 auto;
-      padding: 16px 20px 24px;
+      padding: 24px clamp(20px, 2vw, 24px) 24px;
     }}
     .tab-shell {{
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
     }}
     .shell-toolbar {{
       display: grid;
@@ -309,7 +331,7 @@ def render_dashboard_shell(
     }}
     .control-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 16px;
     }}
     .toolbar-card {{
@@ -317,11 +339,81 @@ def render_dashboard_shell(
       border: 1px solid var(--line);
       border-radius: 10px;
       box-shadow: var(--surface-shadow);
-      padding: 16px;
+      padding: 20px;
+    }}
+    .audit-runner-card {{
+      display: grid;
+      gap: 16px;
+    }}
+    .audit-runner-card .toolbar-card-header {{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }}
+    .audit-runner-card .toolbar-card-header > div {{
+      min-width: 0;
+    }}
+    .audit-runner-card[data-audit-runner-mode="compact"] .audit-runner-form {{
+      display: none;
+    }}
+    .audit-runner-summary {{
+      display: grid;
+      gap: 8px;
+      padding: 14px 16px;
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      background: var(--panel-alt);
+    }}
+    .audit-runner-summary-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }}
+    .audit-runner-summary-item {{
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }}
+    .audit-runner-summary-item span {{
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }}
+    .audit-runner-summary-item strong {{
+      color: var(--ink);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }}
+    .audit-runner-summary-meta {{
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }}
+    .audit-runner-form {{
+      display: grid;
+      gap: 12px;
+    }}
+    .audit-runner-fields {{
+      display: grid;
+      grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }}
+    .audit-runner-actions {{
+      margin-top: 0;
+      justify-content: flex-end;
+    }}
+    .audit-runner-edit {{
+      align-self: flex-start;
     }}
     .toolbar-card-header h2 {{
       margin: 0 0 4px;
-      font-size: 16px;
+      font-size: 17px;
     }}
     .toolbar-card-header p {{
       margin: 0;
@@ -330,7 +422,7 @@ def render_dashboard_shell(
     }}
     .form-grid {{
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 12px;
       margin-top: 14px;
     }}
@@ -358,7 +450,8 @@ def render_dashboard_shell(
       width: 100%;
       border: 1px solid #d6deea;
       border-radius: 8px;
-      padding: 9px 11px;
+      height: 44px;
+      padding: 0 12px;
       font: inherit;
       background: #fff;
       color: var(--ink);
@@ -367,7 +460,7 @@ def render_dashboard_shell(
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
       margin-top: 14px;
     }}
     .toolbar-button {{
@@ -380,7 +473,8 @@ def render_dashboard_shell(
       background: #fff;
       color: #334155;
       border-radius: 8px;
-      padding: 9px 12px;
+      height: 44px;
+      padding: 0 16px;
       font: inherit;
       font-weight: 700;
       cursor: pointer;
@@ -393,6 +487,9 @@ def render_dashboard_shell(
       background: var(--blue);
       border-color: var(--blue);
       color: #fff;
+    }}
+    .toolbar-button-compact {{
+      padding: 0 14px;
     }}
     .toolbar-meta {{
       color: var(--muted);
@@ -408,7 +505,7 @@ def render_dashboard_shell(
       border: 1px solid #dde5f0;
       border-radius: 8px;
       background: var(--panel-alt);
-      padding: 12px;
+      padding: 14px;
       min-height: 94px;
     }}
     .status-card span {{
@@ -458,7 +555,7 @@ def render_dashboard_shell(
     .tab-panel {{
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 16px;
       min-height: calc(100vh - 155px);
     }}
     .panel-toolbar-shell {{
@@ -479,7 +576,25 @@ def render_dashboard_shell(
       header {{ padding: 10px 14px; }}
       main {{ padding: 14px; }}
       .shell-header {{
-        flex-direction: column;
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "heading"
+          "status"
+          "controls";
+      }}
+      .shell-controls {{
+        justify-self: start;
+      }}
+      .font-mode-control {{
+        width: 100%;
+        max-width: 220px;
+      }}
+      .audit-runner-summary-grid,
+      .audit-runner-fields {{
+        grid-template-columns: 1fr;
+      }}
+      .audit-runner-actions {{
+        justify-content: flex-start;
       }}
       iframe {{ min-height: calc(100vh - 210px); }}
     }}
@@ -494,7 +609,7 @@ def render_dashboard_shell(
       </div>
       <div class="shell-controls">
         <label class="font-mode-control">
-          <span>Typography</span>
+          <span>Font</span>
           <select id="dashboard-font-mode" title="Switch typography for this shell session">
             <option value="system-sans">System Sans</option>
             <option value="arial">Arial</option>
@@ -502,11 +617,6 @@ def render_dashboard_shell(
             <option value="calibri">Calibri</option>
             <option value="lucida">Lucida Sans</option>
             <option value="verdana">Verdana</option>
-            <option value="georgia">Georgia</option>
-            <option value="cambria">Cambria</option>
-            <option value="garamond">Garamond</option>
-            <option value="baskerville">Baskerville</option>
-            <option value="didot">Didot</option>
           </select>
         </label>
       </div>
@@ -540,11 +650,6 @@ def render_dashboard_shell(
           calibri: "Calibri, sans-serif",
           lucida: '"Lucida Grande", "Lucida Sans Unicode", sans-serif',
           verdana: "Verdana, sans-serif",
-          georgia: "Georgia, serif",
-          cambria: "Cambria, Georgia, serif",
-          garamond: 'Garamond, "Times New Roman", serif',
-          baskerville: 'Baskerville, "Baskerville Old Face", "Bodoni MT", Georgia, serif',
-          didot: 'Didot, "Didot LT STD", "Times New Roman", serif',
         }};
       const fontModeSelect = document.getElementById("dashboard-font-mode");
       const frames = Array.from(document.querySelectorAll("iframe[data-tab-frame]"));

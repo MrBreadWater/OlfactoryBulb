@@ -278,22 +278,33 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     audits_payload = html_escape(_json_script_payload(_available_audit_entries()), quote=False)
     audit_args_text = html_escape(_display_audit_args(audit_id, audit_args))
     return f"""
-<section class="toolbar-card audit-runner-card" id="control-center-audit-runner">
+<section class="toolbar-card audit-runner-card" id="control-center-audit-runner" data-audit-runner-mode="expanded">
   <div class="toolbar-card-header">
     <div>
       <h2>Audit runner</h2>
       <p id="audit-selection-description">Run a new sweep across every registered audit.</p>
     </div>
+    <button class="toolbar-button toolbar-button-compact audit-runner-edit" type="button" id="control-center-edit-audit" hidden>Edit selection</button>
   </div>
   <div class="audit-runner-summary" id="audit-runner-summary" aria-live="polite">
-    <div class="audit-runner-summary-row">
-      <span>Audit: </span><strong id="audit-runner-summary-audit">—</strong>
-      <span class="summary-kv-sep">|</span>
-      <span>Args: </span><strong id="audit-runner-summary-args">none</strong>
+    <div class="audit-runner-summary-grid">
+      <div class="audit-runner-summary-item">
+        <span>Audit</span>
+        <strong id="audit-runner-summary-audit">—</strong>
+      </div>
+      <div class="audit-runner-summary-item">
+        <span>Args</span>
+        <strong id="audit-runner-summary-args">none</strong>
+      </div>
+      <div class="audit-runner-summary-item">
+        <span>Last run</span>
+        <strong id="audit-runner-summary-last-run">No audit has been run yet.</strong>
+      </div>
     </div>
     <div class="audit-runner-summary-meta" id="audit-runner-summary-meta">No audit has been run in this session.</div>
   </div>
-  <div class="form-grid">
+  <div class="audit-runner-form" id="control-center-audit-form">
+  <div class="audit-runner-fields">
     <label class="form-field">
       <span>Audit id</span>
       <small id="control-center-audit-id-help" class="form-help">Use <code>all</code> to run every registered audit.</small>
@@ -307,11 +318,10 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
       <input id="control-center-audit-args" type="text" value="{audit_args_text}" title="Optional extra command-line flags for the selected audit" aria-label="Audit arguments" aria-describedby="control-center-audit-args-help audit-selection-description" placeholder="--suite maintained_core --details">
     </label>
   </div>
-  <div class="toolbar-actions">
+  <div class="toolbar-actions audit-runner-actions">
     <button class="toolbar-button toolbar-button-primary" type="button" id="control-center-run-audit">Run selected audit</button>
     <button class="toolbar-button" type="button" id="control-center-reset-audit">Reset defaults</button>
-    <button class="toolbar-button toolbar-button-compact" type="button" id="control-center-run-again">Run again</button>
-    <span class="toolbar-meta" id="control-center-audit-runner-status">No audit has been run yet.</span>
+  </div>
   </div>
 </section>
 <script id="control-center-audit-options" type="application/json">{audits_payload}</script>
@@ -323,12 +333,20 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
   const auditArgsInput = document.getElementById("control-center-audit-args");
   const runButton = document.getElementById("control-center-run-audit");
   const resetButton = document.getElementById("control-center-reset-audit");
-  const runnerStatus = document.getElementById("control-center-audit-runner-status");
+  const editButton = document.getElementById("control-center-edit-audit");
+  const auditRunnerCard = document.getElementById("control-center-audit-runner");
+  const auditRunnerForm = document.getElementById("control-center-audit-form");
+  const runnerSummaryAudit = document.getElementById("audit-runner-summary-audit");
+  const runnerSummaryArgs = document.getElementById("audit-runner-summary-args");
+  const runnerSummaryLastRun = document.getElementById("audit-runner-summary-last-run");
+  const runnerSummaryMeta = document.getElementById("audit-runner-summary-meta");
   const selectionDescription = document.getElementById("audit-selection-description");
   const defaultAuditId = {json.dumps(audit_id)};
   const defaultAuditArgs = {json.dumps(audit_args)};
   let formDirty = false;
   let suppressFormEvents = false;
+  let manualRunnerExpanded = true;
+  let runnerStateInitialized = false;
 
   function selectedAuditEntry() {{
     const selectedId = String(auditSelect?.value || "");
@@ -367,6 +385,55 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     return normalizedArgs.join(" ");
   }}
 
+  function formatAuditTimestamp(value) {{
+    const text = String(value || "").trim();
+    if (!text) {{
+      return "No audit has been run yet.";
+    }}
+    return text.replace("T", " ").slice(0, 16);
+  }}
+
+  function setRunnerMode(mode, {{ manual = false }} = {{}}) {{
+    const expanded = String(mode || "") !== "compact";
+    if (manual) {{
+      manualRunnerExpanded = expanded;
+    }}
+    if (auditRunnerCard) {{
+      auditRunnerCard.dataset.auditRunnerMode = expanded ? "expanded" : "compact";
+    }}
+    if (auditRunnerForm) {{
+      auditRunnerForm.hidden = !expanded;
+    }}
+    if (editButton) {{
+      editButton.hidden = expanded;
+    }}
+  }}
+
+  function updateRunnerSummary(auditState) {{
+    const auditIdText = String(auditState?.audit_id || defaultAuditId || "—");
+    const argsArray = Array.isArray(auditState?.audit_args) ? auditState.audit_args : defaultAuditArgs;
+    const auditArgsText = displayAuditArgs(auditIdText, argsArray) || "none";
+    const lastRunText = formatAuditTimestamp(auditState?.generated_at || "");
+    if (runnerSummaryAudit) {{
+      runnerSummaryAudit.textContent = auditIdText || "—";
+    }}
+    if (runnerSummaryArgs) {{
+      runnerSummaryArgs.textContent = auditArgsText;
+    }}
+    if (runnerSummaryLastRun) {{
+      runnerSummaryLastRun.textContent = lastRunText;
+    }}
+    if (runnerSummaryMeta) {{
+      runnerSummaryMeta.textContent = String(auditState?.message || "No audit has been run in this session.");
+    }}
+    if (runButton) {{
+      const hasRun = Boolean(String(auditState?.generated_at || "").trim());
+      runButton.textContent = String(auditState?.status || "") === "running"
+        ? "Running..."
+        : (hasRun ? "Run again" : "Run selected audit");
+    }}
+  }}
+
   function setFormValues(auditId, auditArgs, {{ preserveDirty = false }} = {{}}) {{
     suppressFormEvents = true;
     if (auditSelect && auditId) {{
@@ -395,8 +462,8 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
       audit_args_text: String(auditArgsInput?.value || "").trim(),
     }};
     runButton.disabled = true;
-    if (runnerStatus) {{
-      runnerStatus.textContent = `Starting ${{payload.audit_id}}...`;
+    if (runnerSummaryMeta) {{
+      runnerSummaryMeta.textContent = `Starting ${{payload.audit_id}}...`;
     }}
     try {{
       const response = await fetch("/__audit_run__", {{
@@ -412,12 +479,14 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
       const auditTabButton = document.querySelector('[data-tab-button][data-tab-key="audits"]');
       auditTabButton?.click();
       formDirty = false;
-      if (runnerStatus) {{
-        runnerStatus.textContent = `Running ${{payload.audit_id}} with live status updates.`;
+      manualRunnerExpanded = false;
+      setRunnerMode("compact");
+      if (runButton) {{
+        runButton.textContent = "Run again";
       }}
     }} catch (error) {{
-      if (runnerStatus) {{
-        runnerStatus.textContent = String(error && error.message ? error.message : error);
+      if (runnerSummaryMeta) {{
+        runnerSummaryMeta.textContent = String(error && error.message ? error.message : error);
       }}
     }} finally {{
       runButton.disabled = false;
@@ -434,8 +503,14 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
   }});
   resetButton?.addEventListener("click", () => {{
     setFormValues(defaultAuditId, defaultAuditArgs);
+    manualRunnerExpanded = true;
+    setRunnerMode("expanded", {{ manual: true }});
   }});
   runButton?.addEventListener("click", runSelectedAudit);
+  editButton?.addEventListener("click", () => {{
+    manualRunnerExpanded = true;
+    setRunnerMode("expanded", {{ manual: true }});
+  }});
   window.addEventListener("message", (event) => {{
     const data = event && typeof event.data === "object" ? event.data : null;
     if (!data || data.type !== "control-center-run-audit") {{
@@ -446,6 +521,8 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
   auditArgsInput?.addEventListener("input", () => {{
     if (suppressFormEvents) return;
     formDirty = true;
+    manualRunnerExpanded = true;
+    setRunnerMode("expanded", {{ manual: true }});
   }});
   auditArgsInput?.addEventListener("keydown", (event) => {{
     if (event.key === "Enter") {{
@@ -460,16 +537,27 @@ def _render_audit_runner_panel(*, audit_id: str, audit_args: list[str]) -> str:
     if (!formDirty && auditState.audit_id) {{
       setFormValues(String(auditState.audit_id), Array.isArray(auditState.audit_args) ? auditState.audit_args : []);
     }}
-    if (runnerStatus && auditState.message) {{
-      runnerStatus.textContent = String(auditState.message);
-    }}
+    updateRunnerSummary(auditState);
     if (runButton) {{
       runButton.disabled = String(auditState.status || "") === "running";
     }}
+    const hasPriorRun = Boolean(String(auditState.generated_at || "").trim()) || String(auditState.status || "") === "running" || String(auditState.status || "") === "ready";
+    if (!runnerStateInitialized && hasPriorRun) {{
+      manualRunnerExpanded = false;
+      setRunnerMode("compact");
+      runnerStateInitialized = true;
+    }} else if (String(auditState.status || "") === "idle" && !String(auditState.generated_at || "").trim()) {{
+      setRunnerMode("expanded");
+    }} else if (!manualRunnerExpanded) {{
+      setRunnerMode("compact");
+    }}
+    runnerStateInitialized = true;
     updateSelectionDescription();
   }});
 
   setFormValues(defaultAuditId, defaultAuditArgs);
+  updateRunnerSummary({{ audit_id: defaultAuditId, audit_args: defaultAuditArgs, message: "No audit has been run in this session." }});
+  setRunnerMode("expanded", {{ manual: true }});
 }})();
 </script>
 """
