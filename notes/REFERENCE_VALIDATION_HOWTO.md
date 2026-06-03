@@ -219,26 +219,24 @@ minimum = 8.0
 maximum = 12.0
 title = "Soma diameter stays inside the accepted range"
 criterion = "The observed soma diameter should remain inside the accepted range."
-criterion_latex = 'L \leq \bar{x} \leq U'
+criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
 criterion_formulae = [
-  'L = \mu - k\sigma',
-  'U = \mu + k\sigma',
+  '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 ]
 criterion_definitions = [
   { symbol = '\bar{x}', definition = 'observed group mean' },
-  { symbol = 'L', definition = 'lower accepted bound' },
-  { symbol = 'U', definition = 'upper accepted bound' },
   { symbol = '\mu', definition = 'uploaded reference mean' },
   { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
   { symbol = 'k', definition = 'configured sigma multiplier' },
 ]
 ```
 
-For reference-band rows, prefer a real inequality plus the bound-construction
-formulae rather than a bare membership shell. For example:
+For reference-band rows, prefer a compact centered inequality when the rule is
+centered around a mean, and keep explicit endpoint notation only for modes that
+really need asymmetric bounds. For example:
 
-- symmetric bands: `L \leq \bar{x} \leq U`, `L = \mu - k\sigma`, `U = \mu + k\sigma`
-- lognormal bands: `L \leq \bar{x} \leq U`, `\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}`, `\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2`, `L = e^{\mu_\ell - k\sigma_\ell}`, `U = e^{\mu_\ell + k\sigma_\ell}`
+- symmetric bands: `\left|\bar{x} - \mu\right| \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
+- lognormal bands: `\left|\ln(\bar{x}) - \mu_\ell\right| \leq k\sigma_\ell`, plus `\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}` and `\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2`
 
 The framework now supports two skip behaviors:
 

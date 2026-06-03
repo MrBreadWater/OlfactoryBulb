@@ -31,15 +31,12 @@ def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> Aud
             status="PASS",
             title="Alpha pass",
             criterion="Alpha should pass.",
-            criterion_latex=r"L \leq \bar{x} \leq U",
+            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
             criterion_formulae=[
-                r"L = \mu - k\sigma",
-                r"U = \mu + k\sigma",
+                r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                {"symbol": "L", "definition": "lower accepted bound"},
-                {"symbol": "U", "definition": "upper accepted bound"},
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                 {"symbol": "k", "definition": "configured sigma multiplier"},
@@ -119,12 +116,10 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Environment pass",
                     criterion="Criterion",
-                    criterion_latex=r"L \leq \bar{x} \leq U",
-                    criterion_formulae=[r"L = \mu - k\sigma", r"U = \mu + k\sigma"],
+                    criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+                    criterion_formulae=[r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                        {"symbol": "L", "definition": "lower accepted bound"},
-                        {"symbol": "U", "definition": "upper accepted bound"},
                         {"symbol": r"\mu", "definition": "uploaded reference mean"},
                         {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                         {"symbol": "k", "definition": "configured sigma multiplier"},
@@ -160,12 +155,10 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Short item",
                     criterion="Criterion",
-                    criterion_latex=r"L \leq \bar{x} \leq U",
-                    criterion_formulae=[r"L = \mu - k\sigma", r"U = \mu + k\sigma"],
+                    criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
+                    criterion_formulae=[r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                        {"symbol": "L", "definition": "lower accepted bound"},
-                        {"symbol": "U", "definition": "upper accepted bound"},
                         {"symbol": r"\mu", "definition": "uploaded reference mean"},
                         {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                         {"symbol": "k", "definition": "configured sigma multiplier"},
@@ -392,7 +385,7 @@ def _launch_chromium_cdp() -> tuple[subprocess.Popen[str], str, TemporaryDirecto
 
 class _CDPClient:
     def __init__(self, ws_url: str):
-        self._ws = create_connection(ws_url, timeout=10)
+        self._ws = create_connection(ws_url, timeout=30)
         self._next_id = 0
 
     def close(self) -> None:
@@ -503,8 +496,8 @@ with TemporaryDirectory() as tmp:
     output_dir = Path(manifest["output_dir"])
     preserved_audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert len(preserved_audit_report["groups"]) == 1
-    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"L \leq \bar{x} \leq U"
-    assert preserved_audit_report["groups"][0]["items"][0]["criterion_formulae"] == [r"L = \mu - k\sigma", r"U = \mu + k\sigma"]
+    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
+    assert preserved_audit_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     preserved_audits_html = (output_dir / "audits" / "index.html").read_text()
     assert "./assets/mathjax/tex-svg.js" in preserved_audits_html
 
@@ -549,8 +542,8 @@ with TemporaryDirectory() as tmp:
     assert "./assets/mathjax/tex-svg.js" in audits_html
     assert "cdn.jsdelivr.net" not in audits_html
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
-    assert audit_report["items"][0]["criterion_latex"] == r"L \leq \bar{x} \leq U"
-    assert audit_report["items"][0]["criterion_formulae"] == [r"L = \mu - k\sigma", r"U = \mu + k\sigma"]
+    assert audit_report["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
+    assert audit_report["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
     assert placeholder["placeholder"] is True
@@ -751,8 +744,8 @@ with TemporaryDirectory() as tmp:
         first_run_titles = {group["title"] for group in first_run_report["groups"]}
         assert "Environment/install audit" in first_run_titles
         assert "Scratch boundary audit" in first_run_titles
-        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"L \leq \bar{x} \leq U"
-        assert first_run_report["groups"][0]["items"][0]["criterion_formulae"] == [r"L = \mu - k\sigma", r"U = \mu + k\sigma"]
+        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|\bar{x} - \mu\right| \leq k\sigma"
+        assert first_run_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
         assert first_run_report["groups"][0]["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
 
         run_status, run_payload = _json_post(
@@ -984,7 +977,7 @@ with TemporaryDirectory() as tmp:
                 "      meaning: row.querySelector('.criterion-definition-meaning')?.textContent?.trim() || '',"
                 "      symbolText: row.querySelector('.criterion-definition-symbol')?.textContent?.trim() || ''"
                 "    }));"
-                "    if (equationSvg && formulaSvgCount >= 2 && definitionSvgCount >= 3 && definitions.length >= 3) {"
+                "    if (equationSvg && formulaSvgCount >= 1 && definitionSvgCount >= 3 && definitions.length >= 3) {"
                 "      resolve({"
                 "        equationRendered: true,"
                 "        formulaSvgCount,"
@@ -1008,12 +1001,12 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert math_render["equationRendered"] is True
-            assert math_render["formulaSvgCount"] >= 2
+            assert math_render["formulaSvgCount"] >= 1
             assert math_render["definitionSvgCount"] >= 3
             definition_meanings = [entry["meaning"] for entry in math_render["definitionTexts"]]
             assert "Observed group mean" in definition_meanings
-            assert "Lower accepted bound" in definition_meanings
-            assert "Upper accepted bound" in definition_meanings
+            assert "Uploaded reference mean" in definition_meanings
+            assert "Uploaded reference standard deviation" in definition_meanings
             observed_entry = next(entry for entry in math_render["definitionTexts"] if entry["meaning"] == "Observed group mean")
             assert "\\" not in observed_entry["symbolText"]
             series_visibility = client.eval(

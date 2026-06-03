@@ -56,15 +56,12 @@ sample_report = AuditReport(
             status="PASS",
             title="Alpha math",
             criterion="The observed mean should stay within the accepted interval.",
-            criterion_latex=r"L \leq \bar{x} \leq U",
+            criterion_latex=r"\left|\bar{x} - \mu\right| \leq k\sigma",
             criterion_formulae=[
-                r"L = \mu - k\sigma",
-                r"U = \mu + k\sigma",
+                r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
             ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                {"symbol": "L", "definition": "lower accepted bound"},
-                {"symbol": "U", "definition": "upper accepted bound"},
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                 {"symbol": "k", "definition": "configured sigma multiplier"},
@@ -233,9 +230,8 @@ with TemporaryDirectory() as tmp:
     assert "MathJax" in html
     assert "./assets/mathjax/tex-svg.js" in html
     assert "cdn.jsdelivr.net" not in html
-    assert r"L \leq \bar{x} \leq U" in html
-    assert r"L = \mu - k\sigma" in html
-    assert r"U = \mu + k\sigma" in html
+    assert r"\left|\bar{x} - \mu\right| \leq k\sigma" in html
+    assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in html
     assert html.count("<svg") >= 3
     assert "observed group mean" in html
     assert "f-I curve" in html

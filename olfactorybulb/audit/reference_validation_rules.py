@@ -582,7 +582,7 @@ def _criterion_math_for_band(
     band: ReferenceAcceptanceBand,
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     observed_label = f"{group} mean {property_name.lower()}"
-    latex = r"L \leq \bar{x} \leq U"
+    latex = r"\left|\bar{x} - \mu\right| \leq k\sigma"
     formulae: list[str] = []
     definitions: list[dict[str, Any]] = [{"symbol": r"\bar{x}", "definition": observed_label}]
     if band.mode == "quantile_interval":
@@ -621,10 +621,9 @@ def _criterion_math_for_band(
         latex = r"\bar{x} = b"
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
+        latex = r"\left|\ln(\bar{x}) - \mu_\ell\right| \leq k\sigma_\ell"
         definitions.extend(
             [
-                {"symbol": "L", "definition": "lower lognormal reconstruction of the uploaded mean and standard deviation"},
-                {"symbol": "U", "definition": "upper lognormal reconstruction of the uploaded mean and standard deviation"},
                 {"symbol": r"\mu_\ell", "definition": "log-space mean"},
                 {"symbol": r"\sigma_\ell", "definition": "log-space standard deviation"},
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -636,21 +635,18 @@ def _criterion_math_for_band(
             [
                 r"\sigma_\ell = \sqrt{\ln(1 + (\sigma / \mu)^2)}",
                 r"\mu_\ell = \ln(\mu) - \frac{1}{2}\sigma_\ell^2",
-                r"L = e^{\mu_\ell - k\sigma_\ell}",
-                r"U = e^{\mu_\ell + k\sigma_\ell}",
+                r"\mu_\ell - k\sigma_\ell \leq \ln(\bar{x}) \leq \mu_\ell + k\sigma_\ell",
             ]
         )
     else:
         definitions.extend(
             [
-                {"symbol": "L", "definition": "uploaded mean minus the configured sigma multiplier times the uploaded standard deviation"},
-                {"symbol": "U", "definition": "uploaded mean plus the configured sigma multiplier times the uploaded standard deviation"},
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                 {"symbol": "k", "definition": "configured sigma multiplier"},
             ]
         )
-        formulae.extend([r"L = \mu - k\sigma", r"U = \mu + k\sigma"])
+        formulae.extend([r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"])
     return latex, definitions, formulae
 
 
