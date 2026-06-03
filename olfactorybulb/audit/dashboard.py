@@ -36,7 +36,12 @@ def _render_status_badge(status: str) -> str:
         "WARN": "!",
         "FAIL": "✕",
     }.get(status, "•")
-    return f"<span class='status-badge {_status_class(status)}'><span class='status-icon' aria-hidden='true'>{_esc(icon)}</span>{_esc(status)}</span>"
+    return (
+        f"<span class='status-badge {_status_class(status)}'>"
+        f"<span class='status-icon' aria-hidden='true'>{_esc(icon)}</span>"
+        f"<span class='status-text'>{_esc(status)}</span>"
+        "</span>"
+    )
 
 
 def _render_summary(summary: dict[str, int]) -> str:
@@ -1647,6 +1652,7 @@ def render_audit_dashboard_html(
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 6px;
       flex: 0 0 auto;
       max-width: 100%;
       border-radius: 999px;
@@ -1657,6 +1663,14 @@ def render_audit_dashboard_html(
       white-space: nowrap;
       line-height: 1.2;
       font-variant-numeric: tabular-nums;
+    }}
+    .status-icon {{
+      display: inline-block;
+      line-height: 1;
+      transform: translateY(-0.02em);
+    }}
+    .status-text {{
+      line-height: 1;
     }}
     .summary-chip:focus-visible,
     .status-badge:focus-visible,

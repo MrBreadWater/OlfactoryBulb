@@ -166,6 +166,7 @@ with TemporaryDirectory() as tmp:
     assert "group-link-count" in html
     assert "group-link-main" in html
     assert "aria-current" not in html
+    assert "status-text" in html
     assert "data-item-card" in html
     assert "data-item-toggle" in html
     assert "data-item-detail-body" in html
