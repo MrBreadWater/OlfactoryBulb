@@ -194,6 +194,40 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     detail_level="summary",
                 ),
                 AuditItem(
+                    check_id="human_review_status.numeric_item",
+                    status="PASS",
+                    title="Numeric item",
+                    criterion="Scalar numeric evidence should render as a compact comparison strip.",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    evidence={
+                        "spike_count": 12,
+                        "response_latency_ms": 18.6,
+                        "sample_count": 40,
+                        "label": "Observed scalar metrics",
+                    },
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
+                    check_id="human_review_status.sequence_item",
+                    status="PASS",
+                    title="Sequence item",
+                    criterion="Implicit numeric sequence evidence should render as a sparkline.",
+                    description="Description",
+                    acceptable="Acceptable",
+                    acceptable_basis="Configured",
+                    evidence={
+                        "trial_values": [0.2, 0.6, 0.9, 1.4, 1.6],
+                        "label": "Observed sequence",
+                    },
+                    group_id="human_review_status",
+                    group_title="Human review status",
+                    detail_level="summary",
+                ),
+                AuditItem(
                     check_id="human_review_status.notes_only_item",
                     status="PASS",
                     title="Notes-only item",
@@ -836,6 +870,24 @@ with TemporaryDirectory() as tmp:
             assert series_scale["xTicks"] >= 4
             assert series_scale["yTicks"] >= 4
             assert series_scale["tickLabels"] >= 8
+            numeric_visuals = client.eval(
+                "(() => {"
+                "  const strip = document.querySelector('[data-numeric-strip]');"
+                "  const sparkline = document.querySelector('[data-numeric-sparkline]');"
+                "  return {"
+                "    strip: Boolean(strip),"
+                "    sparkline: Boolean(sparkline),"
+                "    stripLegend: Boolean(strip) && Boolean(strip.closest('.numeric-strip-block')?.querySelector('.numeric-legend')),"
+                "    sparklineMeta: Boolean(sparkline) && Boolean(sparkline.closest('.numeric-sparkline-block')?.querySelector('.numeric-sparkline-meta'))"
+                "  };"
+                "})()"
+            )
+            assert numeric_visuals == {
+                "strip": True,
+                "sparkline": True,
+                "stripLegend": True,
+                "sparklineMeta": True,
+            }
             collapsed = client.eval(
                 "(() => {"
                 "  const group = document.querySelector('[data-group-section]');"

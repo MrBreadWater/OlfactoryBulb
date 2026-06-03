@@ -68,6 +68,38 @@ sample_report = AuditReport(
             group_id="audit_gamma",
             group_title="Audit gamma",
         ),
+        AuditItem(
+            check_id="audit_gamma.gamma_numeric",
+            status="PASS",
+            title="Gamma numeric",
+            criterion="Gamma numeric evidence should render as a compact scalar comparison.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "spike_count": 12,
+                "response_latency_ms": 18.6,
+                "sample_count": 40,
+                "label": "Observed scalar metrics",
+            },
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
+            check_id="audit_gamma.gamma_sequence",
+            status="PASS",
+            title="Gamma sequence",
+            criterion="Gamma sequence evidence should render as a compact sparkline.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "trial_values": [0.2, 0.6, 0.9, 1.4, 1.6],
+                "label": "Observed sequence",
+            },
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
     ],
 )
 
@@ -120,8 +152,17 @@ with TemporaryDirectory() as tmp:
     assert html.count("series-tick-label") >= 4
     assert html.count("<circle class='series-point'") >= 4
     assert "Observed sweep" in html
+    assert "data-numeric-strip" in html
+    assert "data-numeric-sparkline" in html
+    assert "Numeric summary" in html
+    assert "Numeric sequence" in html
+    assert "Observed scalar metrics" in html
+    assert "Observed sequence" in html
     gamma_index = html.index("audit_gamma.gamma_curve")
     assert html.index("series-graph-block", gamma_index) < html.index("data-item-detail-body", gamma_index)
+    strip_index = html.index("data-numeric-strip")
+    sparkline_index = html.index("data-numeric-sparkline")
+    assert strip_index < sparkline_index
     summary_index = html.index("<div class='item-body-summary'>")
     legend_index = html.index("<div class='interval-legend'>", summary_index)
     track_index = html.index("<div class='interval-track'>", summary_index)

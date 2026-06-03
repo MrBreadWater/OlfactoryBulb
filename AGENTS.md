@@ -338,9 +338,12 @@ contract for future sessions.
   - f-I curve graphics should include explicit axis names plus sparse tick
     marks and numeric labels so the graph communicates scale without becoming
     cluttered
-  - do not force scalar numeric evidence into a chart; if the evidence is not
-    explicitly series-shaped, keep it as metadata or use a dedicated interval
-    visual when bounds are present
+  - scalar numeric evidence may use a compact shared-scale dot strip, and
+    short unpaired numeric sequences may use a sparkline; prefer those over
+    bar charts when the data type does not justify a bar encoding
+  - do not force scalar numeric evidence into a bar chart; use the compact
+    dot strip or sparkline when a light visual improves the item, and keep the
+    raw values available in the detail grid
   - keep persistent audit-card body regions visually coherent in collapsed and
     expanded states; numeric summaries, notes/caveats, and warning blocks
     should share deliberate spacing/order instead of relying on each block's

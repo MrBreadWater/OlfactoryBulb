@@ -513,6 +513,205 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
     ), used_keys
 
 
+def _render_numeric_companions(item: AuditItem, evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> tuple[str, set[str]]:
+    exclude = set(exclude_keys or set())
+    if not evidence:
+        return "", set()
+
+    scalar_entries: list[dict[str, Any]] = []
+    sequence_entry: dict[str, Any] | None = None
+    used_keys: set[str] = set()
+
+    for key, value in evidence.items():
+        if key in exclude or key == "__reference_annotations__":
+            continue
+        if key in _INTERVAL_RESERVED_EVIDENCE_KEYS:
+            continue
+        if key in _SERIES_X_KEY_CANDIDATES or key in _SERIES_Y_KEY_CANDIDATES or key == "fi_curve_rows":
+            continue
+        numeric_value = _float_or_none(value)
+        if numeric_value is not None:
+            scalar_entries.append(
+                {
+                    "key": key,
+                    "label": _evidence_label(key),
+                    "value": numeric_value,
+                }
+            )
+            used_keys.add(key)
+            continue
+        numeric_values = _float_list_or_none(value)
+        if sequence_entry is None and numeric_values is not None and len(numeric_values) >= 2:
+            sequence_entry = {
+                "key": key,
+                "label": _evidence_label(key),
+                "values": numeric_values,
+            }
+            used_keys.add(key)
+
+    blocks: list[str] = []
+
+    if scalar_entries:
+        values = [float(entry["value"]) for entry in scalar_entries]
+        domain_low, domain_high = _series_domain(values)
+        plot_width = 520.0
+        plot_height = 78.0
+        margin_left = 54.0
+        margin_right = 18.0
+        margin_top = 18.0
+        margin_bottom = 34.0
+        svg_width = margin_left + plot_width + margin_right
+        svg_height = margin_top + plot_height + margin_bottom
+
+        def _x_pos(value: float) -> float:
+            width = domain_high - domain_low
+            if width <= 0.0:
+                return margin_left + plot_width / 2.0
+            return margin_left + ((value - domain_low) / width) * plot_width
+
+        axis_y = margin_top + plot_height / 2.0
+        x_ticks = _series_tick_values(domain_low, domain_high, target_ticks=5)
+        dots: list[str] = []
+        legend_items: list[str] = []
+        for index, entry in enumerate(scalar_entries):
+            color = _series_color_for_key(entry["key"], index, status=str(item.status))
+            x_pos = _x_pos(float(entry["value"]))
+            dots.append(
+                f"<circle class='numeric-dot' cx='{x_pos:.2f}' cy='{axis_y:.2f}' r='4.2' "
+                f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
+            )
+            legend_items.append(
+                f"<span class='numeric-legend-item'><i class='numeric-legend-swatch' style='background:{color['fill']}; border-color:{color['stroke']};"
+                f"{' border-style:dashed;' if color['dash'] else ''}'></i>{_esc(entry['label'])} {_esc(_format_numeric(float(entry['value'])))}"
+                f"</span>"
+            )
+
+        svg_lines = [
+            f"<svg class='numeric-strip-svg' data-numeric-strip role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
+            f"aria-label='Numeric summary with {len(scalar_entries)} values on a shared scale from {_format_numeric(domain_low)} to {_format_numeric(domain_high)}.'>",
+            f"<rect class='numeric-strip-bg' x='0' y='0' width='{svg_width:.0f}' height='{svg_height:.0f}' rx='10' ry='10'></rect>",
+            f"<line class='numeric-strip-axis' x1='{margin_left:.2f}' y1='{axis_y:.2f}' x2='{margin_left + plot_width:.2f}' y2='{axis_y:.2f}'></line>",
+        ]
+        if domain_low <= 0.0 <= domain_high:
+            svg_lines.append(
+                f"<line class='numeric-strip-zero' x1='{_x_pos(0.0):.2f}' y1='{margin_top:.2f}' x2='{_x_pos(0.0):.2f}' y2='{margin_top + plot_height:.2f}'></line>"
+            )
+        for tick in x_ticks:
+            x_pos = _x_pos(tick)
+            svg_lines.append(
+                f"<line class='numeric-strip-tick' x1='{x_pos:.2f}' y1='{axis_y - 4.0:.2f}' x2='{x_pos:.2f}' y2='{axis_y + 4.0:.2f}'></line>"
+            )
+            svg_lines.append(
+                f"<text class='numeric-strip-label' x='{x_pos:.2f}' y='{axis_y + 12.0:.2f}' text-anchor='middle' dominant-baseline='hanging'>"
+                f"{_esc(_series_tick_label(tick))}</text>"
+            )
+        svg_lines.extend(dots)
+        svg_lines.append("</svg>")
+        blocks.append(
+            "".join(
+                [
+                    "<div class='item-block numeric-strip-block'>",
+                    "<h4>Numeric summary</h4>",
+                    "<div class='numeric-strip-meta'><span>shared scale</span><span>scalar metrics</span></div>",
+                    "<div class='numeric-strip-shell'>",
+                    "".join(svg_lines),
+                    "</div>",
+                    f"<div class='numeric-legend'>{''.join(legend_items)}</div>",
+                    "</div>",
+                ]
+            )
+        )
+
+    if sequence_entry is not None:
+        values = list(sequence_entry["values"])
+        x_low = 0.5
+        x_high = float(len(values)) + 0.5
+        y_low, y_high = _series_domain(values)
+        plot_width = 520.0
+        plot_height = 128.0
+        margin_left = 62.0
+        margin_right = 18.0
+        margin_top = 18.0
+        margin_bottom = 38.0
+        svg_width = margin_left + plot_width + margin_right
+        svg_height = margin_top + plot_height + margin_bottom
+
+        def _x_pos(value: float) -> float:
+            width = x_high - x_low
+            if width <= 0.0:
+                return margin_left + plot_width / 2.0
+            return margin_left + ((value - x_low) / width) * plot_width
+
+        def _y_pos(value: float) -> float:
+            height = y_high - y_low
+            if height <= 0.0:
+                return margin_top + plot_height / 2.0
+            return margin_top + plot_height - ((value - y_low) / height) * plot_height
+
+        x_ticks = _series_tick_values(1.0, float(len(values)), target_ticks=min(5, len(values)))
+        y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
+        x_label = "Index"
+        y_label = "Value"
+        svg_lines = [
+            f"<svg class='numeric-sparkline-svg' data-numeric-sparkline role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
+            f"aria-label='Numeric sequence for {_esc(sequence_entry['label'])} with {len(values)} points. "
+            f"X axis {x_label} from 1 to {len(values)}. Y axis {y_label} from {_format_numeric(y_low)} to {_format_numeric(y_high)}.'>",
+            f"<rect class='numeric-sparkline-bg' x='0' y='0' width='{svg_width:.0f}' height='{svg_height:.0f}' rx='10' ry='10'></rect>",
+            f"<line class='numeric-sparkline-axis' x1='{margin_left:.2f}' y1='{margin_top + plot_height:.2f}' x2='{margin_left + plot_width:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
+            f"<line class='numeric-sparkline-axis' x1='{margin_left:.2f}' y1='{margin_top:.2f}' x2='{margin_left:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
+        ]
+        if y_low <= 0.0 <= y_high:
+            svg_lines.append(
+                f"<line class='numeric-sparkline-zero' x1='{margin_left:.2f}' y1='{_y_pos(0.0):.2f}' x2='{margin_left + plot_width:.2f}' y2='{_y_pos(0.0):.2f}'></line>"
+            )
+        for tick in x_ticks:
+            x_pos = _x_pos(tick)
+            svg_lines.append(
+                f"<line class='numeric-sparkline-tick' x1='{x_pos:.2f}' y1='{margin_top + plot_height:.2f}' x2='{x_pos:.2f}' y2='{margin_top + plot_height + 4.0:.2f}'></line>"
+            )
+            svg_lines.append(
+                f"<text class='numeric-sparkline-label' x='{x_pos:.2f}' y='{margin_top + plot_height + 16.0:.2f}' text-anchor='middle' dominant-baseline='hanging'>"
+                f"{_esc(_series_tick_label(tick))}</text>"
+            )
+        for tick in y_ticks:
+            y_pos = _y_pos(tick)
+            svg_lines.append(
+                f"<line class='numeric-sparkline-tick' x1='{margin_left - 4.0:.2f}' y1='{y_pos:.2f}' x2='{margin_left:.2f}' y2='{y_pos:.2f}'></line>"
+            )
+            svg_lines.append(
+                f"<text class='numeric-sparkline-label' x='{margin_left - 8.0:.2f}' y='{y_pos:.2f}' text-anchor='end' dominant-baseline='middle'>"
+                f"{_esc(_series_tick_label(tick))}</text>"
+            )
+
+        path_commands = [f"M {_x_pos(1.0):.2f} {_y_pos(values[0]):.2f}"]
+        path_commands.extend(f"L {_x_pos(float(index + 1)):.2f} {_y_pos(value):.2f}" for index, value in enumerate(values[1:]))
+        color = _series_color_for_key(str(sequence_entry["key"]), 0, status=str(item.status))
+        svg_lines.append(
+            f"<path class='numeric-sparkline-line' d='{_esc(' '.join(path_commands))}' style='stroke:{color['stroke']}; fill:none;'></path>"
+        )
+        for index, value in enumerate(values, start=1):
+            svg_lines.append(
+                f"<circle class='numeric-sparkline-point' cx='{_x_pos(float(index)):.2f}' cy='{_y_pos(value):.2f}' r='3.4' "
+                f"style='stroke:{color['stroke']}; fill:{color['fill']};'></circle>"
+            )
+        svg_lines.append("</svg>")
+        blocks.append(
+            "".join(
+                [
+                    "<div class='item-block numeric-sparkline-block'>",
+                    "<h4>Numeric sequence</h4>",
+                    f"<div class='numeric-sparkline-meta'><span>{_esc(sequence_entry['label'])}</span><span>Index / Value</span></div>",
+                    "<div class='numeric-sparkline-shell'>",
+                    "".join(svg_lines),
+                    "</div>",
+                    "</div>",
+                ]
+            )
+        )
+
+    return "".join(blocks), used_keys
+
+
 def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
     unit = str(interval["reference_unit"])
     observed_text = _format_numeric(interval["observed_value"], unit=unit)
@@ -648,6 +847,10 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
     )
     interval_summary_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
     series_graph_html, series_graph_keys = _render_series_graph(item, evidence)
+    numeric_companion_html = ""
+    numeric_companion_keys: set[str] = set()
+    if interval is None and not series_graph_html:
+        numeric_companion_html, numeric_companion_keys = _render_numeric_companions(item, evidence)
     warning_text = status_reason_text(item)
     notes_html = _notes_html(item)
     sections = [
@@ -681,6 +884,8 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         )
     if series_graph_html:
         sections.append(series_graph_html)
+    if numeric_companion_html:
+        sections.append(numeric_companion_html)
     if notes_html:
         sections.extend(notes_html)
     if warning_text:
@@ -706,7 +911,11 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ]
     )
     sections.append(
-        _render_evidence(item, exclude_keys=series_graph_keys, include_interval_visual=interval is None)
+        _render_evidence(
+            item,
+            exclude_keys=series_graph_keys | numeric_companion_keys,
+            include_interval_visual=interval is None,
+        )
     )
     sections.extend(["</div>", "</article>"])
     return "".join(section for section in sections if section)
@@ -1325,14 +1534,18 @@ def render_audit_dashboard_html(
     .legend-swatch.observed.status-pass {{ background: var(--green); border-color: var(--green); }}
     .legend-swatch.observed.status-warn {{ background: var(--amber); border-color: var(--amber); }}
     .legend-swatch.observed.status-fail {{ background: var(--red); border-color: var(--red); }}
-    .series-graph-block {{
+    .series-graph-block,
+    .numeric-strip-block,
+    .numeric-sparkline-block {{
       margin: 12px 16px 12px;
       border: 1px solid #dbe4f0;
       border-radius: 10px;
       padding: 12px;
       background: #fbfdff;
     }}
-    .series-graph-meta {{
+    .series-graph-meta,
+    .numeric-strip-meta,
+    .numeric-sparkline-meta {{
       display: flex;
       justify-content: space-between;
       gap: 12px;
@@ -1341,47 +1554,65 @@ def render_audit_dashboard_html(
       line-height: 1.35;
       margin-bottom: 8px;
     }}
-    .series-graph-shell {{
+    .series-graph-shell,
+    .numeric-strip-shell,
+    .numeric-sparkline-shell {{
       border: 1px solid #d9e2ee;
       border-radius: 10px;
       background: linear-gradient(180deg, #eef3fb 0%, #e6edf7 100%);
       overflow: hidden;
     }}
-    .series-graph-svg {{
+    .series-graph-svg,
+    .numeric-strip-svg,
+    .numeric-sparkline-svg {{
       display: block;
       width: 100%;
       height: auto;
     }}
-    .series-graph-bg {{
+    .series-graph-bg,
+    .numeric-strip-bg,
+    .numeric-sparkline-bg {{
       fill: transparent;
     }}
-    .series-axis {{
+    .series-axis,
+    .numeric-strip-axis,
+    .numeric-sparkline-axis {{
       stroke: #cbd5e1;
       stroke-width: 1;
     }}
-    .series-axis-tick {{
+    .series-axis-tick,
+    .numeric-strip-tick,
+    .numeric-sparkline-tick {{
       stroke: #cbd5e1;
       stroke-width: 1;
     }}
-    .series-zero {{
+    .series-zero,
+    .numeric-strip-zero,
+    .numeric-sparkline-zero {{
       stroke: #94a3b8;
       stroke-width: 1.5;
       stroke-dasharray: 4 4;
     }}
-    .series-line {{
+    .series-line,
+    .numeric-sparkline-line {{
       fill: none;
       stroke-width: 2.5;
     }}
-    .series-point {{
+    .series-point,
+    .numeric-dot,
+    .numeric-sparkline-point {{
       stroke-width: 1.5;
       fill: #ffffff;
     }}
-    .series-tick-label {{
+    .series-tick-label,
+    .numeric-strip-label,
+    .numeric-sparkline-label {{
       fill: #64748b;
       font-size: 10px;
       font-weight: 600;
     }}
-    .series-legend {{
+    .series-legend,
+    .numeric-legend {{
       display: flex;
       flex-wrap: wrap;
       gap: 8px 12px;
@@ -1389,12 +1620,14 @@ def render_audit_dashboard_html(
       color: var(--muted);
       font-size: 11px;
     }}
-    .series-legend-item {{
+    .series-legend-item,
+    .numeric-legend-item {{
       display: inline-flex;
       align-items: center;
       gap: 6px;
     }}
-    .series-legend-swatch {{
+    .series-legend-swatch,
+    .numeric-legend-swatch {{
       display: inline-block;
       width: 10px;
       height: 10px;
