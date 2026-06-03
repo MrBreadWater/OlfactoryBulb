@@ -116,11 +116,18 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert "configured lognormal reference interval" in log_item.acceptable_basis
     assert (
         log_item.criterion_latex
-        == r"-2 \leq \frac{\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}/\mu\right) + \frac{1}{2}\ln\!\left(1 + c_{\mathrm{v}}^2\right)}{\sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}} \leq 2"
+        == r"\left|z_{\log}\right| \leq 2"
     )
     assert log_item.criterion_definitions[0]["symbol"] == r"\overline{\mathrm{CV}}_{\mathrm{ISI}}"
-    assert log_item.criterion_definitions[-1]["symbol"] == r"c_{\mathrm{v}}"
-    assert log_item.criterion_formulae == [r"c_{\mathrm{v}} = \frac{\sigma}{\mu}"]
+    assert log_item.criterion_definitions[1]["symbol"] == r"z_{\log}"
+    assert "standardized log-space z-score" in log_item.criterion_definitions[1]["definition"]
+    assert log_item.criterion_formulae == [
+        r"z_{\log} = \frac{\ln(\overline{\mathrm{CV}}_{\mathrm{ISI}}) - m}{s}",
+        r"m = \ln(\mu) - \frac{1}{2}s^2",
+        r"s = \sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}",
+        r"c_{\mathrm{v}} = \frac{\sigma}{\mu}",
+        r"z_{\log} = \frac{\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}/\mu\right) + \frac{1}{2}\ln\!\left(1 + c_{\mathrm{v}}^2\right)}{\sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}}",
+    ]
 
     beta_rule = {
         "kind": "reference_band_rows",

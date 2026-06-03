@@ -340,12 +340,18 @@ configured sigma multiplier numerically, so a <code>reference_sigma_multiplier =
 setting will show <code>2\sigma</code> in the display. For example:</p>
 <ul>
 <li>symmetric bands: <code>\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma</code></li>
-<li>lognormal bands: <code>-k \leq \frac{\ln(\bar{x}/\mu) + \frac{1}{2}\ln(1 + c_{\mathrm{v}}^2)}{\sqrt{\ln(1 + c_{\mathrm{v}}^2)}} \leq k</code>, with <code>c_{\mathrm{v}} = \sigma / \mu</code></li>
+<li>lognormal bands: <code>\left|z_{\log}\right| \leq k</code>, with
+  <code>z_{\log} = (\ln(\bar{x}) - m) / s</code>,
+  <code>m = \ln(\mu) - s^2 / 2</code>,
+  <code>s = \sqrt{\ln(1 + c_{\mathrm{v}}^2)}</code>, and
+  <code>c_{\mathrm{v}} = \sigma / \mu</code></li>
 </ul>
 <p>For log-space criteria, prefer this standardized score form over endpoint
 notation or display-only auxiliary lognormal parameters. It keeps the audit
 decision dimensionless while preserving the original reported arithmetic mean
-and standard deviation.</p>
+and standard deviation. Include <code>z_{\log}</code> in <code>criterion_definitions</code> as the
+standardized log-space z-score of the observed value under the reconstructed
+lognormal reference distribution.</p>
 <p>When a metric has a conventional symbol, prefer it over <code>\bar{x}</code>. Examples
 include <code>\bar{R}_{\mathrm{in}}</code>, <code>\bar{\tau}_m</code>, <code>\bar{I}_{\mathrm{rh}}</code>,
 and <code>\bar{V}_{\mathrm{rest}}</code>.</p>

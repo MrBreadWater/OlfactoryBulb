@@ -628,20 +628,40 @@ def _criterion_math_for_band(
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
         cv_symbol = r"c_{\mathrm{v}}"
+        z_symbol = r"z_{\log}"
+        log_shape_symbol = "s"
+        log_center_symbol = "m"
         log_score = (
             rf"\frac{{\ln\!\left({observed_symbol}/\mu\right) + "
             rf"\frac{{1}}{{2}}\ln\!\left(1 + {cv_symbol}^2\right)}}"
             rf"{{\sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}}}"
         )
-        latex = rf"-{sigma_multiplier} \leq {log_score} \leq {sigma_multiplier}"
+        latex = rf"\left|{z_symbol}\right| \leq {sigma_multiplier}"
         definitions.extend(
             [
+                {
+                    "symbol": z_symbol,
+                    "definition": (
+                        "standardized log-space z-score of the observed value under the "
+                        "reconstructed lognormal reference distribution"
+                    ),
+                },
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
                 {"symbol": cv_symbol, "definition": "uploaded reference coefficient of variation"},
+                {"symbol": log_center_symbol, "definition": "reconstructed log-space mean"},
+                {"symbol": log_shape_symbol, "definition": "reconstructed log-space standard deviation"},
             ]
         )
-        formulae.extend([rf"{cv_symbol} = \frac{{\sigma}}{{\mu}}"])
+        formulae.extend(
+            [
+                rf"{z_symbol} = \frac{{\ln({observed_symbol}) - {log_center_symbol}}}{{{log_shape_symbol}}}",
+                rf"{log_center_symbol} = \ln(\mu) - \frac{{1}}{{2}}{log_shape_symbol}^2",
+                rf"{log_shape_symbol} = \sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}",
+                rf"{cv_symbol} = \frac{{\sigma}}{{\mu}}",
+                rf"{z_symbol} = {log_score}",
+            ]
+        )
     else:
         latex = rf"\mu - {sigma_multiplier}\sigma \leq {observed_symbol} \leq \mu + {sigma_multiplier}\sigma"
         definitions.extend(
