@@ -437,13 +437,13 @@ def render_audit_dashboard_html(
     generated_at = datetime.now().isoformat(timespec="seconds")
     group_nav = "\n".join(
         (
-            f"<a href='#group-{_esc(group['group_id'])}' class='group-link'>"
+            f"<button type='button' class='group-link' data-group-target='group-{_esc(group['group_id'])}'>"
             f"<span class='group-link-label'>{_esc(_expand_terms(group['title'], sentence_case=True))}</span>"
             "<span class='group-link-meta'>"
             f"<small>{int(group.get('item_count', 0))} items</small>"
             f"{_render_status_badge(str(group['worst_status']))}"
             "</span>"
-            "</a>"
+            "</button>"
         )
         for group in groups
     )
@@ -502,7 +502,7 @@ def render_audit_dashboard_html(
       --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
     }}
     * {{ box-sizing: border-box; }}
-    body {{ margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+    body {{ margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; overflow-anchor: none; }}
     header {{
       position: sticky;
       top: 0;
@@ -648,6 +648,7 @@ def render_audit_dashboard_html(
       position: relative;
       z-index: 1;
       align-items: start;
+      overflow-anchor: none;
     }}
     .sidebar, .group-section {{
       background: var(--panel);
@@ -657,7 +658,7 @@ def render_audit_dashboard_html(
     }}
     .sidebar {{
       position: sticky;
-      top: 74px;
+      top: 126px;
       z-index: 1;
       align-self: start;
       padding: 16px;
@@ -680,8 +681,11 @@ def render_audit_dashboard_html(
       border: 1px solid #e6eaf1;
       border-radius: 8px;
       color: inherit;
-      text-decoration: none;
       background: #fbfcfe;
+      appearance: none;
+      width: 100%;
+      text-align: left;
+      cursor: pointer;
     }}
     .group-link:hover {{
       border-color: #c7d4e6;
@@ -707,6 +711,12 @@ def render_audit_dashboard_html(
       white-space: nowrap;
     }}
     .content {{ display: flex; flex-direction: column; gap: 16px; min-width: 0; }}
+    .content {{
+      overflow-anchor: none;
+    }}
+    .group-section {{
+      scroll-margin-top: 24px;
+    }}
     .group-header {{
       display: flex;
       align-items: flex-start;
@@ -715,6 +725,7 @@ def render_audit_dashboard_html(
       padding: 13px 16px;
       border-bottom: 1px solid var(--line);
       background: #fbfcfe;
+      scroll-margin-top: 126px;
     }}
     .group-heading {{
       min-width: 0;
@@ -1223,6 +1234,30 @@ def render_audit_dashboard_html(
         button.addEventListener("click", () => {{
           const section = button.closest("[data-group-section]");
           toggleGroup(section, !section?.classList.contains("group-collapsed"));
+        }});
+      }});
+      document.querySelectorAll(".group-link").forEach((link) => {{
+        link.addEventListener("click", () => {{
+          const target = document.getElementById(String(link.dataset.groupTarget || ""));
+          if (!target) {{
+            return;
+          }}
+          if (typeof link.blur === "function") {{
+            link.blur();
+          }}
+          if (target.classList.contains("group-collapsed")) {{
+            toggleGroup(target, false);
+          }}
+          const alignGroupHeader = () => {{
+            const header = target.querySelector(".group-header") || target;
+            const shellHeader = document.querySelector("body > header");
+            const shellHeaderBottom = shellHeader ? shellHeader.getBoundingClientRect().bottom : 0;
+            const nextScrollTop = Math.max(0, window.scrollY + header.getBoundingClientRect().top - shellHeaderBottom);
+            window.scrollTo({{ top: nextScrollTop, behavior: "auto" }});
+          }};
+          alignGroupHeader();
+          window.setTimeout(alignGroupHeader, 120);
+          window.setTimeout(alignGroupHeader, 500);
         }});
       }});
       document.querySelectorAll("[data-item-toggle]").forEach((button) => {{

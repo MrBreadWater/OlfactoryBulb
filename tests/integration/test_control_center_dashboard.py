@@ -712,6 +712,77 @@ with TemporaryDirectory() as tmp:
                 "detailDisplay": "none",
                 "compactIntervalInHeader": False,
             }
+
+            anchor_before = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 4000;"
+                "  const tick = () => {"
+                "    const link = document.querySelector('.group-link');"
+                "    if (!link) {"
+                "      if (Date.now() > deadline) { resolve(null); return; }"
+                "      setTimeout(tick, 100);"
+                "      return;"
+                "    }"
+                "    const target = document.getElementById(link.dataset.groupTarget);"
+                "    const header = document.querySelector('header');"
+                "    resolve({"
+                "      scrollY: window.scrollY,"
+                "      collapsed: Boolean(target) && target.classList.contains('group-collapsed'),"
+                "      targetFound: Boolean(target),"
+                "      headerBottom: header.getBoundingClientRect().bottom"
+                "    });"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert anchor_before is not None
+            assert anchor_before["targetFound"] is True
+            assert anchor_before["collapsed"] is True
+            before_scroll_y = anchor_before["scrollY"]
+            client.eval(
+                "(() => {"
+                "  const link = document.querySelector('.group-link');"
+                "  link.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));"
+                "  return true;"
+                "})()"
+            )
+            anchor_after = client.eval(
+                "new Promise((resolve) => {"
+                "  const deadline = Date.now() + 4000;"
+                "  const tick = () => {"
+                "    const link = document.querySelector('.group-link');"
+                "    const target = document.getElementById(link.dataset.groupTarget);"
+                "    const header = document.querySelector('header');"
+                "    const headerBottom = header.getBoundingClientRect().bottom;"
+                "    const headerRect = target ? target.querySelector('.group-header').getBoundingClientRect() : { top: -9999 };"
+                "    if (target && !target.classList.contains('group-collapsed') && headerRect.top >= headerBottom - 2 && headerRect.top <= headerBottom + 96) {"
+                "      resolve({"
+                "        collapsed: false,"
+                "        scrolled: window.scrollY > " + str(before_scroll_y) + ","
+                "        targetFound: true,"
+                "        headerAligned: true"
+                "      });"
+                "      return;"
+                "    }"
+                "    if (Date.now() > deadline) {"
+                "      resolve({"
+                "        collapsed: Boolean(target) && target.classList.contains('group-collapsed'),"
+                "        scrolled: window.scrollY > " + str(before_scroll_y) + ","
+                "        targetFound: Boolean(target),"
+                "        headerAligned: headerRect.top >= headerBottom - 2 && headerRect.top <= headerBottom + 96"
+                "      });"
+                "      return;"
+                "    }"
+                "    setTimeout(tick, 100);"
+                "  };"
+                "  tick();"
+                "})"
+            )
+            assert anchor_after is not None
+            assert anchor_after["targetFound"] is True
+            assert anchor_after["collapsed"] is False
+            assert anchor_after["scrolled"] is True
+            assert anchor_after["headerAligned"] is True
         finally:
             client.close()
             proc.terminate()

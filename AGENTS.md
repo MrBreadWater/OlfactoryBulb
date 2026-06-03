@@ -381,6 +381,9 @@ contract for future sessions.
     - collapsed audit item cards should show only the title/status summary and
       any compact numeric strip; the full detail body must stay hidden until
       expanded
+    - clicking an audit-group link should scroll that group header to the top
+      of the content pane, and the sidebar/content surfaces should start below
+      the sticky shell header rather than disappearing behind it
     - the root shell DOM reflects post-JavaScript state, not just the static
       pre-hydration HTML; use a headless browser or equivalent DOM-capable
       check when badge/toolbar behavior changed
