@@ -6,56 +6,39 @@ contract for future sessions.
 
 ## 0. Maintenance duty and reproducibility
 
-- Keep this file continuously up to date when durable repo expectations change.
-  - If a session establishes a new long-lived workflow rule, failure pattern,
-    recovery path, validation requirement, or important caution that future
-    agents should know, update `AGENTS.md` in the same task when practical.
-  - Do not wait for undocumented tribal knowledge to accumulate elsewhere.
+- Maintain `AGENTS.md` as a stable operating contract, not a session journal.
+  Update it when a lesson is durable enough to guide future agents across
+  tasks; do not record every UI tweak, bug fix, command run, or temporary
+  workaround.
 
-- Prefer stable rules over stale inventories.
-  - This file should capture:
-    - invariants
-    - durable expectations
-    - source-of-truth locations
-    - verification standards
-    - failure patterns and recovery rules
-  - This file should **not** hardcode dynamic lists that are expected to change
-    over time unless the list itself is the invariant being documented.
+- Add or revise this file when the new information is one of:
+  - a repo-wide invariant or source-of-truth boundary
+  - a maintained workflow or entrypoint future agents should prefer
+  - a recurring failure mode plus its correct recovery path
+  - a verification standard that prevents false "done" reports
+  - an anti-sprawl rule about where new logic should live
+  - a reproducibility rule that must survive across chats
 
-- For dynamic inventory, point to the live source of truth instead of copying
-  the current contents into prose.
-  - Examples:
-    - registered audits -> `python tools/run_audit.py --list`
-    - registered reference validations ->
-      `python tools/run_reference_validation.py --list-validations`
-    - registered validation protocols ->
-      `python tools/run_reference_validation.py --list-protocols`
-    - dataset configs -> `research_context/reference_datasets/`
-    - validation configs -> `research_context/reference_validations/`
-  - If a future agent adds a new audit/protocol/validation/dataset, update the
-    registry or config and keep `AGENTS.md` pointing at that live mechanism.
+- Do **not** use this file for:
+  - dynamic inventories that can be discovered live
+  - one-off visual preferences unless they generalize into a UI contract
+  - exact test logs, commit summaries, or historical play-by-play
+  - current counts, current audit rosters, or current campaign names
+  - implementation details already enforced by code/tests/config
 
-- When documenting behavior here, distinguish clearly between:
-  - stable contract
-  - current example
-  - live-discoverable state
-  - temporary workaround
+- For dynamic inventory, point to live mechanisms instead of copying lists:
+  - audits: `python tools/run_audit.py --list`
+  - reference validations: `python tools/run_reference_validation.py --list-validations`
+  - validation protocols: `python tools/run_reference_validation.py --list-protocols`
+  - dataset configs: `research_context/reference_datasets/`
+  - validation configs: `research_context/reference_validations/`
 
-- If a behavior matters for reproducibility, do not leave it documented only in
-  `AGENTS.md`.
-  - Encode it in one or more of:
-    - code defaults
-    - declarative config
-    - tests
-    - CLI/discovery surfaces
-    - HOWTO/reference docs
-  - Then use `AGENTS.md` to point future agents to that source of truth.
+- If a behavior matters for reproducibility, encode it in code defaults,
+  declarative config, tests, CLI discovery, or HOWTO docs. Use `AGENTS.md` to
+  point at those sources of truth, not to replace them.
 
-- When a rule is primarily about documentation ownership or where future agents
-  should look first, keep that map in:
-  - `notes/DOCS_OWNERSHIP_MAP.md`
-  - Use `AGENTS.md` for contract-level rules and anti-rot expectations, not as
-    the only index of repo docs.
+- Keep detailed documentation ownership in `notes/DOCS_OWNERSHIP_MAP.md`.
+  Keep `AGENTS.md` focused on contract-level rules and anti-rot expectations.
 
 ## 1. Core defaults
 
@@ -316,133 +299,52 @@ contract for future sessions.
 
 ## 4. Dashboard/runtime expectations
 
-- The maintained dashboard surface is now layered:
-  - shared shell renderer:
-    - `neuroinfra.dashboard.shell`
-  - audit HTML renderer:
-    - `olfactorybulb.audit.dashboard`
-  - repo-level unified shell:
-    - `olfactorybulb.dashboard.control_center`
-  - HFO packet/optimization module:
-    - `tools/analysis/hfo_visual_dashboard.py`
+- Maintained dashboard layers:
+  - shell: `neuroinfra.dashboard.shell`
+  - audit renderer: `olfactorybulb.audit.dashboard`
+  - unified control center: `olfactorybulb.dashboard.control_center`
+  - optimization/HFO module: `tools/analysis/hfo_visual_dashboard.py`
 
-- If touching dashboard/runtime code:
-  - verify the served result, not just static HTML generation
-  - prefer the unified shell when checking end-user behavior:
-    - `python -m olfactorybulb.dashboard.control_center`
-  - That bare control-center command is now the fastest maintained launch path:
-    - default mode: `serve`
-    - startup leaves the audit tab idle by default; it does not auto-run an
-      audit unless the caller explicitly asks for that behavior
-    - the default audit selection in the runner should match bare
-      `python tools/run_audit.py`, which is effectively the `all` / new-sweep
-      path rather than the repo-health alias
-    - campaign auto-detection from the maintained optimization status path or
-      optimization results tree
-    - default local URL: `http://127.0.0.1:6006/`
-    - startup should print a user-facing reachable URL immediately, then keep
-      audit/optimization rendering in the background
-    - if the default local port is occupied, the control center should fall
-      forward to the next available local port and print the actual URL
-  - do not treat export-only coverage as sufficient for dashboard launch
-    changes; verify the actual zero-argument serve path and confirm the shell
-    is reachable before the heavy audit render finishes
-  - a bare `HTTP 200` on `/` is not enough for control-center verification;
-    wait for the background startup render to either replace the loading
-    placeholders with real content or surface a concrete startup error frame/log
-  - for shell/UI changes, verify at least these live behaviors:
-    - `GET /__control_center_state__` reflects startup, running, ready, and
-      error transitions
-    - a real audit rerun through the maintained UI/backend path updates both the
-      tab badge state and `/audits/index.html`
-    - when two different audits are run in one control-center session, the
-      audit page keeps both groups visible instead of wiping the earlier one
-    - when the selected audit is `all` / new sweep, the rendered audit page
-      should preserve the individual constituent audit groups rather than
-      collapsing the whole run into one giant group
-    - the shell progress bar is only acceptable if it reflects real live audit
-      progress; for `all` / new sweep that means determinate
-      `progress_current/progress_total` updates as constituent audits complete,
-      not a permanent indeterminate running state
-    - the audits/optimization/docs module status should live in small chips in
-      the top banner on the right, not as oversized tab content; tab buttons
-      should stay compact and the banner chips should carry the label, status
-      badge, and short state/detail text
-    - the full optimization campaign path should appear only inside the
-      optimization tab panel, not in the top banner subtitle or other banner
-      chrome
-    - running audit/optimization banner chips should be visually
-      distinguishable with a subtle animated aura around the chip outline, but
-      the header should stay clean and uncluttered
-    - editing the audit-runner form must preserve the local draft across
-      background state polling; changing the audit id should not snap back to
-      the previous state-selected audit, and default-only audit arguments
-      should render as blank rather than being force-filled into the text field
-    - the audit runner belongs in the audit tab only; the shell banner should
-      carry the compact module-status view and any progress indicator instead
-      of duplicating those controls in a global page toolbar
-    - the tab content area should read as one full working surface rather than
-      a card nested inside another card
-    - audit groups should default to collapsed in the rendered report, with
-      explicit expand controls for the group list and the item cards
-    - audit item cards should remain compact by default, with item-level
-      expand/collapse plus global expand/collapse controls that affect both
-      groups and items
-    - collapsed audit item cards should show only the title/status summary and
-      any compact numeric strip; the full detail body must stay hidden until
-      expanded
-    - collapsed item cards should size to their own content instead of
-      stretching to the tallest card in the row
-    - warning text should be rendered in its own persistent collapsed block,
-      not mixed into the title/status summary area; the header should stay
-      clean and the warning block should collapse alongside the card body
-    - when tuning dashboard spacing or summary-strip padding, prefer responsive
-      `clamp()`-based values that scale across window sizes and monitor
-      resolutions over fixed desktop-only padding
-    - clicking an audit-group link should scroll that group header to the top
-      of the content pane, and the sidebar/content surfaces should start below
-      the sticky shell header rather than disappearing behind it
-    - the root shell DOM reflects post-JavaScript state, not just the static
-      pre-hydration HTML; use a headless browser or equivalent DOM-capable
-      check when badge/toolbar behavior changed
-    - for progress-bar changes, verify the live `GET /__control_center_state__`
-      payload during an active run and confirm the served page is consuming
-      those changing values, not only the final ready state
-  - when you start a local server during validation, shut it down before
-    finishing the task unless the user explicitly asked you to leave it running
-  - if relevant, also check the optimization module directly:
-    - `http://127.0.0.1:6006/`
-    - `http://127.0.0.1:6006/visual_dashboard/`
-  - if `6006` is unexpectedly reoccupied after killing a visible
-    `serve-static` child, check for an older HFO dashboard watchdog/runtime
-    process that is respawning the server and stop it via the maintained HFO
-    runtime stop command rather than killing only the child PID
-  - the docs tab is a rendered HTML surface, not a raw markdown browser
-    - maintained markdown files remain the authoring source of truth
-    - the served/local docs portal should point at rendered pages under
-      `docs/maintained/`
-    - after changing maintained markdown docs or the render template, rerun:
-      - `python tools/build_maintained_docs_portal.py`
-      - `python tools/run_audit.py maintained_docs_integrity`
-    - do not leave `docs/index.html` pointing at raw `.md` files
+- Prefer the unified control center for end-user dashboard behavior:
+  - `python -m olfactorybulb.dashboard.control_center`
+  - The zero-argument path should serve promptly, print the reachable URL,
+    leave audits idle until requested, and fall forward if port `6006` is busy.
 
-- Do not assume a watcher/server is healthy because a status file says so.
-  - Verify the listener and the rendered page.
+- Verify dashboard changes against the served UI, not only generated files.
+  At minimum, check the real launch path, relevant HTTP endpoints, and any
+  changed interactive behavior with a DOM-capable browser test when JavaScript
+  or layout state is involved.
 
-- If changing packet generation or dashboard refresh behavior:
-  - check both:
-    - pre-render behavior
-    - manual/queued packet refresh behavior
-  - zero-argument control-center startup should prefer reliable shell launch
-    over eager regeneration of missing optimization packets
-  - if packet regeneration is needed, request it explicitly through supported
-    controls/flags rather than making default startup block on heavy packet work
+- Dashboard UI contracts:
+  - keep one shared shell rather than creating standalone dashboard stacks
+  - mount new surfaces as tabs or modules in the unified shell
+  - keep tab panels as full working surfaces, not card-in-card layouts
+  - keep global status/progress compact and truthful
+  - preserve local form drafts across background polling
+  - make audit reports glanceable by default, with collapsed groups/items and
+    explicit expansion controls
+  - keep warnings visible, specific, and non-duplicated
+  - prefer responsive spacing such as `clamp()` over fixed desktop-only values
 
-- Do not create a second standalone dashboard stack when the existing shell can
-  mount the new surface as a tab.
-  - Keep the generic shell generic.
-  - Put repo-specific routing or refresh endpoints in the repo-level control
-    center, not in `neuroinfra.dashboard.shell`.
+- Audit dashboard behavior that should stay stable:
+  - sequential audit runs in one session remain visible instead of replacing
+    earlier groups
+  - `all` / new-sweep output preserves constituent audit groups
+  - progress indicators reflect live audit progress, not just a spinner
+  - numeric interval checks use structured visual summaries when possible
+
+- The docs tab serves rendered maintained markdown under `docs/maintained/`.
+  After changing maintained markdown or the render template, run:
+  - `python tools/build_maintained_docs_portal.py`
+  - `python tools/run_audit.py maintained_docs_integrity`
+
+- Do not assume dashboard runtimes are healthy from status files alone. Verify
+  the listener and rendered page. Shut down local servers you start during
+  validation unless the user explicitly asks to leave them running.
+
+- If `6006` is unexpectedly reoccupied after killing a dashboard child process,
+  check for an older HFO dashboard watchdog/runtime that is respawning it and
+  stop the runtime through the maintained HFO stop path.
 
 ## 5. Audit system: current architecture
 
@@ -846,42 +748,21 @@ contract for future sessions.
 
 ## 14. Good commands to know
 
-- List audits:
+- Audit/discovery:
   - `python tools/run_audit.py --list`
-
-- Run maintained repo-health checks:
-  - `python tools/run_audit.py repo_health --profile maintained`
+  - `python tools/run_audit.py`
   - `python tools/run_audit.py default`
-
-- List grouped test suites:
   - `python tools/run_audit.py test_suite_status --list-suites`
 
-- Open the maintained local docs portal:
+- Dashboards/docs:
+  - `python -m olfactorybulb.dashboard.control_center`
+  - `python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron`
+  - `python tools/build_maintained_docs_portal.py`
   - `docs/index.html`
 
-- Rebuild the rendered maintained docs portal:
-  - `python tools/build_maintained_docs_portal.py`
-
-- Export an audit dashboard:
-  - `python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -- --skip-neuron`
-
-- Serve the unified docs/audits/optimization shell:
-  - `python -m olfactorybulb.dashboard.control_center`
-
-- Run all audits:
-  - `python tools/run_audit.py`
-  - `python tools/run_audit.py all`
-
-- Run human review coverage audit:
-  - `python tools/run_audit.py human_review_status`
-
-- List reference validations:
+- Reference workflows:
   - `python tools/run_reference_validation.py --list-validations`
-
-- List registered validation protocols:
   - `python tools/run_reference_validation.py --list-protocols`
-
-- Rebuild any reference bundle:
   - `python tools/extract_reference_dataset.py --dataset-id <id>`
 
 ## 15. Commit hygiene reminder
