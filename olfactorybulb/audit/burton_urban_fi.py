@@ -14,6 +14,7 @@ from typing import Any, Iterable
 import numpy as np
 from scipy.optimize import curve_fit
 
+from olfactorybulb.audit.criterion_math import criterion_math_for_reference_band
 from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded
 from olfactorybulb.audit.reference_data import (
     BMU2024_EPL_FSI_PROTOCOL_ID,
@@ -33,10 +34,7 @@ from olfactorybulb.audit.reference_validation_protocols import (
     BurtonUrbanProtocol as RegisteredBurtonUrbanProtocol,
     ProtocolRunResult,
 )
-from olfactorybulb.audit.reference_validation_rules import (
-    _criterion_math_for_band,
-    compute_reference_acceptance_band,
-)
+from olfactorybulb.audit.reference_validation_rules import compute_reference_acceptance_band
 from olfactorybulb.slice_connectivity_optimizer import load_slice_geometry, observed_metrics_for_synapse_set, resolve_slice_dir
 from prev_ob_models.cell_registry import get_cell_model_spec
 
@@ -929,7 +927,7 @@ def _build_burton_reference_fit_items(
             in_range = np.isfinite(observed_value) and accepted_low <= observed_value <= accepted_high
             metric_label = BURTON_PROPERTY_LABELS.get(metric_key, metric_key)
             units_suffix = f" {reference.units}" if reference.units else ""
-            criterion_latex, criterion_definitions, criterion_formulae = _criterion_math_for_band(
+            criterion_math = criterion_math_for_reference_band(
                 _cell_label(cell_type),
                 metric_label,
                 band,
@@ -940,9 +938,9 @@ def _build_burton_reference_fit_items(
                     status="PASS" if in_range else "FAIL",
                     title=_title_text_for_band(cell_type, metric_label, band.mode),
                     criterion=_criterion_text_for_band(cell_type, metric_label, band.mode, sigma_phrase),
-                    criterion_latex=criterion_latex,
-                    criterion_formulae=criterion_formulae,
-                    criterion_definitions=criterion_definitions,
+                    criterion_latex=criterion_math.latex,
+                    criterion_formulae=criterion_math.formulae,
+                    criterion_definitions=criterion_math.definitions,
                     description=(
                         f"This is the direct single-cell-type reference check derived from the uploaded Burton and Urban 2014 "
                         f"reference tables rather than from a cross-cell-type ordering heuristic."

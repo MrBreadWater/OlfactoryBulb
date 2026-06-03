@@ -451,7 +451,7 @@
             }
           ],
           "criterion_formulae": [],
-          "criterion_latex": "\\forall i,\\ c - \\epsilon \\leq x_i \\leq c + \\epsilon",
+          "criterion_latex": "\\forall i,\\ \\left|x_i - c\\right| \\leq \\epsilon",
           "description": "This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.",
           "detail_level": "detail",
           "evidence": {
@@ -1731,7 +1731,7 @@
         }
       ],
       "criterion_formulae": [],
-      "criterion_latex": "\\forall i,\\ c - \\epsilon \\leq x_i \\leq c + \\epsilon",
+      "criterion_latex": "\\forall i,\\ \\left|x_i - c\\right| \\leq \\epsilon",
       "description": "This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.",
       "detail_level": "detail",
       "evidence": {

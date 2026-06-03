@@ -359,6 +359,10 @@ contract for future sessions.
   - for math-rendered criteria, prefer one headline inequality or equality in
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
+  - use `olfactorybulb.audit.criterion_math` for recurring criterion-math
+    patterns rather than handcoding equivalent TeX strings in each audit rule,
+    test fixture, or generated artifact; add or extend a builder before
+    repeating a notation pattern
   - do not let audit/dashboard presentation rules become a web of hand-edited
     fixtures, generated artifacts, and hardcoded one-off strings. When a
     presentation convention changes, first move the convention into a
@@ -535,6 +539,8 @@ contract for future sessions.
   plain-language `criterion` as the fallback and opt into math rendering with
   explicit `criterion_latex` plus `criterion_definitions`; do not infer math
   from prose at render time.
+  - Prefer `olfactorybulb.audit.criterion_math` builders for repeated
+    comparison, tolerance, and reference-band forms.
   - For simple comparison rules such as `summary_metric_min`,
     `summary_metric_max`, `summary_metric_range`, `group_ordering`,
     `group_abs_diff_max`, `group_positive`, and `all_exact_metric`, emit the

@@ -255,6 +255,14 @@ When a metric has a conventional symbol, prefer it over `\bar{x}`. Examples
 include `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, `\bar{I}_{\mathrm{rh}}`,
 and `\bar{V}_{\mathrm{rest}}`.
 
+Built-in rule kinds generate their own criterion math through
+`olfactorybulb.audit.criterion_math`. Do not duplicate those TeX strings in
+validation configs. For custom rule kinds, use the same builder module instead
+of hand-writing a separate notation convention inside each rule. Centered
+tolerance checks should render as absolute residuals, for example
+`\left|x - c\right| \leq \epsilon`, rather than endpoint forms such as
+lower-target-to-upper-target inequalities.
+
 The framework now supports two skip behaviors:
 
 - `short_circuit`

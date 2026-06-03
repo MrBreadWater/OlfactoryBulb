@@ -166,20 +166,10 @@ human_review_status = "pending_review"
 # maximum = 12.0
 # title = "Soma diameter stays inside the accepted range"
 # criterion = "Explain the accepted numeric band."
-# criterion_latex = '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma'
-# criterion_formulae = [
-#   '\mu - k\sigma',
-#   '\mu + k\sigma',
-# ]
-# criterion_definitions = [
-#   { symbol = '\bar{x}', definition = 'observed group mean' },
-#   { symbol = '\mu', definition = 'uploaded reference mean' },
-#   { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
-#   { symbol = 'k', definition = 'configured sigma multiplier' },
-# ]
-# The renderer substitutes the configured sigma multiplier numerically in the
-# headline inequality, so a `reference_sigma_multiplier = 2.0` setting will
-# display as `2\sigma` in the rendered audit.
+# This rule auto-generates criterion math from `minimum` and `maximum`.
+# Add explicit `criterion_latex`, `criterion_formulae`, or
+# `criterion_definitions` only for custom rule kinds that do not generate
+# their own math.
 # description = "Use this for direct one-group range checks."
 # acceptable = "The observed value stays inside the configured minimum and maximum."
 # acceptable_basis = "The accepted interval is declared directly in the validation config."
@@ -226,20 +216,10 @@ human_review_status = "pending_review"
 # default_quantile_high_label_field = "q_high_label"
 # title = "Reference band placeholder"
 # criterion = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
-# criterion_latex = '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma'
-# criterion_formulae = [
-#   '\mu - k\sigma',
-#   '\mu + k\sigma',
-# ]
-# criterion_definitions = [
-#   { symbol = '\bar{x}', definition = 'observed group mean' },
-#   { symbol = '\mu', definition = 'uploaded reference mean' },
-#   { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
-#   { symbol = 'k', definition = 'configured sigma multiplier' },
-# ]
-# The renderer substitutes the configured sigma multiplier numerically in the
-# headline inequality, so a `reference_sigma_multiplier = 2.0` setting will
-# display as `2\sigma` in the rendered audit.
+# This rule auto-generates per-property criterion math from
+# `property_band_modes`, bounds, quantile fields, and the configured sigma
+# multiplier. Keep the band-selection config as the source of truth instead of
+# duplicating generated math here.
 # description = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 # acceptable = "Unused placeholder text; this rule auto-generates one item per mapped literature row."
 # acceptable_basis = "Unused placeholder text; this rule auto-generates one item per mapped literature row."

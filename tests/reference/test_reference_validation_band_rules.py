@@ -354,9 +354,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert comparison_items[0].criterion_latex == r"\bar{x}_{\mathrm{MC}} \geq -60"
     assert comparison_items[1].criterion_latex == r"1 \leq \bar{x}_{\mathrm{MC}} \leq 2"
     assert comparison_items[2].criterion_latex == r"\bar{x}_{\mathrm{TC}} < \bar{x}_{\mathrm{MC}}"
-    assert comparison_items[3].criterion_latex == r"\bar{x}_{\mathrm{MC}} - 5 \leq \bar{x}_{\mathrm{TC}} \leq \bar{x}_{\mathrm{MC}} + 5"
+    assert comparison_items[3].criterion_latex == r"\left|\bar{x}_{\mathrm{TC}} - \bar{x}_{\mathrm{MC}}\right| \leq 5"
     assert comparison_items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
-    assert comparison_items[5].criterion_latex == r"\forall i,\ c - \epsilon \leq x_i \leq c + \epsilon"
+    assert comparison_items[5].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
 
     missing_mode_rule = {
         "kind": "reference_band_rows",
