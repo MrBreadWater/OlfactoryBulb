@@ -205,6 +205,27 @@ voltage can often tolerate a symmetric arithmetic band, while a metric such as
 the interspike-interval coefficient of variation is positive-only and usually
 needs a different shape.
 
+If a numerical criterion should render compactly in the dashboard, make it
+explicit with `criterion_latex` plus `criterion_definitions`. Keep `criterion`
+as the plain-language fallback for items that do not opt into math rendering:
+
+```toml
+[[checks]]
+kind = "summary_metric_range"
+check_id = "example_soma_diameter_range"
+metric_key = "soma_diameter_um"
+minimum = 8.0
+maximum = 12.0
+title = "Soma diameter stays inside the accepted range"
+criterion = "The observed soma diameter should remain inside the accepted range."
+criterion_latex = '\bar{x} \in [L, U]'
+criterion_definitions = [
+  { symbol = '\bar{x}', definition = 'observed group mean' },
+  { symbol = 'L', definition = 'lower accepted bound' },
+  { symbol = 'U', definition = 'upper accepted bound' },
+]
+```
+
 The framework now supports two skip behaviors:
 
 - `short_circuit`

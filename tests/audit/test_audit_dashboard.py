@@ -52,6 +52,24 @@ sample_report = AuditReport(
             group_title="Audit beta",
         ),
         AuditItem(
+            check_id="audit_alpha.alpha_math",
+            status="PASS",
+            title="Alpha math",
+            criterion="The observed mean should stay within the accepted interval.",
+            criterion_latex=r"\bar{x} \in [L, U]",
+            criterion_definitions=[
+                {"symbol": r"\bar{x}", "definition": "observed group mean"},
+                {"symbol": "L", "definition": "lower accepted bound"},
+                {"symbol": "U", "definition": "upper accepted bound"},
+            ],
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"count": 4},
+            group_id="audit_alpha",
+            group_title="Audit alpha",
+        ),
+        AuditItem(
             check_id="audit_gamma.gamma_curve",
             status="PASS",
             title="Gamma curve",
@@ -189,6 +207,11 @@ with TemporaryDirectory() as tmp:
     assert "<div class='interval-range-labels'>" not in html
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
+    assert "criterion-math" in html
+    assert "criterion-definitions" in html
+    assert "MathJax" in html
+    assert r"\bar{x} \in [L, U]" in html
+    assert "observed group mean" in html
     assert "f-I curve" in html
     assert "data-series-graph" in html
     assert "data-visual-backend='matplotlib'" in html

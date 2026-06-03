@@ -26,15 +26,21 @@ def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> Aud
         audit_id=audit_id,
         title=title,
         items=[
-            AuditItem(
-                check_id=f"{audit_id}.alpha_pass",
-                status="PASS",
-                title="Alpha pass",
-                criterion="Alpha should pass.",
-                description="Description",
-                acceptable="Acceptable",
-                acceptable_basis="Configured",
-                evidence={
+        AuditItem(
+            check_id=f"{audit_id}.alpha_pass",
+            status="PASS",
+            title="Alpha pass",
+            criterion="Alpha should pass.",
+            criterion_latex=r"\bar{x} \in [L, U]",
+            criterion_definitions=[
+                {"symbol": r"\bar{x}", "definition": "observed group mean"},
+                {"symbol": "L", "definition": "lower accepted bound"},
+                {"symbol": "U", "definition": "upper accepted bound"},
+            ],
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
                     "MC_mean": 0.21,
                     "reference_mean": 0.45,
                     "reference_unit": "Hz",
@@ -106,6 +112,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Environment pass",
                     criterion="Criterion",
+                    criterion_latex=r"\bar{x} \in [L, U]",
+                    criterion_definitions=[
+                        {"symbol": r"\bar{x}", "definition": "observed group mean"},
+                        {"symbol": "L", "definition": "lower accepted bound"},
+                        {"symbol": "U", "definition": "upper accepted bound"},
+                    ],
                     description="Description",
                     acceptable="Acceptable",
                     acceptable_basis="Configured",
@@ -464,11 +476,14 @@ with TemporaryDirectory() as tmp:
         "olfactorybulb.dashboard.control_center.DEFAULT_OPTIMIZATION_ROOT",
         root,
     ), patch("olfactorybulb.dashboard.control_center.run_audit_by_id", return_value=_sample_report()):
-        manifest = export_control_center(None, output_dir=root / "control_center")
+        manifest = export_control_center(None, output_dir=root / "control_center", run_audit_on_start=True)
     output_dir = Path(manifest["output_dir"])
     assert manifest["campaign_dir"] is None
     assert manifest["audit_id"] == "all"
     assert manifest["audit_args"] == []
+    audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
+    assert audit_report["items"][0]["criterion_latex"] == r"\bar{x} \in [L, U]"
+    assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
     assert placeholder["placeholder"] is True
 
@@ -663,6 +678,8 @@ with TemporaryDirectory() as tmp:
         first_run_titles = {group["title"] for group in first_run_report["groups"]}
         assert "Environment/install audit" in first_run_titles
         assert "Scratch boundary audit" in first_run_titles
+        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\bar{x} \in [L, U]"
+        assert first_run_report["groups"][0]["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
 
         run_status, run_payload = _json_post(
             f"{base_url}/__audit_run__",

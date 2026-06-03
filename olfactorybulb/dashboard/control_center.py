@@ -799,6 +799,8 @@ def _combine_audit_history(entries: list[dict[str, Any]]) -> AuditReport:
                     status=item.status,
                     title=item.title,
                     criterion=item.criterion,
+                    criterion_latex=item.criterion_latex,
+                    criterion_definitions=item.criterion_definitions,
                     description=item.description,
                     acceptable=item.acceptable,
                     acceptable_basis=item.acceptable_basis,

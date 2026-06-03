@@ -486,9 +486,13 @@ contract for future sessions.
   - Do not let helper wrappers or notebooks become the only place a new
     user-facing knob exists.
   - When wrappers clone or prefix `AuditItem` instances, preserve
-    `series_visuals`, `companion_visuals`, and the other item-level
-    presentation fields; do not rebuild audit items from a partial field
-    subset.
+    `series_visuals`, `companion_visuals`, `criterion_latex`,
+    `criterion_definitions`, and the other item-level presentation fields; do
+    not rebuild audit items from a partial field subset.
+  - When a validation criterion has a compact mathematical form, keep the
+    plain-language `criterion` as the fallback and opt into math rendering with
+    explicit `criterion_latex` plus `criterion_definitions`; do not infer math
+    from prose at render time.
 
 - For HFO-facing parameter and visualization surfaces:
   - use the current contract/registry path rather than ad hoc whitelists

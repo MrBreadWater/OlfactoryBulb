@@ -1348,11 +1348,66 @@ def _notes_html(item: AuditItem) -> list[str]:
     ] if notes else []
 
 
+def _criterion_definition_html(definition: dict[str, Any]) -> str:
+    symbol = str(definition.get("symbol") or "").strip()
+    meaning = _esc(_expand_terms(str(definition.get("definition") or ""), sentence_case=True).strip())
+    unit = str(definition.get("unit") or "").strip()
+    if not symbol and not meaning and not unit:
+        return ""
+    parts: list[str] = []
+    if symbol:
+        parts.append(f"<code class='criterion-definition-symbol'>{_esc(symbol)}</code>")
+    if meaning:
+        parts.append(f"<span class='criterion-definition-meaning'>{meaning}</span>")
+    if unit:
+        parts.append(f"<span class='criterion-definition-unit'>({_esc(unit)})</span>")
+    return f"<div class='criterion-definition'>{' '.join(parts)}</div>"
+
+
+def _criterion_body_html(item: AuditItem) -> str:
+    if item.criterion_latex:
+        definitions_html = ""
+        if item.criterion_definitions:
+            definitions_html = (
+                "<div class='criterion-definitions'>"
+                + "".join(
+                    _criterion_definition_html(definition)
+                    for definition in item.criterion_definitions
+                )
+                + "</div>"
+            )
+        return (
+            "<div class='item-block criterion-block'>"
+            "<h4>Criterion</h4>"
+            f"<div class='criterion-math' role='math'>\\[{_esc(item.criterion_latex)}\\]</div>"
+            f"{definitions_html}"
+            "</div>"
+        )
+    criterion_text = _esc(_expand_terms(item.criterion, sentence_case=True))
+    definitions_html = ""
+    if item.criterion_definitions:
+        definitions_html = (
+            "<div class='criterion-definitions'>"
+            + "".join(
+                _criterion_definition_html(definition)
+                for definition in item.criterion_definitions
+            )
+            + "</div>"
+        )
+    return f"<div class='item-block'><h4>Criterion</h4><p>{criterion_text}</p>{definitions_html}</div>"
+
+
 def _item_search_blob(item: AuditItem) -> str:
+    definition_fields = [
+        " ".join(str(value).strip() for value in definition.values() if str(value).strip())
+        for definition in item.criterion_definitions
+    ]
     fields = [
         item.check_id,
         item.title,
         item.criterion,
+        item.criterion_latex,
+        " ".join(definition_fields),
         item.description,
         item.acceptable,
         item.acceptable_basis,
@@ -1462,7 +1517,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         [
             f"<div class='item-body item-detail-body' id='{_esc(item_detail_body_id)}' data-item-detail-body hidden>",
         f"<div class='item-block'><h4>Check id</h4><p class='check-id'>{_esc(item.check_id)}</p></div>",
-        f"<div class='item-block'><h4>Criterion</h4><p>{_esc(_expand_terms(item.criterion, sentence_case=True))}</p></div>",
+        _criterion_body_html(item),
         f"<div class='item-block'><h4>Description</h4><p>{_esc(_expand_terms(item.description, sentence_case=True))}</p></div>",
         f"<div class='item-block'><h4>Acceptable result</h4><p>{_esc(_expand_terms(item.acceptable, sentence_case=True))}</p></div>",
         (
@@ -1509,6 +1564,11 @@ def render_audit_dashboard_html(
 ) -> str:
     groups = list(payload.get("groups") or [])
     has_results = bool(groups)
+    has_math_criteria = any(
+        str(item.get("criterion_latex") or "").strip()
+        for group in groups
+        for item in list(group.get("items") or [])
+    )
     has_non_detail_items = any(
         str(item.get("detail_level") or "detail") != "detail"
         for group in groups
@@ -1518,6 +1578,20 @@ def render_audit_dashboard_html(
     if has_non_detail_items:
         detail_toggle_html = '<button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>'
     generated_at = datetime.now().isoformat(timespec="seconds")
+    mathjax_head_html = ""
+    if has_math_criteria:
+        mathjax_head_html = """
+  <script>
+    window.MathJax = {
+      tex: {
+        inlineMath: [['\\(', '\\)'], ['$', '$']],
+        displayMath: [['\\[', '\\]']]
+      },
+      svg: { fontCache: 'global' }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+"""
     group_nav_items: list[str] = []
     for group in groups:
         status_class = _status_class(str(group.get("worst_status", "PASS")))
@@ -2094,6 +2168,50 @@ def render_audit_dashboard_html(
     }}
     .item-block h4 {{ margin: 0 0 4px; font-size: 12px; text-transform: uppercase; color: var(--muted); }}
     .item-block p {{ margin: 0; }}
+    .criterion-block {{
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 12px 14px;
+    }}
+    .criterion-math {{
+      margin-top: 2px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      padding-bottom: 2px;
+    }}
+    .criterion-definitions {{
+      display: grid;
+      gap: 8px;
+      margin: 10px 0 0;
+      padding: 0;
+    }}
+    .criterion-definition {{
+      display: grid;
+      grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
+    }}
+    .criterion-definition-symbol {{
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      color: #1f2937;
+      background: rgba(255, 255, 255, 0.8);
+      border: 1px solid #dbe3ef;
+      border-radius: 6px;
+      padding: 1px 6px;
+      white-space: nowrap;
+    }}
+    .criterion-definition-meaning {{
+      color: #475569;
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .criterion-definition-unit {{
+      color: #64748b;
+      font-size: 12px;
+      white-space: nowrap;
+    }}
     .interval-block {{
       border: 1px solid #e2e8f0;
       border-radius: 10px;
@@ -2392,7 +2510,8 @@ def render_audit_dashboard_html(
         align-items: flex-start;
       }}
     }}
-  </style>
+    </style>
+  {mathjax_head_html}
 </head>
 <body>
   <header>

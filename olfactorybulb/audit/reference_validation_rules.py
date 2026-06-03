@@ -172,6 +172,8 @@ def _rule_item(
     status_reason: str = "",
     title: str | None = None,
     criterion: str | None = None,
+    criterion_latex: str | None = None,
+    criterion_definitions: list[dict[str, Any]] | None = None,
     description: str | None = None,
     acceptable: str | None = None,
     acceptable_basis: str | None = None,
@@ -184,6 +186,10 @@ def _rule_item(
         status=status,
         title=str(title or rule["title"]),
         criterion=str(criterion or rule["criterion"]),
+        criterion_latex=str(criterion_latex if criterion_latex is not None else rule.get("criterion_latex", "")),
+        criterion_definitions=(
+            criterion_definitions if criterion_definitions is not None else rule.get("criterion_definitions", [])
+        ),
         description=str(description or rule["description"]),
         acceptable=str(acceptable or rule["acceptable"]),
         acceptable_basis=str(acceptable_basis or rule["acceptable_basis"]),
@@ -566,6 +572,53 @@ def _criterion_text_for_band(group: str, property_name: str, band: ReferenceAcce
     )
 
 
+def _criterion_math_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand) -> tuple[str, list[dict[str, Any]]]:
+    observed_label = f"{group} mean {property_name.lower()}"
+    latex = r"\bar{x} \in [L, U]"
+    definitions: list[dict[str, Any]] = [{"symbol": r"\bar{x}", "definition": observed_label}]
+    if band.mode == "quantile_interval":
+        definitions.extend(
+            [
+                {"symbol": "L", "definition": "reported lower quantile"},
+                {"symbol": "U", "definition": "reported upper quantile"},
+            ]
+        )
+    elif band.mode == "beta_sd":
+        definitions.extend(
+            [
+                {"symbol": "L", "definition": "lower beta-distribution quantile reconstructed from the uploaded mean and standard deviation"},
+                {"symbol": "U", "definition": "upper beta-distribution quantile reconstructed from the uploaded mean and standard deviation"},
+                {"symbol": "q", "definition": "tail probability matched to the configured sigma multiplier"},
+                {"symbol": r"\alpha", "definition": "beta-shape parameter"},
+                {"symbol": r"\beta", "definition": "beta-shape parameter"},
+            ]
+        )
+    elif band.mode == "binary_indicator":
+        latex = r"\bar{x} = b"
+        definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
+    elif band.mode == "lognormal_sd":
+        definitions.extend(
+            [
+                {"symbol": "L", "definition": "lower lognormal reconstruction of the uploaded mean and standard deviation"},
+                {"symbol": "U", "definition": "upper lognormal reconstruction of the uploaded mean and standard deviation"},
+                {"symbol": r"\mu_\ell", "definition": "log-space mean"},
+                {"symbol": r"\sigma_\ell", "definition": "log-space standard deviation"},
+                {"symbol": "k", "definition": "configured sigma multiplier"},
+            ]
+        )
+    else:
+        definitions.extend(
+            [
+                {"symbol": "L", "definition": "uploaded mean minus the configured sigma multiplier times the uploaded standard deviation"},
+                {"symbol": "U", "definition": "uploaded mean plus the configured sigma multiplier times the uploaded standard deviation"},
+                {"symbol": r"\mu", "definition": "uploaded reference mean"},
+                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                {"symbol": "k", "definition": "configured sigma multiplier"},
+            ]
+        )
+    return latex, definitions
+
+
 def _title_text_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand) -> str:
     if band.mode == "binary_indicator":
         return f"{group} {property_name.lower()} matches the uploaded binary reference indicator"
@@ -942,6 +995,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
         if unit_text:
             range_text = f"{range_text} {unit_text}"
         review_metadata = _property_review_metadata(rule, context, property_name)
+        criterion_latex, criterion_definitions = _criterion_math_for_band(group, property_name, band)
         items.append(
             _rule_item(
                 rule,
@@ -949,6 +1003,8 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                 status=_rule_status(rule, passed),
                 title=_title_text_for_band(group, property_name, band),
                 criterion=_criterion_text_for_band(group, property_name, band, sigma_phrase),
+                criterion_latex=criterion_latex,
+                criterion_definitions=criterion_definitions,
                 description=(
                     f"This is the direct single-cell-type reference check derived from uploaded literature rows for "
                     f"{property_name} rather than from a cross-group ordering heuristic."

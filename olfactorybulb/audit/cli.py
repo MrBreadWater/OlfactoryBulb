@@ -118,6 +118,8 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
             status=item.status,
             title=f"{report.title}: {item.title}",
             criterion=item.criterion,
+            criterion_latex=item.criterion_latex,
+            criterion_definitions=item.criterion_definitions,
             description=item.description,
             acceptable=item.acceptable,
             acceptable_basis=item.acceptable_basis,

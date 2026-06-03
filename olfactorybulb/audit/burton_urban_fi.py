@@ -33,7 +33,10 @@ from olfactorybulb.audit.reference_validation_protocols import (
     BurtonUrbanProtocol as RegisteredBurtonUrbanProtocol,
     ProtocolRunResult,
 )
-from olfactorybulb.audit.reference_validation_rules import compute_reference_acceptance_band
+from olfactorybulb.audit.reference_validation_rules import (
+    _criterion_math_for_band,
+    compute_reference_acceptance_band,
+)
 from olfactorybulb.slice_connectivity_optimizer import load_slice_geometry, observed_metrics_for_synapse_set, resolve_slice_dir
 from prev_ob_models.cell_registry import get_cell_model_spec
 
@@ -926,12 +929,15 @@ def _build_burton_reference_fit_items(
             in_range = np.isfinite(observed_value) and accepted_low <= observed_value <= accepted_high
             metric_label = BURTON_PROPERTY_LABELS.get(metric_key, metric_key)
             units_suffix = f" {reference.units}" if reference.units else ""
+            criterion_latex, criterion_definitions = _criterion_math_for_band(_cell_label(cell_type), metric_label, band)
             items.append(
                 AuditItem(
                     check_id=f"{cell_type.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
                     status="PASS" if in_range else "FAIL",
                     title=_title_text_for_band(cell_type, metric_label, band.mode),
                     criterion=_criterion_text_for_band(cell_type, metric_label, band.mode, sigma_phrase),
+                    criterion_latex=criterion_latex,
+                    criterion_definitions=criterion_definitions,
                     description=(
                         f"This is the direct single-cell-type reference check derived from the uploaded Burton and Urban 2014 "
                         f"reference tables rather than from a cross-cell-type ordering heuristic."

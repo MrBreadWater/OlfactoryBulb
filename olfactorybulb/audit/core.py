@@ -71,12 +71,52 @@ SPECIAL_EVIDENCE_LABELS = {
 INTERNAL_EVIDENCE_KEYS = {"__reference_annotations__"}
 
 
+def _normalize_criterion_definitions(value: Any) -> list[dict[str, str]]:
+    if value is None or value == "":
+        return []
+    if isinstance(value, dict):
+        entries: Iterable[Any] = [value]
+    elif isinstance(value, Iterable) and not isinstance(value, (str, bytes)):
+        entries = value
+    else:
+        entries = [value]
+    normalized: list[dict[str, str]] = []
+    for entry in entries:
+        symbol = ""
+        definition = ""
+        unit = ""
+        if isinstance(entry, dict):
+            symbol = str(entry.get("symbol") or entry.get("name") or entry.get("label") or "").strip()
+            definition = str(
+                entry.get("definition")
+                or entry.get("meaning")
+                or entry.get("description")
+                or ""
+            ).strip()
+            unit = str(entry.get("unit") or "").strip()
+        elif isinstance(entry, (list, tuple)):
+            if len(entry) > 0:
+                symbol = str(entry[0]).strip()
+            if len(entry) > 1:
+                definition = str(entry[1]).strip()
+            if len(entry) > 2:
+                unit = str(entry[2]).strip()
+        else:
+            definition = str(entry).strip()
+        if not symbol and not definition and not unit:
+            continue
+        normalized.append({"symbol": symbol, "definition": definition, "unit": unit})
+    return normalized
+
+
 @dataclass
 class AuditItem:
     check_id: str
     status: str
     title: str
     criterion: str
+    criterion_latex: str = ""
+    criterion_definitions: list[dict[str, Any]] = field(default_factory=list)
     description: str = ""
     acceptable: str = ""
     acceptable_basis: str = ""
@@ -91,6 +131,10 @@ class AuditItem:
     group_id: str = ""
     group_title: str = ""
     detail_level: str = "detail"
+
+    def __post_init__(self) -> None:
+        self.criterion_latex = str(self.criterion_latex or "").strip()
+        self.criterion_definitions = _normalize_criterion_definitions(self.criterion_definitions)
 
 
 @dataclass
@@ -414,7 +458,24 @@ def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
     check_id = _paint(item.check_id, "1", enabled=enabled)
     lines.append(f"{status_tag} {check_id}")
     lines.append(f"  {_paint(_expand_terms(item.title, sentence_case=True), '1', enabled=enabled)}")
-    lines.append(f"  {_paint('Criterion', LABEL_COLOR, enabled=enabled)}  {_expand_terms(item.criterion, sentence_case=True)}")
+    criterion_text = item.criterion_latex if item.criterion_latex else _expand_terms(item.criterion, sentence_case=True)
+    lines.append(f"  {_paint('Criterion', LABEL_COLOR, enabled=enabled)}  {criterion_text}")
+    if item.criterion_definitions:
+        lines.append(f"  {_paint('Definitions', LABEL_COLOR, enabled=enabled)}")
+        for definition in item.criterion_definitions:
+            symbol = str(definition.get("symbol") or "").strip()
+            meaning = _expand_terms(str(definition.get("definition") or ""), sentence_case=True).strip()
+            unit = str(definition.get("unit") or "").strip()
+            parts: list[str] = []
+            if symbol:
+                parts.append(symbol)
+            if meaning:
+                parts.append(meaning)
+            text = " = ".join(parts) if len(parts) > 1 else (parts[0] if parts else "")
+            if unit:
+                text = f"{text} ({unit})" if text else f"({unit})"
+            if text:
+                lines.append(f"    - {text}")
     lines.append(
         f"  {_paint('Description', LABEL_COLOR, enabled=enabled)}  "
         f"{_expand_terms(item.description or _default_description(item), sentence_case=True)}"

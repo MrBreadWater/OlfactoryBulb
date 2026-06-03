@@ -94,6 +94,8 @@ def build_configured_skip_item(
         status=str(spec.get("status", "WARN")),
         title=str(spec["title"]),
         criterion=str(spec["criterion"]),
+        criterion_latex=str(spec.get("criterion_latex", "")),
+        criterion_definitions=spec.get("criterion_definitions", []),
         description=str(spec.get("description", "")),
         acceptable=str(spec.get("acceptable", "")),
         acceptable_basis=str(spec.get("acceptable_basis", "")),
