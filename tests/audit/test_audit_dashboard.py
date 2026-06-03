@@ -182,14 +182,9 @@ with TemporaryDirectory() as tmp:
     assert "warning-summary-text" in html
     assert html.count("data-interval-visual") == 1
     assert html.count("<div class='interval-legend'>") == 1
-    assert "<div class='interval-bound-label lower'" in html
-    assert "<div class='interval-bound-label upper'" in html
-    assert "<div class='interval-bound-label reference'" in html
-    assert "Lower bound 0.12" in html
-    assert "Upper bound 1.03" in html
+    assert "interval-bound-label" not in html
+    assert "interval-marker-label" not in html
     assert "rgba(17, 24, 39, 0.9)" in html
-    assert "interval-marker-label" in html
-    assert "observed-label" in html
     assert "<div class='interval-metric-grid'>" not in html
     assert "<div class='interval-range-labels'>" not in html
     assert "Protocol caveat exists in this item." in html

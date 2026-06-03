@@ -609,7 +609,7 @@ with TemporaryDirectory() as tmp:
         assert "No audit results yet" in initial_audit_html
         assert "audit-empty-state-run" in initial_audit_html
         assert "audit-empty-state-title" in initial_audit_html
-        assert "interval-marker-label" in initial_audit_html
+        assert "interval-marker-label" not in initial_audit_html
         assert "maintained/readme.html" in docs_html
         assert "View source markdown" in rendered_doc_html
         assert initial_state["audit"]["status"] == "idle"
