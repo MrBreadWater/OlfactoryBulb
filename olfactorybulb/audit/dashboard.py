@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import html
+import math
 import json
 import os
 import re
@@ -269,6 +270,50 @@ def _series_domain(values: list[float]) -> tuple[float, float]:
     return domain_low, domain_high
 
 
+def _series_nice_step(raw_step: float) -> float:
+    if raw_step <= 0.0:
+        return 1.0
+    exponent = math.floor(math.log10(raw_step))
+    fraction = raw_step / (10.0**exponent)
+    candidates = (1.0, 2.0, 2.5, 5.0, 10.0)
+    chosen = min(candidates, key=lambda candidate: abs(candidate - fraction))
+    return chosen * (10.0**exponent)
+
+
+def _series_tick_values(low: float, high: float, *, target_ticks: int = 5) -> list[float]:
+    if low == high:
+        return [low]
+    raw_step = abs(high - low) / max(target_ticks - 1, 1)
+    step = _series_nice_step(raw_step)
+    start = math.floor(low / step) * step
+    end = math.ceil(high / step) * step
+    values: list[float] = []
+    current = start
+    guard = 0
+    while current <= end + step * 0.5 and guard < 64:
+        values.append(round(current, 12))
+        current += step
+        guard += 1
+    return values
+
+
+def _series_tick_label(value: float) -> str:
+    if math.isclose(value, round(value), abs_tol=1e-9):
+        return str(int(round(value)))
+    magnitude = abs(value)
+    if magnitude >= 100:
+        text = f"{value:.0f}"
+    elif magnitude >= 10:
+        text = f"{value:.1f}"
+    elif magnitude >= 1:
+        text = f"{value:.1f}"
+    elif magnitude >= 0.1:
+        text = f"{value:.2f}"
+    else:
+        text = f"{value:.3f}"
+    return text.rstrip("0").rstrip(".") if "." in text else text
+
+
 def _series_color_for_key(key: str, index: int, *, status: str) -> dict[str, str]:
     lowered = key.lower()
     if "reference" in lowered:
@@ -360,10 +405,10 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
     y_low, y_high = y_domain
     plot_width = 520.0
     plot_height = 160.0
-    margin_left = 56.0
+    margin_left = 62.0
     margin_right = 18.0
-    margin_top = 16.0
-    margin_bottom = 26.0
+    margin_top = 18.0
+    margin_bottom = 40.0
     svg_width = margin_left + plot_width + margin_right
     svg_height = margin_top + plot_height + margin_bottom
 
@@ -384,24 +429,49 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
         commands.extend(f"L {_x_pos(x):.2f} {_y_pos(y):.2f}" for x, y in points[1:])
         return " ".join(commands)
 
-    x_label = _evidence_label(x_key)
+    has_rate_series = any("rate" in entry["key"].lower() or entry["key"].lower().endswith("_hz") for entry in series_entries)
+    is_fi_curve = series_kind == "f-i curve" or ("current" in x_key.lower() and has_rate_series)
     if not series_kind:
-        if "current" in x_key.lower() and any(
-            "rate" in entry["key"].lower() or entry["key"].lower().endswith("_hz") for entry in series_entries
-        ):
-            series_kind = "f-i curve"
-        else:
-            series_kind = "series graph"
+        series_kind = "f-i curve" if is_fi_curve else "series graph"
+
+    x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
+    y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
+    x_ticks = _series_tick_values(x_low, x_high, target_ticks=5)
+    y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
 
     svg_lines = [
         f"<svg class='series-graph-svg' data-series-graph role='img' viewBox='0 0 {svg_width:.0f} {svg_height:.0f}' "
         f"aria-label='{_esc(series_kind.title())} with {len(series_entries)} series on a shared scale. "
-        f"X axis {x_label} from {_format_numeric(x_low)} to {_format_numeric(x_high)}. "
-        f"Y axis from {_format_numeric(y_low)} to {_format_numeric(y_high)}.'>"
+        f"X axis {x_axis_label} from {_format_numeric(x_low)} to {_format_numeric(x_high)}. "
+        f"Y axis {y_axis_label} from {_format_numeric(y_low)} to {_format_numeric(y_high)}.'>"
         f"<rect class='series-graph-bg' x='0' y='0' width='{svg_width:.0f}' height='{svg_height:.0f}' rx='10' ry='10'></rect>",
         f"<line class='series-axis' x1='{margin_left:.2f}' y1='{margin_top + plot_height:.2f}' x2='{margin_left + plot_width:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
         f"<line class='series-axis' x1='{margin_left:.2f}' y1='{margin_top:.2f}' x2='{margin_left:.2f}' y2='{margin_top + plot_height:.2f}'></line>",
     ]
+
+    x_axis_y = margin_top + plot_height
+    x_tick_label_y = x_axis_y + 16.0
+    y_tick_x = margin_left
+    y_tick_label_x = margin_left - 8.0
+    for tick in x_ticks:
+        x_pos = _x_pos(tick)
+        svg_lines.append(
+            f"<line class='series-axis-tick series-axis-x' x1='{x_pos:.2f}' y1='{x_axis_y:.2f}' x2='{x_pos:.2f}' y2='{x_axis_y + 4.0:.2f}'></line>"
+        )
+        svg_lines.append(
+            f"<text class='series-tick-label series-tick-label-x' x='{x_pos:.2f}' y='{x_tick_label_y:.2f}' text-anchor='middle' dominant-baseline='hanging'>"
+            f"{_esc(_series_tick_label(tick))}</text>"
+        )
+
+    for tick in y_ticks:
+        y_pos = _y_pos(tick)
+        svg_lines.append(
+            f"<line class='series-axis-tick series-axis-y' x1='{y_tick_x - 4.0:.2f}' y1='{y_pos:.2f}' x2='{y_tick_x:.2f}' y2='{y_pos:.2f}'></line>"
+        )
+        svg_lines.append(
+            f"<text class='series-tick-label series-tick-label-y' x='{y_tick_label_x:.2f}' y='{y_pos:.2f}' text-anchor='end' dominant-baseline='middle'>"
+            f"{_esc(_series_tick_label(tick))}</text>"
+        )
 
     if x_low <= 0.0 <= x_high:
         svg_lines.append(
@@ -434,7 +504,7 @@ def _render_series_graph(item: AuditItem, evidence: dict[str, Any], *, exclude_k
     return (
         f"<div class='item-block series-graph-block'>"
         f"<h4>{_esc('f-I curve' if series_kind == 'f-i curve' else 'Series graph')}</h4>"
-        f"<div class='series-graph-meta'><span>x-axis {_esc(x_label)}</span><span>y-axis values</span></div>"
+        f"<div class='series-graph-meta'><span>{_esc(x_axis_label)}</span><span>{_esc(y_axis_label)}</span></div>"
         f"<div class='series-graph-shell'>"
         f"{''.join(svg_lines)}</svg>"
         f"</div>"
@@ -1289,6 +1359,10 @@ def render_audit_dashboard_html(
       stroke: #cbd5e1;
       stroke-width: 1;
     }}
+    .series-axis-tick {{
+      stroke: #cbd5e1;
+      stroke-width: 1;
+    }}
     .series-zero {{
       stroke: #94a3b8;
       stroke-width: 1.5;
@@ -1301,6 +1375,11 @@ def render_audit_dashboard_html(
     .series-point {{
       stroke-width: 1.5;
       fill: #ffffff;
+    }}
+    .series-tick-label {{
+      fill: #64748b;
+      font-size: 10px;
+      font-weight: 600;
     }}
     .series-legend {{
       display: flex;

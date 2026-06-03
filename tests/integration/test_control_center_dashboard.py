@@ -818,6 +818,24 @@ with TemporaryDirectory() as tmp:
                 "hiddenDetail": True,
                 "blockVisible": True,
             }
+            series_scale = client.eval(
+                "(() => {"
+                "  const graph = document.querySelector('[data-series-graph]');"
+                "  const block = graph ? graph.closest('.series-graph-block') : null;"
+                "  const meta = block ? block.querySelector('.series-graph-meta') : null;"
+                "  return {"
+                "    metaText: meta ? meta.textContent || '' : '',"
+                "    xTicks: block ? block.querySelectorAll('.series-axis-x').length : 0,"
+                "    yTicks: block ? block.querySelectorAll('.series-axis-y').length : 0,"
+                "    tickLabels: block ? block.querySelectorAll('.series-tick-label').length : 0"
+                "  };"
+                "})()"
+            )
+            assert "Current (pA)" in series_scale["metaText"]
+            assert "Firing rate (Hz)" in series_scale["metaText"]
+            assert series_scale["xTicks"] >= 4
+            assert series_scale["yTicks"] >= 4
+            assert series_scale["tickLabels"] >= 8
             collapsed = client.eval(
                 "(() => {"
                 "  const group = document.querySelector('[data-group-section]');"

@@ -335,6 +335,9 @@ contract for future sessions.
   - render explicit series/curve graphics in the persistent card body so they
     stay visible when the item is collapsed; do not hide them only inside the
     expanded detail body
+  - f-I curve graphics should include explicit axis names plus sparse tick
+    marks and numeric labels so the graph communicates scale without becoming
+    cluttered
   - do not force scalar numeric evidence into a chart; if the evidence is not
     explicitly series-shaped, keep it as metadata or use a dedicated interval
     visual when bounds are present

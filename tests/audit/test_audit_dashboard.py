@@ -114,6 +114,10 @@ with TemporaryDirectory() as tmp:
     assert "Evidence caveat from protocol matching." in html
     assert "f-I curve" in html
     assert "data-series-graph" in html
+    assert "Current (pA)" in html
+    assert "Firing rate (Hz)" in html
+    assert html.count("series-axis-tick") >= 4
+    assert html.count("series-tick-label") >= 4
     assert html.count("<circle class='series-point'") >= 4
     assert "Observed sweep" in html
     gamma_index = html.index("audit_gamma.gamma_curve")

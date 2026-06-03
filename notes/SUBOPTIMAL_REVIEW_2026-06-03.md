@@ -110,6 +110,62 @@
 - Recommendation:
   - Narrow cancellation triggers to terminal remote-state conditions or explicit user-cancel signals; keep non-terminal local errors as warnings and continue monitoring with backoff/retry.
 
+## Top 3 Remediation Proposals
+
+1) High — make manual allocation remote config portable and explicit
+
+- Target: `olfactorybulb/hfo_optimizer.py:103-126`
+- Root fix:
+  - Replace `remote_host = str(template.get("remote_host") or "jmpaniag@localhost")` with a template-first, fail-fast flow.
+  - Replace `remote_repo_root` default with `_default_repo_root()` and keep that result repo-root-derived.
+- Concrete change:
+  - Add a small helper in `build_manual_allocation_remote_config()`:
+    - Resolve `remote_host` from `template["remote_host"]` and raise a `ValueError` with a remediation message if missing.
+    - Resolve `remote_repo_root` from `template["remote_repo_root"]` or `str(_default_repo_root())`.
+    - Keep `remote_results_root` computed from `remote_repo_root` only when unset.
+- Suggested validation:
+  - Add/extend a regression test in `tests/hfo/test_hfo_optimizer.py`:
+    - Missing `remote_host` now raises a clear exception.
+    - Missing `remote_repo_root` falls back to `_default_repo_root()`.
+    - Existing explicit overrides are preserved.
+
+2) High — remove hard-coded campaign base path in autonomous HFO runner
+
+- Target: `tools/run_hfo_campaign.py:344-374`
+- Root fix:
+  - Remove `Path("/home/alek/OlfactoryBulb/results/notebook_runs/optimization")` and use the maintained default path constant from `olfactorybulb.hfo_optimizer`.
+- Concrete change:
+  - In `run_campaign()`, define:
+    - `campaign_base = Path(campaign_base or DEFAULT_CAMPAIGNS_BASE)`
+    - `campaign_dir = _load_or_init_campaign(campaign_base / campaign_slug, ...)`
+  - Add optional CLI override:
+    - `--campaign-base` (default to `DEFAULT_CAMPAIGNS_BASE`) to keep workflows portable and testable.
+  - Update `parse_args()` and pass through `run_campaign()`.
+- Suggested validation:
+  - Add/extend `tests/hfo/test_run_hfo_campaign.py`:
+    - Assert default run now resolves under `DEFAULT_CAMPAIGNS_BASE`.
+    - Assert explicit `--campaign-base` creates/loads that path.
+    - Keep existing pending-batch behavior unchanged.
+
+3) High — only cancel remote runs for terminal/user-cancel conditions
+
+- Target: `neuroinfra/remote/run_monitor.py:36-350`
+- Root fix:
+  - Do not cancel in a blanket `except Exception`.
+  - Keep monitor resilient to transient local errors with warning+retry, and cancel only for explicit interrupt/user request or confirmed terminal failure context.
+- Concrete change:
+  - Refactor outer `try/except` in `monitor_remote_run()`:
+    - Keep `KeyboardInterrupt` path unchanged.
+    - Replace broad catch with:
+      - status-poll wrapper that catches and returns a transient warning record for poll failures,
+      - a bounded retry counter (e.g., 3 attempts) before surfacing non-terminal poll errors.
+    - Preserve cancellation path for explicit terminal states and confirmed local user-requested aborts.
+- Suggested validation:
+  - Extend `tests/neuroinfra/remote/test_neuroinfra_remote_run_monitor.py` with:
+    - A synthetic transient `poll_status_fn` exception followed by success -> assert `cancel_job_fn` is not called.
+    - A non-terminal error in log filtering or status render path -> assert monitoring continues with warning text.
+    - Existing interrupt path still calls cancel/partial sync exactly once.
+
 ### 11) Medium — notebook utility scripts hard-code absolute checkout paths
 
 - Location: `notebooks/website_header_blenderneuron_style.py:16-19`, `notebooks/website_header_animated_concepts.py:18-19`, `notebooks/website_header_animated_concepts.py:132`, `notebooks/website_header_concepts.py:533-539`
