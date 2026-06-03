@@ -1,10 +1,10 @@
 {
   "audit_id": "control_center_audits",
-  "generated_at": "2026-06-03T15:16:42",
+  "generated_at": "2026-06-03T15:33:43",
   "group_count": 1,
   "index_html": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits/index.html",
   "item_count": 17,
-  "manifest_revision": 1780514202997124903,
+  "manifest_revision": 1780515223554812094,
   "output_dir": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits",
   "report_json": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits/report.json",
   "summary": {

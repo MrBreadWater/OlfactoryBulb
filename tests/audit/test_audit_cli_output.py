@@ -30,15 +30,16 @@ sample_report = AuditReport(
             status="WARN",
             title="TC CV_ISI item",
             criterion="TC CV_ISI should render cleanly.",
-            criterion_latex=r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
+            criterion_latex=r"\left|z(\bar{x})\right| \leq 2",
             criterion_formulae=[
-                r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma",
+                r"z(x) = \frac{x - \mu}{\sigma}",
+                r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
             ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
+                {"symbol": "z(x)", "definition": "arithmetic-space standardization function for a value x"},
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
-                {"symbol": "k", "definition": "configured sigma multiplier"},
             ],
             description="CV_ISI should be expanded so the reader does not have to infer it.",
             acceptable="The tufted-cell value must exceed the mitral-cell value.",
@@ -94,11 +95,13 @@ assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
 assert "Warning" in plain
 assert "Warning surfaced for an unresolved caveat or condition" in plain
-assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in plain
+assert r"\left|z(\bar{x})\right| \leq 2" in plain
 assert "Formulae" in plain
-assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in plain
+assert r"z(x) = \frac{x - \mu}{\sigma}" in plain
+assert r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}" in plain
 assert "Definitions" in plain
 assert "Observed group mean" in plain
+assert "Arithmetic-space standardization function for a value x" in plain
 assert "Why This Is A Warning" not in plain
 assert "Human Review" not in plain
 assert "Accepted | reviewer: human | Manually reviewed and accepted." not in plain

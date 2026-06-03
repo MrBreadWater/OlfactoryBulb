@@ -628,7 +628,8 @@ def _criterion_math_for_band(
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
         cv_symbol = r"c_{\mathrm{v}}"
-        z_symbol = r"z_{\log}"
+        z_function_symbol = r"z_{\log}(x)"
+        z_observed_symbol = rf"z_{{\log}}\!\left({observed_symbol}\right)"
         log_shape_symbol = "s"
         log_center_symbol = "m"
         log_score = (
@@ -636,14 +637,14 @@ def _criterion_math_for_band(
             rf"\frac{{1}}{{2}}\ln\!\left(1 + {cv_symbol}^2\right)}}"
             rf"{{\sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}}}"
         )
-        latex = rf"\left|{z_symbol}\right| \leq {sigma_multiplier}"
+        latex = rf"\left|{z_observed_symbol}\right| \leq {sigma_multiplier}"
         definitions.extend(
             [
                 {
-                    "symbol": z_symbol,
+                    "symbol": z_function_symbol,
                     "definition": (
-                        "standardized log-space z-score of the observed value under the "
-                        "reconstructed lognormal reference distribution"
+                        "log-space standardization function for a positive value x under "
+                        "the reconstructed lognormal reference distribution"
                     ),
                 },
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -655,22 +656,36 @@ def _criterion_math_for_band(
         )
         formulae.extend(
             [
-                rf"{z_symbol} = \frac{{\ln({observed_symbol}) - {log_center_symbol}}}{{{log_shape_symbol}}}",
+                rf"{z_function_symbol} = \frac{{\ln(x) - {log_center_symbol}}}{{{log_shape_symbol}}}",
                 rf"{log_center_symbol} = \ln(\mu) - \frac{{1}}{{2}}{log_shape_symbol}^2",
                 rf"{log_shape_symbol} = \sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}",
                 rf"{cv_symbol} = \frac{{\sigma}}{{\mu}}",
-                rf"{z_symbol} = {log_score}",
+                rf"{z_observed_symbol} = {log_score}",
             ]
         )
     else:
-        latex = rf"\mu - {sigma_multiplier}\sigma \leq {observed_symbol} \leq \mu + {sigma_multiplier}\sigma"
+        z_function_symbol = "z(x)"
+        z_observed_symbol = rf"z\!\left({observed_symbol}\right)"
+        latex = rf"\left|{z_observed_symbol}\right| \leq {sigma_multiplier}"
         definitions.extend(
             [
+                {
+                    "symbol": z_function_symbol,
+                    "definition": (
+                        "arithmetic-space standardization function for a value x under the "
+                        "uploaded reference mean and standard deviation"
+                    ),
+                },
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
                 {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
             ]
         )
-        formulae.extend([rf"\mu - {sigma_multiplier}\sigma", rf"\mu + {sigma_multiplier}\sigma"])
+        formulae.extend(
+            [
+                rf"{z_function_symbol} = \frac{{x - \mu}}{{\sigma}}",
+                rf"{z_observed_symbol} = \frac{{{observed_symbol} - \mu}}{{\sigma}}",
+            ]
+        )
     return latex, definitions, formulae
 
 

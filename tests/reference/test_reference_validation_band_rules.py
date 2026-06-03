@@ -79,6 +79,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
             [
                 "Property,Source,cell_type,mean,sd,unit,q_low,q_high,q_low_label,q_high_label",
                 "ISI Coefficient of Variation,Burton & Urban (2014),MC,0.45,0.29,",
+                "Membrane Resting Voltage,Burton & Urban (2014),MC,-58.0,4.0,mV",
                 "Firing Probability,Example et al. (2026),MC,0.40,0.15,",
                 "Skewed Latency,Example et al. (2026),MC,10.0,3.0,ms,7.0,15.0,25th percentile,75th percentile",
             ]
@@ -116,17 +117,48 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert "configured lognormal reference interval" in log_item.acceptable_basis
     assert (
         log_item.criterion_latex
-        == r"\left|z_{\log}\right| \leq 2"
+        == r"\left|z_{\log}\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}\right)\right| \leq 2"
     )
     assert log_item.criterion_definitions[0]["symbol"] == r"\overline{\mathrm{CV}}_{\mathrm{ISI}}"
-    assert log_item.criterion_definitions[1]["symbol"] == r"z_{\log}"
-    assert "standardized log-space z-score" in log_item.criterion_definitions[1]["definition"]
+    assert log_item.criterion_definitions[1]["symbol"] == r"z_{\log}(x)"
+    assert "log-space standardization function" in log_item.criterion_definitions[1]["definition"]
     assert log_item.criterion_formulae == [
-        r"z_{\log} = \frac{\ln(\overline{\mathrm{CV}}_{\mathrm{ISI}}) - m}{s}",
+        r"z_{\log}(x) = \frac{\ln(x) - m}{s}",
         r"m = \ln(\mu) - \frac{1}{2}s^2",
         r"s = \sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}",
         r"c_{\mathrm{v}} = \frac{\sigma}{\mu}",
-        r"z_{\log} = \frac{\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}/\mu\right) + \frac{1}{2}\ln\!\left(1 + c_{\mathrm{v}}^2\right)}{\sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}}",
+        r"z_{\log}\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}\right) = \frac{\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}/\mu\right) + \frac{1}{2}\ln\!\left(1 + c_{\mathrm{v}}^2\right)}{\sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}}",
+    ]
+
+    symmetric_rule = {
+        "kind": "reference_band_rows",
+        "loader": f"csv:{csv_path}",
+        "reference_source": "Burton & Urban (2014)",
+        "group_field": "cell_type",
+        "sigma_arg_name": "reference_sigma_multiplier",
+        "property_metric_map": {"Membrane Resting Voltage": "resting_voltage_mV"},
+        "property_band_modes": {"Membrane Resting Voltage": "symmetric_sd"},
+        "check_id": "placeholder",
+        "title": "placeholder",
+        "criterion": "placeholder",
+        "description": "placeholder",
+        "acceptable": "placeholder",
+        "acceptable_basis": "placeholder",
+    }
+    symmetric_context = ValidationRuleContext(
+        metrics=[],
+        summary={"MC": {"resting_voltage_mV": -60.0}},
+        args=Namespace(reference_sigma_multiplier=2.0),
+        config={},
+        protocol_result=None,
+    )
+    symmetric_item = build_rule_items([symmetric_rule], symmetric_context)[0]
+    assert symmetric_item.criterion_latex == r"\left|z\!\left(\bar{V}_{\mathrm{rest}}\right)\right| \leq 2"
+    assert symmetric_item.criterion_definitions[1]["symbol"] == "z(x)"
+    assert "arithmetic-space standardization function" in symmetric_item.criterion_definitions[1]["definition"]
+    assert symmetric_item.criterion_formulae == [
+        r"z(x) = \frac{x - \mu}{\sigma}",
+        r"z\!\left(\bar{V}_{\mathrm{rest}}\right) = \frac{\bar{V}_{\mathrm{rest}} - \mu}{\sigma}",
     ]
 
     beta_rule = {

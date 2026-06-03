@@ -359,22 +359,21 @@ contract for future sessions.
   - for math-rendered criteria, prefer one headline inequality or equality in
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
-  - when a reference-band check is centered around a mean, prefer a direct
-    two-sided inequality such as `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
-    rather than an absolute-value shorthand; use a metric-specific observed
+  - when a reference-band check is centered around a mean, prefer a compact
+    standardization-function criterion rather than endpoint notation. Use
+    `|z(\bar{x})| \leq k` for symmetric arithmetic bands and
+    `|z_{\log}(\bar{x})| \leq k` for lognormal reconstructions, with the
+    selected multiplier rendered numerically. Use a metric-specific observed
     symbol when the quantity has a common notation such as
     `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or `\bar{I}_{\mathrm{rh}}`, and
-    keep `\bar{x}` as the fallback only when no clearer symbol exists. Render
-    the selected sigma multiplier numerically in the headline inequality
-    rather than leaving a literal `k` in the display. For lognormal
-    reconstructions, prefer the absolute standardized log-score criterion
-    `|z_{\log}| \leq k` with the selected multiplier rendered numerically.
-    Include `z_{\log}` in the variable-definition list as the standardized
-    log-space z-score of the observed value under the reconstructed lognormal
-    reference distribution. Keep `c_{\mathrm{v}}=\sigma/\mu` in the supporting
-    formulae, and avoid endpoint notation or auxiliary lognormal symbols like
-    `\mu_\ell`, `\sigma_\ell`, `L`, or `U` unless the paper actually defines
-    those quantities
+    keep `\bar{x}` as the fallback only when no clearer symbol exists. Treat
+    `criterion_definitions` as a Definitions section for functions as well as
+    variables: include `z(x)` as the arithmetic-space standardization function
+    or `z_{\log}(x)` as the log-space standardization function. Keep
+    `c_{\mathrm{v}}=\sigma/\mu` in lognormal supporting formulae, and avoid
+    endpoint notation or auxiliary lognormal symbols like `\mu_\ell`,
+    `\sigma_\ell`, `L`, or `U` unless the paper actually defines those
+    quantities
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
       dicts when possible
