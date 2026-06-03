@@ -114,6 +114,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert log_item.evidence["reference_mean"] == 0.45
     assert "lognormal interval reconstructed" in log_item.acceptable_basis
     assert "configured lognormal reference interval" in log_item.acceptable_basis
+    assert (
+        log_item.criterion_latex
+        == r"\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}"
+    )
 
     beta_rule = {
         "kind": "reference_band_rows",

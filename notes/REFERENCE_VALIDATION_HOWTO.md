@@ -236,7 +236,11 @@ centered around a mean, and keep explicit endpoint notation only for modes that
 really need asymmetric bounds. For example:
 
 - symmetric bands: `\left|\bar{x} - \mu\right| \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
-- lognormal bands: `\left|\ln(\bar{x}) - \ln(\mu) + \frac{1}{2}\ln(1 + (\sigma / \mu)^2)\right| \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
+- lognormal bands: `\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
+
+If a log-space criterion can be reduced algebraically without obscuring the
+reference quantities, prefer that reduced form over a longer expanded sum of
+logs or display-only auxiliary parameters.
 
 The framework now supports two skip behaviors:
 

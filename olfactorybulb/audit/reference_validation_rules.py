@@ -622,7 +622,7 @@ def _criterion_math_for_band(
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
         latex = (
-            r"\left|\ln(\bar{x}) - \ln(\mu) + \frac{1}{2}\ln(1 + (\sigma / \mu)^2)\right| "
+            r"\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| "
             r"\leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}"
         )
         definitions.extend(

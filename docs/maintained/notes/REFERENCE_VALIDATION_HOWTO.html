@@ -307,6 +307,39 @@ config</strong>, not hidden in Python defaults. A metric such as membrane restin
 voltage can often tolerate a symmetric arithmetic band, while a metric such as
 the interspike-interval coefficient of variation is positive-only and usually
 needs a different shape.</p>
+<p>If a numerical criterion should render compactly in the dashboard, make it
+explicit with <code>criterion_latex</code>, optional <code>criterion_formulae</code>, and
+<code>criterion_definitions</code>. Keep <code>criterion</code> as the plain-language fallback for
+items that do not opt into math rendering:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_range&quot;
+check_id = &quot;example_soma_diameter_range&quot;
+metric_key = &quot;soma_diameter_um&quot;
+minimum = 8.0
+maximum = 12.0
+title = &quot;Soma diameter stays inside the accepted range&quot;
+criterion = &quot;The observed soma diameter should remain inside the accepted range.&quot;
+criterion_latex = '\left|\bar{x} - \mu\right| \leq k\sigma'
+criterion_formulae = [
+  '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
+]
+criterion_definitions = [
+  { symbol = '\bar{x}', definition = 'observed group mean' },
+  { symbol = '\mu', definition = 'uploaded reference mean' },
+  { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
+  { symbol = 'k', definition = 'configured sigma multiplier' },
+]
+</code></pre>
+<p>For reference-band rows, prefer a compact centered inequality when the rule is
+centered around a mean, and keep explicit endpoint notation only for modes that
+really need asymmetric bounds. For example:</p>
+<ul>
+<li>symmetric bands: <code>\left|\bar{x} - \mu\right| \leq k\sigma</code>, with optional equivalent form <code>\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma</code></li>
+<li>lognormal bands: <code>\left|\ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right)\right| \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}</code></li>
+</ul>
+<p>If a log-space criterion can be reduced algebraically without obscuring the
+reference quantities, prefer that reduced form over a longer expanded sum of
+logs or display-only auxiliary parameters.</p>
 <p>The framework now supports two skip behaviors:</p>
 <ul>
 <li><code>short_circuit</code></li>
