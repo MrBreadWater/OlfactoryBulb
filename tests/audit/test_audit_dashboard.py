@@ -180,7 +180,7 @@ with TemporaryDirectory() as tmp:
     manifest = export_audit_dashboard(sample_report, output_dir, refresh_endpoint="/__audit_refresh__")
     assert manifest["audit_id"] == "new_sweep"
     assert "manifest_revision" in manifest
-    assert (output_dir / "assets" / "mathjax" / "tex-svg.js").exists()
+    assert (output_dir / "assets" / "katex" / "katex.min.js").exists()
     report_payload = json.loads((output_dir / "report.json").read_text())
     assert report_payload["audit_id"] == "new_sweep"
     assert len(report_payload["groups"]) == 4
@@ -237,18 +237,19 @@ with TemporaryDirectory() as tmp:
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "criterion-math" in html
-    assert "criterion-mathjax-display" in html
+    assert "criterion-katex-display" in html
     assert "criterion-formulae" in html
     assert "criterion-formula" in html
-    assert "criterion-mathjax-inline" in html
+    assert "criterion-katex-inline" in html
     assert "criterion-definitions" in html
     assert "criterion-definition-symbol" in html
     assert "Delta formulae only" in html
     assert r"x \leq y" in html
     assert "criterion-variables" not in html
     assert "criterion-variable-chip" not in html
-    assert "MathJax" in html
-    assert "./assets/mathjax/tex-svg.js" in html
+    assert "./assets/katex/katex.min.css" in html
+    assert "./assets/katex/katex.min.js" in html
+    assert "./assets/katex/contrib/auto-render.min.js" in html
     assert "cdn.jsdelivr.net" not in html
     assert r"\lvert \bar{x} - \mu \rvert \leq k\sigma" in html
     assert r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma" in html

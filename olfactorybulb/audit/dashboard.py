@@ -18,7 +18,7 @@ from olfactorybulb.audit.cli import run_audit_by_id
 from olfactorybulb.audit.core import AuditItem, AuditReport, _summary_chunks, _expand_terms, status_reason_text
 
 
-_MATHJAX_BUNDLE_PATH = Path(__file__).resolve().parent / "static" / "mathjax" / "tex-svg.js"
+_KATEX_BUNDLE_PATH = Path(__file__).resolve().parent / "static" / "katex"
 
 
 def _esc(value: object) -> str:
@@ -34,7 +34,7 @@ def _render_math_markup(expression: str, *, display: bool) -> str:
     return f"\\({_esc(source)}\\)"
 
 
-def _item_uses_mathjax(item: dict[str, Any]) -> bool:
+def _item_uses_katex(item: dict[str, Any]) -> bool:
     if str(item.get("criterion_latex") or "").strip():
         return True
     if any(str(formula).strip() for formula in list(item.get("criterion_formulae") or [])):
@@ -1458,7 +1458,7 @@ def _criterion_definition_html(definition: dict[str, Any]) -> str:
     parts: list[str] = []
     if symbol:
         parts.append(
-            f"<span class='criterion-definition-symbol criterion-mathjax-inline' role='img' aria-label='{_esc(symbol)}'>"
+            f"<span class='criterion-definition-symbol criterion-katex-inline' role='img' aria-label='{_esc(symbol)}'>"
             f"{_render_math_markup(symbol, display=False)}"
             "</span>"
         )
@@ -1474,7 +1474,7 @@ def _criterion_formulae_html(formulae: list[str]) -> str:
     if not normalized:
         return ""
     rows = "".join(
-        f"<div class='criterion-formula criterion-mathjax-inline' role='img' aria-label='{_esc(formula)}'>{_render_math_markup(formula, display=False)}</div>"
+        f"<div class='criterion-formula criterion-katex-inline' role='img' aria-label='{_esc(formula)}'>{_render_math_markup(formula, display=False)}</div>"
         for formula in normalized
     )
     return f"<div class='criterion-formulae'>{rows}</div>"
@@ -1496,7 +1496,7 @@ def _criterion_body_html(item: AuditItem) -> str:
         return (
             "<div class='item-block criterion-block'>"
             "<h4>Criterion</h4>"
-            f"<div class='criterion-math criterion-mathjax-display' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
+            f"<div class='criterion-math criterion-katex-display' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
             f"{formulae_html}"
             f"{definitions_html}"
             "</div>"
@@ -1677,12 +1677,12 @@ def render_audit_dashboard_html(
     payload: dict[str, Any],
     *,
     refresh_endpoint: str | None = None,
-    mathjax_script_src: str = "./assets/mathjax/tex-svg.js",
+    math_asset_prefix: str = "./assets/katex",
 ) -> str:
     groups = list(payload.get("groups") or [])
     has_results = bool(groups)
     has_math_criteria = any(
-        _item_uses_mathjax(item)
+        _item_uses_katex(item)
         for item in _payload_items(payload)
     )
     has_non_detail_items = any(
@@ -1694,29 +1694,37 @@ def render_audit_dashboard_html(
     if has_non_detail_items:
         detail_toggle_html = '<button class="toggle-button" type="button" id="show-detail-toggle" aria-pressed="true">Show detail items</button>'
     generated_at = datetime.now().isoformat(timespec="seconds")
-    mathjax_head_html = ""
+    katex_head_html = ""
     if has_math_criteria:
-        mathjax_head_html = """
+        katex_head_html = """
+  <link rel="stylesheet" href="__KATEX_CSS_HREF__">
   <script>
-    window.MathJax = {
-      tex: {
-        inlineMath: [['\\\\(', '\\\\)'], ['$', '$']],
-        displayMath: [['\\\\[', '\\\\]']]
-      },
-      svg: { fontCache: 'global' },
-      startup: { typeset: true }
+    window.__KATEX_RENDER_OPTIONS__ = {
+      delimiters: [
+        { left: '\\\\(', right: '\\\\)', display: false },
+        { left: '\\\\[', right: '\\\\]', display: true },
+        { left: '$$', right: '$$', display: true }
+      ],
+      throwOnError: false,
+      strict: "ignore",
+      ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"]
     };
   </script>
-  <script defer src="__MATHJAX_SCRIPT_SRC__"></script>
+  <script defer src="__KATEX_SCRIPT_SRC__"></script>
+  <script defer src="__KATEX_AUTORENDER_SCRIPT_SRC__"></script>
   <script>
-    window.addEventListener("load", () => {
-      if (window.MathJax && typeof window.MathJax.typesetPromise === "function") {
-        window.MathJax.typesetPromise();
+    window.addEventListener("DOMContentLoaded", () => {
+      if (typeof window.renderMathInElement === "function") {
+        window.renderMathInElement(document.body, window.__KATEX_RENDER_OPTIONS__ || {});
       }
     });
   </script>
 """
-        mathjax_head_html = mathjax_head_html.replace("__MATHJAX_SCRIPT_SRC__", _esc(mathjax_script_src))
+        katex_head_html = (
+            katex_head_html.replace("__KATEX_CSS_HREF__", _esc(f"{math_asset_prefix}/katex.min.css"))
+            .replace("__KATEX_SCRIPT_SRC__", _esc(f"{math_asset_prefix}/katex.min.js"))
+            .replace("__KATEX_AUTORENDER_SCRIPT_SRC__", _esc(f"{math_asset_prefix}/contrib/auto-render.min.js"))
+        )
     group_nav_items: list[str] = []
     for group in groups:
         status_class = _status_class(str(group.get("worst_status", "PASS")))
@@ -2321,22 +2329,23 @@ def render_audit_dashboard_html(
       overflow-y: hidden;
       color: #334155;
     }}
-    .criterion-math mjx-container,
-    .criterion-formula mjx-container,
-    .criterion-definition-symbol mjx-container {{
+    .criterion-math .katex-display,
+    .criterion-formula .katex,
+    .criterion-definition-symbol .katex {{
       background: transparent !important;
-      fill: currentColor;
+      color: inherit;
     }}
-    .criterion-math mjx-container {{
+    .criterion-math .katex-display {{
       display: block;
       min-width: max-content;
       max-width: none;
+      margin: 0;
     }}
-    .criterion-formula mjx-container {{
+    .criterion-formula .katex {{
       display: block;
       max-width: none;
     }}
-    .criterion-definition-symbol mjx-container {{
+    .criterion-definition-symbol .katex {{
       display: inline-block;
       max-width: none;
       white-space: nowrap;
@@ -2705,7 +2714,7 @@ def render_audit_dashboard_html(
       }}
     }}
     </style>
-  {mathjax_head_html}
+    {katex_head_html}
 </head>
 <body>
   <header>
@@ -2920,16 +2929,14 @@ def export_audit_dashboard(
 ) -> dict[str, Any]:
     def _report_has_math(payload_dict: dict[str, Any]) -> bool:
         return any(
-            _item_uses_mathjax(item)
+            _item_uses_katex(item)
             for item in _payload_items(payload_dict)
         )
 
-    def _ensure_mathjax_bundle(output_root: Path) -> str:
-        asset_dir = output_root / "assets" / "mathjax"
-        asset_dir.mkdir(parents=True, exist_ok=True)
-        bundle_path = asset_dir / "tex-svg.js"
-        shutil.copyfile(_MATHJAX_BUNDLE_PATH, bundle_path)
-        return "./assets/mathjax/tex-svg.js"
+    def _ensure_katex_bundle(output_root: Path) -> str:
+        asset_dir = output_root / "assets" / "katex"
+        shutil.copytree(_KATEX_BUNDLE_PATH, asset_dir, dirs_exist_ok=True)
+        return "./assets/katex"
 
     output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
@@ -2942,13 +2949,13 @@ def export_audit_dashboard(
     report_tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     os.replace(report_tmp, report_path)
 
-    mathjax_script_src = "./assets/mathjax/tex-svg.js"
+    math_asset_prefix = "./assets/katex"
     if _report_has_math(payload):
-        mathjax_script_src = _ensure_mathjax_bundle(output_path)
+        math_asset_prefix = _ensure_katex_bundle(output_path)
     html_text = render_audit_dashboard_html(
         payload,
         refresh_endpoint=refresh_endpoint,
-        mathjax_script_src=mathjax_script_src,
+        math_asset_prefix=math_asset_prefix,
     )
     index_tmp = index_path.with_name(f".{index_path.name}.tmp")
     index_tmp.write_text(html_text)

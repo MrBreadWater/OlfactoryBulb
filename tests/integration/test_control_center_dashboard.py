@@ -454,7 +454,7 @@ with TemporaryDirectory() as tmp:
     assert "No audit has been run yet." in html
     assert "/audits/index.html?__rev=" in html
     audits_html = (output_dir / "audits" / "index.html").read_text()
-    assert "./assets/mathjax/tex-svg.js" not in audits_html
+    assert "./assets/katex/katex.min.js" not in audits_html
     assert "cdn.jsdelivr.net" not in audits_html
     assert audit_report["audit_id"] == "control_center_audits"
     assert len(audit_report["groups"]) == 0
@@ -499,7 +499,7 @@ with TemporaryDirectory() as tmp:
     assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\lvert \bar{x} - \mu \rvert \leq k\sigma"
     assert preserved_audit_report["groups"][0]["items"][0]["criterion_formulae"] == [r"\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma"]
     preserved_audits_html = (output_dir / "audits" / "index.html").read_text()
-    assert "./assets/mathjax/tex-svg.js" in preserved_audits_html
+    assert "./assets/katex/katex.min.js" in preserved_audits_html
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -537,9 +537,9 @@ with TemporaryDirectory() as tmp:
     assert manifest["campaign_dir"] is None
     assert manifest["audit_id"] == "all"
     assert manifest["audit_args"] == []
-    assert (output_dir / "audits" / "assets" / "mathjax" / "tex-svg.js").exists()
+    assert (output_dir / "audits" / "assets" / "katex" / "katex.min.js").exists()
     audits_html = (output_dir / "audits" / "index.html").read_text()
-    assert "./assets/mathjax/tex-svg.js" in audits_html
+    assert "./assets/katex/katex.min.js" in audits_html
     assert "cdn.jsdelivr.net" not in audits_html
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert audit_report["items"][0]["criterion_latex"] == r"\lvert \bar{x} - \mu \rvert \leq k\sigma"
@@ -967,18 +967,13 @@ with TemporaryDirectory() as tmp:
             math_render = client.eval(
                 "new Promise((resolve) => {"
                 "  const deadline = Date.now() + 12000;"
-                "  const tick = async () => {"
-                "    try {"
-                "      if (window.MathJax && window.MathJax.startup && window.MathJax.startup.promise) {"
-                "        await window.MathJax.startup.promise;"
-                "      }"
-                "    } catch (_error) {}"
+                "  const tick = () => {"
                 "    const equation = document.querySelector('.criterion-math');"
-                "    const equationRendered = Boolean(equation && equation.querySelector('mjx-container'));"
+                "    const equationRendered = Boolean(equation && equation.querySelector('.katex-display'));"
                 "    const formulaRows = Array.from(document.querySelectorAll('.criterion-formula'));"
-                "    const formulaRendered = formulaRows.length >= 1 && formulaRows.every((row) => row.querySelector('mjx-container'));"
+                "    const formulaRendered = formulaRows.length >= 1 && formulaRows.every((row) => row.querySelector('.katex'));"
                 "    const definitions = Array.from(document.querySelectorAll('.criterion-definition'));"
-                "    const definitionRendered = definitions.length >= 3 && definitions.every((row) => row.querySelector('.criterion-definition-symbol mjx-container'));"
+                "    const definitionRendered = definitions.length >= 3 && definitions.every((row) => row.querySelector('.criterion-definition-symbol .katex'));"
                 "    const definitionTexts = definitions.map((row) => ({"
                 "      meaning: row.querySelector('.criterion-definition-meaning')?.textContent?.trim() || '',"
                 "      symbolText: row.querySelector('.criterion-definition-symbol')?.textContent?.trim() || ''"
@@ -1003,8 +998,6 @@ with TemporaryDirectory() as tmp:
             assert "Observed group mean" in definition_meanings
             assert "Uploaded reference mean" in definition_meanings
             assert "Uploaded reference standard deviation" in definition_meanings
-            observed_entry = next(entry for entry in math_render["definitionTexts"] if entry["meaning"] == "Observed group mean")
-            assert "\\" not in observed_entry["symbolText"]
             series_visibility = client.eval(
                 "(() => {"
                 "  const graph = document.querySelector('[data-series-graph]');"

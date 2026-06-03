@@ -348,9 +348,8 @@ contract for future sessions.
   - keep warnings visible, specific, and non-duplicated
   - keep core maintained dashboard rendering self-contained; do not depend on
     third-party CDN runtime assets for features such as math rendering
-  - use the bundled local MathJax runtime to typeset criterion math in the
-    browser, and verify the served page actually renders `mjx-container`
-    output
+  - use the bundled local KaTeX runtime to typeset criterion math in the
+    browser, and verify the served page actually renders `.katex` output
   - keep rendered math backgrounds transparent; do not rely on opaque wrapper
     backgrounds around math fragments
   - when audit evidence contains an explicit series or curve, such as

@@ -207,7 +207,7 @@ needs a different shape.
 
 If a numerical criterion should render compactly in the dashboard, make it
 explicit with `criterion_latex`, optional `criterion_formulae`, and
-`criterion_definitions`. The audit dashboard uses the bundled MathJax runtime
+`criterion_definitions`. The audit dashboard uses the bundled KaTeX runtime
 in the browser, so standard LaTeX delimiters such as `\lvert` and `\rvert`
 render correctly. Keep `criterion` as the plain-language fallback for items
 that do not opt into math rendering:
