@@ -42,10 +42,11 @@ sample_report = AuditReport(
             description="Description",
             acceptable="Acceptable",
             acceptable_basis="Configured",
-            evidence={"count": 0},
+            evidence={"count": 0, "notes": ["Evidence caveat from protocol matching."]},
             human_review_status="accepted",
             human_review_note="Manually reviewed and accepted.",
             human_review_reviewer="human",
+            note="Protocol caveat exists in this item.",
             group_id="audit_beta",
             group_title="Audit beta",
         ),
@@ -88,6 +89,15 @@ with TemporaryDirectory() as tmp:
     assert "evidence-lines" not in html
     assert "Warning" in html
     assert "warning-summary-text" in html
+    assert "Protocol caveat exists in this item." in html
+    assert "Evidence caveat from protocol matching." in html
+    notes_index = html.index("<div class='item-body-notes'>")
+    warning_index = html.index("<div class='item-body-warning'>")
+    assert notes_index < warning_index
+    assert "item-body-notes" in html
+    assert "<ul class='item-notes-list'>" in html
+    assert html.count("<li class='item-note'>") == 2
+    assert "<span class='item-summary-text'>" not in html
     assert "status-reason-block" not in html
     assert "Human review" not in html
     assert "reviewer: human" not in html

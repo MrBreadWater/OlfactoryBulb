@@ -301,19 +301,28 @@ def _render_evidence(item: AuditItem) -> str:
 
 
 def _collapsed_summary_messages(item: AuditItem) -> list[str]:
-    messages: list[str] = []
-    if item.note:
-        note_text = str(item.note).strip()
-        if note_text:
-            messages.append(note_text)
+    return []
+
+
+def _notes_html(item: AuditItem) -> list[str]:
+    notes: list[str] = []
+    note_text = str(item.note).strip() if item.note else ""
+    if note_text:
+        notes.append(note_text)
     notes_list = item.evidence.get("notes") if isinstance(item.evidence, dict) else None
     if isinstance(notes_list, list):
         for note_text in notes_list:
             rendered = str(note_text).strip()
-            if rendered and rendered not in messages:
-                messages.append(rendered)
-                break
-    return messages[:1]
+            if rendered and rendered not in notes:
+                notes.append(rendered)
+    return [
+        "<div class='item-body-notes'>",
+        "<div class='item-notes-label'>Notes / caveats</div>",
+        "<ul class='item-notes-list'>",
+        "".join(f"<li class='item-note'>{_esc(_expand_terms(note_text, sentence_case=True))}</li>" for note_text in notes),
+        "</ul>",
+        "</div>",
+    ] if notes else []
 
 
 def _item_search_blob(item: AuditItem) -> str:
@@ -343,6 +352,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
     )
     compact_interval_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
     warning_text = status_reason_text(item)
+    notes_html = _notes_html(item)
     sections = [
         (
             f"<article class='item-card {_status_class(item.status)} item-collapsed' data-item-card data-status='{_esc(item.status)}' "
@@ -372,6 +382,8 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
                 "</div>",
             ]
         )
+    if notes_html:
+        sections.extend(notes_html)
     if warning_text:
         sections.extend(
             [
@@ -395,11 +407,6 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         ]
     )
     sections.append(_render_evidence(item))
-    if item.note:
-        sections.append(
-            "<div class='item-block'><h4>Note</h4>"
-            f"<p>{_esc(_expand_terms(item.note, sentence_case=True))}</p></div>"
-        )
     sections.extend(["</div>", "</article>"])
     return "".join(section for section in sections if section)
 
@@ -833,22 +840,51 @@ def render_audit_dashboard_html(
       padding: clamp(12px, 1vw, 16px) clamp(16px, 3vw, 60px);
       background: #ffffff;
     }}
-    .item-body-warning {{
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      margin: 12px clamp(16px, 3vw, 60px) 0;
+    .item-body-notes {{
+      margin: 12px 16px 12px;
       padding: 10px 12px;
-      border: 1px solid #f3d8a2;
+      border: 1px solid #e5e7eb;
       border-radius: 8px;
-      background: #fffaf0;
+      background: #f8fafc;
+      color: #334155;
     }}
-    .warning-summary-label {{
-      color: #a16207;
+    .item-notes-label {{
+      color: #475569;
       font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.02em;
+      margin-bottom: 6px;
+    }}
+    .item-notes-list {{
+      margin: 0;
+      padding-left: 18px;
+    }}
+    .item-note {{
+      font-size: 12px;
+      line-height: 1.45;
+      padding-left: 2px;
+      overflow-wrap: anywhere;
+    }}
+    .item-note + .item-note {{
+      margin-top: 4px;
+    }}
+    .item-note::marker {{
+      color: #64748b;
+    }}
+    .item-body-warning {{
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin: 12px 16px 12px;
+      padding: 10px 12px;
+      border: 1px solid #f3d8a2;
+      border-left: 4px solid #f59e0b;
+      border-radius: 8px;
+      background: #fffbeb;
+    }}
+    .warning-summary-label {{
+      display: none;
     }}
     .warning-summary-text {{
       color: #334155;
