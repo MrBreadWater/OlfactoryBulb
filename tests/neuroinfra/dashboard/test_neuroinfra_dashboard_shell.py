@@ -39,10 +39,10 @@ assert "shell-status-strip" in html
 assert "tone-fail" in html
 assert "shell-progress" in html
 assert "Running audit" in html
-assert "dashboard-font-mode" in html
-assert ">Font<" in html
-assert "FONT_FAMILY_BY_MODE" in html
-assert 'helvetica: \'"Helvetica Neue\", Helvetica, Arial, sans-serif\'' in html
-assert 'verdana:' in html
+assert "dashboard-font-mode" not in html
+assert ">Font<" not in html
+assert "FONT_FAMILY_BY_MODE" not in html
+assert '"Helvetica Neue"' not in html
+assert 'verdana:' not in html
 
 print("neuroinfra_dashboard_shell: OK")

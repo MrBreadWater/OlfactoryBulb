@@ -1091,6 +1091,7 @@ def export_control_center(
     audits_dir = root_dir / "audits"
     optimization_dir.mkdir(parents=True, exist_ok=True)
     audits_dir.mkdir(parents=True, exist_ok=True)
+    existing_history = _load_audit_history(audits_dir)
 
     if campaign_path is None:
         log("no active optimization campaign detected; using placeholder optimization tab")
@@ -1115,10 +1116,11 @@ def export_control_center(
         )
         campaign_label = campaign_path.name
         campaign_path_text = str(campaign_path)
-    _write_audit_history(audits_dir, [])
     if run_audit_on_start:
         log(f"running audit {audit_id} {' '.join(resolved_audit_args)}".rstrip())
         audit_report = run_audit_by_id(audit_id, resolved_audit_args)
+        if not existing_history:
+            _write_audit_history(audits_dir, [])
         history_entries = _append_or_replace_audit_history_entry(
             audits_dir,
             audit_id=audit_id,
@@ -1127,10 +1129,14 @@ def export_control_center(
         )
         combined_report = _combine_audit_history(history_entries)
     else:
-        combined_report = AuditReport(
-            audit_id="control_center_audits",
-            title="Control center audits",
-            items=[],
+        combined_report = (
+            _combine_audit_history(existing_history)
+            if existing_history
+            else AuditReport(
+                audit_id="control_center_audits",
+                title="Control center audits",
+                items=[],
+            )
         )
     audit_manifest = export_audit_dashboard(
         combined_report,
@@ -1511,6 +1517,19 @@ def serve_control_center(
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003 - standard handler signature
             return
+
+        def end_headers(self) -> None:
+            request_path = urlparse(self.path).path
+            if request_path in {
+                "/",
+                "/index.html",
+                "/__control_center_state__",
+                "/__control_center_dev_state__",
+            } or request_path.endswith(".html") or request_path.endswith(".json"):
+                self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Expires", "0")
+            super().end_headers()
 
         def _send_json(self, status: int, payload: dict[str, Any]) -> None:
             data = json.dumps(payload, indent=2, sort_keys=True).encode("utf-8")

@@ -22,6 +22,17 @@ def _esc(value: object) -> str:
     return html.escape(str(value), quote=True)
 
 
+def _src_with_revision(src: str, revision: object) -> str:
+    base = str(src or "").strip()
+    if not base:
+        return ""
+    revision_text = str(revision or "").strip()
+    if not revision_text:
+        return base
+    separator = "&" if "?" in base else "?"
+    return f"{base}{separator}__rev={html.escape(revision_text, quote=True)}"
+
+
 def render_dashboard_shell(
     *,
     title: str,
@@ -81,7 +92,7 @@ def render_dashboard_shell(
                 f"<section id='tab-{_esc(tab.key)}' class='tab-panel' role='tabpanel'"
                 f"{'' if tab.key == active_key else ' hidden'}>"
                 f"{_panel_toolbar_html(tab.key)}"
-                f"<iframe src='{_esc(tab.src)}' title='{_esc(tab.label)}' data-tab-frame data-tab-key='{_esc(tab.key)}' data-base-src='{_esc(tab.src)}'></iframe>"
+                f"<iframe src='{_src_with_revision(tab.src, (tab_state_payload.get(tab.key) or {}).get('revision'))}' title='{_esc(tab.label)}' data-tab-frame data-tab-key='{_esc(tab.key)}' data-base-src='{_esc(tab.src)}'></iframe>"
                 "</section>"
             )
         )
@@ -135,8 +146,7 @@ def render_dashboard_shell(
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(640px, 1.15fr);
       grid-template-areas:
-        "heading status"
-        "heading controls";
+        "heading status";
       gap: 12px 16px;
       align-items: start;
     }}
@@ -144,40 +154,6 @@ def render_dashboard_shell(
       grid-area: heading;
       min-width: 0;
       flex: 1 1 auto;
-    }}
-    .shell-controls {{
-      grid-area: controls;
-      display: flex;
-      justify-content: flex-end;
-      align-items: flex-start;
-      min-width: 0;
-      width: auto;
-      max-width: none;
-      margin-left: 0;
-    }}
-    .font-mode-control {{
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      min-width: 160px;
-      width: 180px;
-    }}
-    .font-mode-control span {{
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
-    }}
-    .font-mode-control select {{
-      appearance: none;
-      width: 100%;
-      border: 1px solid #d6deea;
-      border-radius: 8px;
-      padding: 8px 10px;
-      font: inherit;
-      background: #fff;
-      color: var(--ink);
     }}
     h1 {{ margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: 0; }}
     .subtle {{ color: var(--muted); font-size: 12px; }}
@@ -217,8 +193,7 @@ def render_dashboard_shell(
     .shell-status-chip:focus-visible,
     .toolbar-button:focus-visible,
     .form-field input:focus-visible,
-    .form-field select:focus-visible,
-    .font-mode-control select:focus-visible {{
+    .form-field select:focus-visible {{
       outline: 2px solid rgba(43, 95, 184, 0.45);
       outline-offset: 2px;
     }}
@@ -579,15 +554,7 @@ def render_dashboard_shell(
         grid-template-columns: 1fr;
         grid-template-areas:
           "heading"
-          "status"
-          "controls";
-      }}
-      .shell-controls {{
-        justify-self: start;
-      }}
-      .font-mode-control {{
-        width: 100%;
-        max-width: 220px;
+          "status";
       }}
       .audit-runner-summary-grid,
       .audit-runner-fields {{
@@ -606,19 +573,6 @@ def render_dashboard_shell(
       <div class="shell-heading">
         <h1>{_esc(title)}</h1>
         <div class="subtle">{_esc(subtitle)}</div>
-      </div>
-      <div class="shell-controls">
-        <label class="font-mode-control">
-          <span>Font</span>
-          <select id="dashboard-font-mode" title="Switch typography for this shell session">
-            <option value="system-sans">System Sans</option>
-            <option value="arial">Arial</option>
-            <option value="helvetica">Helvetica Neue</option>
-            <option value="calibri">Calibri</option>
-            <option value="lucida">Lucida Sans</option>
-            <option value="verdana">Verdana</option>
-          </select>
-        </label>
       </div>
       <div class="shell-status-strip" role="tablist" aria-label="Dashboard sections">
         {header_status_html}
@@ -643,41 +597,8 @@ def render_dashboard_shell(
       <script id="dashboard-shell-state" type="application/json">{initial_state_json}</script>
     <script>
       (() => {{
-        const FONT_FAMILY_BY_MODE = {{
-          "system-sans": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-          arial: "Arial, sans-serif",
-          helvetica: '"Helvetica Neue", Helvetica, Arial, sans-serif',
-          calibri: "Calibri, sans-serif",
-          lucida: '"Lucida Grande", "Lucida Sans Unicode", sans-serif',
-          verdana: "Verdana, sans-serif",
-        }};
-      const fontModeSelect = document.getElementById("dashboard-font-mode");
       const frames = Array.from(document.querySelectorAll("iframe[data-tab-frame]"));
-      const DEFAULT_FONT_MODE = "verdana";
-      const FONT_MODE_STORAGE_KEY = "dashboard-font-mode";
-
-      function normalizeFontMode(mode) {{
-        const normalized = String(mode || "").trim();
-        return Object.prototype.hasOwnProperty.call(FONT_FAMILY_BY_MODE, normalized)
-          ? normalized
-          : DEFAULT_FONT_MODE;
-      }}
-
-      function loadFontModePreference() {{
-        try {{
-          return normalizeFontMode(window.localStorage?.getItem(FONT_MODE_STORAGE_KEY));
-        }} catch (_error) {{
-          return DEFAULT_FONT_MODE;
-        }}
-      }}
-
-      function persistFontModePreference(mode) {{
-        try {{
-          window.localStorage?.setItem(FONT_MODE_STORAGE_KEY, String(mode || DEFAULT_FONT_MODE));
-        }} catch (_error) {{
-          return;
-        }}
-      }}
+      const DEFAULT_FONT_FAMILY = "Verdana, sans-serif";
 
       function applyFontFamily(element, value) {{
         if (!element) {{
@@ -686,8 +607,8 @@ def render_dashboard_shell(
         element.style.setProperty("font-family", value);
       }}
 
-      function applyFontModeToFrame(frame, mode) {{
-        const fontFamily = FONT_FAMILY_BY_MODE[String(mode || DEFAULT_FONT_MODE)] || FONT_FAMILY_BY_MODE[DEFAULT_FONT_MODE];
+      function applyDefaultFontToFrame(frame) {{
+        const fontFamily = DEFAULT_FONT_FAMILY;
         if (!frame) {{
           return;
         }}
@@ -706,14 +627,14 @@ def render_dashboard_shell(
         }}
       }}
 
-      function applyFontMode(mode) {{
-        const fontFamily = FONT_FAMILY_BY_MODE[String(mode || DEFAULT_FONT_MODE)] || FONT_FAMILY_BY_MODE[DEFAULT_FONT_MODE];
+      function applyDefaultFont() {{
+        const fontFamily = DEFAULT_FONT_FAMILY;
         document.documentElement.style.setProperty("--ui-font-stack", fontFamily);
         applyFontFamily(document.documentElement, fontFamily);
         applyFontFamily(document.body, fontFamily);
         document.body.style.setProperty("font-family", fontFamily);
         frames.forEach((frame) => {{
-          applyFontModeToFrame(frame, mode);
+          applyDefaultFontToFrame(frame);
         }});
       }}
 
@@ -850,19 +771,9 @@ def render_dashboard_shell(
         if (!button) return;
         setActiveTab(button.dataset.tabTarget || "tab-{_esc(active_key)}");
       }});
-      if (fontModeSelect) {{
-        const savedFontMode = loadFontModePreference();
-        fontModeSelect.value = savedFontMode;
-        applyFontMode(savedFontMode);
-        fontModeSelect.addEventListener("change", () => {{
-          const nextFontMode = fontModeSelect.value || DEFAULT_FONT_MODE;
-          persistFontModePreference(nextFontMode);
-          applyFontMode(nextFontMode);
-        }});
-      }}
       frames.forEach((frame) => {{
         frame.addEventListener("load", () => {{
-          applyFontModeToFrame(frame, String(fontModeSelect?.value || DEFAULT_FONT_MODE));
+          applyDefaultFontToFrame(frame);
         }}, {{ passive: true }});
       }});
       const stateNode = document.getElementById("dashboard-shell-state");
@@ -872,6 +783,7 @@ def render_dashboard_shell(
         }} catch (_error) {{
         }}
       }}
+      applyDefaultFont();
       setActiveTab("tab-{_esc(active_key)}");
       const pollIntervalMs = Number(document.body.dataset.statePollIntervalMs || "0");
       if (pollIntervalMs > 0 && String(document.body.dataset.stateEndpoint || "").trim()) {{

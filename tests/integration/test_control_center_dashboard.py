@@ -444,6 +444,7 @@ with TemporaryDirectory() as tmp:
     assert 'aria-describedby="control-center-audit-args-help audit-selection-description"' in html
     assert 'id="control-center-audit-args" type="text" value=""' in html
     assert "No audit has been run yet." in html
+    assert "/audits/index.html?__rev=" in html
     audits_html = (output_dir / "audits" / "index.html").read_text()
     assert "./assets/mathjax/tex-svg.js" not in audits_html
     assert "cdn.jsdelivr.net" not in audits_html
@@ -453,6 +454,43 @@ with TemporaryDirectory() as tmp:
     assert _export_call_kwargs["cleanup_stale_packets_before_render"] is False
     assert _export_call_kwargs["asset_url_prefix"] == "/repo"
     assert not _run_audit_calls
+
+with TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    campaign_dir = root / "campaign"
+    campaign_dir.mkdir()
+    audits_dir = root / "control_center_preserved" / "audits"
+    audits_dir.mkdir(parents=True, exist_ok=True)
+    preserved_report = _sample_report("burton_urban_fi", "Burton & Urban f-I validation audit")
+    (audits_dir / "history.json").write_text(
+        json.dumps(
+            {
+                "generated_at": "now",
+                "entries": [
+                    {
+                        "entry_key": '{"audit_args": ["--skip-neuron"], "audit_id": "burton_urban_fi"}',
+                        "audit_id": "burton_urban_fi",
+                        "audit_args": ["--skip-neuron"],
+                        "group_id": "burton_urban_fi-001",
+                        "group_title": "Burton & Urban f-I validation audit (--skip-neuron)",
+                        "report": preserved_report.to_dict(),
+                        "updated_at": "now",
+                    }
+                ],
+            }
+        )
+    )
+    with (
+        patch("olfactorybulb.dashboard.control_center.hfo_dashboard.export_visual_dashboard", side_effect=_fake_export_visual_dashboard),
+        patch("olfactorybulb.dashboard.control_center.run_audit_by_id", side_effect=_capture_run_audit_by_id),
+    ):
+        manifest = export_control_center(campaign_dir, output_dir=root / "control_center_preserved")
+    output_dir = Path(manifest["output_dir"])
+    preserved_audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
+    assert len(preserved_audit_report["groups"]) == 1
+    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\bar{x} \in [L, U]"
+    preserved_audits_html = (output_dir / "audits" / "index.html").read_text()
+    assert "./assets/mathjax/tex-svg.js" in preserved_audits_html
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -623,14 +661,19 @@ with TemporaryDirectory() as tmp:
         base_url = f"http://127.0.0.1:{server.server_port}"
 
         root_html = urlopen(f"{base_url}/", timeout=3).read().decode("utf-8")
-        initial_audit_html = urlopen(f"{base_url}/audits/index.html", timeout=3).read().decode("utf-8")
+        with urlopen(f"{base_url}/audits/index.html", timeout=3) as audit_response:
+            initial_audit_html = audit_response.read().decode("utf-8")
+            assert "no-store" in str(audit_response.headers.get("Cache-Control") or "")
+        with urlopen(f"{base_url}/__control_center_state__", timeout=3) as state_response:
+            initial_state = json.loads(state_response.read().decode("utf-8"))
+            assert "no-store" in str(state_response.headers.get("Cache-Control") or "")
         docs_html = urlopen(f"{base_url}/docs/index.html", timeout=3).read().decode("utf-8")
         rendered_doc_html = urlopen(f"{base_url}/docs/maintained/readme.html", timeout=3).read().decode("utf-8")
-        initial_state = json.loads(urlopen(f"{base_url}/__control_center_state__", timeout=3).read().decode("utf-8"))
         dev_state = json.loads(urlopen(f"{base_url}/__control_center_dev_state__", timeout=3).read().decode("utf-8"))
         assert "Run selected audit" in root_html
         assert "__control_center_state__" in root_html
         assert "__control_center_dev_state__" in root_html
+        assert "/audits/index.html?__rev=" in root_html
         assert dev_state["ok"] is True
         assert dev_state["revision"]
         assert "Display controls" not in initial_audit_html
