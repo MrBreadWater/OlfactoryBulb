@@ -346,6 +346,8 @@ contract for future sessions.
     scroll to it, but the sidebar must not render a selected/current-group
     state or `aria-current` highlight
   - keep warnings visible, specific, and non-duplicated
+  - keep core maintained dashboard rendering self-contained; do not depend on
+    third-party CDN runtime assets for features such as math rendering
   - when audit evidence contains an explicit series or curve, such as
     f-I/current-clamp arrays or `fi_curve_rows`, render the curve first only
     when the item explicitly opts into a `series_visuals` declaration; do not
@@ -373,9 +375,11 @@ contract for future sessions.
     expanded states; numeric summaries, notes/caveats, and warning blocks
     should share deliberate spacing/order instead of relying on each block's
     incidental first-child margins
-  - persistent interval summaries should show only the interval bar and
-    legend; keep the metric grid for the expanded interval block so collapsed
-    cards stay compact
+  - persistent interval summaries should stay compact, but they must still
+    expose the key numeric values in-view; keep the metric grid for the
+    expanded interval block, and use unlabeled value annotations aligned to
+    the interval marks in the collapsed summary instead of verbose bound/mean
+    callout text
   - when changing audit-card body layout, check representative combinations:
     no persistent body, numeric-only, notes-only, warning-only, notes plus
     warning, and numeric plus notes/warning when applicable

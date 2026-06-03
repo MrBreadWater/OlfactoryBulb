@@ -159,6 +159,7 @@ with TemporaryDirectory() as tmp:
     manifest = export_audit_dashboard(sample_report, output_dir, refresh_endpoint="/__audit_refresh__")
     assert manifest["audit_id"] == "new_sweep"
     assert "manifest_revision" in manifest
+    assert (output_dir / "assets" / "mathjax" / "tex-svg.js").exists()
     report_payload = json.loads((output_dir / "report.json").read_text())
     assert report_payload["audit_id"] == "new_sweep"
     assert len(report_payload["groups"]) == 3
@@ -200,11 +201,17 @@ with TemporaryDirectory() as tmp:
     assert "warning-summary-text" in html
     assert html.count("data-interval-visual") == 1
     assert html.count("<div class='interval-legend'>") == 1
+    assert "interval-value-labels" in html
+    assert html.count("interval-value-label") >= 4
     assert "interval-bound-label" not in html
     assert "interval-marker-label" not in html
     assert "rgba(17, 24, 39, 0.9)" in html
     assert "<div class='interval-metric-grid'>" not in html
     assert "<div class='interval-range-labels'>" not in html
+    assert "0.12 Hz" in html
+    assert "0.21 Hz" in html
+    assert "0.45 Hz" in html
+    assert "1.03 Hz" in html
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "criterion-math" in html
@@ -213,6 +220,8 @@ with TemporaryDirectory() as tmp:
     assert "criterion-variables" not in html
     assert "criterion-variable-chip" not in html
     assert "MathJax" in html
+    assert "./assets/mathjax/tex-svg.js" in html
+    assert "cdn.jsdelivr.net" not in html
     assert r"\bar{x} \in [L, U]" in html
     assert "observed group mean" in html
     assert "f-I curve" in html

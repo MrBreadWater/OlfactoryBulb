@@ -444,6 +444,9 @@ with TemporaryDirectory() as tmp:
     assert 'aria-describedby="control-center-audit-args-help audit-selection-description"' in html
     assert 'id="control-center-audit-args" type="text" value=""' in html
     assert "No audit has been run yet." in html
+    audits_html = (output_dir / "audits" / "index.html").read_text()
+    assert "./assets/mathjax/tex-svg.js" not in audits_html
+    assert "cdn.jsdelivr.net" not in audits_html
     assert audit_report["audit_id"] == "control_center_audits"
     assert len(audit_report["groups"]) == 0
     assert _export_call_kwargs["generate_packets_top_n"] == 0
@@ -487,6 +490,10 @@ with TemporaryDirectory() as tmp:
     assert manifest["campaign_dir"] is None
     assert manifest["audit_id"] == "all"
     assert manifest["audit_args"] == []
+    assert (output_dir / "audits" / "assets" / "mathjax" / "tex-svg.js").exists()
+    audits_html = (output_dir / "audits" / "index.html").read_text()
+    assert "./assets/mathjax/tex-svg.js" in audits_html
+    assert "cdn.jsdelivr.net" not in audits_html
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert audit_report["items"][0]["criterion_latex"] == r"\bar{x} \in [L, U]"
     assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
@@ -1015,6 +1022,7 @@ with TemporaryDirectory() as tmp:
                 "  const summaryInterval = card.querySelector('.item-body-summary [data-interval-visual]');"
                 "  const summaryTrack = card.querySelector('.item-body-summary .interval-track');"
                 "  const summaryLegend = card.querySelector('.item-body-summary .interval-legend');"
+                "  const summaryValueLabels = card.querySelectorAll('.item-body-summary .interval-value-label');"
                 "  const summaryMetrics = card.querySelector('.item-body-summary .interval-metric-grid');"
                 "  const detail = card.querySelector('[data-item-detail-body]');"
                 "  const detailInterval = card.querySelector('[data-item-detail-body] [data-interval-visual]');"
@@ -1026,6 +1034,7 @@ with TemporaryDirectory() as tmp:
                 "    summaryInterval: Boolean(summaryInterval),"
                 "    summaryTrack: Boolean(summaryTrack),"
                 "    summaryLegend: Boolean(summaryLegend),"
+                "    summaryValueLabels: summaryValueLabels.length,"
                 "    summaryMetrics: Boolean(summaryMetrics),"
                 "    detailHidden: Boolean(detail) && detail.hidden === true,"
                 "    detailDisplay: detail ? getComputedStyle(detail).display : '',"
@@ -1042,6 +1051,7 @@ with TemporaryDirectory() as tmp:
                 "summaryInterval": True,
                 "summaryTrack": True,
                 "summaryLegend": True,
+                "summaryValueLabels": 4,
                 "summaryMetrics": False,
                 "detailHidden": True,
                 "detailDisplay": "none",

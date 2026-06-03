@@ -8,6 +8,7 @@ import math
 import json
 import os
 import re
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,9 @@ import time
 
 from olfactorybulb.audit.cli import run_audit_by_id
 from olfactorybulb.audit.core import AuditItem, AuditReport, _summary_chunks, _expand_terms, status_reason_text
+
+
+_MATHJAX_BUNDLE_PATH = Path(__file__).resolve().parent / "static" / "mathjax" / "tex-svg.js"
 
 
 def _esc(value: object) -> str:
@@ -242,6 +246,7 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
       {reference_tick_html}
       <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
     </div>
+    {_render_interval_value_labels(interval, item.status)}
     <div class='interval-legend'>
       <span><i class='legend-swatch accepted'></i>accepted range</span>
       <span><i class='legend-swatch reference'></i>reference mean</span>
@@ -250,6 +255,71 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
   </div>
 </div>
 """
+
+
+def _render_interval_value_labels(
+    interval: dict[str, Any],
+    status: str,
+    *,
+    compact: bool = False,
+) -> str:
+    unit = str(interval["reference_unit"])
+    positions = interval["positions"]
+    labels: list[dict[str, Any]] = [
+        {
+            "position": float(positions["accepted_low"]),
+            "text": _format_numeric(interval["accepted_low"], unit=unit),
+            "kind": "accepted",
+        },
+        {
+            "position": float(positions["accepted_high"]),
+            "text": _format_numeric(interval["accepted_high"], unit=unit),
+            "kind": "accepted",
+        },
+        {
+            "position": float(positions["observed_value"] or 0.0),
+            "text": _format_numeric(interval["observed_value"], unit=unit),
+            "kind": _status_class(status),
+        },
+    ]
+    if positions["reference_mean"] is not None and interval["reference_mean"] is not None:
+        labels.append(
+            {
+                "position": float(positions["reference_mean"]),
+                "text": _format_numeric(interval["reference_mean"], unit=unit),
+                "kind": "reference",
+            }
+        )
+    labels.sort(key=lambda entry: (entry["position"], entry["text"]))
+    rows_right_edges: list[float] = []
+    for entry in labels:
+        approx_width = max(9.0, min(18.0 if compact else 20.0, len(str(entry["text"])) * 0.95))
+        left_edge = float(entry["position"]) - (approx_width / 2.0)
+        right_edge = float(entry["position"]) + (approx_width / 2.0)
+        assigned_row = 0
+        for row_index, row_right_edge in enumerate(rows_right_edges):
+            if left_edge >= row_right_edge + 1.2:
+                assigned_row = row_index
+                rows_right_edges[row_index] = right_edge
+                break
+        else:
+            assigned_row = len(rows_right_edges)
+            rows_right_edges.append(right_edge)
+        entry["row"] = assigned_row
+    row_count = max(1, len(rows_right_edges))
+    labels_html = "".join(
+        (
+            f"<span class='interval-value-label interval-value-label-{_esc(str(entry['kind']))}' "
+            f"style='left:{float(entry['position']):.2f}%; --interval-label-row:{int(entry['row'])};'>"
+            f"{_esc(str(entry['text']))}</span>"
+        )
+        for entry in labels
+    )
+    compact_attr = " data-compact-interval-values" if compact else ""
+    return (
+        f"<div class='interval-value-labels' style='--interval-label-rows:{row_count};'{compact_attr}>"
+        f"{labels_html}</div>"
+    )
 
 
 _SERIES_X_KEY_CANDIDATES = ("currents_pA", "step_currents_pA", "current_steps_pA", "current_pA")
@@ -1268,6 +1338,7 @@ def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) 
     {reference_tick_html}
     <div class='interval-marker {_status_class(item.status)}' style='left:{float(positions["observed_value"] or 0.0):.2f}%'></div>
   </div>
+  {_render_interval_value_labels(interval, item.status, compact=True)}
   <div class='interval-legend'>
     <span><i class='legend-swatch accepted'></i>accepted range</span>
     <span><i class='legend-swatch reference'></i>reference mean</span>
@@ -1561,6 +1632,7 @@ def render_audit_dashboard_html(
     payload: dict[str, Any],
     *,
     refresh_endpoint: str | None = None,
+    mathjax_script_src: str = "./assets/mathjax/tex-svg.js",
 ) -> str:
     groups = list(payload.get("groups") or [])
     has_results = bool(groups)
@@ -1591,7 +1663,7 @@ def render_audit_dashboard_html(
       startup: { typeset: true }
     };
   </script>
-  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>
+  <script defer src="__MATHJAX_SCRIPT_SRC__"></script>
   <script>
     window.addEventListener("load", () => {
       if (window.MathJax && typeof window.MathJax.typesetPromise === "function") {
@@ -1600,6 +1672,7 @@ def render_audit_dashboard_html(
     });
   </script>
 """
+        mathjax_head_html = mathjax_head_html.replace("__MATHJAX_SCRIPT_SRC__", _esc(mathjax_script_src))
     group_nav_items: list[str] = []
     for group in groups:
         status_class = _status_class(str(group.get("worst_status", "PASS")))
@@ -2311,6 +2384,39 @@ def render_audit_dashboard_html(
     .interval-marker.status-pass {{ background: var(--green); }}
     .interval-marker.status-warn {{ background: var(--amber); }}
     .interval-marker.status-fail {{ background: var(--red); }}
+    .interval-value-labels {{
+      position: relative;
+      min-height: calc(var(--interval-label-rows, 1) * 18px);
+      margin-top: 4px;
+    }}
+    .interval-value-label {{
+      position: absolute;
+      top: calc(var(--interval-label-row, 0) * 18px);
+      transform: translateX(-50%);
+      color: #475569;
+      font-size: 11px;
+      line-height: 1;
+      white-space: nowrap;
+    }}
+    .interval-value-label-accepted {{
+      color: #334155;
+    }}
+    .interval-value-label-reference {{
+      color: #0f172a;
+      font-weight: 600;
+    }}
+    .interval-value-label-status-pass {{
+      color: #15803d;
+      font-weight: 700;
+    }}
+    .interval-value-label-status-warn {{
+      color: #b45309;
+      font-weight: 700;
+    }}
+    .interval-value-label-status-fail {{
+      color: #b91c1c;
+      font-weight: 700;
+    }}
     .interval-legend {{
       display: flex;
       flex-wrap: wrap;
@@ -2734,6 +2840,20 @@ def export_audit_dashboard(
     *,
     refresh_endpoint: str | None = None,
 ) -> dict[str, Any]:
+    def _report_has_math(payload_dict: dict[str, Any]) -> bool:
+        return any(
+            str(item.get("criterion_latex") or "").strip()
+            for group in list(payload_dict.get("groups") or [])
+            for item in list(group.get("items") or [])
+        )
+
+    def _ensure_mathjax_bundle(output_root: Path) -> str:
+        asset_dir = output_root / "assets" / "mathjax"
+        asset_dir.mkdir(parents=True, exist_ok=True)
+        bundle_path = asset_dir / "tex-svg.js"
+        shutil.copyfile(_MATHJAX_BUNDLE_PATH, bundle_path)
+        return "./assets/mathjax/tex-svg.js"
+
     output_path = Path(output_dir).expanduser().resolve()
     output_path.mkdir(parents=True, exist_ok=True)
     payload = report.to_dict()
@@ -2745,7 +2865,14 @@ def export_audit_dashboard(
     report_tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
     os.replace(report_tmp, report_path)
 
-    html_text = render_audit_dashboard_html(payload, refresh_endpoint=refresh_endpoint)
+    mathjax_script_src = "./assets/mathjax/tex-svg.js"
+    if _report_has_math(payload):
+        mathjax_script_src = _ensure_mathjax_bundle(output_path)
+    html_text = render_audit_dashboard_html(
+        payload,
+        refresh_endpoint=refresh_endpoint,
+        mathjax_script_src=mathjax_script_src,
+    )
     index_tmp = index_path.with_name(f".{index_path.name}.tmp")
     index_tmp.write_text(html_text)
     os.replace(index_tmp, index_path)
