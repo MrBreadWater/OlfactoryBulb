@@ -56,16 +56,11 @@ sample_report = AuditReport(
             status="PASS",
             title="Alpha math",
             criterion="The observed mean should stay within the accepted interval.",
-            criterion_latex=r"\left|z(\bar{x})\right| \leq 2",
-            criterion_formulae=[
-                r"z(x) = \frac{x - \mu}{\sigma}",
-                r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
-            ],
+            criterion_latex=r"\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}",
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                {"symbol": "z(x)", "definition": "arithmetic-space standardization function for a value x"},
-                {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                {"symbol": r"\mu_{\mathrm{ref}}", "definition": "uploaded reference mean"},
+                {"symbol": r"\sigma_{\mathrm{ref}}", "definition": "uploaded reference standard deviation"},
             ],
             description="Description",
             acceptable="Acceptable",
@@ -254,12 +249,10 @@ with TemporaryDirectory() as tmp:
     assert "cdn.jsdelivr.net" not in html
     assert r"\lvert" not in html
     assert r"\rvert" not in html
-    assert r"\left|z(\bar{x})\right| \leq 2" in html
-    assert r"z(x) = \frac{x - \mu}{\sigma}" in html
+    assert r"\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}" in html
     assert "justify-content: center" in html
     assert "color: #000" in html
     assert "observed group mean" in html
-    assert "Arithmetic-space standardization function for a value x" in html
     assert "f-I curve" in html
     assert "data-series-graph" in html
     assert "data-visual-backend='matplotlib'" in html

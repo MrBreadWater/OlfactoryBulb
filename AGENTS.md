@@ -360,20 +360,24 @@ contract for future sessions.
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
   - when a reference-band check is centered around a mean, prefer a compact
-    standardization-function criterion rather than endpoint notation. Use
-    `|z(\bar{x})| \leq k` for symmetric arithmetic bands and
-    `|z_{\log}(\bar{x})| \leq k` for lognormal reconstructions, with the
-    selected multiplier rendered numerically. Use a metric-specific observed
-    symbol when the quantity has a common notation such as
+    absolute-residual criterion rather than endpoint notation or z-score
+    notation. Use `|\bar{x} - \mu_{\mathrm{ref}}| \leq k\sigma_{\mathrm{ref}}`
+    for symmetric arithmetic bands and
+    `|\ln(\bar{x}) - \mu_{\log}| \leq k\sigma_{\log}` for lognormal
+    reconstructions, with the selected multiplier rendered numerically. Use a
+    metric-specific observed symbol when the quantity has a common notation such as
     `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or `\bar{I}_{\mathrm{rh}}`, and
     keep `\bar{x}` as the fallback only when no clearer symbol exists. Treat
     `criterion_definitions` as a Definitions section for functions as well as
-    variables: include `z(x)` as the arithmetic-space standardization function
-    or `z_{\log}(x)` as the log-space standardization function. Keep
-    `c_{\mathrm{v}}=\sigma/\mu` in lognormal supporting formulae, and avoid
-    endpoint notation or auxiliary lognormal symbols like `\mu_\ell`,
-    `\sigma_\ell`, `L`, or `U` unless the paper actually defines those
-    quantities
+    variables, but do not introduce helper functions when the residual
+    inequality is already readable. For lognormal reconstructions, keep
+    `\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \sigma_{\log}^2/2` and
+    `\sigma_{\log} = \sqrt{\ln(1+(\sigma_{\mathrm{ref}}/\mu_{\mathrm{ref}})^2)}`
+    in supporting formulae. Use `\sigma_{\log}`, not the uploaded arithmetic
+    `\sigma_{\mathrm{ref}}`, on the right-hand side of the log-space
+    inequality. Avoid endpoint notation or auxiliary lognormal symbols like
+    `\mu_\ell`, `\sigma_\ell`, `L`, or `U` unless the paper actually defines
+    those quantities
   - make the plot declaration explicit at registration time:
     - use the helper builders in `olfactorybulb.audit` rather than hand-built
       dicts when possible

@@ -310,11 +310,10 @@ needs a different shape.</p>
 <p>If a numerical criterion should render compactly in the dashboard, make it
 explicit with <code>criterion_latex</code>, optional <code>criterion_formulae</code>, and
 <code>criterion_definitions</code>. The definitions list can define functions as well as
-variables; for example, reference-band rules should define standardization
-functions such as <code>z(x)</code> or <code>z_{\log}(x)</code> there. The audit dashboard uses the
-bundled KaTeX runtime in the browser, so direct inequalities and ordinary
-LaTeX math render correctly. Keep <code>criterion</code> as the plain-language fallback
-for items that do not opt into math rendering:</p>
+variables when a criterion needs them. The audit dashboard uses the bundled
+KaTeX runtime in the browser, so direct inequalities and ordinary LaTeX math
+render correctly. Keep <code>criterion</code> as the plain-language fallback for items
+that do not opt into math rendering:</p>
 <pre><code class="language-toml">[[checks]]
 kind = &quot;summary_metric_range&quot;
 check_id = &quot;example_soma_diameter_range&quot;
@@ -323,37 +322,33 @@ minimum = 8.0
 maximum = 12.0
 title = &quot;Soma diameter stays inside the accepted range&quot;
 criterion = &quot;The observed soma diameter should remain inside the accepted range.&quot;
-criterion_latex = '\left|z(\bar{x})\right| \leq 2'
-criterion_formulae = [
-  'z(x) = \frac{x - \mu}{\sigma}',
-  'z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}',
-]
+criterion_latex = '\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}'
 criterion_definitions = [
   { symbol = '\bar{x}', definition = 'observed group mean' },
-  { symbol = 'z(x)', definition = 'arithmetic-space standardization function for a value x' },
-  { symbol = '\mu', definition = 'uploaded reference mean' },
-  { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
+  { symbol = '\mu_{\mathrm{ref}}', definition = 'uploaded reference mean' },
+  { symbol = '\sigma_{\mathrm{ref}}', definition = 'uploaded reference standard deviation' },
 ]
 </code></pre>
-<p>For reference-band rows, prefer a compact two-sided inequality when the rule is
-centered around a mean, and keep explicit endpoint notation only for modes that
-really need asymmetric bounds. The rendered headline inequality substitutes the
-configured sigma multiplier numerically, so a <code>reference_sigma_multiplier = 2</code>
-setting will show <code>2</code> in the display. For example:</p>
+<p>For reference-band rows, prefer a compact absolute-residual inequality when the
+rule is centered around a mean, and keep explicit endpoint notation only for
+modes that really need asymmetric bounds. The rendered headline inequality
+substitutes the configured sigma multiplier numerically, so a
+<code>reference_sigma_multiplier = 2</code> setting will show <code>2\sigma_{\mathrm{ref}}</code>
+or <code>2\sigma_{\log}</code> in the display. For example:</p>
 <ul>
-<li>symmetric bands: <code>\left|z(\bar{x})\right| \leq k</code>, with
-  <code>z(x) = (x - \mu) / \sigma</code></li>
-<li>lognormal bands: <code>\left|z_{\log}(\bar{x})\right| \leq k</code>, with
-  <code>z_{\log}(x) = (\ln(x) - m) / s</code>,
-  <code>m = \ln(\mu) - s^2 / 2</code>,
-  <code>s = \sqrt{\ln(1 + c_{\mathrm{v}}^2)}</code>, and
-  <code>c_{\mathrm{v}} = \sigma / \mu</code></li>
+<li>symmetric bands:
+  <code>\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq k\sigma_{\mathrm{ref}}</code></li>
+<li>lognormal bands:
+  <code>\left|\ln(\bar{x}) - \mu_{\log}\right| \leq k\sigma_{\log}</code>, with
+  <code>\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \sigma_{\log}^2 / 2</code> and
+  <code>\sigma_{\log} = \sqrt{\ln(1 + (\sigma_{\mathrm{ref}} / \mu_{\mathrm{ref}})^2)}</code></li>
 </ul>
-<p>For mean-plus-SD criteria, prefer these standardized score forms over endpoint
-notation or display-only auxiliary parameters. They keep the audit decision
-dimensionless while preserving the original reported arithmetic mean and
-standard deviation. Include <code>z(x)</code> or <code>z_{\log}(x)</code> in
-<code>criterion_definitions</code> as the relevant standardization function.</p>
+<p>For mean-plus-SD criteria, prefer these residual forms over standardized
+z-score notation or endpoint notation. They avoid redundant function
+definitions while keeping the sigma multiplier visible in the headline
+criterion. For lognormal reconstructions, <code>\sigma_{\log}</code> is the reconstructed
+log-space standard deviation; do not put the uploaded arithmetic
+<code>\sigma_{\mathrm{ref}}</code> on the right-hand side of the log-space inequality.</p>
 <p>When a metric has a conventional symbol, prefer it over <code>\bar{x}</code>. Examples
 include <code>\bar{R}_{\mathrm{in}}</code>, <code>\bar{\tau}_m</code>, <code>\bar{I}_{\mathrm{rh}}</code>,
 and <code>\bar{V}_{\mathrm{rest}}</code>.</p>

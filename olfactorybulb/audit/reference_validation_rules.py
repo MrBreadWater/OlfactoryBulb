@@ -627,63 +627,33 @@ def _criterion_math_for_band(
         latex = r"{obs} = b".format(obs=observed_symbol)
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        cv_symbol = r"c_{\mathrm{v}}"
-        z_function_symbol = r"z_{\log}(x)"
-        z_observed_symbol = rf"z_{{\log}}\!\left({observed_symbol}\right)"
-        log_shape_symbol = "s"
-        log_center_symbol = "m"
-        log_score = (
-            rf"\frac{{\ln\!\left({observed_symbol}/\mu\right) + "
-            rf"\frac{{1}}{{2}}\ln\!\left(1 + {cv_symbol}^2\right)}}"
-            rf"{{\sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}}}"
-        )
-        latex = rf"\left|{z_observed_symbol}\right| \leq {sigma_multiplier}"
+        reference_mean_symbol = r"\mu_{\mathrm{ref}}"
+        reference_sd_symbol = r"\sigma_{\mathrm{ref}}"
+        log_mean_symbol = r"\mu_{\log}"
+        log_sd_symbol = r"\sigma_{\log}"
+        latex = rf"\left|\ln\!\left({observed_symbol}\right) - {log_mean_symbol}\right| \leq {sigma_multiplier}{log_sd_symbol}"
         definitions.extend(
             [
-                {
-                    "symbol": z_function_symbol,
-                    "definition": (
-                        "log-space standardization function for a positive value x under "
-                        "the reconstructed lognormal reference distribution"
-                    ),
-                },
-                {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
-                {"symbol": cv_symbol, "definition": "uploaded reference coefficient of variation"},
-                {"symbol": log_center_symbol, "definition": "reconstructed log-space mean"},
-                {"symbol": log_shape_symbol, "definition": "reconstructed log-space standard deviation"},
+                {"symbol": reference_mean_symbol, "definition": "uploaded arithmetic reference mean"},
+                {"symbol": reference_sd_symbol, "definition": "uploaded arithmetic reference standard deviation"},
+                {"symbol": log_mean_symbol, "definition": "reconstructed log-space mean"},
+                {"symbol": log_sd_symbol, "definition": "reconstructed log-space standard deviation"},
             ]
         )
         formulae.extend(
             [
-                rf"{z_function_symbol} = \frac{{\ln(x) - {log_center_symbol}}}{{{log_shape_symbol}}}",
-                rf"{log_center_symbol} = \ln(\mu) - \frac{{1}}{{2}}{log_shape_symbol}^2",
-                rf"{log_shape_symbol} = \sqrt{{\ln\!\left(1 + {cv_symbol}^2\right)}}",
-                rf"{cv_symbol} = \frac{{\sigma}}{{\mu}}",
-                rf"{z_observed_symbol} = {log_score}",
+                rf"{log_mean_symbol} = \ln({reference_mean_symbol}) - \frac{{1}}{{2}}{log_sd_symbol}^2",
+                rf"{log_sd_symbol} = \sqrt{{\ln\!\left(1 + \left(\frac{{{reference_sd_symbol}}}{{{reference_mean_symbol}}}\right)^2\right)}}",
             ]
         )
     else:
-        z_function_symbol = "z(x)"
-        z_observed_symbol = rf"z\!\left({observed_symbol}\right)"
-        latex = rf"\left|{z_observed_symbol}\right| \leq {sigma_multiplier}"
+        reference_mean_symbol = r"\mu_{\mathrm{ref}}"
+        reference_sd_symbol = r"\sigma_{\mathrm{ref}}"
+        latex = rf"\left|{observed_symbol} - {reference_mean_symbol}\right| \leq {sigma_multiplier}{reference_sd_symbol}"
         definitions.extend(
             [
-                {
-                    "symbol": z_function_symbol,
-                    "definition": (
-                        "arithmetic-space standardization function for a value x under the "
-                        "uploaded reference mean and standard deviation"
-                    ),
-                },
-                {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
-            ]
-        )
-        formulae.extend(
-            [
-                rf"{z_function_symbol} = \frac{{x - \mu}}{{\sigma}}",
-                rf"{z_observed_symbol} = \frac{{{observed_symbol} - \mu}}{{\sigma}}",
+                {"symbol": reference_mean_symbol, "definition": "uploaded reference mean"},
+                {"symbol": reference_sd_symbol, "definition": "uploaded reference standard deviation"},
             ]
         )
     return latex, definitions, formulae

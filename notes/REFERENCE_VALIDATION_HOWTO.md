@@ -208,11 +208,10 @@ needs a different shape.
 If a numerical criterion should render compactly in the dashboard, make it
 explicit with `criterion_latex`, optional `criterion_formulae`, and
 `criterion_definitions`. The definitions list can define functions as well as
-variables; for example, reference-band rules should define standardization
-functions such as `z(x)` or `z_{\log}(x)` there. The audit dashboard uses the
-bundled KaTeX runtime in the browser, so direct inequalities and ordinary
-LaTeX math render correctly. Keep `criterion` as the plain-language fallback
-for items that do not opt into math rendering:
+variables when a criterion needs them. The audit dashboard uses the bundled
+KaTeX runtime in the browser, so direct inequalities and ordinary LaTeX math
+render correctly. Keep `criterion` as the plain-language fallback for items
+that do not opt into math rendering:
 
 ```toml
 [[checks]]
@@ -223,38 +222,34 @@ minimum = 8.0
 maximum = 12.0
 title = "Soma diameter stays inside the accepted range"
 criterion = "The observed soma diameter should remain inside the accepted range."
-criterion_latex = '\left|z(\bar{x})\right| \leq 2'
-criterion_formulae = [
-  'z(x) = \frac{x - \mu}{\sigma}',
-  'z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}',
-]
+criterion_latex = '\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}'
 criterion_definitions = [
   { symbol = '\bar{x}', definition = 'observed group mean' },
-  { symbol = 'z(x)', definition = 'arithmetic-space standardization function for a value x' },
-  { symbol = '\mu', definition = 'uploaded reference mean' },
-  { symbol = '\sigma', definition = 'uploaded reference standard deviation' },
+  { symbol = '\mu_{\mathrm{ref}}', definition = 'uploaded reference mean' },
+  { symbol = '\sigma_{\mathrm{ref}}', definition = 'uploaded reference standard deviation' },
 ]
 ```
 
-For reference-band rows, prefer a compact two-sided inequality when the rule is
-centered around a mean, and keep explicit endpoint notation only for modes that
-really need asymmetric bounds. The rendered headline inequality substitutes the
-configured sigma multiplier numerically, so a `reference_sigma_multiplier = 2`
-setting will show `2` in the display. For example:
+For reference-band rows, prefer a compact absolute-residual inequality when the
+rule is centered around a mean, and keep explicit endpoint notation only for
+modes that really need asymmetric bounds. The rendered headline inequality
+substitutes the configured sigma multiplier numerically, so a
+`reference_sigma_multiplier = 2` setting will show `2\sigma_{\mathrm{ref}}`
+or `2\sigma_{\log}` in the display. For example:
 
-- symmetric bands: `\left|z(\bar{x})\right| \leq k`, with
-  `z(x) = (x - \mu) / \sigma`
-- lognormal bands: `\left|z_{\log}(\bar{x})\right| \leq k`, with
-  `z_{\log}(x) = (\ln(x) - m) / s`,
-  `m = \ln(\mu) - s^2 / 2`,
-  `s = \sqrt{\ln(1 + c_{\mathrm{v}}^2)}`, and
-  `c_{\mathrm{v}} = \sigma / \mu`
+- symmetric bands:
+  `\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq k\sigma_{\mathrm{ref}}`
+- lognormal bands:
+  `\left|\ln(\bar{x}) - \mu_{\log}\right| \leq k\sigma_{\log}`, with
+  `\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \sigma_{\log}^2 / 2` and
+  `\sigma_{\log} = \sqrt{\ln(1 + (\sigma_{\mathrm{ref}} / \mu_{\mathrm{ref}})^2)}`
 
-For mean-plus-SD criteria, prefer these standardized score forms over endpoint
-notation or display-only auxiliary parameters. They keep the audit decision
-dimensionless while preserving the original reported arithmetic mean and
-standard deviation. Include `z(x)` or `z_{\log}(x)` in
-`criterion_definitions` as the relevant standardization function.
+For mean-plus-SD criteria, prefer these residual forms over standardized
+z-score notation or endpoint notation. They avoid redundant function
+definitions while keeping the sigma multiplier visible in the headline
+criterion. For lognormal reconstructions, `\sigma_{\log}` is the reconstructed
+log-space standard deviation; do not put the uploaded arithmetic
+`\sigma_{\mathrm{ref}}` on the right-hand side of the log-space inequality.
 
 When a metric has a conventional symbol, prefer it over `\bar{x}`. Examples
 include `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, `\bar{I}_{\mathrm{rh}}`,

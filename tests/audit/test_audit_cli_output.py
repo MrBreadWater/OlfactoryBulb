@@ -30,16 +30,17 @@ sample_report = AuditReport(
             status="WARN",
             title="TC CV_ISI item",
             criterion="TC CV_ISI should render cleanly.",
-            criterion_latex=r"\left|z(\bar{x})\right| \leq 2",
+            criterion_latex=r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}",
             criterion_formulae=[
-                r"z(x) = \frac{x - \mu}{\sigma}",
-                r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+                r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+                r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
             ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                {"symbol": "z(x)", "definition": "arithmetic-space standardization function for a value x"},
-                {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                {"symbol": r"\mu_{\mathrm{ref}}", "definition": "uploaded arithmetic reference mean"},
+                {"symbol": r"\sigma_{\mathrm{ref}}", "definition": "uploaded arithmetic reference standard deviation"},
+                {"symbol": r"\mu_{\log}", "definition": "reconstructed log-space mean"},
+                {"symbol": r"\sigma_{\log}", "definition": "reconstructed log-space standard deviation"},
             ],
             description="CV_ISI should be expanded so the reader does not have to infer it.",
             acceptable="The tufted-cell value must exceed the mitral-cell value.",
@@ -95,13 +96,13 @@ assert "coefficient of variation of interspike intervals" in plain
 assert "ordering rule instead of a numeric range" in plain
 assert "Warning" in plain
 assert "Warning surfaced for an unresolved caveat or condition" in plain
-assert r"\left|z(\bar{x})\right| \leq 2" in plain
+assert r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}" in plain
 assert "Formulae" in plain
-assert r"z(x) = \frac{x - \mu}{\sigma}" in plain
-assert r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}" in plain
+assert r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2" in plain
+assert r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}" in plain
 assert "Definitions" in plain
 assert "Observed group mean" in plain
-assert "Arithmetic-space standardization function for a value x" in plain
+assert "Reconstructed log-space standard deviation" in plain
 assert "Why This Is A Warning" not in plain
 assert "Human Review" not in plain
 assert "Accepted | reviewer: human | Manually reviewed and accepted." not in plain

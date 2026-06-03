@@ -492,44 +492,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{R}_{\\mathrm{in}}\\right) = \\frac{\\ln\\!\\left(\\bar{R}_{\\mathrm{in}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{R}_{\\mathrm{in}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{R}_{\\mathrm{in}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -570,44 +557,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{\\tau}_m\\right) = \\frac{\\ln\\!\\left(\\bar{\\tau}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{\\tau}_m\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{\\tau}_m\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -648,44 +622,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{C}_m\\right) = \\frac{\\ln\\!\\left(\\bar{C}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{C}_m\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{C}_m\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -726,26 +687,18 @@
                     "unit": ""
                   },
                   {
-                    "definition": "arithmetic-space standardization function for a value x under the uploaded reference mean and standard deviation",
-                    "symbol": "z(x)",
-                    "unit": ""
-                  },
-                  {
                     "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   }
                 ],
-                "criterion_formulae": [
-                  "z(x) = \\frac{x - \\mu}{\\sigma}",
-                  "z\\!\\left(\\bar{V}_{\\mathrm{rest}}\\right) = \\frac{\\bar{V}_{\\mathrm{rest}} - \\mu}{\\sigma}"
-                ],
-                "criterion_latex": "\\left|z\\!\\left(\\bar{V}_{\\mathrm{rest}}\\right)\\right| \\leq 2",
+                "criterion_formulae": [],
+                "criterion_latex": "\\left|\\bar{V}_{\\mathrm{rest}} - \\mu_{\\mathrm{ref}}\\right| \\leq 2\\sigma_{\\mathrm{ref}}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Resting Voltage rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -785,26 +738,18 @@
                     "unit": ""
                   },
                   {
-                    "definition": "arithmetic-space standardization function for a value x under the uploaded reference mean and standard deviation",
-                    "symbol": "z(x)",
-                    "unit": ""
-                  },
-                  {
                     "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   }
                 ],
-                "criterion_formulae": [
-                  "z(x) = \\frac{x - \\mu}{\\sigma}",
-                  "z\\!\\left(\\bar{V}_{\\mathrm{th}}\\right) = \\frac{\\bar{V}_{\\mathrm{th}} - \\mu}{\\sigma}"
-                ],
-                "criterion_latex": "\\left|z\\!\\left(\\bar{V}_{\\mathrm{th}}\\right)\\right| \\leq 2",
+                "criterion_formulae": [],
+                "criterion_latex": "\\left|\\bar{V}_{\\mathrm{th}} - \\mu_{\\mathrm{ref}}\\right| \\leq 2\\sigma_{\\mathrm{ref}}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Threshold rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -844,44 +789,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{A}_{\\mathrm{AP}}\\right) = \\frac{\\ln\\!\\left(\\bar{A}_{\\mathrm{AP}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{A}_{\\mathrm{AP}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{A}_{\\mathrm{AP}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -922,44 +854,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\overline{\\mathrm{FWHM}}\\right) = \\frac{\\ln\\!\\left(\\overline{\\mathrm{FWHM}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\overline{\\mathrm{FWHM}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\overline{\\mathrm{FWHM}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1000,44 +919,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{s}_{\\mathrm{rise}}\\right) = \\frac{\\ln\\!\\left(\\bar{s}_{\\mathrm{rise}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{s}_{\\mathrm{rise}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{s}_{\\mathrm{rise}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1078,26 +984,18 @@
                     "unit": ""
                   },
                   {
-                    "definition": "arithmetic-space standardization function for a value x under the uploaded reference mean and standard deviation",
-                    "symbol": "z(x)",
-                    "unit": ""
-                  },
-                  {
                     "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   }
                 ],
-                "criterion_formulae": [
-                  "z(x) = \\frac{x - \\mu}{\\sigma}",
-                  "z\\!\\left(\\bar{s}_{\\mathrm{fall}}\\right) = \\frac{\\bar{s}_{\\mathrm{fall}} - \\mu}{\\sigma}"
-                ],
-                "criterion_latex": "\\left|z\\!\\left(\\bar{s}_{\\mathrm{fall}}\\right)\\right| \\leq 2",
+                "criterion_formulae": [],
+                "criterion_latex": "\\left|\\bar{s}_{\\mathrm{fall}} - \\mu_{\\mathrm{ref}}\\right| \\leq 2\\sigma_{\\mathrm{ref}}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Falling Slope rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1137,44 +1035,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{I}_{\\mathrm{rh}}\\right) = \\frac{\\ln\\!\\left(\\bar{I}_{\\mathrm{rh}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{I}_{\\mathrm{rh}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{I}_{\\mathrm{rh}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1215,44 +1100,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{t}_{\\mathrm{lat}}\\right) = \\frac{\\ln\\!\\left(\\bar{t}_{\\mathrm{lat}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{t}_{\\mathrm{lat}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{t}_{\\mathrm{lat}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1293,44 +1165,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{g}_{\\mathrm{FI}}\\right) = \\frac{\\ln\\!\\left(\\bar{g}_{\\mathrm{FI}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{g}_{\\mathrm{FI}}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{g}_{\\mathrm{FI}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1371,44 +1230,31 @@
                     "unit": ""
                   },
                   {
-                    "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                    "symbol": "z_{\\log}(x)",
+                    "definition": "uploaded arithmetic reference mean",
+                    "symbol": "\\mu_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
-                    "definition": "uploaded reference mean",
-                    "symbol": "\\mu",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference standard deviation",
-                    "symbol": "\\sigma",
-                    "unit": ""
-                  },
-                  {
-                    "definition": "uploaded reference coefficient of variation",
-                    "symbol": "c_{\\mathrm{v}}",
+                    "definition": "uploaded arithmetic reference standard deviation",
+                    "symbol": "\\sigma_{\\mathrm{ref}}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space mean",
-                    "symbol": "m",
+                    "symbol": "\\mu_{\\log}",
                     "unit": ""
                   },
                   {
                     "definition": "reconstructed log-space standard deviation",
-                    "symbol": "s",
+                    "symbol": "\\sigma_{\\log}",
                     "unit": ""
                   }
                 ],
                 "criterion_formulae": [
-                  "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-                  "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-                  "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-                  "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-                  "z_{\\log}\\!\\left(\\bar{f}_{\\max}\\right) = \\frac{\\ln\\!\\left(\\bar{f}_{\\max}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+                  "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+                  "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
                 ],
-                "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{f}_{\\max}\\right)\\right| \\leq 2",
+                "criterion_latex": "\\left|\\ln\\!\\left(\\bar{f}_{\\max}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
                 "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
                 "detail_level": "detail",
                 "evidence": {
@@ -1926,44 +1772,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{R}_{\\mathrm{in}}\\right) = \\frac{\\ln\\!\\left(\\bar{R}_{\\mathrm{in}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{R}_{\\mathrm{in}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{R}_{\\mathrm{in}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2004,44 +1837,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{\\tau}_m\\right) = \\frac{\\ln\\!\\left(\\bar{\\tau}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{\\tau}_m\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{\\tau}_m\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2082,44 +1902,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{C}_m\\right) = \\frac{\\ln\\!\\left(\\bar{C}_m/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{C}_m\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{C}_m\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2160,26 +1967,18 @@
                 "unit": ""
               },
               {
-                "definition": "arithmetic-space standardization function for a value x under the uploaded reference mean and standard deviation",
-                "symbol": "z(x)",
-                "unit": ""
-              },
-              {
                 "definition": "uploaded reference mean",
-                "symbol": "\\mu",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               }
             ],
-            "criterion_formulae": [
-              "z(x) = \\frac{x - \\mu}{\\sigma}",
-              "z\\!\\left(\\bar{V}_{\\mathrm{rest}}\\right) = \\frac{\\bar{V}_{\\mathrm{rest}} - \\mu}{\\sigma}"
-            ],
-            "criterion_latex": "\\left|z\\!\\left(\\bar{V}_{\\mathrm{rest}}\\right)\\right| \\leq 2",
+            "criterion_formulae": [],
+            "criterion_latex": "\\left|\\bar{V}_{\\mathrm{rest}} - \\mu_{\\mathrm{ref}}\\right| \\leq 2\\sigma_{\\mathrm{ref}}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Resting Voltage rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2219,26 +2018,18 @@
                 "unit": ""
               },
               {
-                "definition": "arithmetic-space standardization function for a value x under the uploaded reference mean and standard deviation",
-                "symbol": "z(x)",
-                "unit": ""
-              },
-              {
                 "definition": "uploaded reference mean",
-                "symbol": "\\mu",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               }
             ],
-            "criterion_formulae": [
-              "z(x) = \\frac{x - \\mu}{\\sigma}",
-              "z\\!\\left(\\bar{V}_{\\mathrm{th}}\\right) = \\frac{\\bar{V}_{\\mathrm{th}} - \\mu}{\\sigma}"
-            ],
-            "criterion_latex": "\\left|z\\!\\left(\\bar{V}_{\\mathrm{th}}\\right)\\right| \\leq 2",
+            "criterion_formulae": [],
+            "criterion_latex": "\\left|\\bar{V}_{\\mathrm{th}} - \\mu_{\\mathrm{ref}}\\right| \\leq 2\\sigma_{\\mathrm{ref}}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Threshold rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2278,44 +2069,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{A}_{\\mathrm{AP}}\\right) = \\frac{\\ln\\!\\left(\\bar{A}_{\\mathrm{AP}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{A}_{\\mathrm{AP}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{A}_{\\mathrm{AP}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2356,44 +2134,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\overline{\\mathrm{FWHM}}\\right) = \\frac{\\ln\\!\\left(\\overline{\\mathrm{FWHM}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\overline{\\mathrm{FWHM}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\overline{\\mathrm{FWHM}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2434,44 +2199,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{s}_{\\mathrm{rise}}\\right) = \\frac{\\ln\\!\\left(\\bar{s}_{\\mathrm{rise}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{s}_{\\mathrm{rise}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{s}_{\\mathrm{rise}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2512,26 +2264,18 @@
                 "unit": ""
               },
               {
-                "definition": "arithmetic-space standardization function for a value x under the uploaded reference mean and standard deviation",
-                "symbol": "z(x)",
-                "unit": ""
-              },
-              {
                 "definition": "uploaded reference mean",
-                "symbol": "\\mu",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               }
             ],
-            "criterion_formulae": [
-              "z(x) = \\frac{x - \\mu}{\\sigma}",
-              "z\\!\\left(\\bar{s}_{\\mathrm{fall}}\\right) = \\frac{\\bar{s}_{\\mathrm{fall}} - \\mu}{\\sigma}"
-            ],
-            "criterion_latex": "\\left|z\\!\\left(\\bar{s}_{\\mathrm{fall}}\\right)\\right| \\leq 2",
+            "criterion_formulae": [],
+            "criterion_latex": "\\left|\\bar{s}_{\\mathrm{fall}} - \\mu_{\\mathrm{ref}}\\right| \\leq 2\\sigma_{\\mathrm{ref}}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Falling Slope rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2571,44 +2315,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{I}_{\\mathrm{rh}}\\right) = \\frac{\\ln\\!\\left(\\bar{I}_{\\mathrm{rh}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{I}_{\\mathrm{rh}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{I}_{\\mathrm{rh}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2649,44 +2380,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{t}_{\\mathrm{lat}}\\right) = \\frac{\\ln\\!\\left(\\bar{t}_{\\mathrm{lat}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{t}_{\\mathrm{lat}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{t}_{\\mathrm{lat}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2727,44 +2445,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{g}_{\\mathrm{FI}}\\right) = \\frac{\\ln\\!\\left(\\bar{g}_{\\mathrm{FI}}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{g}_{\\mathrm{FI}}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{g}_{\\mathrm{FI}}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2805,44 +2510,31 @@
                 "unit": ""
               },
               {
-                "definition": "log-space standardization function for a positive value x under the reconstructed lognormal reference distribution",
-                "symbol": "z_{\\log}(x)",
+                "definition": "uploaded arithmetic reference mean",
+                "symbol": "\\mu_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
-                "definition": "uploaded reference mean",
-                "symbol": "\\mu",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference standard deviation",
-                "symbol": "\\sigma",
-                "unit": ""
-              },
-              {
-                "definition": "uploaded reference coefficient of variation",
-                "symbol": "c_{\\mathrm{v}}",
+                "definition": "uploaded arithmetic reference standard deviation",
+                "symbol": "\\sigma_{\\mathrm{ref}}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space mean",
-                "symbol": "m",
+                "symbol": "\\mu_{\\log}",
                 "unit": ""
               },
               {
                 "definition": "reconstructed log-space standard deviation",
-                "symbol": "s",
+                "symbol": "\\sigma_{\\log}",
                 "unit": ""
               }
             ],
             "criterion_formulae": [
-              "z_{\\log}(x) = \\frac{\\ln(x) - m}{s}",
-              "m = \\ln(\\mu) - \\frac{1}{2}s^2",
-              "s = \\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}",
-              "c_{\\mathrm{v}} = \\frac{\\sigma}{\\mu}",
-              "z_{\\log}\\!\\left(\\bar{f}_{\\max}\\right) = \\frac{\\ln\\!\\left(\\bar{f}_{\\max}/\\mu\\right) + \\frac{1}{2}\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}{\\sqrt{\\ln\\!\\left(1 + c_{\\mathrm{v}}^2\\right)}}"
+              "\\mu_{\\log} = \\ln(\\mu_{\\mathrm{ref}}) - \\frac{1}{2}\\sigma_{\\log}^2",
+              "\\sigma_{\\log} = \\sqrt{\\ln\\!\\left(1 + \\left(\\frac{\\sigma_{\\mathrm{ref}}}{\\mu_{\\mathrm{ref}}}\\right)^2\\right)}"
             ],
-            "criterion_latex": "\\left|z_{\\log}\\!\\left(\\bar{f}_{\\max}\\right)\\right| \\leq 2",
+            "criterion_latex": "\\left|\\ln\\!\\left(\\bar{f}_{\\max}\\right) - \\mu_{\\log}\\right| \\leq 2\\sigma_{\\log}",
             "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
             "detail_level": "detail",
             "evidence": {
@@ -2879,8 +2571,8 @@
         "title": "Granule cell intrinsic validation",
         "worst_status": "FAIL"
       },
-      "updated_at": "2026-06-03T15:33:43"
+      "updated_at": "2026-06-03T15:53:13"
     }
   ],
-  "generated_at": "2026-06-03T15:33:43"
+  "generated_at": "2026-06-03T15:53:13"
 }

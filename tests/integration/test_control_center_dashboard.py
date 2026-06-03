@@ -31,16 +31,17 @@ def _sample_report(audit_id: str = "new_sweep", title: str = "New sweep") -> Aud
             status="PASS",
             title="Alpha pass",
             criterion="Alpha should pass.",
-            criterion_latex=r"\left|z(\bar{x})\right| \leq 2",
+            criterion_latex=r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}",
             criterion_formulae=[
-                r"z(x) = \frac{x - \mu}{\sigma}",
-                r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+                r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+                r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
             ],
             criterion_definitions=[
                 {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                {"symbol": "z(x)", "definition": "arithmetic-space standardization function for a value x"},
-                {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                {"symbol": r"\mu_{\mathrm{ref}}", "definition": "uploaded arithmetic reference mean"},
+                {"symbol": r"\sigma_{\mathrm{ref}}", "definition": "uploaded arithmetic reference standard deviation"},
+                {"symbol": r"\mu_{\log}", "definition": "reconstructed log-space mean"},
+                {"symbol": r"\sigma_{\log}", "definition": "reconstructed log-space standard deviation"},
             ],
             description="Description",
             acceptable="Acceptable",
@@ -117,16 +118,17 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Environment pass",
                     criterion="Criterion",
-                    criterion_latex=r"\left|z(\bar{x})\right| \leq 2",
+                    criterion_latex=r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}",
                     criterion_formulae=[
-                        r"z(x) = \frac{x - \mu}{\sigma}",
-                        r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+                        r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+                        r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
                     ],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                        {"symbol": "z(x)", "definition": "arithmetic-space standardization function for a value x"},
-                        {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                        {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                        {"symbol": r"\mu_{\mathrm{ref}}", "definition": "uploaded arithmetic reference mean"},
+                        {"symbol": r"\sigma_{\mathrm{ref}}", "definition": "uploaded arithmetic reference standard deviation"},
+                        {"symbol": r"\mu_{\log}", "definition": "reconstructed log-space mean"},
+                        {"symbol": r"\sigma_{\log}", "definition": "reconstructed log-space standard deviation"},
                     ],
                     description="Description",
                     acceptable="Acceptable",
@@ -159,16 +161,17 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     status="PASS",
                     title="Short item",
                     criterion="Criterion",
-                    criterion_latex=r"\left|z(\bar{x})\right| \leq 2",
+                    criterion_latex=r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}",
                     criterion_formulae=[
-                        r"z(x) = \frac{x - \mu}{\sigma}",
-                        r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+                        r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+                        r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
                     ],
                     criterion_definitions=[
                         {"symbol": r"\bar{x}", "definition": "observed group mean"},
-                        {"symbol": "z(x)", "definition": "arithmetic-space standardization function for a value x"},
-                        {"symbol": r"\mu", "definition": "uploaded reference mean"},
-                        {"symbol": r"\sigma", "definition": "uploaded reference standard deviation"},
+                        {"symbol": r"\mu_{\mathrm{ref}}", "definition": "uploaded arithmetic reference mean"},
+                        {"symbol": r"\sigma_{\mathrm{ref}}", "definition": "uploaded arithmetic reference standard deviation"},
+                        {"symbol": r"\mu_{\log}", "definition": "reconstructed log-space mean"},
+                        {"symbol": r"\sigma_{\log}", "definition": "reconstructed log-space standard deviation"},
                     ],
                     description="Description",
                     acceptable="Acceptable",
@@ -505,10 +508,13 @@ with TemporaryDirectory() as tmp:
     output_dir = Path(manifest["output_dir"])
     preserved_audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
     assert len(preserved_audit_report["groups"]) == 1
-    assert preserved_audit_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|z(\bar{x})\right| \leq 2"
+    assert (
+        preserved_audit_report["groups"][0]["items"][0]["criterion_latex"]
+        == r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}"
+    )
     assert preserved_audit_report["groups"][0]["items"][0]["criterion_formulae"] == [
-        r"z(x) = \frac{x - \mu}{\sigma}",
-        r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+        r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+        r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
     ]
     preserved_audits_html = (output_dir / "audits" / "index.html").read_text()
     assert "./assets/katex/katex.min.js" in preserved_audits_html
@@ -558,10 +564,13 @@ with TemporaryDirectory() as tmp:
     assert r"\lvert" not in audits_html
     assert r"\rvert" not in audits_html
     audit_report = json.loads((output_dir / "audits" / "report.json").read_text())
-    assert audit_report["items"][0]["criterion_latex"] == r"\left|z(\bar{x})\right| \leq 2"
+    assert (
+        audit_report["items"][0]["criterion_latex"]
+        == r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}"
+    )
     assert audit_report["items"][0]["criterion_formulae"] == [
-        r"z(x) = \frac{x - \mu}{\sigma}",
-        r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+        r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+        r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
     ]
     assert audit_report["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
     placeholder = json.loads((output_dir / "optimization" / "manifest.json").read_text())
@@ -763,10 +772,13 @@ with TemporaryDirectory() as tmp:
         first_run_titles = {group["title"] for group in first_run_report["groups"]}
         assert "Environment/install audit" in first_run_titles
         assert "Scratch boundary audit" in first_run_titles
-        assert first_run_report["groups"][0]["items"][0]["criterion_latex"] == r"\left|z(\bar{x})\right| \leq 2"
+        assert (
+            first_run_report["groups"][0]["items"][0]["criterion_latex"]
+            == r"\left|\ln\!\left(\bar{x}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}"
+        )
         assert first_run_report["groups"][0]["items"][0]["criterion_formulae"] == [
-            r"z(x) = \frac{x - \mu}{\sigma}",
-            r"z(\bar{x}) = \frac{\bar{x} - \mu}{\sigma}",
+            r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+            r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
         ]
         assert first_run_report["groups"][0]["items"][0]["criterion_definitions"][0]["symbol"] == r"\bar{x}"
 
@@ -1018,8 +1030,8 @@ with TemporaryDirectory() as tmp:
             assert math_render["definitionRendered"] is True
             definition_meanings = [entry["meaning"] for entry in math_render["definitionTexts"]]
             assert "Observed group mean" in definition_meanings
-            assert "Uploaded reference mean" in definition_meanings
-            assert "Uploaded reference standard deviation" in definition_meanings
+            assert "Uploaded arithmetic reference mean" in definition_meanings
+            assert "Uploaded arithmetic reference standard deviation" in definition_meanings
             series_visibility = client.eval(
                 "(() => {"
                 "  const graph = document.querySelector('[data-series-graph]');"

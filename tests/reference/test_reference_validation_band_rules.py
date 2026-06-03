@@ -117,17 +117,19 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert "configured lognormal reference interval" in log_item.acceptable_basis
     assert (
         log_item.criterion_latex
-        == r"\left|z_{\log}\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}\right)\right| \leq 2"
+        == r"\left|\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}\right) - \mu_{\log}\right| \leq 2\sigma_{\log}"
     )
     assert log_item.criterion_definitions[0]["symbol"] == r"\overline{\mathrm{CV}}_{\mathrm{ISI}}"
-    assert log_item.criterion_definitions[1]["symbol"] == r"z_{\log}(x)"
-    assert "log-space standardization function" in log_item.criterion_definitions[1]["definition"]
+    assert [definition["symbol"] for definition in log_item.criterion_definitions] == [
+        r"\overline{\mathrm{CV}}_{\mathrm{ISI}}",
+        r"\mu_{\mathrm{ref}}",
+        r"\sigma_{\mathrm{ref}}",
+        r"\mu_{\log}",
+        r"\sigma_{\log}",
+    ]
     assert log_item.criterion_formulae == [
-        r"z_{\log}(x) = \frac{\ln(x) - m}{s}",
-        r"m = \ln(\mu) - \frac{1}{2}s^2",
-        r"s = \sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}",
-        r"c_{\mathrm{v}} = \frac{\sigma}{\mu}",
-        r"z_{\log}\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}\right) = \frac{\ln\!\left(\overline{\mathrm{CV}}_{\mathrm{ISI}}/\mu\right) + \frac{1}{2}\ln\!\left(1 + c_{\mathrm{v}}^2\right)}{\sqrt{\ln\!\left(1 + c_{\mathrm{v}}^2\right)}}",
+        r"\mu_{\log} = \ln(\mu_{\mathrm{ref}}) - \frac{1}{2}\sigma_{\log}^2",
+        r"\sigma_{\log} = \sqrt{\ln\!\left(1 + \left(\frac{\sigma_{\mathrm{ref}}}{\mu_{\mathrm{ref}}}\right)^2\right)}",
     ]
 
     symmetric_rule = {
@@ -153,13 +155,13 @@ with tempfile.TemporaryDirectory() as tmpdir:
         protocol_result=None,
     )
     symmetric_item = build_rule_items([symmetric_rule], symmetric_context)[0]
-    assert symmetric_item.criterion_latex == r"\left|z\!\left(\bar{V}_{\mathrm{rest}}\right)\right| \leq 2"
-    assert symmetric_item.criterion_definitions[1]["symbol"] == "z(x)"
-    assert "arithmetic-space standardization function" in symmetric_item.criterion_definitions[1]["definition"]
-    assert symmetric_item.criterion_formulae == [
-        r"z(x) = \frac{x - \mu}{\sigma}",
-        r"z\!\left(\bar{V}_{\mathrm{rest}}\right) = \frac{\bar{V}_{\mathrm{rest}} - \mu}{\sigma}",
+    assert symmetric_item.criterion_latex == r"\left|\bar{V}_{\mathrm{rest}} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}"
+    assert [definition["symbol"] for definition in symmetric_item.criterion_definitions] == [
+        r"\bar{V}_{\mathrm{rest}}",
+        r"\mu_{\mathrm{ref}}",
+        r"\sigma_{\mathrm{ref}}",
     ]
+    assert symmetric_item.criterion_formulae == []
 
     beta_rule = {
         "kind": "reference_band_rows",
