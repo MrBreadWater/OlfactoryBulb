@@ -84,7 +84,7 @@ with TemporaryDirectory() as tmp:
     assert "Reference interval" in html
     assert "Details" in html
     assert "evidence-lines" not in html
-    assert "Why this is a warning" in html
+    assert "Warning" in html
     assert "Human review" not in html
     assert "reviewer: human" not in html
 

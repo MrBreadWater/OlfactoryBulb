@@ -492,9 +492,11 @@ contract for future sessions.
   - explicit `Description`
   - `Acceptable result`
   - `How Acceptable Result Was Determined`
-  - explicit warning reason text for `WARN` items, especially when the warning
-    comes from pending/provisional validation-design review state or an
-    intentionally surfaced caveat
+  - explicit, concise `Warning` text for `WARN` items, especially when the
+    warning comes from pending/provisional validation-design review state or
+    an intentionally surfaced caveat; avoid repeating boilerplate phrasing like
+    "why this is a warning" when a shorter warning label plus a specific
+    reason is clearer
   - evidence blocks readable in plain text
   - grouped summaries should collapse cleanly in large multi-audit reports
     without hiding warning/failure detail

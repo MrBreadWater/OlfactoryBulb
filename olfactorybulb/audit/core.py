@@ -290,21 +290,13 @@ def status_reason_text(item: AuditItem) -> str:
         return ""
     review_status = str(item.human_review_status or "").strip()
     if review_status == "pending_review":
-        return (
-            "This item is a warning because the validation-design choice behind this check is still pending human review."
-        )
+        return "Pending human review for the validation-design choice behind this check."
     if review_status == "provisional":
-        return (
-            "This item is a warning because the validation-design choice behind this check is still provisional."
-        )
+        return "Provisional validation-design choice for this check."
     title_text = str(item.title or "").lower()
     if "caveat" in title_text or "notes / protocol caveats" in title_text or "note" in title_text:
-        return (
-            "This item is a warning because relevant validation caveats apply to the current context and are being surfaced intentionally."
-        )
-    return (
-        "This item is a warning because the audit is surfacing a caveat or unresolved condition that is important but not treated as a hard failure."
-    )
+        return "Relevant validation caveats apply to the current context."
+    return "Warning surfaced for an unresolved caveat or condition."
 
 
 def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
@@ -329,7 +321,7 @@ def _render_item_lines(item: AuditItem, *, enabled: bool) -> list[str]:
     status_reason = status_reason_text(item)
     if status_reason:
         lines.append(
-            f"  {_paint('Why This Is A Warning', NOTE_COLOR, enabled=enabled)}  "
+            f"  {_paint('Warning', NOTE_COLOR, enabled=enabled)}  "
             f"{_paint(_expand_terms(status_reason, sentence_case=True), DIM, enabled=enabled)}"
         )
     if item.evidence:

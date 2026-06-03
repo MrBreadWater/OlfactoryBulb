@@ -390,7 +390,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
     status_reason = status_reason_text(item)
     if status_reason:
         sections.append(
-            "<div class='item-block status-reason-block'><h4>Why this is a warning</h4>"
+            "<div class='item-block status-reason-block'><h4>Warning</h4>"
             f"<p>{_esc(_expand_terms(status_reason, sentence_case=True))}</p></div>"
         )
     sections.append(_render_evidence(item))
