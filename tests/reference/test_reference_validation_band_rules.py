@@ -116,7 +116,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert "configured lognormal reference interval" in log_item.acceptable_basis
     assert (
         log_item.criterion_latex
-        == r"\lvert \ln\!\left(\frac{\overline{\mathrm{CV}}_{\mathrm{ISI}}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}"
+        == r"\lvert \ln\!\left(\frac{\overline{\mathrm{CV}}_{\mathrm{ISI}}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq 2\sqrt{\ln(1 + (\sigma / \mu)^2)}"
     )
     assert log_item.criterion_definitions[0]["symbol"] == r"\overline{\mathrm{CV}}_{\mathrm{ISI}}"
 

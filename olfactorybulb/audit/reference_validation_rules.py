@@ -41,6 +41,7 @@ class ReferenceAcceptanceBand:
     lower_bound: float | None
     upper_bound: float | None
     description: str
+    sigma_multiplier: float = 2.0
 
 
 RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
@@ -391,6 +392,7 @@ def compute_reference_acceptance_band(
         lower_bound=lower_bound,
         upper_bound=upper_bound,
         description=description,
+        sigma_multiplier=float(sigma_multiplier),
     )
 
 
@@ -583,10 +585,11 @@ def _criterion_math_for_band(
 ) -> tuple[str, list[dict[str, Any]], list[str]]:
     observed_label = f"{group} mean {property_name.lower()}"
     observed_symbol = _observed_symbol_for_property(property_name)
-    latex = r"\lvert {obs} - \mu \rvert \leq k\sigma".format(obs=observed_symbol)
+    sigma_multiplier = _latex_number(band.sigma_multiplier)
     formulae: list[str] = []
     definitions: list[dict[str, Any]] = [{"symbol": observed_symbol, "definition": observed_label}]
     if band.mode == "quantile_interval":
+        latex = r"{low} \leq {obs} \leq {high}".format(obs=observed_symbol, low="L", high="U")
         definitions.extend(
             [
                 {"symbol": "L", "definition": "reported lower quantile bound"},
@@ -597,6 +600,7 @@ def _criterion_math_for_band(
         )
         formulae.extend([r"L = q_{\mathrm{low}}", r"U = q_{\mathrm{high}}"])
     elif band.mode == "beta_sd":
+        latex = r"{low} \leq {obs} \leq {high}".format(obs=observed_symbol, low="L", high="U")
         definitions.extend(
             [
                 {"symbol": "L", "definition": "lower beta-distribution quantile reconstructed from the uploaded mean and standard deviation"},
@@ -622,7 +626,7 @@ def _criterion_math_for_band(
         latex = r"{obs} = b".format(obs=observed_symbol)
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        latex = rf"\lvert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \rvert \leq k\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
+        latex = rf"\lvert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \rvert \leq {sigma_multiplier}\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -631,6 +635,7 @@ def _criterion_math_for_band(
             ]
         )
     else:
+        latex = rf"\lvert {observed_symbol} - \mu \rvert \leq {sigma_multiplier}\sigma"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -660,6 +665,10 @@ def _row_field_name(
     if override is not None:
         return str(override).strip()
     return str(rule.get(default_field_key, default) or default).strip()
+
+
+def _latex_number(value: float) -> str:
+    return f"{float(value):g}"
 
 
 _PROPERTY_OBSERVED_SYMBOLS: dict[str, str] = {

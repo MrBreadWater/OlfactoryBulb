@@ -233,7 +233,9 @@ criterion_definitions = [
 
 For reference-band rows, prefer a compact centered inequality when the rule is
 centered around a mean, and keep explicit endpoint notation only for modes that
-really need asymmetric bounds. For example:
+really need asymmetric bounds. The rendered headline inequality substitutes the
+configured sigma multiplier numerically, so a `reference_sigma_multiplier = 2`
+setting will show `2\sigma` in the display. For example:
 
 - symmetric bands: `\lvert \bar{x} - \mu \rvert \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
 - lognormal bands: `\lvert \ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
