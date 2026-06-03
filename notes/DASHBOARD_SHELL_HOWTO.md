@@ -134,6 +134,9 @@ Once the shell is open:
   audit-arguments field stays blank rather than force-filling those defaults
 - the audit runner lives only inside the audit tab; module status and progress
   live in the shell banner instead of in a duplicated global toolbar
+- after a run, the audit runner collapses into a compact summary with
+  `Edit selection`; the empty-state `Run selected audit` button posts back to
+  the shell so the audit tab can launch a run without another global launcher
 - the audit page itself now provides display controls for:
   - search
   - failures/warnings-only filtering

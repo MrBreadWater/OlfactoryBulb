@@ -165,7 +165,11 @@
 - renders maintained audit reports to:
   - <code>index.html</code>
   - <code>report.json</code>
-  - <code>manifest.json</code></p>
+  - <code>manifest.json</code>
+- audit cards render explicit item visuals declared by the audit/rule layer
+  rather than inferring them from array-shaped evidence alone
+- the standard series backend is Matplotlib; use explicit visual specs when
+  registering a new plotted audit item</p>
 <h2 id="canonical-commands">Canonical commands</h2>
 <p>Use the OBGPU environment.</p>
 <p>Fastest maintained launch:</p>
@@ -239,6 +243,9 @@ python -m olfactorybulb.dashboard.control_center serve \
   audit-arguments field stays blank rather than force-filling those defaults</li>
 <li>the audit runner lives only inside the audit tab; module status and progress
   live in the shell banner instead of in a duplicated global toolbar</li>
+<li>after a run, the audit runner collapses into a compact summary with
+  <code>Edit selection</code>; the empty-state <code>Run selected audit</code> button posts back to
+  the shell so the audit tab can launch a run without another global launcher</li>
 <li>the audit page itself now provides display controls for:</li>
 <li>search</li>
 <li>failures/warnings-only filtering</li>
