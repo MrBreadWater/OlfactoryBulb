@@ -190,6 +190,10 @@ contract for future sessions.
     post-CSS state that exercises the changed layout. DOM presence/order tests
     are not enough when the task is spacing, overflow, collapse behavior,
     z-order, or responsive fit.
+  - For math-criterion dashboard changes, verify the served browser path
+    renders both the main equation and any symbol-definition rows via MathJax;
+    raw TeX in definition text is a regression even if `mjx-container` exists
+    elsewhere on the card.
 - For notebook-facing defaults, verify the actual notebook/runtime paths that
   consume them.
   - If a user reports that a just-delivered change failed, reproduce that exact

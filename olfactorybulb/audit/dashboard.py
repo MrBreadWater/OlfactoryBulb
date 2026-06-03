@@ -1356,7 +1356,7 @@ def _criterion_definition_html(definition: dict[str, Any]) -> str:
         return ""
     parts: list[str] = []
     if symbol:
-        parts.append(f"<code class='criterion-definition-symbol'>{_esc(symbol)}</code>")
+        parts.append(f"<span class='criterion-definition-symbol' role='math'>\\({_esc(symbol)}\\)</span>")
     if meaning:
         parts.append(f"<span class='criterion-definition-meaning'>{meaning}</span>")
     if unit:
@@ -1364,29 +1364,8 @@ def _criterion_definition_html(definition: dict[str, Any]) -> str:
     return f"<div class='criterion-definition'>{' '.join(parts)}</div>"
 
 
-def _criterion_variable_row_html(definitions: list[dict[str, Any]]) -> str:
-    symbols = []
-    for definition in definitions:
-        symbol = str(definition.get("symbol") or "").strip()
-        if symbol and symbol not in symbols:
-            symbols.append(symbol)
-    if not symbols:
-        return ""
-    chips = "".join(
-        f"<span class='criterion-variable-chip'>\\({_esc(symbol)}\\)</span>"
-        for symbol in symbols
-    )
-    return (
-        "<div class='criterion-variables'>"
-        "<span class='criterion-variables-label'>Variables</span>"
-        f"{chips}"
-        "</div>"
-    )
-
-
 def _criterion_body_html(item: AuditItem) -> str:
     if item.criterion_latex:
-        variable_row_html = _criterion_variable_row_html(item.criterion_definitions)
         definitions_html = ""
         if item.criterion_definitions:
             definitions_html = (
@@ -1401,7 +1380,6 @@ def _criterion_body_html(item: AuditItem) -> str:
             "<div class='item-block criterion-block'>"
             "<h4>Criterion</h4>"
             f"<div class='criterion-math' role='math'>\\[{_esc(item.criterion_latex)}\\]</div>"
-            f"{variable_row_html}"
             f"{definitions_html}"
             "</div>"
         )
@@ -2210,55 +2188,28 @@ def render_audit_dashboard_html(
       overflow-y: hidden;
       padding-bottom: 2px;
     }}
-    .criterion-variables {{
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px;
-      margin-top: 8px;
-    }}
-    .criterion-variables-label {{
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.02em;
-      margin-right: 4px;
-    }}
-    .criterion-variable-chip {{
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 24px;
-      padding: 2px 10px;
-      border-radius: 999px;
-      border: 1px solid #dbe3ef;
-      background: #ffffff;
-      color: #1f2937;
-      font-size: 12px;
-      font-weight: 700;
-      white-space: nowrap;
-    }}
     .criterion-definitions {{
       display: grid;
-      gap: 8px;
-      margin: 10px 0 0;
+      gap: 7px;
+      margin: 12px 0 0;
       padding: 0;
     }}
     .criterion-definition {{
       display: grid;
-      grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-      gap: 8px;
-      align-items: start;
+      grid-template-columns: minmax(0, max-content) minmax(0, 1fr) minmax(0, max-content);
+      gap: 10px;
+      align-items: center;
     }}
     .criterion-definition-symbol {{
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 2px 9px;
       color: #1f2937;
-      background: rgba(255, 255, 255, 0.8);
+      background: rgba(255, 255, 255, 0.92);
       border: 1px solid #dbe3ef;
-      border-radius: 6px;
-      padding: 1px 6px;
+      border-radius: 999px;
       white-space: nowrap;
     }}
     .criterion-definition-meaning {{

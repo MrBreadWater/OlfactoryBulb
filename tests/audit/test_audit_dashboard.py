@@ -208,9 +208,10 @@ with TemporaryDirectory() as tmp:
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
     assert "criterion-math" in html
-    assert "criterion-variables" in html
-    assert "criterion-variable-chip" in html
     assert "criterion-definitions" in html
+    assert "criterion-definition-symbol" in html
+    assert "criterion-variables" not in html
+    assert "criterion-variable-chip" not in html
     assert "MathJax" in html
     assert r"\bar{x} \in [L, U]" in html
     assert "observed group mean" in html

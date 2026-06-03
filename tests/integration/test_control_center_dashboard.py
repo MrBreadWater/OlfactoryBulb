@@ -909,24 +909,25 @@ with TemporaryDirectory() as tmp:
                 "  const tick = () => {"
                 "    const equation = document.querySelector('.criterion-math');"
                 "    const equationMath = equation ? equation.querySelector('mjx-container') : null;"
-                "    const chips = Array.from(document.querySelectorAll('.criterion-variable-chip'));"
-                "    const chipMathCount = chips.filter((chip) => chip.querySelector('mjx-container')).length;"
-                "    const definitions = Array.from(document.querySelectorAll('.criterion-definitions .criterion-definition-meaning'));"
-                "    if (equationMath && chipMathCount >= 3 && definitions.length >= 3) {"
+                "    const definitions = Array.from(document.querySelectorAll('.criterion-definition'));"
+                "    const definitionMathCount = definitions.filter((row) => row.querySelector('.criterion-definition-symbol mjx-container')).length;"
+                "    const definitionTexts = definitions.map((row) => ({"
+                "      meaning: row.querySelector('.criterion-definition-meaning')?.textContent?.trim() || '',"
+                "      symbolText: row.querySelector('.criterion-definition-symbol')?.textContent?.trim() || ''"
+                "    }));"
+                "    if (equationMath && definitionMathCount >= 3 && definitions.length >= 3) {"
                 "      resolve({"
                 "        equationRendered: true,"
-                "        chipMathCount,"
-                "        variablesLabel: document.querySelector('.criterion-variables-label')?.textContent?.trim() || '',"
-                "        definitionTexts: definitions.map((node) => (node.textContent || '').trim()),"
+                "        definitionMathCount,"
+                "        definitionTexts,"
                 "      });"
                 "      return;"
                 "    }"
                 "    if (Date.now() > deadline) {"
                 "      resolve({"
                 "        equationRendered: Boolean(equationMath),"
-                "        chipMathCount,"
-                "        variablesLabel: document.querySelector('.criterion-variables-label')?.textContent?.trim() || '',"
-                "        definitionTexts: definitions.map((node) => (node.textContent || '').trim()),"
+                "        definitionMathCount,"
+                "        definitionTexts,"
                 "      });"
                 "      return;"
                 "    }"
@@ -936,11 +937,13 @@ with TemporaryDirectory() as tmp:
                 "})"
             )
             assert math_render["equationRendered"] is True
-            assert math_render["chipMathCount"] >= 3
-            assert math_render["variablesLabel"] == "Variables"
-            assert "Observed group mean" in math_render["definitionTexts"]
-            assert "Lower accepted bound" in math_render["definitionTexts"]
-            assert "Upper accepted bound" in math_render["definitionTexts"]
+            assert math_render["definitionMathCount"] >= 3
+            definition_meanings = [entry["meaning"] for entry in math_render["definitionTexts"]]
+            assert "Observed group mean" in definition_meanings
+            assert "Lower accepted bound" in definition_meanings
+            assert "Upper accepted bound" in definition_meanings
+            observed_entry = next(entry for entry in math_render["definitionTexts"] if entry["meaning"] == "Observed group mean")
+            assert "\\" not in observed_entry["symbolText"]
             series_visibility = client.eval(
                 "(() => {"
                 "  const graph = document.querySelector('[data-series-graph]');"
