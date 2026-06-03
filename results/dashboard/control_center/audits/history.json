@@ -1,0 +1,2460 @@
+{
+  "entries": [
+    {
+      "audit_args": [],
+      "audit_id": "gc_intrinsic_validation",
+      "entry_key": "{\"audit_args\": [], \"audit_id\": \"gc_intrinsic_validation\"}",
+      "group_id": "gc_intrinsic_validation-001",
+      "group_title": "Granule-cell intrinsic validation audit",
+      "report": {
+        "audit_id": "gc_intrinsic_validation",
+        "groups": [
+          {
+            "group_id": "gc_intrinsic_validation",
+            "item_count": 17,
+            "items": [
+              {
+                "acceptable": "All caveats relevant to the generic-granule-cell firing-rate-versus-current context are displayed here.",
+                "acceptable_basis": "The note set is loaded from the granule-cell validation-notes table by matching the synthetic source and protocol context declared in this validation.",
+                "check_id": "gc_generic_fi_caveats",
+                "companion_visuals": [],
+                "criterion": "Generic-granule-cell firing-rate-versus-current outputs should display the current extraction-status and protocol caveats that travel with the reference dataset.",
+                "criterion_definitions": [],
+                "criterion_formulae": [],
+                "criterion_latex": "",
+                "description": "This section keeps the generic-granule-cell firing-rate-versus-current caveats visible, including the fact that the current-rate point table remains unavailable in the extracted bundle.",
+                "detail_level": "detail",
+                "evidence": {
+                  "note_ids": [
+                    "N_GC_GENERIC_FI_POINTS_UNAVAILABLE"
+                  ],
+                  "notes": [
+                    "No validated generic-granule-cell current-rate point set was extracted. GC_fI_curve.csv remains empty until a machine-readable or manually curated point table is added."
+                  ],
+                  "protocol_ids_in_scope": [
+                    "BU2015_GC_intrinsic_current_clamp"
+                  ]
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "WARN",
+                "status_reason": "This item is a warning because relevant validation caveats matched the current rows and should remain visible in the report.",
+                "title": "Notes / protocol caveats"
+              },
+              {
+                "acceptable": "At least one audited granule-cell metric record is produced and the evidence lists the current-step family that was executed.",
+                "acceptable_basis": "This rule is an implementation sanity check rather than a literature tolerance band.",
+                "check_id": "gc_intrinsic_protocol_executed",
+                "companion_visuals": [],
+                "criterion": "Run the maintained granule-cell models through the configured intrinsic current-clamp protocol and produce at least one metric row for every requested model.",
+                "criterion_definitions": [],
+                "criterion_formulae": [],
+                "criterion_latex": "",
+                "description": "This is the top-level execution sanity check for the granule-cell intrinsic validation path.",
+                "detail_level": "detail",
+                "evidence": {
+                  "cell_models": [
+                    "GC1",
+                    "GC2",
+                    "GC3",
+                    "GC4",
+                    "GC5"
+                  ],
+                  "fi_curve_rows": [
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 0.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 50.0,
+                      "firing_rate_Hz": 5.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 100.0,
+                      "firing_rate_Hz": 18.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 150.00000000000003,
+                      "firing_rate_Hz": 29.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 200.0,
+                      "firing_rate_Hz": 41.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 250.0,
+                      "firing_rate_Hz": 53.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC1",
+                      "cell_type": "GC",
+                      "current_pA": 300.00000000000006,
+                      "firing_rate_Hz": 68.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 0.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 50.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 100.0,
+                      "firing_rate_Hz": 27.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 150.00000000000003,
+                      "firing_rate_Hz": 50.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 200.0,
+                      "firing_rate_Hz": 11.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 250.0,
+                      "firing_rate_Hz": 11.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC2",
+                      "cell_type": "GC",
+                      "current_pA": 300.00000000000006,
+                      "firing_rate_Hz": 22.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 0.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 50.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 100.0,
+                      "firing_rate_Hz": 52.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 150.00000000000003,
+                      "firing_rate_Hz": 1.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 200.0,
+                      "firing_rate_Hz": 1.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 250.0,
+                      "firing_rate_Hz": 7.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC3",
+                      "cell_type": "GC",
+                      "current_pA": 300.00000000000006,
+                      "firing_rate_Hz": 53.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 0.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 50.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 100.0,
+                      "firing_rate_Hz": 13.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 150.00000000000003,
+                      "firing_rate_Hz": 21.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 200.0,
+                      "firing_rate_Hz": 31.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 250.0,
+                      "firing_rate_Hz": 45.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC4",
+                      "cell_type": "GC",
+                      "current_pA": 300.00000000000006,
+                      "firing_rate_Hz": 61.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 0.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 50.0,
+                      "firing_rate_Hz": 0.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 100.0,
+                      "firing_rate_Hz": 32.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 150.00000000000003,
+                      "firing_rate_Hz": 62.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 200.0,
+                      "firing_rate_Hz": 91.0,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 250.0,
+                      "firing_rate_Hz": 48.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    },
+                    {
+                      "cell_name": "GC5",
+                      "cell_type": "GC",
+                      "current_pA": 300.00000000000006,
+                      "firing_rate_Hz": 56.5,
+                      "gc_subtype": "generic_or_unspecified",
+                      "rate_definition": "mean_step_rate",
+                      "step_duration_ms": 2000.0
+                    }
+                  ],
+                  "reference_gc_subtypes": [
+                    "generic_or_unspecified"
+                  ],
+                  "step_currents_pA": [
+                    0.0,
+                    50.0,
+                    100.0,
+                    150.00000000000003,
+                    200.0,
+                    250.0,
+                    300.00000000000006
+                  ],
+                  "step_duration_ms": 2000.0,
+                  "target_vm_mV": null
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "Granule-cell intrinsic protocol executed"
+              },
+              {
+                "acceptable": "Every audited granule-cell model has a finite resting membrane potential value.",
+                "acceptable_basis": "A finite resting-potential estimate is required before any direct comparison against the granule-cell reference rows is meaningful.",
+                "check_id": "gc_resting_potential_recorded",
+                "companion_visuals": [],
+                "criterion": "Every audited granule-cell model should produce a finite resting membrane potential before the literature comparisons are interpreted.",
+                "criterion_definitions": [],
+                "criterion_formulae": [],
+                "criterion_latex": "",
+                "description": "This is a prerequisite sanity check that the intrinsic sweep produced usable resting-potential estimates.",
+                "detail_level": "detail",
+                "evidence": {
+                  "cell_count": 5,
+                  "failing_values": {},
+                  "metric_key": "resting_potential_mV"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "Resting membrane potential was recorded for every audited granule-cell model"
+              },
+              {
+                "acceptable": "Every audited model has a zero-current step firing rate of exactly zero hertz within tolerance.",
+                "acceptable_basis": "This is a regime sanity check for the configured current-clamp protocol rather than a direct literature confidence interval.",
+                "check_id": "gc_zero_current_quiescence",
+                "companion_visuals": [],
+                "criterion": "Granule-cell models used for these intrinsic comparisons should not spike during the zero-current depolarizing-step condition.",
+                "criterion_definitions": [
+                  {
+                    "definition": "zero_step_rate_Hz value for each audited row",
+                    "symbol": "x_i",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "expected value",
+                    "symbol": "c",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "tolerance",
+                    "symbol": "\\epsilon",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\forall i,\\ \\vert x_i - 0 \\vert \\leq 1e-09",
+                "description": "This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.",
+                "detail_level": "detail",
+                "evidence": {
+                  "expected": 0.0,
+                  "failing_values": {},
+                  "metric_key": "zero_step_rate_Hz",
+                  "tolerance": 1e-09
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "Granule-cell models remain quiescent during the zero-current step"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 169.779 and 1572.387 MOhm, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for Input Resistance using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_input_resistance_mohm_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean input resistance should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean input resistance",
+                    "symbol": "\\bar{R}_{\\mathrm{in}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{R}_{\\mathrm{in}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 603.2 +/- 363.4 MOhm from Burton & Urban (2015) (n=32)"
+                  },
+                  "accepted_high": 1572.387,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 169.779,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 672.154,
+                  "reference_mean": 603.2,
+                  "reference_unit": "MOhm"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified input resistance stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 9.827 and 61.47 ms, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for Membrane Time Constant using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_membrane_time_constant_ms_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean membrane time constant should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean membrane time constant",
+                    "symbol": "\\bar{\\tau}_m",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{\\tau}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 27.3 +/- 13.2 ms from Burton & Urban (2015) (n=28)"
+                  },
+                  "accepted_high": 61.47,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 9.827,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 72.15,
+                  "reference_mean": 27.3,
+                  "reference_unit": "ms"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "FAIL",
+                "status_reason": "",
+                "title": "generic_or_unspecified membrane time constant stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 27.11 and 73.648 pF, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for Capacitance using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_cell_capacitance_pf_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean capacitance should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean capacitance",
+                    "symbol": "\\bar{C}_m",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{C}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 46.1 +/- 11.7 pF from Burton & Urban (2015) (n=28)"
+                  },
+                  "accepted_high": 73.648,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 27.11,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 92.601,
+                  "reference_mean": 46.1,
+                  "reference_unit": "pF"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "FAIL",
+                "status_reason": "",
+                "title": "generic_or_unspecified capacitance stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between -88.2 and -54.2 mV, using the configured symmetric reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for Membrane Resting Voltage using the configured symmetric reference interval: the uploaded arithmetic mean plus or minus two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_resting_potential_mv_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean membrane resting voltage should remain within two standard deviations of the uploaded reference value.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean membrane resting voltage",
+                    "symbol": "\\bar{V}_{\\mathrm{rest}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [
+                  "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{rest}} \\leq \\mu + k\\sigma"
+                ],
+                "criterion_latex": "\\vert \\bar{V}_{\\mathrm{rest}} - \\mu \\vert \\leq 2\\sigma",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Resting Voltage rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: -71.2 +/- 8.5 mV from Burton & Urban (2015) (n=40)"
+                  },
+                  "accepted_high": -54.2,
+                  "accepted_interval_mode": "symmetric_sd",
+                  "accepted_interval_standard": "symmetric reference interval",
+                  "accepted_low": -88.2,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": -84.709,
+                  "reference_mean": -71.2,
+                  "reference_unit": "mV"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified membrane resting voltage stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between -44.5 and -13.3 mV, using the configured symmetric reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for AP Threshold using the configured symmetric reference interval: the uploaded arithmetic mean plus or minus two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_ap_onset_mv_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean ap threshold should remain within two standard deviations of the uploaded reference value.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean ap threshold",
+                    "symbol": "\\bar{V}_{\\mathrm{th}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [
+                  "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{th}} \\leq \\mu + k\\sigma"
+                ],
+                "criterion_latex": "\\vert \\bar{V}_{\\mathrm{th}} - \\mu \\vert \\leq 2\\sigma",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Threshold rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: -28.9 +/- 7.8 mV from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": -13.3,
+                  "accepted_interval_mode": "symmetric_sd",
+                  "accepted_interval_standard": "symmetric reference interval",
+                  "accepted_low": -44.5,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": -39.818,
+                  "reference_mean": -28.9,
+                  "reference_unit": "mV"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified ap threshold stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 35.097 and 82.901 mV, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for AP Amplitude using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_amplitude_mv_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean ap amplitude should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean ap amplitude",
+                    "symbol": "\\bar{A}_{\\mathrm{AP}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{A}_{\\mathrm{AP}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 55.2 +/- 12.0 mV from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": 82.901,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 35.097,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 61.771,
+                  "reference_mean": 55.2,
+                  "reference_unit": "mV"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified ap amplitude stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 0.674 and 1.432 ms, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for AP Half-Width using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_fwhm_ms_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean ap half-width should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean ap half-width",
+                    "symbol": "\\overline{\\mathrm{FWHM}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\overline{\\mathrm{FWHM}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 1.0 +/- 0.19 ms from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": 1.432,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 0.674,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 1.22,
+                  "reference_mean": 1.0,
+                  "reference_unit": "ms"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified ap half-width stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 74.737 and 328.508 mV/ms, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for AP Rising Slope using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_rise_slope_mv_per_ms_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean ap rising slope should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean ap rising slope",
+                    "symbol": "\\bar{s}_{\\mathrm{rise}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{s}_{\\mathrm{rise}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 167.8 +/- 64.3 mV/ms from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": 328.508,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 74.737,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 203.521,
+                  "reference_mean": 167.8,
+                  "reference_unit": "mV/ms"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified ap rising slope stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between -88.1 and -32.5 mV/ms, using the configured symmetric reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for AP Falling Slope using the configured symmetric reference interval: the uploaded arithmetic mean plus or minus two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_fall_slope_mv_per_ms_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean ap falling slope should remain within two standard deviations of the uploaded reference value.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean ap falling slope",
+                    "symbol": "\\bar{s}_{\\mathrm{fall}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [
+                  "\\mu - k\\sigma \\leq \\bar{s}_{\\mathrm{fall}} \\leq \\mu + k\\sigma"
+                ],
+                "criterion_latex": "\\vert \\bar{s}_{\\mathrm{fall}} - \\mu \\vert \\leq 2\\sigma",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Falling Slope rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: -60.3 +/- 13.9 mV/ms from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": -32.5,
+                  "accepted_interval_mode": "symmetric_sd",
+                  "accepted_interval_standard": "symmetric reference interval",
+                  "accepted_low": -88.1,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": -42.089,
+                  "reference_mean": -60.3,
+                  "reference_unit": "mV/ms"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "PASS",
+                "status_reason": "",
+                "title": "generic_or_unspecified ap falling slope stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 11.125 and 93.268 pA, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for Rheobase Current using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_rheobase_pa_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean rheobase current should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean rheobase current",
+                    "symbol": "\\bar{I}_{\\mathrm{rh}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{I}_{\\mathrm{rh}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 37.1 +/- 21.2 pA from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": 93.268,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 11.125,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 90.0,
+                  "reference_mean": 37.1,
+                  "reference_unit": "pA"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "WARN",
+                "status_reason": "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review.",
+                "title": "generic_or_unspecified rheobase current stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 64.492 and 1959.058 ms, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for First Spike Latency using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_first_spike_latency_ms_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean first spike latency should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean first spike latency",
+                    "symbol": "\\bar{t}_{\\mathrm{lat}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{t}_{\\mathrm{lat}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 511.6 +/- 529.6 ms from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": 1959.058,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 64.492,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 37.77,
+                  "reference_mean": 511.6,
+                  "reference_unit": "ms"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "FAIL",
+                "status_reason": "",
+                "title": "generic_or_unspecified first spike latency stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 382.607 and 1684.958 Hz/nA, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for FI Curve Slope using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_fi_slope_hz_per_na_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean fi curve slope should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean fi curve slope",
+                    "symbol": "\\bar{g}_{\\mathrm{FI}}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{g}_{\\mathrm{FI}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 860.0 +/- 330.0 Hz/nA from Burton & Urban (2015) (n=30)"
+                  },
+                  "accepted_high": 1684.958,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 382.607,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 570.0,
+                  "reference_mean": 860.0,
+                  "reference_unit": "Hz/nA"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "WARN",
+                "status_reason": "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review.",
+                "title": "generic_or_unspecified fi curve slope stays within the uploaded reference band"
+              },
+              {
+                "acceptable": "The observed generic_or_unspecified mean must lie between 22.477 and 107.955 Hz, using the configured lognormal reference interval.",
+                "acceptable_basis": "Derived from the uploaded literature row for Peak Instantaneous Rate using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+                "check_id": "generic_or_unspecified_peak_instantaneous_rate_hz_within_uploaded_reference_band",
+                "companion_visuals": [],
+                "criterion": "The generic_or_unspecified mean peak instantaneous rate should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+                "criterion_definitions": [
+                  {
+                    "definition": "generic_or_unspecified mean peak instantaneous rate",
+                    "symbol": "\\bar{f}_{\\max}",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference mean",
+                    "symbol": "\\mu",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "uploaded reference standard deviation",
+                    "symbol": "\\sigma",
+                    "unit": ""
+                  },
+                  {
+                    "definition": "configured sigma multiplier",
+                    "symbol": "k",
+                    "unit": ""
+                  }
+                ],
+                "criterion_formulae": [],
+                "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{f}_{\\max}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+                "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
+                "detail_level": "detail",
+                "evidence": {
+                  "__reference_annotations__": {
+                    "generic_or_unspecified_mean": "reference: 53.2 +/- 21.7 Hz from Burton & Urban (2015) (n=31)"
+                  },
+                  "accepted_high": 107.955,
+                  "accepted_interval_mode": "lognormal_sd",
+                  "accepted_interval_standard": "lognormal reference interval",
+                  "accepted_low": 22.477,
+                  "accepted_lower_bound": 0.0,
+                  "accepted_sigma_multiplier": 2.0,
+                  "generic_or_unspecified_mean": 94.139,
+                  "reference_mean": 53.2,
+                  "reference_unit": "Hz"
+                },
+                "group_id": "",
+                "group_title": "",
+                "human_review_note": "",
+                "human_review_reviewer": "",
+                "human_review_status": "pending_review",
+                "note": "",
+                "series_visuals": [],
+                "status": "WARN",
+                "status_reason": "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review.",
+                "title": "generic_or_unspecified peak instantaneous rate stays within the uploaded reference band"
+              }
+            ],
+            "summary": {
+              "FAIL": 3,
+              "PASS": 10,
+              "WARN": 4
+            },
+            "title": "Granule cell intrinsic validation",
+            "worst_status": "FAIL"
+          }
+        ],
+        "items": [
+          {
+            "acceptable": "All caveats relevant to the generic-granule-cell firing-rate-versus-current context are displayed here.",
+            "acceptable_basis": "The note set is loaded from the granule-cell validation-notes table by matching the synthetic source and protocol context declared in this validation.",
+            "check_id": "gc_generic_fi_caveats",
+            "companion_visuals": [],
+            "criterion": "Generic-granule-cell firing-rate-versus-current outputs should display the current extraction-status and protocol caveats that travel with the reference dataset.",
+            "criterion_definitions": [],
+            "criterion_formulae": [],
+            "criterion_latex": "",
+            "description": "This section keeps the generic-granule-cell firing-rate-versus-current caveats visible, including the fact that the current-rate point table remains unavailable in the extracted bundle.",
+            "detail_level": "detail",
+            "evidence": {
+              "note_ids": [
+                "N_GC_GENERIC_FI_POINTS_UNAVAILABLE"
+              ],
+              "notes": [
+                "No validated generic-granule-cell current-rate point set was extracted. GC_fI_curve.csv remains empty until a machine-readable or manually curated point table is added."
+              ],
+              "protocol_ids_in_scope": [
+                "BU2015_GC_intrinsic_current_clamp"
+              ]
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "WARN",
+            "status_reason": "This item is a warning because relevant validation caveats matched the current rows and should remain visible in the report.",
+            "title": "Notes / protocol caveats"
+          },
+          {
+            "acceptable": "At least one audited granule-cell metric record is produced and the evidence lists the current-step family that was executed.",
+            "acceptable_basis": "This rule is an implementation sanity check rather than a literature tolerance band.",
+            "check_id": "gc_intrinsic_protocol_executed",
+            "companion_visuals": [],
+            "criterion": "Run the maintained granule-cell models through the configured intrinsic current-clamp protocol and produce at least one metric row for every requested model.",
+            "criterion_definitions": [],
+            "criterion_formulae": [],
+            "criterion_latex": "",
+            "description": "This is the top-level execution sanity check for the granule-cell intrinsic validation path.",
+            "detail_level": "detail",
+            "evidence": {
+              "cell_models": [
+                "GC1",
+                "GC2",
+                "GC3",
+                "GC4",
+                "GC5"
+              ],
+              "fi_curve_rows": [
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 0.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 50.0,
+                  "firing_rate_Hz": 5.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 100.0,
+                  "firing_rate_Hz": 18.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 150.00000000000003,
+                  "firing_rate_Hz": 29.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 200.0,
+                  "firing_rate_Hz": 41.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 250.0,
+                  "firing_rate_Hz": 53.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC1",
+                  "cell_type": "GC",
+                  "current_pA": 300.00000000000006,
+                  "firing_rate_Hz": 68.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 0.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 50.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 100.0,
+                  "firing_rate_Hz": 27.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 150.00000000000003,
+                  "firing_rate_Hz": 50.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 200.0,
+                  "firing_rate_Hz": 11.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 250.0,
+                  "firing_rate_Hz": 11.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC2",
+                  "cell_type": "GC",
+                  "current_pA": 300.00000000000006,
+                  "firing_rate_Hz": 22.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 0.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 50.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 100.0,
+                  "firing_rate_Hz": 52.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 150.00000000000003,
+                  "firing_rate_Hz": 1.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 200.0,
+                  "firing_rate_Hz": 1.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 250.0,
+                  "firing_rate_Hz": 7.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC3",
+                  "cell_type": "GC",
+                  "current_pA": 300.00000000000006,
+                  "firing_rate_Hz": 53.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 0.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 50.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 100.0,
+                  "firing_rate_Hz": 13.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 150.00000000000003,
+                  "firing_rate_Hz": 21.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 200.0,
+                  "firing_rate_Hz": 31.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 250.0,
+                  "firing_rate_Hz": 45.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC4",
+                  "cell_type": "GC",
+                  "current_pA": 300.00000000000006,
+                  "firing_rate_Hz": 61.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 0.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 50.0,
+                  "firing_rate_Hz": 0.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 100.0,
+                  "firing_rate_Hz": 32.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 150.00000000000003,
+                  "firing_rate_Hz": 62.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 200.0,
+                  "firing_rate_Hz": 91.0,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 250.0,
+                  "firing_rate_Hz": 48.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                },
+                {
+                  "cell_name": "GC5",
+                  "cell_type": "GC",
+                  "current_pA": 300.00000000000006,
+                  "firing_rate_Hz": 56.5,
+                  "gc_subtype": "generic_or_unspecified",
+                  "rate_definition": "mean_step_rate",
+                  "step_duration_ms": 2000.0
+                }
+              ],
+              "reference_gc_subtypes": [
+                "generic_or_unspecified"
+              ],
+              "step_currents_pA": [
+                0.0,
+                50.0,
+                100.0,
+                150.00000000000003,
+                200.0,
+                250.0,
+                300.00000000000006
+              ],
+              "step_duration_ms": 2000.0,
+              "target_vm_mV": null
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "Granule-cell intrinsic protocol executed"
+          },
+          {
+            "acceptable": "Every audited granule-cell model has a finite resting membrane potential value.",
+            "acceptable_basis": "A finite resting-potential estimate is required before any direct comparison against the granule-cell reference rows is meaningful.",
+            "check_id": "gc_resting_potential_recorded",
+            "companion_visuals": [],
+            "criterion": "Every audited granule-cell model should produce a finite resting membrane potential before the literature comparisons are interpreted.",
+            "criterion_definitions": [],
+            "criterion_formulae": [],
+            "criterion_latex": "",
+            "description": "This is a prerequisite sanity check that the intrinsic sweep produced usable resting-potential estimates.",
+            "detail_level": "detail",
+            "evidence": {
+              "cell_count": 5,
+              "failing_values": {},
+              "metric_key": "resting_potential_mV"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "Resting membrane potential was recorded for every audited granule-cell model"
+          },
+          {
+            "acceptable": "Every audited model has a zero-current step firing rate of exactly zero hertz within tolerance.",
+            "acceptable_basis": "This is a regime sanity check for the configured current-clamp protocol rather than a direct literature confidence interval.",
+            "check_id": "gc_zero_current_quiescence",
+            "companion_visuals": [],
+            "criterion": "Granule-cell models used for these intrinsic comparisons should not spike during the zero-current depolarizing-step condition.",
+            "criterion_definitions": [
+              {
+                "definition": "zero_step_rate_Hz value for each audited row",
+                "symbol": "x_i",
+                "unit": ""
+              },
+              {
+                "definition": "expected value",
+                "symbol": "c",
+                "unit": ""
+              },
+              {
+                "definition": "tolerance",
+                "symbol": "\\epsilon",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\forall i,\\ \\vert x_i - 0 \\vert \\leq 1e-09",
+            "description": "This keeps the intrinsic validation in a positive-rheobase regime rather than a spontaneously active zero-current regime.",
+            "detail_level": "detail",
+            "evidence": {
+              "expected": 0.0,
+              "failing_values": {},
+              "metric_key": "zero_step_rate_Hz",
+              "tolerance": 1e-09
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "Granule-cell models remain quiescent during the zero-current step"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 169.779 and 1572.387 MOhm, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for Input Resistance using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_input_resistance_mohm_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean input resistance should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean input resistance",
+                "symbol": "\\bar{R}_{\\mathrm{in}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{R}_{\\mathrm{in}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Input Resistance rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 603.2 +/- 363.4 MOhm from Burton & Urban (2015) (n=32)"
+              },
+              "accepted_high": 1572.387,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 169.779,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 672.154,
+              "reference_mean": 603.2,
+              "reference_unit": "MOhm"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified input resistance stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 9.827 and 61.47 ms, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for Membrane Time Constant using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_membrane_time_constant_ms_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean membrane time constant should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean membrane time constant",
+                "symbol": "\\bar{\\tau}_m",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{\\tau}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Time Constant rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 27.3 +/- 13.2 ms from Burton & Urban (2015) (n=28)"
+              },
+              "accepted_high": 61.47,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 9.827,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 72.15,
+              "reference_mean": 27.3,
+              "reference_unit": "ms"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "FAIL",
+            "status_reason": "",
+            "title": "generic_or_unspecified membrane time constant stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 27.11 and 73.648 pF, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for Capacitance using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_cell_capacitance_pf_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean capacitance should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean capacitance",
+                "symbol": "\\bar{C}_m",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{C}_m\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Capacitance rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 46.1 +/- 11.7 pF from Burton & Urban (2015) (n=28)"
+              },
+              "accepted_high": 73.648,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 27.11,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 92.601,
+              "reference_mean": 46.1,
+              "reference_unit": "pF"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "FAIL",
+            "status_reason": "",
+            "title": "generic_or_unspecified capacitance stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between -88.2 and -54.2 mV, using the configured symmetric reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for Membrane Resting Voltage using the configured symmetric reference interval: the uploaded arithmetic mean plus or minus two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_resting_potential_mv_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean membrane resting voltage should remain within two standard deviations of the uploaded reference value.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean membrane resting voltage",
+                "symbol": "\\bar{V}_{\\mathrm{rest}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [
+              "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{rest}} \\leq \\mu + k\\sigma"
+            ],
+            "criterion_latex": "\\vert \\bar{V}_{\\mathrm{rest}} - \\mu \\vert \\leq 2\\sigma",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Membrane Resting Voltage rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: -71.2 +/- 8.5 mV from Burton & Urban (2015) (n=40)"
+              },
+              "accepted_high": -54.2,
+              "accepted_interval_mode": "symmetric_sd",
+              "accepted_interval_standard": "symmetric reference interval",
+              "accepted_low": -88.2,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": -84.709,
+              "reference_mean": -71.2,
+              "reference_unit": "mV"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified membrane resting voltage stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between -44.5 and -13.3 mV, using the configured symmetric reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for AP Threshold using the configured symmetric reference interval: the uploaded arithmetic mean plus or minus two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_ap_onset_mv_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean ap threshold should remain within two standard deviations of the uploaded reference value.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean ap threshold",
+                "symbol": "\\bar{V}_{\\mathrm{th}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [
+              "\\mu - k\\sigma \\leq \\bar{V}_{\\mathrm{th}} \\leq \\mu + k\\sigma"
+            ],
+            "criterion_latex": "\\vert \\bar{V}_{\\mathrm{th}} - \\mu \\vert \\leq 2\\sigma",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Threshold rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: -28.9 +/- 7.8 mV from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": -13.3,
+              "accepted_interval_mode": "symmetric_sd",
+              "accepted_interval_standard": "symmetric reference interval",
+              "accepted_low": -44.5,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": -39.818,
+              "reference_mean": -28.9,
+              "reference_unit": "mV"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified ap threshold stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 35.097 and 82.901 mV, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for AP Amplitude using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_amplitude_mv_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean ap amplitude should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean ap amplitude",
+                "symbol": "\\bar{A}_{\\mathrm{AP}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{A}_{\\mathrm{AP}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Amplitude rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 55.2 +/- 12.0 mV from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": 82.901,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 35.097,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 61.771,
+              "reference_mean": 55.2,
+              "reference_unit": "mV"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified ap amplitude stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 0.674 and 1.432 ms, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for AP Half-Width using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_fwhm_ms_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean ap half-width should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean ap half-width",
+                "symbol": "\\overline{\\mathrm{FWHM}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\overline{\\mathrm{FWHM}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Half-Width rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 1.0 +/- 0.19 ms from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": 1.432,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 0.674,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 1.22,
+              "reference_mean": 1.0,
+              "reference_unit": "ms"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified ap half-width stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 74.737 and 328.508 mV/ms, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for AP Rising Slope using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_rise_slope_mv_per_ms_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean ap rising slope should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean ap rising slope",
+                "symbol": "\\bar{s}_{\\mathrm{rise}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{s}_{\\mathrm{rise}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Rising Slope rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 167.8 +/- 64.3 mV/ms from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": 328.508,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 74.737,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 203.521,
+              "reference_mean": 167.8,
+              "reference_unit": "mV/ms"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified ap rising slope stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between -88.1 and -32.5 mV/ms, using the configured symmetric reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for AP Falling Slope using the configured symmetric reference interval: the uploaded arithmetic mean plus or minus two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_fall_slope_mv_per_ms_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean ap falling slope should remain within two standard deviations of the uploaded reference value.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean ap falling slope",
+                "symbol": "\\bar{s}_{\\mathrm{fall}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [
+              "\\mu - k\\sigma \\leq \\bar{s}_{\\mathrm{fall}} \\leq \\mu + k\\sigma"
+            ],
+            "criterion_latex": "\\vert \\bar{s}_{\\mathrm{fall}} - \\mu \\vert \\leq 2\\sigma",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for AP Falling Slope rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: -60.3 +/- 13.9 mV/ms from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": -32.5,
+              "accepted_interval_mode": "symmetric_sd",
+              "accepted_interval_standard": "symmetric reference interval",
+              "accepted_low": -88.1,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": -42.089,
+              "reference_mean": -60.3,
+              "reference_unit": "mV/ms"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "PASS",
+            "status_reason": "",
+            "title": "generic_or_unspecified ap falling slope stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 11.125 and 93.268 pA, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for Rheobase Current using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_rheobase_pa_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean rheobase current should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean rheobase current",
+                "symbol": "\\bar{I}_{\\mathrm{rh}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{I}_{\\mathrm{rh}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Rheobase Current rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 37.1 +/- 21.2 pA from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": 93.268,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 11.125,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 90.0,
+              "reference_mean": 37.1,
+              "reference_unit": "pA"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "WARN",
+            "status_reason": "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review.",
+            "title": "generic_or_unspecified rheobase current stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 64.492 and 1959.058 ms, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for First Spike Latency using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_first_spike_latency_ms_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean first spike latency should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean first spike latency",
+                "symbol": "\\bar{t}_{\\mathrm{lat}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{t}_{\\mathrm{lat}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for First Spike Latency rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 511.6 +/- 529.6 ms from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": 1959.058,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 64.492,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 37.77,
+              "reference_mean": 511.6,
+              "reference_unit": "ms"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "FAIL",
+            "status_reason": "",
+            "title": "generic_or_unspecified first spike latency stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 382.607 and 1684.958 Hz/nA, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for FI Curve Slope using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_fi_slope_hz_per_na_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean fi curve slope should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean fi curve slope",
+                "symbol": "\\bar{g}_{\\mathrm{FI}}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{g}_{\\mathrm{FI}}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for FI Curve Slope rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 860.0 +/- 330.0 Hz/nA from Burton & Urban (2015) (n=30)"
+              },
+              "accepted_high": 1684.958,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 382.607,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 570.0,
+              "reference_mean": 860.0,
+              "reference_unit": "Hz/nA"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "WARN",
+            "status_reason": "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review.",
+            "title": "generic_or_unspecified fi curve slope stays within the uploaded reference band"
+          },
+          {
+            "acceptable": "The observed generic_or_unspecified mean must lie between 22.477 and 107.955 Hz, using the configured lognormal reference interval.",
+            "acceptable_basis": "Derived from the uploaded literature row for Peak Instantaneous Rate using the configured lognormal reference interval: a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation over two standard deviations. The sigma multiplier comes from 'reference_sigma_multiplier' when that standard needs one.",
+            "check_id": "generic_or_unspecified_peak_instantaneous_rate_hz_within_uploaded_reference_band",
+            "companion_visuals": [],
+            "criterion": "The generic_or_unspecified mean peak instantaneous rate should remain within two standard deviations of the uploaded reference value under a lognormal reconstruction.",
+            "criterion_definitions": [
+              {
+                "definition": "generic_or_unspecified mean peak instantaneous rate",
+                "symbol": "\\bar{f}_{\\max}",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference mean",
+                "symbol": "\\mu",
+                "unit": ""
+              },
+              {
+                "definition": "uploaded reference standard deviation",
+                "symbol": "\\sigma",
+                "unit": ""
+              },
+              {
+                "definition": "configured sigma multiplier",
+                "symbol": "k",
+                "unit": ""
+              }
+            ],
+            "criterion_formulae": [],
+            "criterion_latex": "\\vert \\ln\\!\\left(\\frac{\\bar{f}_{\\max}\\sqrt{\\mu^2 + \\sigma^2}}{\\mu^2}\\right) \\vert \\leq 2\\sqrt{\\ln(1 + (\\sigma / \\mu)^2)}",
+            "description": "This is the direct single-cell-type reference check derived from uploaded literature rows for Peak Instantaneous Rate rather than from a cross-group ordering heuristic.",
+            "detail_level": "detail",
+            "evidence": {
+              "__reference_annotations__": {
+                "generic_or_unspecified_mean": "reference: 53.2 +/- 21.7 Hz from Burton & Urban (2015) (n=31)"
+              },
+              "accepted_high": 107.955,
+              "accepted_interval_mode": "lognormal_sd",
+              "accepted_interval_standard": "lognormal reference interval",
+              "accepted_low": 22.477,
+              "accepted_lower_bound": 0.0,
+              "accepted_sigma_multiplier": 2.0,
+              "generic_or_unspecified_mean": 94.139,
+              "reference_mean": 53.2,
+              "reference_unit": "Hz"
+            },
+            "group_id": "",
+            "group_title": "",
+            "human_review_note": "",
+            "human_review_reviewer": "",
+            "human_review_status": "pending_review",
+            "note": "",
+            "series_visuals": [],
+            "status": "WARN",
+            "status_reason": "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review.",
+            "title": "generic_or_unspecified peak instantaneous rate stays within the uploaded reference band"
+          }
+        ],
+        "summary": {
+          "FAIL": 3,
+          "PASS": 10,
+          "WARN": 4
+        },
+        "title": "Granule cell intrinsic validation",
+        "worst_status": "FAIL"
+      },
+      "updated_at": "2026-06-03T14:04:39"
+    }
+  ],
+  "generated_at": "2026-06-03T14:04:39"
+}

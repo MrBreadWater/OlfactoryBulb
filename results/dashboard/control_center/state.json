@@ -1,0 +1,166 @@
+{
+  "audit": {
+    "audit_args": [],
+    "audit_id": "gc_intrinsic_validation",
+    "badge": "FAIL",
+    "badge_tone": "fail",
+    "generated_at": "2026-06-03T14:04:41",
+    "message": "Granule-cell intrinsic validation audit: fail 3, warn 4, pass 10",
+    "progress_active": false,
+    "progress_current": 0,
+    "progress_indeterminate": false,
+    "progress_label": "",
+    "progress_total": 0,
+    "progress_value_text": "",
+    "revision": "1780509881007968047",
+    "status": "ready",
+    "summary": {
+      "FAIL": 3,
+      "PASS": 10,
+      "WARN": 4
+    },
+    "worst_status": "FAIL"
+  },
+  "available_audits": [
+    {
+      "audit_id": "default",
+      "default_args": [
+        "--profile",
+        "maintained"
+      ],
+      "description": "Run the maintained repo-health profile. If no explicit args are provided, this resolves to repo_health --profile maintained.",
+      "title": "Default audit profile"
+    },
+    {
+      "audit_id": "all",
+      "default_args": [],
+      "description": "Run a new sweep across every registered audit.",
+      "title": "All registered audits"
+    },
+    {
+      "audit_id": "env_install",
+      "default_args": [],
+      "description": "Audit whether the active machine environment can run the maintained OBGPU workflow.",
+      "title": "Environment/install audit"
+    },
+    {
+      "audit_id": "repo_health",
+      "default_args": [
+        "--profile",
+        "maintained"
+      ],
+      "description": "Run the curated maintained-surface environment, wrapper, contract, and reference-data health checks.",
+      "title": "Repo health audit"
+    },
+    {
+      "audit_id": "reference_dataset_status",
+      "default_args": [],
+      "description": "Audit that one declarative reference dataset's generated outputs exist and load cleanly.",
+      "title": "Reference dataset status audit"
+    },
+    {
+      "audit_id": "reference_dataset_contracts",
+      "default_args": [],
+      "description": "Audit that one declarative reference dataset satisfies maintained schema, provenance, notes, and f-I tagging contracts.",
+      "title": "Reference dataset contract audit"
+    },
+    {
+      "audit_id": "test_suite_status",
+      "default_args": [],
+      "description": "Run grouped Python test suites through the maintained audit surface instead of exposing every low-level test as its own audit.",
+      "title": "Structured test-suite audit"
+    },
+    {
+      "audit_id": "maintained_docs_integrity",
+      "default_args": [],
+      "description": "Audit that maintained docs avoid removed entrypoints and that the docs portal points at the current markdown docs.",
+      "title": "Maintained docs integrity audit"
+    },
+    {
+      "audit_id": "scratch_boundary",
+      "default_args": [],
+      "description": "Audit that local scratch areas, source-data corpora, and generated artifact boundaries remain explicit and protected.",
+      "title": "Scratch boundary audit"
+    },
+    {
+      "audit_id": "burton_urban_fi",
+      "default_args": [],
+      "description": "Audit MC/TC f-I, AP-shape, and spike-train metrics against Burton & Urban 2014.",
+      "title": "Burton & Urban f-I validation audit"
+    },
+    {
+      "audit_id": "epli_correctness",
+      "default_args": [],
+      "description": "Audit optional EPLI morphology, slice defaults, and network-readiness constraints.",
+      "title": "EPLI correctness audit"
+    },
+    {
+      "audit_id": "gc_intrinsic_validation",
+      "default_args": [],
+      "description": "Audit maintained granule-cell models against generic and subtype-aware literature references.",
+      "title": "Granule-cell intrinsic validation audit"
+    },
+    {
+      "audit_id": "epl_fsi_intrinsic_validation",
+      "default_args": [],
+      "description": "Audit the maintained synthetic EPL fast-spiking interneuron surrogate against the Burton, Malyshko, and Urban 2024 reference bundle.",
+      "title": "External plexiform layer fast-spiking interneuron intrinsic validation audit"
+    },
+    {
+      "audit_id": "human_review_status",
+      "default_args": [],
+      "description": "Audit that declarative reference-validation items resolve to explicit review states for validation-design choices such as distribution assumptions, pooling rules, and protocol matching.",
+      "title": "Validation design review status audit"
+    },
+    {
+      "audit_id": "hfo_feature_contracts",
+      "default_args": [],
+      "description": "Audit that HFO optimizer parameters, notebook controls, packet artifacts, and dashboard expectations share one centralized contract.",
+      "title": "HFO feature/visual contract audit"
+    }
+  ],
+  "campaign_label": "hfo_epli_big_singlewrapper_120cpu_20260527_082225",
+  "docs": {
+    "badge": "ready",
+    "badge_tone": "info",
+    "message": "Rendered maintained docs portal.",
+    "status": "ready"
+  },
+  "optimization": {
+    "badge": "77 packets",
+    "badge_tone": "info",
+    "generated_at": "2026-06-03T14:04:29.061054",
+    "message": "77 packets from 12663 candidate rows",
+    "packet_count": 77,
+    "revision": "1780509869061051908",
+    "status": "ready"
+  },
+  "progress": {
+    "active": false,
+    "fraction": 0.0,
+    "indeterminate": true,
+    "label": "Granule-cell intrinsic validation audit: fail 3, warn 4, pass 10",
+    "value_text": ""
+  },
+  "tabs": {
+    "audits": {
+      "badge": "FAIL",
+      "badge_tone": "fail",
+      "revision": "1780509881007968047",
+      "src": "/audits/index.html"
+    },
+    "docs": {
+      "badge": "ready",
+      "badge_tone": "info",
+      "revision": "maintained-docs",
+      "src": "/docs/index.html"
+    },
+    "optimization": {
+      "badge": "77 packets",
+      "badge_tone": "info",
+      "revision": "1780509869061051908",
+      "src": "/optimization/index.html"
+    }
+  },
+  "updated_at": "2026-06-03T14:07:16"
+}

@@ -1504,27 +1504,7 @@ def _criterion_formulae_html(formulae: list[str]) -> str:
 
 
 def _criterion_body_html(item: AuditItem) -> str:
-    if item.criterion_latex:
-        formulae_html = _criterion_formulae_html(item.criterion_formulae)
-        definitions_html = ""
-        if item.criterion_definitions:
-            definitions_html = (
-                "<div class='criterion-definitions'>"
-                + "".join(
-                    _criterion_definition_html(definition)
-                    for definition in item.criterion_definitions
-                )
-                + "</div>"
-            )
-        return (
-            "<div class='item-block criterion-block'>"
-            "<h4>Criterion</h4>"
-            f"<div class='criterion-math' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
-            f"{formulae_html}"
-            f"{definitions_html}"
-            "</div>"
-        )
-    criterion_text = _esc(_expand_terms(item.criterion, sentence_case=True))
+    formulae_html = _criterion_formulae_html(item.criterion_formulae)
     definitions_html = ""
     if item.criterion_definitions:
         definitions_html = (
@@ -1535,7 +1515,24 @@ def _criterion_body_html(item: AuditItem) -> str:
             )
             + "</div>"
         )
-    return f"<div class='item-block'><h4>Criterion</h4><p>{criterion_text}</p>{definitions_html}</div>"
+    if item.criterion_latex:
+        return (
+            "<div class='item-block criterion-block'>"
+            "<h4>Criterion</h4>"
+            f"<div class='criterion-math' role='img' aria-label='{_esc(item.criterion_latex)}'>{_render_math_markup(item.criterion_latex, display=True)}</div>"
+            f"{formulae_html}"
+            f"{definitions_html}"
+            "</div>"
+        )
+    criterion_text = _esc(_expand_terms(item.criterion, sentence_case=True))
+    return (
+        "<div class='item-block criterion-block'>"
+        "<h4>Criterion</h4>"
+        f"<p>{criterion_text}</p>"
+        f"{formulae_html}"
+        f"{definitions_html}"
+        "</div>"
+    )
 
 
 def _item_search_blob(item: AuditItem) -> str:

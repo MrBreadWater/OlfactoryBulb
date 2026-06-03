@@ -1,0 +1,1260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OlfactoryBulb Control Center</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f3f6fb;
+      --ink: #162132;
+      --muted: #5f6f86;
+      --line: #d7dfeb;
+      --panel: #ffffff;
+      --panel-alt: #f8fbff;
+      --blue: #2b5fb8;
+      --blue-soft: #e6edff;
+      --blue-chip-active: #f4f9ff;
+      --blue-chip-active-border: #8aa8d0;
+      --blue-chip-active-ink: #173a7a;
+      --blue-running-chip: #edf2ff;
+      --blue-running-border: #9cb4ef;
+      --red: #c23d3d;
+      --amber: #b87414;
+      --green: #177245;
+      --surface-shadow: 0 14px 32px rgba(15, 23, 42, 0.08);
+      --ui-font-stack: Verdana, sans-serif;
+    }
+    * { box-sizing: border-box; }
+      body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 var(--ui-font-stack);
+    }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      background: rgba(243, 246, 251, 0.96);
+      border-bottom: 1px solid var(--line);
+      padding: 10px 20px 10px;
+      backdrop-filter: blur(8px);
+    }
+    .shell-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(640px, 1.15fr);
+      grid-template-areas:
+        "heading status";
+      gap: 12px 16px;
+      align-items: start;
+    }
+    .shell-heading {
+      grid-area: heading;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+    h1 { margin: 0 0 4px; font-size: 22px; font-weight: 700; letter-spacing: 0; }
+    .subtle { color: var(--muted); font-size: 12px; }
+    .shell-status-strip {
+      grid-area: status;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+      gap: 12px;
+      min-width: 0;
+      align-self: stretch;
+    }
+    .shell-status-chip {
+      appearance: none;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #ffffff;
+      color: inherit;
+      box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+      min-width: 0;
+      overflow: hidden;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+      line-height: 1.2;
+    }
+    .shell-status-chip[aria-selected="true"] {
+      border-color: var(--blue-chip-active-border);
+      background: linear-gradient(180deg, #ffffff 0%, var(--blue-chip-active) 100%);
+      color: var(--blue-chip-active-ink);
+      box-shadow: inset 4px 0 0 rgba(47, 133, 211, 0.85), 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+    .shell-status-chip:focus-visible,
+    .toolbar-button:focus-visible,
+    .form-field input:focus-visible,
+    .form-field select:focus-visible {
+      outline: 2px solid rgba(43, 95, 184, 0.45);
+      outline-offset: 2px;
+    }
+    .shell-status-chip[aria-selected="false"] {
+      background: #ffffff;
+    }
+    .shell-status-chip span {
+      color: var(--ink);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      line-height: 1.2;
+    }
+    .shell-status-chip strong {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      font-size: 12px;
+      line-height: 1.3;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid transparent;
+      font-style: normal;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+    }
+    .shell-status-chip small {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .shell-status-chip[aria-selected="true"][data-tab-tone="running"] {
+      animation: shell-status-aura 1.8s ease-in-out infinite;
+    }
+    @keyframes shell-status-aura {
+      0% {
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05), 0 0 0 0 rgba(37, 99, 235, 0.0);
+      }
+      40% {
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05), 0 0 0 5px rgba(37, 99, 235, 0.14);
+      }
+      100% {
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05), 0 0 0 10px rgba(37, 99, 235, 0.0);
+      }
+    }
+    .shell-progress {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .shell-progress[hidden] {
+      display: none !important;
+    }
+    .shell-progress-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .shell-progress-label {
+      font-weight: 700;
+      color: var(--ink);
+    }
+    .shell-progress-track {
+      position: relative;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: #dbe5f4;
+    }
+    .shell-progress-bar {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #2563eb, #60a5fa);
+      transition: width 180ms ease;
+    }
+    .shell-progress-bar.indeterminate {
+      position: absolute;
+      width: 32%;
+      animation: shell-progress-indeterminate 1.15s ease-in-out infinite;
+    }
+    @keyframes shell-progress-indeterminate {
+      0% { left: -30%; }
+      100% { left: 100%; }
+    }
+    main {
+      width: 100%;
+      max-width: max(95%, 1700px);
+      margin: 0 auto;
+      padding: 24px clamp(20px, 2vw, 24px) 24px;
+    }
+    .tab-shell {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .shell-toolbar {
+      display: grid;
+      gap: 16px;
+    }
+    .control-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .toolbar-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      box-shadow: var(--surface-shadow);
+      padding: 20px;
+    }
+    .audit-runner-card {
+      display: grid;
+      gap: 16px;
+    }
+    .audit-runner-card .toolbar-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .audit-runner-card .toolbar-card-header > div {
+      min-width: 0;
+    }
+    .audit-runner-card[data-audit-runner-mode="compact"] .audit-runner-form {
+      display: none;
+    }
+    .audit-runner-summary {
+      display: grid;
+      gap: 8px;
+      padding: 14px 16px;
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      background: var(--panel-alt);
+    }
+    .audit-runner-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .audit-runner-summary-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
+    }
+    .audit-runner-summary-item span {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+    .audit-runner-summary-item strong {
+      color: var(--ink);
+      font-size: 13px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .audit-runner-summary-meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .audit-runner-form {
+      display: grid;
+      gap: 12px;
+    }
+    .audit-runner-fields {
+      display: grid;
+      grid-template-columns: minmax(0, 260px) minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+    .audit-runner-actions {
+      margin-top: 0;
+      justify-content: flex-end;
+    }
+    .audit-runner-edit {
+      align-self: flex-start;
+    }
+    .toolbar-card-header h2 {
+      margin: 0 0 4px;
+      font-size: 17px;
+    }
+    .toolbar-card-header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .form-field-wide {
+      grid-column: 1 / -1;
+    }
+    .form-field span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .form-help {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .form-field input,
+    .form-field select {
+      appearance: none;
+      width: 100%;
+      border: 1px solid #d6deea;
+      border-radius: 8px;
+      height: 44px;
+      padding: 0 12px;
+      font: inherit;
+      background: #fff;
+      color: var(--ink);
+    }
+    .toolbar-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .toolbar-button {
+      appearance: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid #d6deea;
+      background: #fff;
+      color: #334155;
+      border-radius: 8px;
+      height: 44px;
+      padding: 0 16px;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .toolbar-button:disabled {
+      cursor: wait;
+      opacity: 0.7;
+    }
+    .toolbar-button-primary {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+    .toolbar-button-compact {
+      padding: 0 14px;
+    }
+    .toolbar-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .status-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .status-card {
+      border: 1px solid #dde5f0;
+      border-radius: 8px;
+      background: var(--panel-alt);
+      padding: 14px;
+      min-height: 94px;
+    }
+    .status-card span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .status-card strong {
+      display: block;
+      margin-top: 4px;
+      font-size: 16px;
+    }
+    .status-card small {
+      display: block;
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .tone-neutral {
+      background: #eef2f8;
+      color: var(--muted);
+      border-color: #d7dfeb;
+    }
+    .tone-pass {
+      background: #ebfaf1;
+      color: var(--green);
+      border-color: #b6ead0;
+    }
+    .tone-warn {
+      background: #fff7e8;
+      color: var(--amber);
+      border-color: #f4d7a4;
+    }
+    .tone-fail {
+      background: #fdeeee;
+      color: var(--red);
+      border-color: #f0b6b6;
+    }
+    .tone-running, .tone-info {
+      background: var(--blue-running-chip);
+      color: #264db0;
+      border-color: var(--blue-running-border);
+    }
+    .tab-panel[hidden] { display: none !important; }
+    .tab-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: calc(100vh - 155px);
+    }
+    .panel-toolbar-shell {
+      display: grid;
+      gap: 12px;
+    }
+    iframe {
+      display: block;
+      width: 100%;
+      min-height: calc(100vh - 190px);
+      flex: 1 1 auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #ffffff;
+      box-shadow: var(--surface-shadow);
+    }
+    @media (max-width: 760px) {
+      header { padding: 10px 14px; }
+      main { padding: 14px; }
+      .shell-header {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+          "heading"
+          "status";
+      }
+      .audit-runner-summary-grid,
+      .audit-runner-fields {
+        grid-template-columns: 1fr;
+      }
+      .audit-runner-actions {
+        justify-content: flex-start;
+      }
+      iframe { min-height: calc(100vh - 210px); }
+    }
+  </style>
+</head>
+<body data-state-endpoint="/__control_center_state__" data-state-poll-interval-ms="2000">
+  <header>
+    <div class="shell-header">
+      <div class="shell-heading">
+        <h1>OlfactoryBulb Control Center</h1>
+        <div class="subtle">docs, audits, and optimization in one maintained shell</div>
+      </div>
+      <div class="shell-status-strip" role="tablist" aria-label="Dashboard sections">
+        <button class='shell-status-chip' type='button' role='tab' data-tab-button data-shell-status-card data-tab-key='audits' data-tab-target='tab-audits' aria-controls='tab-audits' data-tab-tone='info' aria-selected='true' title='Structured audit results, grouped summaries, and detailed findings.'><span>Audits</span><strong class='tone-info' data-shell-status-badge>idle</strong><small data-shell-status-detail>No audit has been run in this session yet.</small></button>
+<button class='shell-status-chip' type='button' role='tab' data-tab-button data-shell-status-card data-tab-key='optimization' data-tab-target='tab-optimization' aria-controls='tab-optimization' data-tab-tone='running' aria-selected='false' title='Campaign-level HFO packet review and candidate ranking.'><span>Optimization</span><strong class='tone-running' data-shell-status-badge>loading</strong><small data-shell-status-detail>Preparing optimization view</small></button>
+<button class='shell-status-chip' type='button' role='tab' data-tab-button data-shell-status-card data-tab-key='docs' data-tab-target='tab-docs' aria-controls='tab-docs' data-tab-tone='info' aria-selected='false' title='Rendered maintained docs and current operational guidance.'><span>Docs</span><strong class='tone-info' data-shell-status-badge>ready</strong><small data-shell-status-detail>Rendered maintained docs portal.</small></button>
+      </div>
+    </div>
+    <div class="shell-progress" id="shell-progress" hidden>
+      <div class="shell-progress-meta">
+        <span class="shell-progress-label" id="shell-progress-label">No audit has been run in this session yet.</span>
+        <span id="shell-progress-value"></span>
+      </div>
+      <div class="shell-progress-track">
+        <div class="shell-progress-bar indeterminate" id="shell-progress-bar" style="width: 0.0%"></div>
+      </div>
+    </div>
+  </header>
+  <main>
+    <div class="tab-shell">
+      
+      <section id='tab-audits' class='tab-panel' role='tabpanel'><div class='panel-toolbar-shell' data-panel-toolbar data-tab-key='audits'><section class="toolbar-card audit-runner-card" id="control-center-audit-runner" data-audit-runner-mode="expanded">
+  <div class="toolbar-card-header">
+    <div>
+      <h2>Audit runner</h2>
+      <p id="audit-selection-description">Run a new sweep across every registered audit.</p>
+    </div>
+    <button class="toolbar-button toolbar-button-compact audit-runner-edit" type="button" id="control-center-edit-audit" hidden>Edit selection</button>
+  </div>
+  <div class="audit-runner-summary" id="audit-runner-summary" aria-live="polite">
+    <div class="audit-runner-summary-grid">
+      <div class="audit-runner-summary-item">
+        <span>Audit</span>
+        <strong id="audit-runner-summary-audit">—</strong>
+      </div>
+      <div class="audit-runner-summary-item">
+        <span>Args</span>
+        <strong id="audit-runner-summary-args">none</strong>
+      </div>
+      <div class="audit-runner-summary-item">
+        <span>Last run</span>
+        <strong id="audit-runner-summary-last-run">No audit has been run yet.</strong>
+      </div>
+    </div>
+    <div class="audit-runner-summary-meta" id="audit-runner-summary-meta">No audit has been run in this session.</div>
+  </div>
+  <div class="audit-runner-form" id="control-center-audit-form">
+  <div class="audit-runner-fields">
+    <label class="form-field">
+      <span>Audit id</span>
+      <small id="control-center-audit-id-help" class="form-help">Use <code>all</code> to run every registered audit.</small>
+      <select id="control-center-audit-id" title="Choose a registered audit to run from this page" aria-label="Audit id" aria-describedby="control-center-audit-id-help audit-selection-description">
+        <option value='default'>default</option>
+<option value='all'>all</option>
+<option value='env_install'>env_install</option>
+<option value='repo_health'>repo_health</option>
+<option value='reference_dataset_status'>reference_dataset_status</option>
+<option value='reference_dataset_contracts'>reference_dataset_contracts</option>
+<option value='test_suite_status'>test_suite_status</option>
+<option value='maintained_docs_integrity'>maintained_docs_integrity</option>
+<option value='scratch_boundary'>scratch_boundary</option>
+<option value='burton_urban_fi'>burton_urban_fi</option>
+<option value='epli_correctness'>epli_correctness</option>
+<option value='gc_intrinsic_validation' selected>gc_intrinsic_validation</option>
+<option value='epl_fsi_intrinsic_validation'>epl_fsi_intrinsic_validation</option>
+<option value='human_review_status'>human_review_status</option>
+<option value='hfo_feature_contracts'>hfo_feature_contracts</option>
+      </select>
+    </label>
+    <label class="form-field">
+      <span>Audit arguments</span>
+      <small id="control-center-audit-args-help" class="form-help">Optional command-line flags for the selected audit.</small>
+      <input id="control-center-audit-args" type="text" value="" title="Optional extra command-line flags for the selected audit" aria-label="Audit arguments" aria-describedby="control-center-audit-args-help audit-selection-description" placeholder="--suite maintained_core --details">
+    </label>
+  </div>
+  <div class="toolbar-actions audit-runner-actions">
+    <button class="toolbar-button toolbar-button-primary" type="button" id="control-center-run-audit">Run selected audit</button>
+    <button class="toolbar-button" type="button" id="control-center-reset-audit">Reset defaults</button>
+  </div>
+  </div>
+</section>
+<script id="control-center-audit-options" type="application/json">[
+  {
+    "audit_id": "default",
+    "default_args": [
+      "--profile",
+      "maintained"
+    ],
+    "description": "Run the maintained repo-health profile. If no explicit args are provided, this resolves to repo_health --profile maintained.",
+    "title": "Default audit profile"
+  },
+  {
+    "audit_id": "all",
+    "default_args": [],
+    "description": "Run a new sweep across every registered audit.",
+    "title": "All registered audits"
+  },
+  {
+    "audit_id": "env_install",
+    "default_args": [],
+    "description": "Audit whether the active machine environment can run the maintained OBGPU workflow.",
+    "title": "Environment/install audit"
+  },
+  {
+    "audit_id": "repo_health",
+    "default_args": [
+      "--profile",
+      "maintained"
+    ],
+    "description": "Run the curated maintained-surface environment, wrapper, contract, and reference-data health checks.",
+    "title": "Repo health audit"
+  },
+  {
+    "audit_id": "reference_dataset_status",
+    "default_args": [],
+    "description": "Audit that one declarative reference dataset's generated outputs exist and load cleanly.",
+    "title": "Reference dataset status audit"
+  },
+  {
+    "audit_id": "reference_dataset_contracts",
+    "default_args": [],
+    "description": "Audit that one declarative reference dataset satisfies maintained schema, provenance, notes, and f-I tagging contracts.",
+    "title": "Reference dataset contract audit"
+  },
+  {
+    "audit_id": "test_suite_status",
+    "default_args": [],
+    "description": "Run grouped Python test suites through the maintained audit surface instead of exposing every low-level test as its own audit.",
+    "title": "Structured test-suite audit"
+  },
+  {
+    "audit_id": "maintained_docs_integrity",
+    "default_args": [],
+    "description": "Audit that maintained docs avoid removed entrypoints and that the docs portal points at the current markdown docs.",
+    "title": "Maintained docs integrity audit"
+  },
+  {
+    "audit_id": "scratch_boundary",
+    "default_args": [],
+    "description": "Audit that local scratch areas, source-data corpora, and generated artifact boundaries remain explicit and protected.",
+    "title": "Scratch boundary audit"
+  },
+  {
+    "audit_id": "burton_urban_fi",
+    "default_args": [],
+    "description": "Audit MC/TC f-I, AP-shape, and spike-train metrics against Burton &amp; Urban 2014.",
+    "title": "Burton &amp; Urban f-I validation audit"
+  },
+  {
+    "audit_id": "epli_correctness",
+    "default_args": [],
+    "description": "Audit optional EPLI morphology, slice defaults, and network-readiness constraints.",
+    "title": "EPLI correctness audit"
+  },
+  {
+    "audit_id": "gc_intrinsic_validation",
+    "default_args": [],
+    "description": "Audit maintained granule-cell models against generic and subtype-aware literature references.",
+    "title": "Granule-cell intrinsic validation audit"
+  },
+  {
+    "audit_id": "epl_fsi_intrinsic_validation",
+    "default_args": [],
+    "description": "Audit the maintained synthetic EPL fast-spiking interneuron surrogate against the Burton, Malyshko, and Urban 2024 reference bundle.",
+    "title": "External plexiform layer fast-spiking interneuron intrinsic validation audit"
+  },
+  {
+    "audit_id": "human_review_status",
+    "default_args": [],
+    "description": "Audit that declarative reference-validation items resolve to explicit review states for validation-design choices such as distribution assumptions, pooling rules, and protocol matching.",
+    "title": "Validation design review status audit"
+  },
+  {
+    "audit_id": "hfo_feature_contracts",
+    "default_args": [],
+    "description": "Audit that HFO optimizer parameters, notebook controls, packet artifacts, and dashboard expectations share one centralized contract.",
+    "title": "HFO feature/visual contract audit"
+  }
+]</script>
+<script>
+(() => {
+  const optionsNode = document.getElementById("control-center-audit-options");
+  const availableAudits = optionsNode && optionsNode.textContent ? JSON.parse(optionsNode.textContent) : [];
+  const auditSelect = document.getElementById("control-center-audit-id");
+  const auditArgsInput = document.getElementById("control-center-audit-args");
+  const runButton = document.getElementById("control-center-run-audit");
+  const resetButton = document.getElementById("control-center-reset-audit");
+  const editButton = document.getElementById("control-center-edit-audit");
+  const auditRunnerCard = document.getElementById("control-center-audit-runner");
+  const auditRunnerForm = document.getElementById("control-center-audit-form");
+  const runnerSummaryAudit = document.getElementById("audit-runner-summary-audit");
+  const runnerSummaryArgs = document.getElementById("audit-runner-summary-args");
+  const runnerSummaryLastRun = document.getElementById("audit-runner-summary-last-run");
+  const runnerSummaryMeta = document.getElementById("audit-runner-summary-meta");
+  const selectionDescription = document.getElementById("audit-selection-description");
+  const defaultAuditId = "gc_intrinsic_validation";
+  const defaultAuditArgs = [];
+  let formDirty = false;
+  let suppressFormEvents = false;
+  let manualRunnerExpanded = false;
+  let runnerStateInitialized = false;
+
+  function selectedAuditEntry() {
+    const selectedId = String(auditSelect?.value || "");
+    return availableAudits.find((entry) => entry.audit_id === selectedId) || null;
+  }
+
+  function auditEntryForId(auditId) {
+    return availableAudits.find((entry) => entry.audit_id === String(auditId || "")) || null;
+  }
+
+  function selectedAuditDefaultArgs() {
+    const entry = selectedAuditEntry();
+    return Array.isArray(entry?.default_args) ? entry.default_args : [];
+  }
+
+  function defaultArgsForAuditId(auditId) {
+    const entry = auditEntryForId(auditId);
+    return Array.isArray(entry?.default_args) ? entry.default_args : [];
+  }
+
+  function arraysEqual(left, right) {
+    if (!Array.isArray(left) || !Array.isArray(right) || left.length !== right.length) return false;
+    return left.every((value, index) => String(value) === String(right[index]));
+  }
+
+  function displayAuditArgs(auditId, auditArgs) {
+    const normalizedArgs = Array.isArray(auditArgs)
+      ? auditArgs.map((value) => String(value || "").trim()).filter(Boolean)
+      : [];
+    const defaultArgs = defaultArgsForAuditId(auditId)
+      .map((value) => String(value || "").trim())
+      .filter(Boolean);
+    if (arraysEqual(normalizedArgs, defaultArgs)) {
+      return "";
+    }
+    return normalizedArgs.join(" ");
+  }
+
+  function formatAuditTimestamp(value) {
+    const text = String(value || "").trim();
+    if (!text) {
+      return "No audit has been run yet.";
+    }
+    return text.replace("T", " ").slice(0, 16);
+  }
+
+  function setRunnerMode(mode, { manual = false } = {}) {
+    const expanded = String(mode || "") !== "compact";
+    if (manual) {
+      manualRunnerExpanded = expanded;
+    }
+    if (auditRunnerCard) {
+      auditRunnerCard.dataset.auditRunnerMode = expanded ? "expanded" : "compact";
+    }
+    if (auditRunnerForm) {
+      auditRunnerForm.hidden = !expanded;
+    }
+    if (editButton) {
+      editButton.hidden = expanded;
+    }
+  }
+
+  function updateRunnerSummary(auditState) {
+    const auditIdText = String(auditState?.audit_id || defaultAuditId || "—");
+    const argsArray = Array.isArray(auditState?.audit_args) ? auditState.audit_args : defaultAuditArgs;
+    const auditArgsText = displayAuditArgs(auditIdText, argsArray) || "none";
+    const lastRunText = formatAuditTimestamp(auditState?.generated_at || "");
+    if (runnerSummaryAudit) {
+      runnerSummaryAudit.textContent = auditIdText || "—";
+    }
+    if (runnerSummaryArgs) {
+      runnerSummaryArgs.textContent = auditArgsText;
+    }
+    if (runnerSummaryLastRun) {
+      runnerSummaryLastRun.textContent = lastRunText;
+    }
+    if (runnerSummaryMeta) {
+      runnerSummaryMeta.textContent = String(auditState?.message || "No audit has been run in this session.");
+    }
+    if (runButton) {
+      const hasRun = Boolean(String(auditState?.generated_at || "").trim());
+      runButton.textContent = String(auditState?.status || "") === "running"
+        ? "Running..."
+        : (hasRun ? "Run again" : "Run selected audit");
+    }
+  }
+
+  function setFormValues(auditId, auditArgs, { preserveDirty = false } = {}) {
+    suppressFormEvents = true;
+    if (auditSelect && auditId) {
+      auditSelect.value = String(auditId);
+    }
+    if (auditArgsInput) {
+      auditArgsInput.value = displayAuditArgs(auditId, auditArgs);
+    }
+    suppressFormEvents = false;
+    if (!preserveDirty) {
+      formDirty = false;
+    }
+    updateSelectionDescription();
+  }
+
+  function updateSelectionDescription() {
+    const entry = selectedAuditEntry();
+    if (!selectionDescription) return;
+    selectionDescription.textContent = entry ? entry.description : "Choose any registered audit, pass explicit arguments, and rerun it without restarting the shell.";
+  }
+
+  async function runSelectedAudit() {
+    if (!runButton) return;
+    const payload = {
+      audit_id: String(auditSelect?.value || defaultAuditId),
+      audit_args_text: String(auditArgsInput?.value || "").trim(),
+    };
+    runButton.disabled = true;
+    if (runnerSummaryMeta) {
+      runnerSummaryMeta.textContent = `Starting ${payload.audit_id}...`;
+    }
+    try {
+      const response = await fetch("/__audit_run__", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) {
+        throw new Error(String(result.error || "Audit run failed"));
+      }
+      const auditTabButton = document.querySelector('[data-tab-button][data-tab-key="audits"]');
+      auditTabButton?.click();
+      formDirty = false;
+      manualRunnerExpanded = false;
+      setRunnerMode("compact");
+      if (runButton) {
+        runButton.textContent = "Run again";
+      }
+    } catch (error) {
+      if (runnerSummaryMeta) {
+        runnerSummaryMeta.textContent = String(error && error.message ? error.message : error);
+      }
+    } finally {
+      runButton.disabled = false;
+    }
+  }
+
+  auditSelect?.addEventListener("change", () => {
+    if (suppressFormEvents) return;
+    formDirty = true;
+    if (auditArgsInput) {
+      auditArgsInput.value = "";
+    }
+    updateSelectionDescription();
+  });
+  resetButton?.addEventListener("click", () => {
+    setFormValues(defaultAuditId, defaultAuditArgs);
+    manualRunnerExpanded = true;
+    setRunnerMode("expanded", { manual: true });
+  });
+  runButton?.addEventListener("click", runSelectedAudit);
+  editButton?.addEventListener("click", () => {
+    manualRunnerExpanded = true;
+    setRunnerMode("expanded", { manual: true });
+  });
+  window.addEventListener("message", (event) => {
+    const data = event && typeof event.data === "object" ? event.data : null;
+    if (!data || data.type !== "control-center-run-audit") {
+      return;
+    }
+    runSelectedAudit();
+  });
+  auditArgsInput?.addEventListener("input", () => {
+    if (suppressFormEvents) return;
+    formDirty = true;
+    manualRunnerExpanded = true;
+    setRunnerMode("expanded", { manual: true });
+  });
+  auditArgsInput?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      runSelectedAudit();
+    }
+  });
+
+  window.addEventListener("dashboard-shell-state", (event) => {
+    const state = event.detail || {};
+    const auditState = state.audit || {};
+    const hasPriorRun = Boolean(String(auditState.generated_at || "").trim()) || String(auditState.status || "") === "running" || String(auditState.status || "") === "ready";
+    if (!formDirty && auditState.audit_id) {
+      setFormValues(String(auditState.audit_id), Array.isArray(auditState.audit_args) ? auditState.audit_args : []);
+    }
+    updateRunnerSummary(auditState);
+    if (runButton) {
+      runButton.disabled = String(auditState.status || "") === "running";
+    }
+    if (!runnerStateInitialized && hasPriorRun) {
+      manualRunnerExpanded = false;
+      setRunnerMode("compact");
+      runnerStateInitialized = true;
+    } else if (String(auditState.status || "") === "idle" && !String(auditState.generated_at || "").trim()) {
+      setRunnerMode("expanded");
+    } else if (hasPriorRun && !manualRunnerExpanded) {
+      manualRunnerExpanded = false;
+      setRunnerMode("compact");
+    }
+    runnerStateInitialized = true;
+    updateSelectionDescription();
+  });
+
+  setFormValues(defaultAuditId, defaultAuditArgs);
+  updateRunnerSummary({ audit_id: defaultAuditId, audit_args: defaultAuditArgs, message: "No audit has been run in this session." });
+  setRunnerMode("expanded");
+})();
+</script></div><iframe src='/audits/index.html?__rev=idle' title='Audits' data-tab-frame data-tab-key='audits' data-base-src='/audits/index.html'></iframe></section>
+<section id='tab-optimization' class='tab-panel' role='tabpanel' hidden><div class='panel-toolbar-shell' data-panel-toolbar data-tab-key='optimization'><section class="toolbar-card optimization-context-card">
+  <div class="toolbar-card-header">
+    <div>
+      <h2>Optimization campaign</h2>
+      <p>The optimization tab shows the active campaign path that was auto-detected for this session.</p>
+    </div>
+  </div>
+  <div class="status-grid">
+    <div class="status-card">
+      <span>Campaign</span>
+      <strong>/home/alek/OlfactoryBulb/results/notebook_runs/optimization/hfo_epli_big_singlewrapper_120cpu_20260527_082225</strong>
+      <small>The optimization tab shows the active campaign path that was auto-detected for this session.</small>
+    </div>
+  </div>
+</section></div><iframe src='/optimization/index.html?__rev=loading' title='Optimization' data-tab-frame data-tab-key='optimization' data-base-src='/optimization/index.html'></iframe></section>
+<section id='tab-docs' class='tab-panel' role='tabpanel' hidden><iframe src='/docs/index.html?__rev=maintained-docs' title='Docs' data-tab-frame data-tab-key='docs' data-base-src='/docs/index.html'></iframe></section>
+    </div>
+  </main>
+      <script id="dashboard-shell-state" type="application/json">{
+  "audit": {
+    "audit_args": [],
+    "audit_id": "gc_intrinsic_validation",
+    "badge": "idle",
+    "badge_tone": "info",
+    "message": "No audit has been run in this session yet.",
+    "progress_active": false,
+    "progress_current": 0,
+    "progress_indeterminate": false,
+    "progress_label": "",
+    "progress_total": 0,
+    "progress_value_text": "",
+    "status": "idle"
+  },
+  "available_audits": [
+    {
+      "audit_id": "default",
+      "default_args": [
+        "--profile",
+        "maintained"
+      ],
+      "description": "Run the maintained repo-health profile. If no explicit args are provided, this resolves to repo_health --profile maintained.",
+      "title": "Default audit profile"
+    },
+    {
+      "audit_id": "all",
+      "default_args": [],
+      "description": "Run a new sweep across every registered audit.",
+      "title": "All registered audits"
+    },
+    {
+      "audit_id": "env_install",
+      "default_args": [],
+      "description": "Audit whether the active machine environment can run the maintained OBGPU workflow.",
+      "title": "Environment/install audit"
+    },
+    {
+      "audit_id": "repo_health",
+      "default_args": [
+        "--profile",
+        "maintained"
+      ],
+      "description": "Run the curated maintained-surface environment, wrapper, contract, and reference-data health checks.",
+      "title": "Repo health audit"
+    },
+    {
+      "audit_id": "reference_dataset_status",
+      "default_args": [],
+      "description": "Audit that one declarative reference dataset's generated outputs exist and load cleanly.",
+      "title": "Reference dataset status audit"
+    },
+    {
+      "audit_id": "reference_dataset_contracts",
+      "default_args": [],
+      "description": "Audit that one declarative reference dataset satisfies maintained schema, provenance, notes, and f-I tagging contracts.",
+      "title": "Reference dataset contract audit"
+    },
+    {
+      "audit_id": "test_suite_status",
+      "default_args": [],
+      "description": "Run grouped Python test suites through the maintained audit surface instead of exposing every low-level test as its own audit.",
+      "title": "Structured test-suite audit"
+    },
+    {
+      "audit_id": "maintained_docs_integrity",
+      "default_args": [],
+      "description": "Audit that maintained docs avoid removed entrypoints and that the docs portal points at the current markdown docs.",
+      "title": "Maintained docs integrity audit"
+    },
+    {
+      "audit_id": "scratch_boundary",
+      "default_args": [],
+      "description": "Audit that local scratch areas, source-data corpora, and generated artifact boundaries remain explicit and protected.",
+      "title": "Scratch boundary audit"
+    },
+    {
+      "audit_id": "burton_urban_fi",
+      "default_args": [],
+      "description": "Audit MC/TC f-I, AP-shape, and spike-train metrics against Burton &amp; Urban 2014.",
+      "title": "Burton &amp; Urban f-I validation audit"
+    },
+    {
+      "audit_id": "epli_correctness",
+      "default_args": [],
+      "description": "Audit optional EPLI morphology, slice defaults, and network-readiness constraints.",
+      "title": "EPLI correctness audit"
+    },
+    {
+      "audit_id": "gc_intrinsic_validation",
+      "default_args": [],
+      "description": "Audit maintained granule-cell models against generic and subtype-aware literature references.",
+      "title": "Granule-cell intrinsic validation audit"
+    },
+    {
+      "audit_id": "epl_fsi_intrinsic_validation",
+      "default_args": [],
+      "description": "Audit the maintained synthetic EPL fast-spiking interneuron surrogate against the Burton, Malyshko, and Urban 2024 reference bundle.",
+      "title": "External plexiform layer fast-spiking interneuron intrinsic validation audit"
+    },
+    {
+      "audit_id": "human_review_status",
+      "default_args": [],
+      "description": "Audit that declarative reference-validation items resolve to explicit review states for validation-design choices such as distribution assumptions, pooling rules, and protocol matching.",
+      "title": "Validation design review status audit"
+    },
+    {
+      "audit_id": "hfo_feature_contracts",
+      "default_args": [],
+      "description": "Audit that HFO optimizer parameters, notebook controls, packet artifacts, and dashboard expectations share one centralized contract.",
+      "title": "HFO feature/visual contract audit"
+    }
+  ],
+  "campaign_label": "hfo_epli_big_singlewrapper_120cpu_20260527_082225",
+  "docs": {
+    "badge": "ready",
+    "badge_tone": "info",
+    "message": "Rendered maintained docs portal.",
+    "status": "ready"
+  },
+  "optimization": {
+    "badge": "loading",
+    "badge_tone": "running",
+    "message": "Preparing optimization view",
+    "status": "loading"
+  },
+  "progress": {
+    "active": false,
+    "fraction": 0.0,
+    "indeterminate": true,
+    "label": "No audit has been run in this session yet.",
+    "value_text": ""
+  },
+  "tabs": {
+    "audits": {
+      "badge": "idle",
+      "badge_tone": "info",
+      "revision": "idle",
+      "src": "/audits/index.html"
+    },
+    "docs": {
+      "badge": "ready",
+      "badge_tone": "info",
+      "revision": "maintained-docs",
+      "src": "/docs/index.html"
+    },
+    "optimization": {
+      "badge": "loading",
+      "badge_tone": "running",
+      "revision": "loading",
+      "src": "/optimization/index.html"
+    }
+  },
+  "updated_at": "2026-06-03T14:04:41"
+}</script>
+    <script>
+      (() => {
+      const frames = Array.from(document.querySelectorAll("iframe[data-tab-frame]"));
+      const DEFAULT_FONT_FAMILY = "Verdana, sans-serif";
+
+      function applyFontFamily(element, value) {
+        if (!element) {
+          return;
+        }
+        element.style.setProperty("font-family", value);
+      }
+
+      function applyDefaultFontToFrame(frame) {
+        const fontFamily = DEFAULT_FONT_FAMILY;
+        if (!frame) {
+          return;
+        }
+        try {
+          const frameDocument = frame.contentDocument;
+          if (!frameDocument) {
+            return;
+          }
+          applyFontFamily(frameDocument.body, fontFamily);
+          const frameHtml = frameDocument.documentElement;
+          if (frameHtml) {
+            frameHtml.style.setProperty("font-family", fontFamily);
+          }
+        } catch (_error) {
+          return;
+        }
+      }
+
+      function applyDefaultFont() {
+        const fontFamily = DEFAULT_FONT_FAMILY;
+        document.documentElement.style.setProperty("--ui-font-stack", fontFamily);
+        applyFontFamily(document.documentElement, fontFamily);
+        applyFontFamily(document.body, fontFamily);
+        document.body.style.setProperty("font-family", fontFamily);
+        frames.forEach((frame) => {
+          applyDefaultFontToFrame(frame);
+        });
+      }
+
+      function toneClass(tone) {
+        const normalized = String(tone || "neutral").toLowerCase();
+        if (["pass", "warn", "fail", "info", "running", "neutral"].includes(normalized)) {
+          return "tone-" + normalized;
+        }
+        return "tone-neutral";
+      }
+      function applyChipTone(card, tone, isActive) {
+        const normalizedTone = String(tone || "neutral").toLowerCase();
+        if (!card) return;
+        const badge = card.querySelector("[data-shell-status-badge]");
+        if (badge) {
+          badge.className = toneClass(tone);
+        }
+        card.dataset.tabTone = normalizedTone;
+      }
+      function withRevision(src, revision) {
+        const base = String(src || "");
+        if (!base) return base;
+        const url = new URL(base, window.location.href);
+        if (revision) {
+          url.searchParams.set("__rev", String(revision));
+        } else {
+          url.searchParams.delete("__rev");
+        }
+        if (url.origin === window.location.origin) {
+          return url.pathname + url.search + url.hash;
+        }
+        return url.toString();
+      }
+      function setActiveTab(tabId) {
+        const buttons = document.querySelectorAll("[data-tab-button]");
+        const panels = document.querySelectorAll(".tab-panel");
+        let resolved = tabId;
+        if (!resolved || !document.getElementById(resolved)) {
+          resolved = "tab-audits";
+        }
+        buttons.forEach((button) => {
+          const selected = button.dataset.tabTarget === resolved;
+          button.setAttribute("aria-selected", selected ? "true" : "false");
+          const tone = button.getAttribute("data-tab-tone") || "neutral";
+          applyChipTone(button, tone, selected);
+        });
+        panels.forEach((panel) => {
+          panel.hidden = panel.id !== resolved;
+        });
+      }
+      function applyState(state) {
+        if (!state || typeof state !== "object") return;
+        window.__dashboardShellState = state;
+        const tabs = state.tabs || {};
+        Object.entries(tabs).forEach(([key, tabState]) => {
+          const button = document.querySelector(`[data-tab-button][data-tab-key="${key}"]`);
+          const frame = document.querySelector(`iframe[data-tab-frame][data-tab-key="${key}"]`);
+          const statusCard = document.querySelector(`[data-shell-status-card][data-tab-key="${key}"]`) || button;
+          const rawTone = String(tabState.badge_tone || tabState.status || "neutral").toLowerCase();
+          const tone = toneClass(rawTone);
+          if (statusCard) {
+            const detailEl = statusCard.querySelector("[data-shell-status-detail]");
+            const stateKey = String(key === "audits" ? "audit" : key);
+            const stateValue = state[stateKey] && typeof state[stateKey] === "object" ? state[stateKey] : {};
+            const detailText = String(stateValue.message || detailEl?.textContent || "");
+            const badgeText = String(tabState.badge || "").trim();
+            const badgeEl = statusCard.querySelector("[data-shell-status-badge]");
+            const isActive = statusCard.getAttribute("aria-selected") === "true";
+            if (badgeEl) {
+              badgeEl.textContent = badgeText;
+              badgeEl.className = tone;
+            }
+            if (detailEl) {
+              detailEl.textContent = detailText;
+            }
+            statusCard.dataset.tabTone = rawTone;
+            applyChipTone(statusCard, rawTone, isActive);
+            if (button && button !== statusCard) {
+              button.dataset.tabTone = rawTone;
+              applyChipTone(button, rawTone, isActive);
+            }
+          }
+          if (statusCard) {
+            const desiredBaseSrc = String(tabState.src || frame?.dataset.baseSrc || frame?.getAttribute("src") || "").trim();
+            const desiredSrc = withRevision(desiredBaseSrc, tabState.revision || "");
+            if (frame) {
+              if (desiredBaseSrc) {
+                frame.dataset.baseSrc = desiredBaseSrc;
+              }
+              if (desiredSrc && frame.dataset.currentSrc !== desiredSrc) {
+                frame.dataset.currentSrc = desiredSrc;
+                frame.src = desiredSrc;
+              }
+            }
+          }
+        });
+        const progress = state.progress || {};
+        const progressRoot = document.getElementById("shell-progress");
+        const progressLabel = document.getElementById("shell-progress-label");
+        const progressValue = document.getElementById("shell-progress-value");
+        const progressBar = document.getElementById("shell-progress-bar");
+        if (progressRoot && progressLabel && progressValue && progressBar) {
+          const active = Boolean(progress.active);
+          progressRoot.hidden = !active;
+          progressLabel.textContent = String(progress.label || "");
+          progressValue.textContent = String(progress.value_text || "");
+          const fraction = Number(progress.fraction || 0);
+          const clamped = Number.isFinite(fraction) ? Math.max(0, Math.min(fraction, 1)) : 0;
+          progressBar.style.width = `${clamped * 100}%`;
+          progressBar.classList.toggle("indeterminate", Boolean(progress.indeterminate));
+        }
+        window.dispatchEvent(new CustomEvent("dashboard-shell-state", { detail: state }));
+      }
+      async function pollState() {
+        const endpoint = String(document.body.dataset.stateEndpoint || "").trim();
+        if (!endpoint || pollState.inFlight) return;
+        pollState.inFlight = true;
+        try {
+          const response = await fetch(endpoint + (endpoint.includes("?") ? "&" : "?") + "cache=" + Date.now(), {
+            cache: "no-store",
+          });
+          if (!response.ok) {
+            throw new Error("State poll failed with status " + response.status);
+          }
+          const payload = await response.json();
+          applyState(payload);
+        } catch (_error) {
+        } finally {
+          pollState.inFlight = false;
+        }
+      }
+      document.addEventListener("click", (event) => {
+        const button = event.target.closest("[data-tab-button]");
+        if (!button) return;
+        setActiveTab(button.dataset.tabTarget || "tab-audits");
+      });
+      frames.forEach((frame) => {
+        frame.addEventListener("load", () => {
+          applyDefaultFontToFrame(frame);
+        }, { passive: true });
+      });
+      const stateNode = document.getElementById("dashboard-shell-state");
+      if (stateNode && stateNode.textContent) {
+        try {
+          applyState(JSON.parse(stateNode.textContent));
+        } catch (_error) {
+        }
+      }
+      applyDefaultFont();
+      setActiveTab("tab-audits");
+      const pollIntervalMs = Number(document.body.dataset.statePollIntervalMs || "0");
+      if (pollIntervalMs > 0 && String(document.body.dataset.stateEndpoint || "").trim()) {
+        window.setInterval(pollState, pollIntervalMs);
+      }
+    })();
+  </script>
+</body>
+</html>

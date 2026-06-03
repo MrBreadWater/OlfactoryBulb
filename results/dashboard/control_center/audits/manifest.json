@@ -1,0 +1,17 @@
+{
+  "audit_id": "control_center_audits",
+  "generated_at": "2026-06-03T14:04:41",
+  "group_count": 1,
+  "index_html": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits/index.html",
+  "item_count": 17,
+  "manifest_revision": 1780509881007968047,
+  "output_dir": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits",
+  "report_json": "/home/alek/OlfactoryBulb/results/dashboard/control_center/audits/report.json",
+  "summary": {
+    "FAIL": 3,
+    "PASS": 10,
+    "WARN": 4
+  },
+  "title": "Control center audits",
+  "worst_status": "FAIL"
+}

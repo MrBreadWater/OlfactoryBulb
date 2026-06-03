@@ -219,7 +219,7 @@ minimum = 8.0
 maximum = 12.0
 title = "Soma diameter stays inside the accepted range"
 criterion = "The observed soma diameter should remain inside the accepted range."
-criterion_latex = '\lvert \bar{x} - \mu \rvert \leq k\sigma'
+criterion_latex = '\vert \bar{x} - \mu \vert \leq k\sigma'
 criterion_formulae = [
   '\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma',
 ]
@@ -237,8 +237,8 @@ really need asymmetric bounds. The rendered headline inequality substitutes the
 configured sigma multiplier numerically, so a `reference_sigma_multiplier = 2`
 setting will show `2\sigma` in the display. For example:
 
-- symmetric bands: `\lvert \bar{x} - \mu \rvert \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
-- lognormal bands: `\lvert \ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \rvert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
+- symmetric bands: `\vert \bar{x} - \mu \vert \leq k\sigma`, with optional equivalent form `\mu - k\sigma \leq \bar{x} \leq \mu + k\sigma`
+- lognormal bands: `\vert \ln\!\left(\frac{\bar{x}\sqrt{\mu^2 + \sigma^2}}{\mu^2}\right) \vert \leq k\sqrt{\ln(1 + (\sigma / \mu)^2)}`
 
 If a log-space criterion can be reduced algebraically without obscuring the
 reference quantities, prefer that reduced form over a longer expanded sum of

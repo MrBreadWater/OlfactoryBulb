@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable
 import math
+import re
 
 import numpy as np
 from scipy.stats import beta as beta_distribution
@@ -626,7 +627,7 @@ def _criterion_math_for_band(
         latex = r"{obs} = b".format(obs=observed_symbol)
         definitions.append({"symbol": "b", "definition": "uploaded binary reference indicator"})
     elif band.mode == "lognormal_sd":
-        latex = rf"\lvert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \rvert \leq {sigma_multiplier}\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
+        latex = rf"\vert \ln\!\left(\frac{{{observed_symbol}\sqrt{{\mu^2 + \sigma^2}}}}{{\mu^2}}\right) \vert \leq {sigma_multiplier}\sqrt{{\ln(1 + (\sigma / \mu)^2)}}"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -635,7 +636,7 @@ def _criterion_math_for_band(
             ]
         )
     else:
-        latex = rf"\lvert {observed_symbol} - \mu \rvert \leq {sigma_multiplier}\sigma"
+        latex = rf"\vert {observed_symbol} - \mu \vert \leq {sigma_multiplier}\sigma"
         definitions.extend(
             [
                 {"symbol": r"\mu", "definition": "uploaded reference mean"},
@@ -669,6 +670,15 @@ def _row_field_name(
 
 def _latex_number(value: float) -> str:
     return f"{float(value):g}"
+
+
+def _latex_token(value: str, *, fallback: str = "x") -> str:
+    token = re.sub(r"[^A-Za-z0-9]+", "", str(value or "").strip())
+    return token or fallback
+
+
+def _group_mean_symbol(group: str) -> str:
+    return rf"\bar{{x}}_{{\mathrm{{{_latex_token(group, fallback='g')}}}}}"
 
 
 _PROPERTY_OBSERVED_SYMBOLS: dict[str, str] = {
@@ -799,6 +809,12 @@ def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> l
     entity_key = str(rule.get("entity_key", "cell_name"))
     expected = float(rule.get("expected", 0.0))
     tolerance = float(rule.get("tolerance", 1e-9))
+    criterion_latex = rf"\forall i,\ \vert x_i - {_latex_number(expected)} \vert \leq {_latex_number(tolerance)}"
+    criterion_definitions = [
+        {"symbol": r"x_i", "definition": f"{metric_key} value for each audited row"},
+        {"symbol": "c", "definition": "expected value"},
+        {"symbol": r"\epsilon", "definition": "tolerance"},
+    ]
     failing = {
         str(metric.get(entity_key, f"row_{index}")): metric.get(metric_key)
         for index, metric in enumerate(context.metrics)
@@ -810,7 +826,15 @@ def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> l
         "tolerance": tolerance,
         "failing_values": _rounded_dict(failing),
     }
-    return [_rule_item(rule, status=_rule_status(rule, not failing), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, not failing),
+            evidence=evidence,
+            criterion_latex=criterion_latex,
+            criterion_definitions=criterion_definitions,
+        )
+    ]
 
 
 @register_validation_rule("group_ordering")
@@ -829,6 +853,9 @@ def _group_ordering(rule: dict[str, Any], context: ValidationRuleContext) -> lis
         diff = right_value - left_value
     else:
         raise ValueError(f"Unsupported group_ordering operator {operator!r}")
+    left_symbol = _group_mean_symbol(left_group)
+    right_symbol = _group_mean_symbol(right_group)
+    criterion_latex = rf"{right_symbol} {operator} {left_symbol}"
     evidence = _rounded_dict(
         {
             f"{left_group}_mean": left_value,
@@ -836,7 +863,18 @@ def _group_ordering(rule: dict[str, Any], context: ValidationRuleContext) -> lis
             f"{right_group}_minus_{left_group}": diff,
         }
     )
-    return [_rule_item(rule, status=_rule_status(rule, passed), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            criterion_latex=criterion_latex,
+            criterion_definitions=[
+                {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
+                {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},
+            ],
+        )
+    ]
 
 
 @register_validation_rule("group_abs_diff_max")
@@ -848,6 +886,8 @@ def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) ->
     left_value = _group_mean(context.summary, left_group, metric_key)
     right_value = _group_mean(context.summary, right_group, metric_key)
     difference = abs(right_value - left_value)
+    left_symbol = _group_mean_symbol(left_group)
+    right_symbol = _group_mean_symbol(right_group)
     evidence = _rounded_dict(
         {
             f"{left_group}_mean": left_value,
@@ -856,7 +896,19 @@ def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) ->
             "max_difference": max_difference,
         }
     )
-    return [_rule_item(rule, status=_rule_status(rule, difference <= max_difference), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, difference <= max_difference),
+            evidence=evidence,
+            criterion_latex=rf"\vert {right_symbol} - {left_symbol} \vert \leq {_latex_number(max_difference)}",
+            criterion_definitions=[
+                {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
+                {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},
+                {"symbol": r"\Delta", "definition": "absolute difference between the two group means"},
+            ],
+        )
+    ]
 
 
 @register_validation_rule("group_positive")
@@ -865,9 +917,21 @@ def _group_positive(rule: dict[str, Any], context: ValidationRuleContext) -> lis
     groups = [str(group) for group in rule.get("groups", [])]
     if not groups:
         raise ValueError("group_positive rule requires non-empty 'groups'")
+    group_symbols = [_group_mean_symbol(group) for group in groups]
     evidence = _rounded_dict({f"{group}_mean": _group_mean(context.summary, group, metric_key) for group in groups})
     passed = all(_is_finite_number(_group_mean(context.summary, group, metric_key)) and _group_mean(context.summary, group, metric_key) > 0.0 for group in groups)
-    return [_rule_item(rule, status=_rule_status(rule, passed), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            criterion_latex=" \\wedge ".join(rf"{symbol} > 0" for symbol in group_symbols),
+            criterion_definitions=[
+                {"symbol": symbol, "definition": f"{group} mean {metric_key}"}
+                for symbol, group in zip(group_symbols, groups, strict=False)
+            ],
+        )
+    ]
 
 
 @register_validation_rule("summary_metric_min")
@@ -877,8 +941,19 @@ def _summary_metric_min(rule: dict[str, Any], context: ValidationRuleContext) ->
     group = _summary_group(rule, context)
     observed = _group_mean(context.summary, group, metric_key)
     passed = _is_finite_number(observed) and observed >= minimum
+    observed_symbol = _group_mean_symbol(group)
     evidence = _summary_evidence(rule, context, group=group, base={"group": group, "observed": observed, "minimum": minimum})
-    return [_rule_item(rule, status=_rule_status(rule, passed), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            criterion_latex=rf"{observed_symbol} \geq {_latex_number(minimum)}",
+            criterion_definitions=[
+                {"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"},
+            ],
+        )
+    ]
 
 
 @register_validation_rule("summary_metric_max")
@@ -888,8 +963,19 @@ def _summary_metric_max(rule: dict[str, Any], context: ValidationRuleContext) ->
     group = _summary_group(rule, context)
     observed = _group_mean(context.summary, group, metric_key)
     passed = _is_finite_number(observed) and observed <= maximum
+    observed_symbol = _group_mean_symbol(group)
     evidence = _summary_evidence(rule, context, group=group, base={"group": group, "observed": observed, "maximum": maximum})
-    return [_rule_item(rule, status=_rule_status(rule, passed), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            criterion_latex=rf"{observed_symbol} \leq {_latex_number(maximum)}",
+            criterion_definitions=[
+                {"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"},
+            ],
+        )
+    ]
 
 
 @register_validation_rule("summary_metric_range")
@@ -900,13 +986,24 @@ def _summary_metric_range(rule: dict[str, Any], context: ValidationRuleContext) 
     group = _summary_group(rule, context)
     observed = _group_mean(context.summary, group, metric_key)
     passed = _is_finite_number(observed) and minimum <= observed <= maximum
+    observed_symbol = _group_mean_symbol(group)
     evidence = _summary_evidence(
         rule,
         context,
         group=group,
         base={"group": group, "observed": observed, "minimum": minimum, "maximum": maximum},
     )
-    return [_rule_item(rule, status=_rule_status(rule, passed), evidence=evidence)]
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            criterion_latex=rf"{_latex_number(minimum)} \leq {observed_symbol} \leq {_latex_number(maximum)}",
+            criterion_definitions=[
+                {"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"},
+            ],
+        )
+    ]
 
 
 @register_validation_rule("summary_metric_status_map")

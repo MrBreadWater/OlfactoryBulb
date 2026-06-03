@@ -360,7 +360,7 @@ contract for future sessions.
     `criterion_latex`, then place any supporting bound-construction formulas in
     `criterion_formulae` rather than hiding the actual mathematics inside prose
   - when a reference-band check is centered around a mean, prefer an absolute-
-    value criterion such as `\lvert \bar{x} - \mu \rvert \le k\sigma`; use a
+    value criterion such as `\vert \bar{x} - \mu \vert \le k\sigma`; use a
     metric-specific observed symbol when the quantity has a common notation
     such as `\bar{R}_{\mathrm{in}}`, `\bar{\tau}_m`, or
     `\bar{I}_{\mathrm{rh}}`, and keep `\bar{x}` as the fallback only when no
@@ -515,10 +515,17 @@ contract for future sessions.
     `series_visuals`, `companion_visuals`, `criterion_latex`,
     `criterion_definitions`, and the other item-level presentation fields; do
     not rebuild audit items from a partial field subset.
-  - When a validation criterion has a compact mathematical form, keep the
-    plain-language `criterion` as the fallback and opt into math rendering with
-    explicit `criterion_latex` plus `criterion_definitions`; do not infer math
-    from prose at render time.
+- When a validation criterion has a compact mathematical form, keep the
+  plain-language `criterion` as the fallback and opt into math rendering with
+  explicit `criterion_latex` plus `criterion_definitions`; do not infer math
+  from prose at render time.
+  - For simple comparison rules such as `summary_metric_min`,
+    `summary_metric_max`, `summary_metric_range`, `group_ordering`,
+    `group_abs_diff_max`, `group_positive`, and `all_exact_metric`, emit the
+    inequality or equality directly in `criterion_latex` instead of hiding it
+    in prose.
+  - The dashboard should still surface `criterion_formulae` when a rule only
+    supplies supporting math rows.
 
 - For HFO-facing parameter and visualization surfaces:
   - use the current contract/registry path rather than ad hoc whitelists

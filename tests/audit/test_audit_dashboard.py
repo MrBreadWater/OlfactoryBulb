@@ -95,6 +95,23 @@ sample_report = AuditReport(
             group_title="Audit gamma",
         ),
         AuditItem(
+            check_id="audit_delta.delta_formulae_only",
+            status="PASS",
+            title="Delta formulae only",
+            criterion="Delta formulae should still render when the rule only provides supporting math rows.",
+            criterion_formulae=[r"x \leq y"],
+            criterion_definitions=[
+                {"symbol": "x", "definition": "lower quantity"},
+                {"symbol": "y", "definition": "upper quantity"},
+            ],
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"label": "Formula-only math"},
+            group_id="audit_delta",
+            group_title="Audit delta",
+        ),
+        AuditItem(
             check_id="audit_gamma.gamma_numeric",
             status="PASS",
             title="Gamma numeric",
@@ -166,12 +183,13 @@ with TemporaryDirectory() as tmp:
     assert (output_dir / "assets" / "mathjax" / "tex-svg.js").exists()
     report_payload = json.loads((output_dir / "report.json").read_text())
     assert report_payload["audit_id"] == "new_sweep"
-    assert len(report_payload["groups"]) == 3
+    assert len(report_payload["groups"]) == 4
     assert report_payload["groups"][0]["group_id"] == "audit_alpha"
     html = (output_dir / "index.html").read_text()
     assert "Audit groups" in html
     assert "Audit alpha" in html
     assert "Audit beta" in html
+    assert "Audit delta" in html
     assert "/__audit_refresh__" in html
     assert "Display controls" in html
     assert "overall-status" in html
@@ -225,6 +243,8 @@ with TemporaryDirectory() as tmp:
     assert "criterion-definition-symbol" in html
     assert "criterion-svg-display" in html
     assert "criterion-svg-inline" in html
+    assert "Delta formulae only" in html
+    assert r"x \leq y" in html
     assert "criterion-variables" not in html
     assert "criterion-variable-chip" not in html
     assert "MathJax" in html
