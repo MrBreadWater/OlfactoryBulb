@@ -328,6 +328,9 @@ contract for future sessions.
   - make audit reports glanceable by default, with collapsed groups/items and
     explicit expansion controls
   - keep warnings visible, specific, and non-duplicated
+  - when audit evidence is primarily numeric, render a compact graph or band
+    first and keep the key/value grid as fallback metadata rather than the
+    primary visual
   - keep persistent audit-card body regions visually coherent in collapsed and
     expanded states; numeric summaries, notes/caveats, and warning blocks
     should share deliberate spacing/order instead of relying on each block's

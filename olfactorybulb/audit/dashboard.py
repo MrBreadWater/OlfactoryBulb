@@ -230,6 +230,105 @@ def _render_interval_visual(item: AuditItem, interval: dict[str, Any]) -> str:
 """
 
 
+def _extract_numeric_profile_data(evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> dict[str, Any] | None:
+    exclude = set(exclude_keys or set())
+    entries: list[tuple[str, float]] = []
+    for key, value in evidence.items():
+        if key in exclude or key == "__reference_annotations__":
+            continue
+        numeric_value = _float_or_none(value)
+        if numeric_value is not None:
+            entries.append((key, numeric_value))
+    if not entries:
+        return None
+
+    values = [value for _, value in entries]
+    domain_low = min(values)
+    domain_high = max(values)
+    if all(value >= 0.0 for value in values):
+        domain_low = 0.0
+    elif all(value <= 0.0 for value in values):
+        domain_high = 0.0
+
+    span = domain_high - domain_low
+    if span <= 0.0:
+        pad = max(abs(domain_high) * 0.25, 1.0)
+    else:
+        pad = max(span * 0.12, abs(domain_high) * 0.03, 0.1)
+    domain_low -= pad
+    domain_high += pad
+    if min(values) >= 0.0:
+        domain_low = max(0.0, domain_low)
+    if max(values) <= 0.0:
+        domain_high = min(0.0, domain_high)
+
+    def _position(value: float) -> float:
+        width = domain_high - domain_low
+        if width <= 0.0:
+            return 50.0
+        return max(0.0, min(100.0, ((value - domain_low) / width) * 100.0))
+
+    zero_position = _position(0.0)
+    rows: list[dict[str, Any]] = []
+    for key, value in entries:
+        value_position = _position(value)
+        left = min(zero_position, value_position)
+        width = max(0.0, abs(value_position - zero_position))
+        rows.append(
+            {
+                "key": key,
+                "label": _evidence_label(key),
+                "value": value,
+                "value_text": _format_numeric(value),
+                "left": left,
+                "width": width,
+            }
+        )
+
+    return {
+        "rows": rows,
+        "domain_low": domain_low,
+        "domain_high": domain_high,
+        "domain_low_text": _format_numeric(domain_low),
+        "domain_high_text": _format_numeric(domain_high),
+        "zero_position": zero_position,
+        "numeric_keys": [key for key, _ in entries],
+    }
+
+
+def _render_numeric_profile(item: AuditItem, evidence: dict[str, Any], *, exclude_keys: set[str] | None = None) -> tuple[str, set[str]]:
+    profile = _extract_numeric_profile_data(evidence, exclude_keys=exclude_keys)
+    if profile is None:
+        return "", set()
+    rows = profile["rows"]
+    row_count = len(rows)
+    status_class = _status_class(item.status)
+    rows_html = "".join(
+        f"<div class='numeric-profile-row'>"
+        f"<div class='numeric-profile-label'>{_esc(row['label'])}</div>"
+        f"<div class='numeric-profile-track'>"
+        f"<div class='numeric-profile-zero' style='left:{profile['zero_position']:.2f}%;'></div>"
+        f"<div class='numeric-profile-bar {status_class}' style='left:{row['left']:.2f}%; width:{row['width']:.2f}%;'></div>"
+        "</div>"
+        f"<div class='numeric-profile-value'>{_esc(row['value_text'])}</div>"
+        "</div>"
+        for row in rows
+    )
+    aria_label = (
+        f"Numeric profile with {row_count} values on a shared scale from "
+        f"{profile['domain_low_text']} to {profile['domain_high_text']}."
+    )
+    return (
+        "<div class='item-block numeric-profile-block'>"
+        "<h4>Numeric profile</h4>"
+        f"<div class='numeric-profile-scale'><span>{_esc(profile['domain_low_text'])}</span><span>{_esc(profile['domain_high_text'])}</span></div>"
+        f"<div class='numeric-profile-graph' data-evidence-graph role='img' aria-label='{_esc(aria_label)}'>"
+        f"{rows_html}"
+        "</div>"
+        "</div>"
+    ), set(profile["numeric_keys"])
+
+
 def _render_compact_interval_summary(item: AuditItem, interval: dict[str, Any]) -> str:
     unit = str(interval["reference_unit"])
     observed_text = _format_numeric(interval["observed_value"], unit=unit)
@@ -296,6 +395,11 @@ def _render_evidence(item: AuditItem) -> str:
         observed_key = str(interval.get("observed_key", "")).strip()
         if observed_key:
             exclude_keys.add(observed_key)
+    else:
+        numeric_profile_html, numeric_keys = _render_numeric_profile(item, evidence, exclude_keys=exclude_keys)
+        if numeric_profile_html:
+            rendered_sections.append(numeric_profile_html)
+            exclude_keys.update(numeric_keys)
     rendered_sections.append(_render_structured_evidence(evidence, exclude_keys=exclude_keys))
     return "".join(section for section in rendered_sections if section)
 
@@ -1073,6 +1177,83 @@ def render_audit_dashboard_html(
     .legend-swatch.observed.status-pass {{ background: var(--green); border-color: var(--green); }}
     .legend-swatch.observed.status-warn {{ background: var(--amber); border-color: var(--amber); }}
     .legend-swatch.observed.status-fail {{ background: var(--red); border-color: var(--red); }}
+    .numeric-profile-block {{
+      border: 1px solid #dbe4f0;
+      border-radius: 10px;
+      padding: 12px;
+      background: #fbfdff;
+    }}
+    .numeric-profile-scale {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      margin-bottom: 8px;
+    }}
+    .numeric-profile-graph {{
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }}
+    .numeric-profile-row {{
+      display: grid;
+      grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+    }}
+    .numeric-profile-label {{
+      color: #334155;
+      font-size: 12px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }}
+    .numeric-profile-track {{
+      position: relative;
+      height: 14px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #eef3fb 0%, #e6edf7 100%);
+      border: 1px solid #d9e2ee;
+    }}
+    .numeric-profile-zero {{
+      position: absolute;
+      top: -1px;
+      bottom: -1px;
+      width: 2px;
+      background: #94a3b8;
+      border-radius: 999px;
+      opacity: 0.9;
+    }}
+    .numeric-profile-bar {{
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      min-width: 2px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+    }}
+    .numeric-profile-bar.status-pass {{
+      background: rgba(21, 128, 61, 0.18);
+      border-color: rgba(21, 128, 61, 0.28);
+    }}
+    .numeric-profile-bar.status-warn {{
+      background: rgba(217, 119, 6, 0.18);
+      border-color: rgba(217, 119, 6, 0.28);
+    }}
+    .numeric-profile-bar.status-fail {{
+      background: rgba(220, 38, 38, 0.18);
+      border-color: rgba(220, 38, 38, 0.28);
+    }}
+    .numeric-profile-value {{
+      color: #334155;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }}
     .evidence-grid {{
       margin: 0;
       display: grid;

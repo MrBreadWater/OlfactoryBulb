@@ -50,6 +50,18 @@ sample_report = AuditReport(
             group_id="audit_beta",
             group_title="Audit beta",
         ),
+        AuditItem(
+            check_id="audit_gamma.gamma_profile",
+            status="PASS",
+            title="Gamma profile",
+            criterion="Gamma values should stay stable.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"count": 12, "mean": 4.2, "std": 1.1, "label": "Observed sweep"},
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
     ],
 )
 
@@ -60,7 +72,7 @@ with TemporaryDirectory() as tmp:
     assert "manifest_revision" in manifest
     report_payload = json.loads((output_dir / "report.json").read_text())
     assert report_payload["audit_id"] == "new_sweep"
-    assert len(report_payload["groups"]) == 2
+    assert len(report_payload["groups"]) == 3
     assert report_payload["groups"][0]["group_id"] == "audit_alpha"
     html = (output_dir / "index.html").read_text()
     assert "Audit groups" in html
@@ -91,6 +103,10 @@ with TemporaryDirectory() as tmp:
     assert "warning-summary-text" in html
     assert "Protocol caveat exists in this item." in html
     assert "Evidence caveat from protocol matching." in html
+    assert "Numeric profile" in html
+    assert "numeric-profile-graph" in html
+    assert html.count("<div class='numeric-profile-row'>") >= 1
+    assert "Observed sweep" in html
     notes_index = html.index("<div class='item-body-notes'>")
     warning_index = html.index("<div class='item-body-warning'>")
     assert notes_index < warning_index
