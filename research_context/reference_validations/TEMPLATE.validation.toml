@@ -1,3 +1,9 @@
+# For the full maintained walkthrough from paper metric to final audit item,
+# plus definitions and examples for every supported status, top-level TOML
+# section, built-in rule kind, built-in protocol runner, warning/caveat path,
+# and visualization feature, see:
+# notes/REFERENCE_VALIDATION_TUTORIAL.md
+#
 # Required validation identity
 validation_id = "example_validation"
 title = "Example literature validation audit"

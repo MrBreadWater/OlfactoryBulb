@@ -190,16 +190,18 @@ surface, use:</p>
 <ul>
 <li><code>python -m olfactorybulb.dashboard.control_center</code></li>
 </ul>
-<p>That maintained command auto-detects the active optimization campaign when it
-can, serves immediately at <code>http://127.0.0.1:6006/</code> by default, falls forward
-to the next available local port if <code>6006</code> is already occupied, and leaves the
-audit tab idle until you explicitly run an audit. The default audit selection
-matches bare <code>python tools/run_audit.py</code> (<code>all</code> / new sweep), and the page now
-includes an audit runner for choosing any registered audit plus explicit audit
-arguments. It does not regenerate missing optimization packets during default
-startup. Use <code>--run-audit-on-start</code> if you explicitly want immediate audit
-execution, or <code>--open-browser</code> if you want it to launch a local browser
-automatically.</p>
+<p>That maintained command serves immediately at <code>http://127.0.0.1:6006/</code> by
+default, falls forward to the next available local port if <code>6006</code> is already
+occupied, and leaves the audit tab idle until you explicitly run an audit. The
+default audit selection matches bare <code>python tools/run_audit.py</code> (<code>all</code> / new
+sweep), and the page now includes an audit runner for choosing any registered
+audit plus explicit audit arguments. The optimization tab starts unselected
+unless you pass an explicit campaign path; use the on-page optimization
+selector to choose among discovered campaigns under
+<code>results/notebook_runs/optimization/</code>. It does not regenerate missing
+optimization packets during default startup. Use <code>--run-audit-on-start</code> if you
+explicitly want immediate audit execution, or <code>--open-browser</code> if you want it
+to launch a local browser automatically.</p>
 <p>For a local docs portal that points at the rendered maintained docs first and
 historical generated pages second, open:</p>
 <ul>

@@ -3,6 +3,12 @@
 If you want the shortest explanation first, start with:
 [REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md](/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md)
 
+If you want the full step-by-step tutorial from paper metric to final audit
+item, including review-status rules, accepted top-level TOML sections,
+built-in rule kinds, built-in protocol runners, warnings/caveats, math, and
+visualization features, use:
+[REFERENCE_VALIDATION_TUTORIAL.md](/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_TUTORIAL.md)
+
 If you are trying to contribute missing literature values by hand rather than
 add new validation logic, use:
 [manual_reference_templates/README.md](/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md)

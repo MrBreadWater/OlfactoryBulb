@@ -69,9 +69,14 @@
       "output_rel": "maintained/research_context/manual_reference_templates/README.html",
       "source_rel": "research_context/manual_reference_templates/README.md",
       "title": "Manual Reference Extraction Templates"
+    },
+    {
+      "output_rel": "maintained/notes/REFERENCE_VALIDATION_TUTORIAL.html",
+      "source_rel": "notes/REFERENCE_VALIDATION_TUTORIAL.md",
+      "title": "Reference Validation Tutorial"
     }
   ],
-  "generated_at": "2026-06-03T16:10:25",
+  "generated_at": "2026-06-04T16:52:32",
   "sections": [
     {
       "pages": [

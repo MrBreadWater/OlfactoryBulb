@@ -643,6 +643,18 @@ contract for future sessions.
   - `skip_neuron_mode = "protocol_handles_skip"`
   - This is how `epli_correctness` now works.
 
+- The reference-validation tutorial/docs surface is a maintained permanent
+  contract, not optional background reading.
+  - When changing validation-design review statuses, accepted top-level
+    validation TOML sections, built-in protocol runners, built-in rule kinds,
+    warning/caveat semantics, or validation visualization/math behavior,
+    update these in the same task:
+    - `notes/REFERENCE_VALIDATION_TUTORIAL.md`
+    - `notes/REFERENCE_VALIDATION_HOWTO.md`
+    - `research_context/reference_validations/TEMPLATE.validation.toml`
+  - Keep definitions explicit there rather than expecting future agents to
+    rediscover semantics by reading code.
+
 ## 7. Validation-design review metadata is mandatory
 
 - Every declarative validation item should resolve to a validation-design

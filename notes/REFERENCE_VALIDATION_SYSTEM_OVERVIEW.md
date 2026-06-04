@@ -5,6 +5,7 @@ it exists.
 
 If you later need the implementation details:
 
+- full paper-to-audit tutorial and field reference: [REFERENCE_VALIDATION_TUTORIAL.md](/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_TUTORIAL.md)
 - dataset ingestion: [REFERENCE_DATASET_HOWTO.md](/home/michael/OlfactoryBulb/notes/REFERENCE_DATASET_HOWTO.md)
 - simulation-backed validation: [REFERENCE_VALIDATION_HOWTO.md](/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_HOWTO.md)
 - manual intake templates: [manual_reference_templates/README.md](/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md)

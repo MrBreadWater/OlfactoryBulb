@@ -1,0 +1,1752 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Reference Validation Tutorial</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fb;
+      --panel: #ffffff;
+      --panel-alt: #f0f4ff;
+      --text: #17202a;
+      --muted: #667085;
+      --accent: #2563eb;
+      --line: #d9dee8;
+      --shadow: 0 10px 28px rgba(15, 23, 42, 0.08);
+      --code-bg: #0f172a;
+      --code-ink: #e2e8f0;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font: 15px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px 20px 72px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 24px;
+    }
+    @media (max-width: 980px) {
+      main { grid-template-columns: 1fr; }
+      aside { order: -1; }
+    }
+    article, aside {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+    }
+    article { padding: 28px; min-width: 0; }
+    aside { padding: 20px; height: fit-content; position: sticky; top: 20px; }
+    .eyebrow {
+      color: var(--accent);
+      font-size: 0.82rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 10px;
+    }
+    .meta {
+      margin: 0 0 18px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel-alt);
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    .meta a { color: var(--accent); text-decoration: none; }
+    .meta a:hover { text-decoration: underline; }
+    h1, h2, h3, h4 { line-height: 1.25; }
+    h1 { margin-top: 0; font-size: 2rem; }
+    h2 { margin-top: 2rem; font-size: 1.45rem; }
+    h3 { margin-top: 1.5rem; font-size: 1.15rem; }
+    p, li { min-width: 0; }
+    a { color: var(--accent); }
+    pre {
+      background: var(--code-bg);
+      color: var(--code-ink);
+      padding: 14px 16px;
+      border-radius: 8px;
+      overflow-x: auto;
+      border: 1px solid rgba(226, 232, 240, 0.08);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.92em;
+    }
+    :not(pre) > code {
+      background: rgba(37, 99, 235, 0.08);
+      color: #1d4ed8;
+      padding: 0.12rem 0.32rem;
+      border-radius: 4px;
+    }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      border: 1px solid var(--line);
+      padding: 0.55rem 0.7rem;
+      text-align: left;
+      vertical-align: top;
+    }
+    th { background: #f8fafc; }
+    blockquote {
+      margin: 1rem 0;
+      padding: 0.8rem 1rem;
+      border-left: 3px solid var(--accent);
+      background: rgba(37, 99, 235, 0.06);
+      color: var(--muted);
+    }
+    ul, ol { padding-left: 1.3rem; }
+    img { max-width: 100%; height: auto; }
+    .toc ul { padding-left: 1rem; }
+    .toc a { color: var(--accent); text-decoration: none; }
+    .toc a:hover { text-decoration: underline; }
+  </style>
+  <script>
+    if (window.location.protocol !== "file:") {
+      window.addEventListener("DOMContentLoaded", function () {
+        document.querySelectorAll("a[data-served-href]").forEach(function (anchor) {
+          anchor.setAttribute("href", anchor.getAttribute("data-served-href"));
+        });
+      });
+    }
+  </script>
+</head>
+<body>
+  <main>
+    <article>
+      <div class="eyebrow">Maintained Docs</div>
+      <p class="meta">
+        <a href="../../index.html">Docs portal</a>
+        ·
+        <a href="../../notes/REFERENCE_VALIDATION_TUTORIAL.md" data-served-href="/repo/notes/REFERENCE_VALIDATION_TUTORIAL.md">View source markdown</a>
+        ·
+        <code>notes/REFERENCE_VALIDATION_TUTORIAL.md</code>
+      </p>
+      <h1 id="reference-validation-tutorial">Reference Validation Tutorial</h1>
+<p>Use this document when you want the full maintained paper-to-audit workflow in
+one place.</p>
+<p>This tutorial is intentionally more detailed and more step-by-step than the
+system overview or the validation HOWTO. It is the maintained onboarding path
+for:</p>
+<ul>
+<li>adding one new paper metric to an existing validation</li>
+<li>adding a new paper that needs normalized reference rows</li>
+<li>deciding whether you need dataset work, protocol work, rule work, or only a
+  validation-config change</li>
+<li>choosing and documenting validation-design review status at every stage</li>
+</ul>
+<p>If you only want the short conceptual explanation first, start with
+<a href="REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html">REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</a>.</p>
+<p>If you already know the workflow and only need the extension points, use
+<a href="REFERENCE_VALIDATION_HOWTO.html">REFERENCE_VALIDATION_HOWTO.md</a>.</p>
+<h2 id="what-this-system-does">What this system does</h2>
+<p>Reference validation turns "the paper says this metric should look like X"
+into a reproducible audit item.</p>
+<p>It does that by keeping four responsibilities separate:</p>
+<ol>
+<li>reference dataset config
+   - turns papers and supplements into normalized reference rows</li>
+<li>reference validation config
+   - says which protocol to run and which checks to apply</li>
+<li>protocol runner
+   - measures model-side quantities</li>
+<li>rule handler
+   - turns those measurements into judgments</li>
+</ol>
+<p>The core discipline is:</p>
+<ul>
+<li>protocol runners produce measurements</li>
+<li>rule handlers produce judgments</li>
+</ul>
+<p>Do not hide judgment logic inside a protocol runner.
+Do not hide measurement logic inside a validation config.</p>
+<h2 id="the-quickest-decision-tree">The quickest decision tree</h2>
+<p>When you want to add a paper metric, ask these questions in order:</p>
+<ol>
+<li>Is the paper value already present in a normalized reference dataset?
+   - If no: update or add a dataset config first.</li>
+<li>Does an existing protocol runner already emit the corresponding model-side
+   metric?
+   - If no: extend or add a protocol runner.</li>
+<li>Can an existing built-in rule kind express the comparison?
+   - If yes: edit only the validation config.
+   - If no: add a new rule kind.</li>
+<li>Has a human reviewed the validation-design choice behind the comparison?
+   - If no: mark it <code>pending_review</code>.
+   - If yes, but it is still a temporary stopgap: mark it <code>provisional</code>.
+   - If yes, and the design choice is accepted: mark it <code>accepted</code>.</li>
+</ol>
+<p>That decision tree is the shortest reliable way to avoid writing the wrong kind
+of code.</p>
+<h2 id="end-to-end-example-add-one-paper-metric">End-to-end example: add one paper metric</h2>
+<p>This section walks through the full path as if you had a paper with one metric
+you wanted to compare against one of the maintained models.</p>
+<p>Assume the paper reports a metric called "Membrane Resting Voltage" and you
+want to compare it against an existing validation.</p>
+<h3 id="step-1-write-down-the-comparison-you-actually-want">Step 1: write down the comparison you actually want</h3>
+<p>Before touching code or TOML, write down all four of these:</p>
+<ul>
+<li>paper/source identity</li>
+<li>the exact literature value you want to use</li>
+<li>the model-side quantity that should match it</li>
+<li>the comparison rule</li>
+</ul>
+<p>Good example:</p>
+<ul>
+<li>paper: "Example et al. (2026)"</li>
+<li>literature metric: "Membrane Resting Voltage"</li>
+<li>model metric key: <code>resting_potential_mV</code></li>
+<li>comparison style: mean-with-accepted-band</li>
+</ul>
+<p>Bad example:</p>
+<ul>
+<li>"compare the model to the paper somehow"</li>
+</ul>
+<p>If you cannot name the model-side metric key or the comparison style yet, you
+do not know which layer needs work.</p>
+<h3 id="step-2-decide-which-layer-is-missing">Step 2: decide which layer is missing</h3>
+<p>Use this checklist:</p>
+<ul>
+<li>If the paper value is not yet in a normalized CSV used by validations:
+  dataset work is missing.</li>
+<li>If the paper value exists, but the protocol result does not emit the
+  model-side metric key:
+  protocol work is missing.</li>
+<li>If both values exist, but no built-in rule kind can compare them:
+  rule work is missing.</li>
+<li>If both values exist and a built-in rule kind fits:
+  only validation-config work is missing.</li>
+</ul>
+<h3 id="step-3-if-needed-add-the-paper-data-to-a-dataset">Step 3: if needed, add the paper data to a dataset</h3>
+<p>If the paper is not yet normalized, update or add a dataset config under
+<code>research_context/reference_datasets/</code>.</p>
+<p>The dataset layer owns:</p>
+<ul>
+<li>source files</li>
+<li>extraction mapping</li>
+<li>normalized outputs such as <code>ephys</code>, <code>fi_curve</code>, <code>protocols</code>, <code>identity</code></li>
+<li>note rows and manual-extraction backlog</li>
+</ul>
+<p>The dataset layer does not own:</p>
+<ul>
+<li>model execution</li>
+<li>judgment logic</li>
+<li>PASS/WARN/FAIL decision rules</li>
+</ul>
+<p>Recommended order when adding a new paper to the dataset layer:</p>
+<ol>
+<li>add the source files</li>
+<li>add protocol rows</li>
+<li>add note rows for protocol caveats</li>
+<li>add summary or point extraction rules</li>
+<li>add manual-extraction rows for anything unresolved</li>
+<li>run the downloader and extractor</li>
+<li>inspect the generated CSVs</li>
+<li>run the dataset audits</li>
+</ol>
+<p>Commands:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/download_reference_dataset_sources.py --dataset-id &lt;dataset_id&gt;
+python tools/extract_reference_dataset.py --dataset-id &lt;dataset_id&gt;
+python tools/run_audit.py reference_dataset_contracts --dataset-id &lt;dataset_id&gt;
+python tools/run_audit.py reference_dataset_status --dataset-id &lt;dataset_id&gt;
+python tools/run_audit.py test_suite_status --suite reference_bundles
+</code></pre>
+<p>Rules for this stage:</p>
+<ul>
+<li>do not guess missing values</li>
+<li>do not silently pool incompatible cell classes</li>
+<li>do not hide protocol caveats</li>
+<li>do not manually patch generated CSVs when the config or extractor should be
+  fixed instead</li>
+</ul>
+<h3 id="step-4-confirm-the-protocol-runner-emits-the-model-side-metric">Step 4: confirm the protocol runner emits the model-side metric</h3>
+<p>Once the paper value exists in normalized form, check whether the relevant
+protocol runner already emits the model-side metric you need.</p>
+<p>Examples of emitted metrics in current validations include:</p>
+<ul>
+<li><code>resting_potential_mV</code></li>
+<li><code>input_resistance_MOhm</code></li>
+<li><code>rheobase_pA</code></li>
+<li><code>fi_gain_Hz_per_50pA</code></li>
+<li><code>cv_isi</code></li>
+<li><code>FWHM_ms</code></li>
+<li><code>AP_onset_mV</code></li>
+</ul>
+<p>If the protocol runner already emits the metric, keep moving.</p>
+<p>If it does not, extend the appropriate protocol runner in
+<code>olfactorybulb/audit/reference_validation_protocols.py</code>.</p>
+<p>Protocol runners should emit measurements, not pass/fail decisions.</p>
+<h3 id="step-5-choose-the-right-rule-kind">Step 5: choose the right rule kind</h3>
+<p>Most paper metrics map cleanly to one of the built-in rule kinds:</p>
+<ul>
+<li>exact protocol execution sanity:
+  <code>protocol_executed</code></li>
+<li>"every cell has a usable finite value":
+  <code>all_finite_metric</code></li>
+<li>"every cell equals a fixed expected value":
+  <code>all_exact_metric</code></li>
+<li>"group B should be larger or smaller than group A":
+  <code>group_ordering</code></li>
+<li>"two groups should stay close":
+  <code>group_abs_diff_max</code></li>
+<li>"these groups should remain positive":
+  <code>group_positive</code></li>
+<li>"a summary value should be above a threshold":
+  <code>summary_metric_min</code></li>
+<li>"a summary value should be below a threshold":
+  <code>summary_metric_max</code></li>
+<li>"a summary value should be inside a fixed range":
+  <code>summary_metric_range</code></li>
+<li>"a summary status code maps to PASS/WARN/FAIL":
+  <code>summary_metric_status_map</code></li>
+<li>"a normalized literature row defines an accepted band":
+  <code>reference_band_rows</code></li>
+<li>"a reference curve and model curve should stay near each other":
+  <code>reference_curve_match</code></li>
+<li>"protocol or reference caveats must remain visible":
+  <code>note_presence</code></li>
+</ul>
+<p>If one of those fits, stay in config.</p>
+<p>If none of those fits, add a new rule kind and document it in the same task.</p>
+<h3 id="step-6-create-or-edit-the-validation-config">Step 6: create or edit the validation config</h3>
+<p>Validation configs live under:</p>
+<ul>
+<li><code>research_context/reference_validations/</code></li>
+</ul>
+<p>Copy the template when creating a new one:</p>
+<pre><code class="language-bash">cp \
+  research_context/reference_validations/TEMPLATE.validation.toml \
+  research_context/reference_validations/my_validation.validation.toml
+</code></pre>
+<p>At minimum, a config needs:</p>
+<pre><code class="language-toml">validation_id = &quot;my_validation&quot;
+title = &quot;My literature validation audit&quot;
+description = &quot;One-line summary of what this validation compares.&quot;
+protocol_runner = &quot;replace_with_registered_protocol_id&quot;
+
+[[checks]]
+kind = &quot;protocol_executed&quot;
+check_id = &quot;my_protocol_executed&quot;
+title = &quot;My protocol executed&quot;
+criterion = &quot;Describe the required protocol.&quot;
+description = &quot;This confirms the configured protocol actually ran.&quot;
+acceptable = &quot;At least one metric row is produced.&quot;
+acceptable_basis = &quot;This is an execution sanity check.&quot;
+</code></pre>
+<h3 id="step-7-add-the-specific-metric-comparison">Step 7: add the specific metric comparison</h3>
+<p>If the paper metric is best represented as a literature reference band, add it
+to <code>reference_band_rows</code>.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+loader = &quot;csv:research_context/EXAMPLE_ephys.csv&quot;
+reference_source = &quot;Example et al. (2026)&quot;
+group_field = &quot;cell_type&quot;
+sigma_arg_name = &quot;reference_sigma_multiplier&quot;
+property_metric_map = {
+  &quot;Membrane Resting Voltage&quot; = &quot;resting_potential_mV&quot;,
+}
+property_band_modes = {
+  &quot;Membrane Resting Voltage&quot; = &quot;symmetric_sd&quot;,
+}
+title = &quot;Reference band placeholder&quot;
+criterion = &quot;Unused placeholder text; this rule auto-generates one item per mapped reference row.&quot;
+description = &quot;Unused placeholder text; this rule auto-generates one item per mapped reference row.&quot;
+acceptable = &quot;Unused placeholder text; this rule auto-generates one item per mapped reference row.&quot;
+acceptable_basis = &quot;Unused placeholder text; this rule auto-generates one item per mapped reference row.&quot;
+</code></pre>
+<p>If the metric is not a reference-band comparison, use the rule kind that best
+matches the paper's claim instead.</p>
+<h3 id="step-8-set-validation-design-review-status">Step 8: set validation-design review status</h3>
+<p>This is mandatory.</p>
+<p>Every declarative validation item must resolve to one of these statuses:</p>
+<ul>
+<li><code>accepted</code></li>
+<li><code>provisional</code></li>
+<li><code>pending_review</code></li>
+<li><code>not_applicable</code></li>
+</ul>
+<p>Start new work with:</p>
+<pre><code class="language-toml">[human_review]
+default_status = &quot;pending_review&quot;
+</code></pre>
+<p>Then override it where needed.</p>
+<p>Examples:</p>
+<pre><code class="language-toml">[human_review]
+default_status = &quot;pending_review&quot;
+</code></pre>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;protocol_executed&quot;
+...
+human_review_status = &quot;accepted&quot;
+human_review_reviewer = &quot;human&quot;
+human_review_note = &quot;Protocol equivalence manually reviewed.&quot;
+</code></pre>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+property_human_review_statuses = {
+  &quot;Membrane Resting Voltage&quot; = &quot;accepted&quot;,
+  &quot;AHP Duration&quot; = &quot;provisional&quot;,
+}
+property_human_review_notes = {
+  &quot;AHP Duration&quot; = &quot;Temporary stopgap until source-backed quantiles are available.&quot;,
+}
+</code></pre>
+<h3 id="step-9-do-a-cheap-smoke-test-first">Step 9: do a cheap smoke test first</h3>
+<p>Most validations should first be run in skip mode so you can validate the
+config path before paying for the full model execution.</p>
+<p>Command:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id &lt;validation_id&gt; --skip-neuron
+</code></pre>
+<p>For simulation-backed validations with <code>skip_neuron_mode = "short_circuit"</code>,
+this returns the configured <code>[skip_item]</code>.</p>
+<p>For mixed validations with
+<code>skip_neuron_mode = "protocol_handles_skip"</code>, the protocol runner still emits
+cheap status-style checks while the expensive parts stay skipped.</p>
+<h3 id="step-10-run-the-full-validation">Step 10: run the full validation</h3>
+<p>Once the config path looks right, run the full validation:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id &lt;validation_id&gt;
+</code></pre>
+<p>If a richer audit wrapper exists, run that too:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py &lt;audit_id&gt;
+</code></pre>
+<h3 id="step-11-run-the-review-status-coverage-audit">Step 11: run the review-status coverage audit</h3>
+<p>Always check review coverage explicitly:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_audit.py human_review_status
+</code></pre>
+<p>This audit:</p>
+<ul>
+<li>fails if any item has no resolved review status</li>
+<li>fails if any status string is unknown</li>
+<li>warns on <code>pending_review</code></li>
+<li>warns on <code>provisional</code></li>
+</ul>
+<h3 id="step-12-decide-what-can-be-promoted-from-pending-review">Step 12: decide what can be promoted from pending review</h3>
+<p>After the validation runs end-to-end, promote only the design choices that have
+actually been reviewed.</p>
+<p>Good pattern:</p>
+<ul>
+<li>start with <code>pending_review</code></li>
+<li>promote stable, justified choices to <code>accepted</code></li>
+<li>mark temporary but acknowledged stopgaps as <code>provisional</code></li>
+<li>keep control-flow-only items as <code>not_applicable</code></li>
+</ul>
+<p>That sequence makes review debt visible without blocking all work.</p>
+<h2 id="validation-design-review-statuses">Validation-design review statuses</h2>
+<p>These statuses are about the validation-design choice, not about whether a
+human personally inspected one specific observed run result.</p>
+<h3 id="accepted"><code>accepted</code></h3>
+<p>Definition:</p>
+<ul>
+<li>a human has reviewed the validation-design choice and considers it acceptable</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>accepted protocol-equivalence assumptions</li>
+<li>accepted pooling/separation choices</li>
+<li>accepted reference-band modes</li>
+<li>accepted manual extraction or mapping choices</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+property_human_review_statuses = {
+  &quot;Membrane Resting Voltage&quot; = &quot;accepted&quot;,
+}
+</code></pre>
+<h3 id="provisional"><code>provisional</code></h3>
+<p>Definition:</p>
+<ul>
+<li>a human reviewed the design choice, but it is still a deliberate stopgap</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>positive-only band reconstructions that are acceptable for now but not ideal</li>
+<li>temporary protocol mapping assumptions</li>
+<li>source-backed but caveated approximations</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+property_human_review_statuses = {
+  &quot;AHP Duration&quot; = &quot;provisional&quot;,
+}
+property_human_review_notes = {
+  &quot;AHP Duration&quot; = &quot;Temporary stopgap until source-backed quantiles are available.&quot;,
+}
+</code></pre>
+<h3 id="pending_review"><code>pending_review</code></h3>
+<p>Definition:</p>
+<ul>
+<li>the design choice exists and is runnable, but a human has not yet signed off
+  on it</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>new validations</li>
+<li>new rule instances</li>
+<li>new mapping choices</li>
+<li>newly added literature bands</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[human_review]
+default_status = &quot;pending_review&quot;
+</code></pre>
+<h3 id="not_applicable"><code>not_applicable</code></h3>
+<p>Definition:</p>
+<ul>
+<li>the item is not a scientific validation-design choice and should not count as
+  review debt</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>skip items</li>
+<li>pure command/control-flow items</li>
+<li>structural non-literature execution scaffolding when appropriate</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[skip_item]
+check_id = &quot;example_validation_skipped&quot;
+status = &quot;WARN&quot;
+title = &quot;Example validation skipped&quot;
+criterion = &quot;The audit should make it explicit when the expensive protocol was not run.&quot;
+description = &quot;This keeps the CLI informative in skip mode.&quot;
+acceptable = &quot;The report clearly says no protocol-backed measurements were produced.&quot;
+acceptable_basis = &quot;This item is generated by control flow rather than by scientific data.&quot;
+human_review_status = &quot;not_applicable&quot;
+</code></pre>
+<h2 id="accepted-top-level-validation-toml-keys-and-sections">Accepted top-level validation TOML keys and sections</h2>
+<p>The maintained loader and validation engine recognize these top-level keys and
+sections.</p>
+<p>If you need a new top-level section, add loader support and update this
+document, the template, and the HOWTO in the same task.</p>
+<h3 id="validation_id"><code>validation_id</code></h3>
+<p>Definition:</p>
+<ul>
+<li>stable identifier for the validation</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">validation_id = &quot;gc_intrinsic_validation&quot;
+</code></pre>
+<h3 id="title"><code>title</code></h3>
+<p>Definition:</p>
+<ul>
+<li>human-facing validation title</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">title = &quot;Granule cell intrinsic validation&quot;
+</code></pre>
+<h3 id="description"><code>description</code></h3>
+<p>Definition:</p>
+<ul>
+<li>one-line description of what the validation compares</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">description = &quot;Audit maintained granule-cell models against generic and subtype-specific intrinsic references.&quot;
+</code></pre>
+<h3 id="protocol_runner"><code>protocol_runner</code></h3>
+<p>Definition:</p>
+<ul>
+<li>registered protocol runner ID used to produce model-side metrics</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">protocol_runner = &quot;gc_intrinsic_current_clamp&quot;
+</code></pre>
+<h3 id="metric_group_field"><code>metric_group_field</code></h3>
+<p>Definition:</p>
+<ul>
+<li>metric field used to group measurements before group-mean and summary rules
+  run</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-toml">metric_group_field = &quot;cell_type&quot;
+</code></pre>
+<pre><code class="language-toml">metric_group_field = &quot;gc_subtype&quot;
+</code></pre>
+<h3 id="notes_path"><code>notes_path</code></h3>
+<p>Definition:</p>
+<ul>
+<li>optional path to a notes table used by <code>note_presence</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">notes_path = &quot;research_context/GC_validation_notes.csv&quot;
+</code></pre>
+<h3 id="skip_neuron_mode"><code>skip_neuron_mode</code></h3>
+<p>Definition:</p>
+<ul>
+<li>how <code>--skip-neuron</code> behaves for this validation</li>
+</ul>
+<p>Accepted values:</p>
+<ul>
+<li><code>short_circuit</code></li>
+<li><code>protocol_handles_skip</code></li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-toml">skip_neuron_mode = &quot;short_circuit&quot;
+</code></pre>
+<pre><code class="language-toml">skip_neuron_mode = &quot;protocol_handles_skip&quot;
+</code></pre>
+<h3 id="extensions"><code>extensions</code></h3>
+<p>Definition:</p>
+<ul>
+<li>optional module specs that register new protocol runners or new rule kinds</li>
+</ul>
+<p>Examples:</p>
+<pre><code class="language-toml">extensions = [&quot;my_project.validation_extensions&quot;]
+</code></pre>
+<pre><code class="language-toml">extensions = [&quot;my_project.validation_extensions:register&quot;]
+</code></pre>
+<h3 id="human_review"><code>[human_review]</code></h3>
+<p>Definition:</p>
+<ul>
+<li>default validation-design review metadata for items that do not override it</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[human_review]
+default_status = &quot;pending_review&quot;
+default_reviewer = &quot;human&quot;
+default_note = &quot;Shared note for items that do not override it.&quot;
+</code></pre>
+<h3 id="defaults"><code>[defaults]</code></h3>
+<p>Definition:</p>
+<ul>
+<li>validation-level defaults copied onto parsed CLI args when those args do not
+  already have values</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[defaults]
+cell_models = &quot;GC1,GC2,GC3,GC4,GC5&quot;
+reference_sigma_multiplier = 2.0
+</code></pre>
+<h3 id="protocol"><code>[protocol]</code></h3>
+<p>Definition:</p>
+<ul>
+<li>default protocol-runner parameter values passed into the registered protocol
+  runner</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[protocol]
+target_vm_mV = -58.0
+step_start_nA = 0.0
+step_stop_nA = 0.30
+step_increment_nA = 0.05
+</code></pre>
+<h3 id="skip_item"><code>[skip_item]</code></h3>
+<p>Definition:</p>
+<ul>
+<li>optional synthetic item returned when <code>--skip-neuron</code> short-circuits the
+  validation</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[skip_item]
+check_id = &quot;gc_intrinsic_validation_skipped&quot;
+status = &quot;WARN&quot;
+title = &quot;Granule-cell intrinsic validation was skipped&quot;
+criterion = &quot;The audit should make it explicit when the NEURON-backed intrinsic protocol was not run.&quot;
+description = &quot;This keeps the declarative validation CLI informative even when the expensive protocol execution is skipped.&quot;
+acceptable = &quot;The report clearly says that no protocol-backed granule-cell measurements were produced.&quot;
+acceptable_basis = &quot;This item is generated by command-line control flow rather than scientific data.&quot;
+evidence_arg_keys = [&quot;jobs&quot;, &quot;reference_sigma_multiplier&quot;, &quot;cell_models&quot;, &quot;reference_gc_subtypes&quot;]
+human_review_status = &quot;not_applicable&quot;
+</code></pre>
+<h3 id="checks"><code>[[checks]]</code></h3>
+<p>Definition:</p>
+<ul>
+<li>one rule instance per array entry</li>
+</ul>
+<p>Every check should define:</p>
+<ul>
+<li><code>kind</code></li>
+<li><code>check_id</code></li>
+<li><code>title</code></li>
+<li><code>criterion</code></li>
+<li><code>description</code></li>
+<li><code>acceptable</code></li>
+<li><code>acceptable_basis</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_range&quot;
+check_id = &quot;synthetic_soma_diameter&quot;
+metric_key = &quot;soma_diameter_um&quot;
+minimum = 8.9
+maximum = 10.3
+title = &quot;Synthetic soma diameter matches the target&quot;
+criterion = &quot;Target soma diameter is 9.6 plus or minus 0.7 micrometers.&quot;
+description = &quot;This compares the instantiated surrogate soma diameter against the target range.&quot;
+acceptable = &quot;The observed soma diameter falls within 8.9 to 10.3 micrometers.&quot;
+acceptable_basis = &quot;The acceptance range comes from the maintained target constants.&quot;
+</code></pre>
+<h2 id="common-optional-per-check-features">Common optional per-check features</h2>
+<p>These optional fields are part of the maintained validation-config surface even
+though not every rule kind uses every field.</p>
+<h3 id="human_review_status-human_review_reviewer-human_review_note"><code>human_review_status</code>, <code>human_review_reviewer</code>, <code>human_review_note</code></h3>
+<p>Definition:</p>
+<ul>
+<li>per-check overrides for validation-design review metadata</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;protocol_executed&quot;
+check_id = &quot;my_protocol_executed&quot;
+title = &quot;My protocol executed&quot;
+criterion = &quot;Describe the required protocol.&quot;
+description = &quot;This confirms the configured protocol actually ran.&quot;
+acceptable = &quot;At least one metric row is produced.&quot;
+acceptable_basis = &quot;This is an execution sanity check.&quot;
+human_review_status = &quot;accepted&quot;
+human_review_reviewer = &quot;human&quot;
+human_review_note = &quot;Protocol equivalence manually reviewed.&quot;
+</code></pre>
+<h3 id="enabled_when_arg_truthy"><code>enabled_when_arg_truthy</code></h3>
+<p>Definition:</p>
+<ul>
+<li>enables the check only when the named CLI/config arg resolves truthy</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_min&quot;
+check_id = &quot;candidate_slice_exists&quot;
+enabled_when_arg_truthy = &quot;candidate_slice&quot;
+metric_key = &quot;candidate_slice_exists_count&quot;
+minimum = 1.0
+title = &quot;Candidate slice exists&quot;
+criterion = &quot;A candidate slice path should be present when candidate-slice mode is requested.&quot;
+description = &quot;This rule only applies when candidate-slice mode is active.&quot;
+acceptable = &quot;The observed count is at least one.&quot;
+acceptable_basis = &quot;The threshold is declared directly in config.&quot;
+</code></pre>
+<h3 id="enabled_when_arg_falsey"><code>enabled_when_arg_falsey</code></h3>
+<p>Definition:</p>
+<ul>
+<li>enables the check only when the named CLI/config arg resolves falsey</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_range&quot;
+check_id = &quot;synthetic_soma_diameter&quot;
+enabled_when_arg_falsey = &quot;skip_neuron&quot;
+metric_key = &quot;soma_diameter_um&quot;
+minimum = 8.9
+maximum = 10.3
+title = &quot;Synthetic soma diameter matches the target&quot;
+criterion = &quot;Target soma diameter is 9.6 plus or minus 0.7 micrometers.&quot;
+description = &quot;This only applies when the NEURON-backed path actually ran.&quot;
+acceptable = &quot;The observed diameter falls within 8.9 to 10.3 micrometers.&quot;
+acceptable_basis = &quot;The accepted interval is declared directly in config.&quot;
+</code></pre>
+<h3 id="enabled_when_arg_in-and-enabled_values"><code>enabled_when_arg_in</code> and <code>enabled_values</code></h3>
+<p>Definition:</p>
+<ul>
+<li>enables the check only when the named arg value is one of the configured
+  allowed values</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;note_presence&quot;
+check_id = &quot;gc_subtype_fi_caveats&quot;
+enabled_when_arg_in = &quot;reference_gc_subtypes&quot;
+enabled_values = [&quot;sGC&quot;, &quot;dGC&quot;]
+title = &quot;Notes / protocol caveats&quot;
+criterion = &quot;Subtype current-rate outputs should keep subtype caveats visible.&quot;
+description = &quot;This rule only applies to the selected subtype targets.&quot;
+acceptable = &quot;All subtype caveats relevant to the selected subtype are displayed.&quot;
+acceptable_basis = &quot;The note set is resolved from the selected subtype context.&quot;
+scope = &quot;fI_validation&quot;
+synthetic_contexts = [
+  { source = &quot;GC_sGC_dGC_fI_curve.csv&quot;, protocol_id = &quot;GERAMITA2016_sGC_dGC_intrinsic_current_clamp&quot;, cell_type = &quot;GC&quot;, gc_subtype = &quot;sGC&quot; },
+  { source = &quot;GC_sGC_dGC_fI_curve.csv&quot;, protocol_id = &quot;GERAMITA2016_sGC_dGC_intrinsic_current_clamp&quot;, cell_type = &quot;GC&quot;, gc_subtype = &quot;dGC&quot; },
+]
+</code></pre>
+<h3 id="filter_field-filter_value-and-filter_values"><code>filter_field</code>, <code>filter_value</code>, and <code>filter_values</code></h3>
+<p>Definition:</p>
+<ul>
+<li>filter loaded reference rows down to one field/value subset before the rule
+  runs</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_curve_match&quot;
+check_id = &quot;example_curve_match&quot;
+loader = &quot;csv:research_context/EXAMPLE_fI_curve.csv&quot;
+filter_field = &quot;protocol_id&quot;
+filter_value = &quot;EXAMPLE_PROTOCOL&quot;
+protocol_evidence_key = &quot;fi_curve_rows&quot;
+reference_current_key = &quot;current_pA&quot;
+reference_value_key = &quot;firing_rate_Hz&quot;
+model_current_key = &quot;current_pA&quot;
+model_value_key = &quot;firing_rate_Hz&quot;
+maximum_mae = 20.0
+maximum_rmse = 30.0
+minimum_point_count = 5
+title = &quot;Model curve stays near the extracted reference curve&quot;
+criterion = &quot;Explain the accepted curve mismatch threshold.&quot;
+description = &quot;Only rows for the configured protocol are compared.&quot;
+acceptable = &quot;The matched current points satisfy the configured error thresholds.&quot;
+acceptable_basis = &quot;The current thresholds are declared directly in config.&quot;
+</code></pre>
+<h3 id="filter_values_arg"><code>filter_values_arg</code></h3>
+<p>Definition:</p>
+<ul>
+<li>pulls filter values from a CLI/config arg instead of hardcoding them</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+loader = &quot;gc_subtype_ephys&quot;
+filter_field = &quot;gc_subtype&quot;
+filter_values_arg = &quot;reference_gc_subtypes&quot;
+reference_source = &quot;Geramita et al. (2016)&quot;
+group_field = &quot;gc_subtype&quot;
+sigma_arg_name = &quot;reference_sigma_multiplier&quot;
+property_metric_map = { &quot;Input Resistance&quot; = &quot;input_resistance_MOhm&quot; }
+property_band_modes = { &quot;Input Resistance&quot; = &quot;lognormal_sd&quot; }
+title = &quot;Reference band placeholder&quot;
+criterion = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+description = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable_basis = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+</code></pre>
+<h3 id="evidence_metric_keys"><code>evidence_metric_keys</code></h3>
+<p>Definition:</p>
+<ul>
+<li>appends extra summary metrics to the evidence block for summary rules</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_min&quot;
+check_id = &quot;baseline_slice_population_counts&quot;
+metric_key = &quot;baseline_population_min_count&quot;
+minimum = 1.0
+title = &quot;Baseline slice contains nonzero populations&quot;
+criterion = &quot;The baseline slice should export nonempty key populations.&quot;
+description = &quot;This is a direct nonzero-count check.&quot;
+acceptable = &quot;The observed count is at least one.&quot;
+acceptable_basis = &quot;The threshold is declared directly in config.&quot;
+evidence_metric_keys = [&quot;baseline_MCs_count&quot;, &quot;baseline_TCs_count&quot;, &quot;baseline_GCs_count&quot;]
+</code></pre>
+<h3 id="pass_status-and-fail_status"><code>pass_status</code> and <code>fail_status</code></h3>
+<p>Definition:</p>
+<ul>
+<li>override the status emitted when a rule passes or fails</li>
+</ul>
+<p>Use it when:</p>
+<ul>
+<li>a comparison is informative but not strong enough to deserve PASS on success</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+check_id = &quot;example_soft_reference_band&quot;
+pass_status = &quot;WARN&quot;
+fail_status = &quot;FAIL&quot;
+loader = &quot;csv:research_context/EXAMPLE_ephys.csv&quot;
+reference_source = &quot;Example et al. (2026)&quot;
+group_field = &quot;cell_type&quot;
+sigma_arg_name = &quot;reference_sigma_multiplier&quot;
+property_metric_map = { &quot;Skewed Latency&quot; = &quot;latency_ms&quot; }
+property_band_modes = { &quot;Skewed Latency&quot; = &quot;quantile_interval&quot; }
+title = &quot;Reference band placeholder&quot;
+criterion = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+description = &quot;This comparison remains visible as a warning even when inside the accepted interval.&quot;
+acceptable = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable_basis = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+</code></pre>
+<h3 id="row_contexts-as_protocol_context-and-property_name"><code>row_contexts</code>, <code>as_protocol_context</code>, and <code>property_name</code></h3>
+<p>Definition:</p>
+<ul>
+<li>tell <code>note_presence</code> how to load rows whose note IDs or protocol IDs should
+  generate visible caveats</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;note_presence&quot;
+check_id = &quot;protocol_caveats&quot;
+title = &quot;Notes / protocol caveats&quot;
+criterion = &quot;Relevant protocol caveats should remain visible whenever this validation is rendered.&quot;
+description = &quot;This surfaces protocol caveats instead of burying them in CSV text.&quot;
+acceptable = &quot;All caveats relevant to the current protocol context are displayed here.&quot;
+acceptable_basis = &quot;The note set is loaded by matching the configured protocol rows.&quot;
+scope = &quot;fI_validation&quot;
+row_contexts = [
+  { loader = &quot;csv:research_context/EXAMPLE_protocols.csv&quot;, filter_field = &quot;protocol_id&quot;, filter_values = [&quot;EXAMPLE_PROTOCOL&quot;], as_protocol_context = true, property_name = &quot;FI Protocol&quot; },
+]
+</code></pre>
+<h3 id="synthetic_contexts"><code>synthetic_contexts</code></h3>
+<p>Definition:</p>
+<ul>
+<li>inject manually declared note-resolution contexts when the needed context is
+  not already present in a loaded CSV</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;note_presence&quot;
+check_id = &quot;gc_generic_fi_caveats&quot;
+title = &quot;Notes / protocol caveats&quot;
+criterion = &quot;Generic current-rate outputs should keep extraction-status caveats visible.&quot;
+description = &quot;This uses a synthetic context because the current-rate point table remains unavailable.&quot;
+acceptable = &quot;All relevant caveats are displayed here.&quot;
+acceptable_basis = &quot;The note set is resolved from the synthetic source and protocol context.&quot;
+scope = &quot;fI_validation&quot;
+synthetic_contexts = [
+  { source = &quot;GC_fI_curve.csv&quot;, protocol_id = &quot;BU2015_GC_intrinsic_current_clamp&quot;, cell_type = &quot;GC&quot;, gc_subtype = &quot;generic_or_unspecified&quot; },
+]
+</code></pre>
+<h3 id="property_human_review_statuses-property_human_review_notes-and-property_human_review_reviewers"><code>property_human_review_statuses</code>, <code>property_human_review_notes</code>, and <code>property_human_review_reviewers</code></h3>
+<p>Definition:</p>
+<ul>
+<li>per-property overrides for <code>reference_band_rows</code>, used when one reference-band
+  rule expands into many generated items with different review maturity</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+human_review_reviewer = &quot;human&quot;
+property_human_review_statuses = {
+  &quot;Membrane Resting Voltage&quot; = &quot;accepted&quot;,
+  &quot;AHP Duration&quot; = &quot;provisional&quot;,
+}
+property_human_review_notes = {
+  &quot;AHP Duration&quot; = &quot;Temporary stopgap until source-backed quantiles are available.&quot;,
+}
+</code></pre>
+<h3 id="property_notes"><code>property_notes</code></h3>
+<p>Definition:</p>
+<ul>
+<li>optional per-property note text for <code>reference_band_rows</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+property_notes = {
+  &quot;Membrane Resting Voltage&quot; = &quot;Reference row comes from a pooled adult cohort.&quot;,
+}
+</code></pre>
+<h2 id="skip-modes">Skip modes</h2>
+<h3 id="short_circuit"><code>short_circuit</code></h3>
+<p>Definition:</p>
+<ul>
+<li><code>--skip-neuron</code> returns only the configured <code>[skip_item]</code></li>
+</ul>
+<p>Use it when:</p>
+<ul>
+<li>the validation is fundamentally simulation-backed</li>
+<li>there is no meaningful cheap partial result</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">skip_neuron_mode = &quot;short_circuit&quot;
+</code></pre>
+<h3 id="protocol_handles_skip"><code>protocol_handles_skip</code></h3>
+<p>Definition:</p>
+<ul>
+<li><code>--skip-neuron</code> still runs cheap checks and lets the protocol runner emit
+  status-style items for skipped expensive paths</li>
+</ul>
+<p>Use it when:</p>
+<ul>
+<li>some useful structural or source-level checks should still run without the
+  expensive NEURON-backed path</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">skip_neuron_mode = &quot;protocol_handles_skip&quot;
+</code></pre>
+<p>Current maintained example:</p>
+<ul>
+<li><code>epli_correctness</code></li>
+</ul>
+<h2 id="built-in-protocols">Built-in protocols</h2>
+<p>These are the maintained built-in protocol runners.</p>
+<h3 id="burton_urban_mctc_current_clamp"><code>burton_urban_mctc_current_clamp</code></h3>
+<p>Definition:</p>
+<ul>
+<li>runs maintained mitral-cell and tufted-cell isolated models through the
+  Burton and Urban 2014 current-clamp family</li>
+</ul>
+<p>Used by:</p>
+<ul>
+<li><code>burton_urban_fi</code></li>
+</ul>
+<p>Example config:</p>
+<pre><code class="language-toml">protocol_runner = &quot;burton_urban_mctc_current_clamp&quot;
+</code></pre>
+<p>Example command:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id burton_urban_fi --skip-neuron
+</code></pre>
+<h3 id="epl_fsi_current_clamp"><code>epl_fsi_current_clamp</code></h3>
+<p>Definition:</p>
+<ul>
+<li>runs the maintained synthetic EPL fast-spiking interneuron surrogate through
+  the Burton, Malyshko, and Urban 2024 current-clamp family</li>
+</ul>
+<p>Used by:</p>
+<ul>
+<li><code>epl_fsi_intrinsic_validation</code></li>
+</ul>
+<p>Example config:</p>
+<pre><code class="language-toml">protocol_runner = &quot;epl_fsi_current_clamp&quot;
+</code></pre>
+<p>Example command:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id epl_fsi_intrinsic_validation --skip-neuron
+</code></pre>
+<h3 id="epli_correctness_structural"><code>epli_correctness_structural</code></h3>
+<p>Definition:</p>
+<ul>
+<li>collects slice-readiness, source-code-default, morphology, and fast-spiking
+  scaffold metrics for the provisional EPLI path</li>
+</ul>
+<p>Used by:</p>
+<ul>
+<li><code>epli_correctness</code></li>
+</ul>
+<p>Example config:</p>
+<pre><code class="language-toml">protocol_runner = &quot;epli_correctness_structural&quot;
+</code></pre>
+<p>Example command:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id epli_correctness --skip-neuron
+</code></pre>
+<h3 id="gc_intrinsic_current_clamp"><code>gc_intrinsic_current_clamp</code></h3>
+<p>Definition:</p>
+<ul>
+<li>runs maintained granule-cell models through the configured intrinsic
+  current-clamp protocol and emits the metrics used by GC validations</li>
+</ul>
+<p>Used by:</p>
+<ul>
+<li><code>gc_intrinsic_validation</code></li>
+</ul>
+<p>Example config:</p>
+<pre><code class="language-toml">protocol_runner = &quot;gc_intrinsic_current_clamp&quot;
+</code></pre>
+<p>Example command:</p>
+<pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
+python tools/run_reference_validation.py --validation-id gc_intrinsic_validation --skip-neuron
+</code></pre>
+<h2 id="built-in-comparison-and-caveat-rule-kinds">Built-in comparison and caveat rule kinds</h2>
+<p>This section defines every maintained built-in rule kind and shows the minimum
+shape of a valid example.</p>
+<h3 id="protocol_executed"><code>protocol_executed</code></h3>
+<p>Definition:</p>
+<ul>
+<li>passes when the protocol runner produced at least one metric row</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>top-level execution sanity</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;protocol_executed&quot;
+check_id = &quot;my_protocol_executed&quot;
+title = &quot;My protocol executed&quot;
+criterion = &quot;Describe the required protocol.&quot;
+description = &quot;This confirms the configured protocol actually ran.&quot;
+acceptable = &quot;At least one metric row is produced.&quot;
+acceptable_basis = &quot;This is an execution sanity check.&quot;
+</code></pre>
+<h3 id="all_finite_metric"><code>all_finite_metric</code></h3>
+<p>Definition:</p>
+<ul>
+<li>fails if any metric row has a missing, non-finite, or invalid numeric value
+  for the requested metric key</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>prerequisite sanity checks</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;all_finite_metric&quot;
+check_id = &quot;resting_potential_recorded&quot;
+metric_key = &quot;resting_potential_mV&quot;
+entity_key = &quot;cell_name&quot;
+title = &quot;Resting potential was recorded&quot;
+criterion = &quot;Every audited model should produce a finite resting membrane potential.&quot;
+description = &quot;This is a prerequisite sanity check.&quot;
+acceptable = &quot;Every audited model has a finite resting potential.&quot;
+acceptable_basis = &quot;A finite resting potential is required before direct literature comparison is meaningful.&quot;
+</code></pre>
+<h3 id="all_exact_metric"><code>all_exact_metric</code></h3>
+<p>Definition:</p>
+<ul>
+<li>fails if any metric row differs from a fixed expected value by more than the
+  configured tolerance</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>zero-current quiescence</li>
+<li>exact flag-like metrics</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;all_exact_metric&quot;
+check_id = &quot;zero_current_quiescence&quot;
+metric_key = &quot;zero_step_rate_Hz&quot;
+entity_key = &quot;cell_name&quot;
+expected = 0.0
+tolerance = 1e-9
+title = &quot;Cells remain quiescent during the zero-current step&quot;
+criterion = &quot;No audited cell should spike during the zero-current step.&quot;
+description = &quot;This keeps the validation in a positive-rheobase regime.&quot;
+acceptable = &quot;Every audited model equals zero within tolerance.&quot;
+acceptable_basis = &quot;This is a protocol-regime sanity check.&quot;
+</code></pre>
+<h3 id="group_ordering"><code>group_ordering</code></h3>
+<p>Definition:</p>
+<ul>
+<li>compares two group means and checks whether the right-hand group is greater
+  than or less than the left-hand group</li>
+</ul>
+<p>Accepted operators:</p>
+<ul>
+<li><code>"&gt;"</code></li>
+<li><code>"&lt;"</code></li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>directional group comparisons from the paper</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;group_ordering&quot;
+check_id = &quot;tc_fi_gain_higher&quot;
+metric_key = &quot;fi_gain_Hz_per_50pA&quot;
+left_group = &quot;MC&quot;
+right_group = &quot;TC&quot;
+operator = &quot;&gt;&quot;
+title = &quot;Tufted-cell gain is higher than mitral-cell gain&quot;
+criterion = &quot;The paper reports higher gain in tufted cells than in mitral cells.&quot;
+description = &quot;This is a directional group comparison.&quot;
+acceptable = &quot;The tufted-cell mean gain is strictly larger than the mitral-cell mean.&quot;
+acceptable_basis = &quot;The rule checks the direction of the group-mean difference.&quot;
+</code></pre>
+<h3 id="group_abs_diff_max"><code>group_abs_diff_max</code></h3>
+<p>Definition:</p>
+<ul>
+<li>compares two group means and requires the absolute difference to stay below a
+  configured maximum</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>"these groups should stay similar" claims</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;group_abs_diff_max&quot;
+check_id = &quot;ap_threshold_similarity&quot;
+metric_key = &quot;AP_onset_mV&quot;
+left_group = &quot;MC&quot;
+right_group = &quot;TC&quot;
+max_difference = 5.0
+title = &quot;Action-potential thresholds remain similar&quot;
+criterion = &quot;The paper reports similar thresholds in both groups.&quot;
+description = &quot;This is a similarity check.&quot;
+acceptable = &quot;The absolute group-mean difference is no more than five millivolts.&quot;
+acceptable_basis = &quot;The validation uses a direct maximum-difference threshold.&quot;
+</code></pre>
+<h3 id="group_positive"><code>group_positive</code></h3>
+<p>Definition:</p>
+<ul>
+<li>requires one or more named group means to be strictly greater than zero</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>positive rheobase regime checks</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;group_positive&quot;
+check_id = &quot;rheobase_positive&quot;
+metric_key = &quot;rheobase_pA&quot;
+groups = [&quot;MC&quot;, &quot;TC&quot;]
+title = &quot;Rheobases remain positive&quot;
+criterion = &quot;Both groups should require a depolarizing step before spiking.&quot;
+description = &quot;This is a regime sanity check.&quot;
+acceptable = &quot;All configured group means are greater than zero.&quot;
+acceptable_basis = &quot;The rule treats strict positivity as the required condition.&quot;
+</code></pre>
+<h3 id="summary_metric_min"><code>summary_metric_min</code></h3>
+<p>Definition:</p>
+<ul>
+<li>requires one summary value to be at least the configured minimum</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>structural count checks</li>
+<li>nonzero-entry checks</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_min&quot;
+check_id = &quot;baseline_slice_population_counts&quot;
+metric_key = &quot;baseline_population_min_count&quot;
+minimum = 1.0
+title = &quot;Baseline slice contains nonzero populations&quot;
+criterion = &quot;The maintained baseline slice should export nonempty key populations.&quot;
+description = &quot;This is a direct nonzero-count check.&quot;
+acceptable = &quot;The observed count is at least one.&quot;
+acceptable_basis = &quot;The threshold is declared directly in config.&quot;
+</code></pre>
+<h3 id="summary_metric_max"><code>summary_metric_max</code></h3>
+<p>Definition:</p>
+<ul>
+<li>requires one summary value to be at most the configured maximum</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>upper-limit checks</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_max&quot;
+check_id = &quot;example_latency_ceiling&quot;
+metric_key = &quot;latency_ms&quot;
+maximum = 25.0
+title = &quot;Latency stays below the ceiling&quot;
+criterion = &quot;The observed latency should not exceed the accepted ceiling.&quot;
+description = &quot;This is a direct upper-bound check.&quot;
+acceptable = &quot;The observed value is at most twenty-five milliseconds.&quot;
+acceptable_basis = &quot;The threshold is declared directly in config.&quot;
+</code></pre>
+<h3 id="summary_metric_range"><code>summary_metric_range</code></h3>
+<p>Definition:</p>
+<ul>
+<li>requires one summary value to stay inside a closed interval</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>direct numeric range checks</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_range&quot;
+check_id = &quot;synthetic_soma_diameter&quot;
+metric_key = &quot;soma_diameter_um&quot;
+minimum = 8.9
+maximum = 10.3
+title = &quot;Synthetic soma diameter matches the target&quot;
+criterion = &quot;Target soma diameter is 9.6 plus or minus 0.7 micrometers.&quot;
+description = &quot;This compares the observed diameter against the target range.&quot;
+acceptable = &quot;The observed diameter falls within 8.9 to 10.3 micrometers.&quot;
+acceptable_basis = &quot;The accepted interval is declared directly in config.&quot;
+</code></pre>
+<h3 id="summary_metric_status_map"><code>summary_metric_status_map</code></h3>
+<p>Definition:</p>
+<ul>
+<li>maps a numeric status code to PASS, WARN, or FAIL using configured code sets</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>structural/readiness paths that emit explicit status codes</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_status_map&quot;
+check_id = &quot;epli_reciprocal_architecture&quot;
+metric_key = &quot;epli_reciprocal_architecture_code&quot;
+pass_values = [2]
+warn_values = [1]
+fail_values = [0]
+title = &quot;Default architecture is reciprocal&quot;
+criterion = &quot;Default integration should preserve reciprocal excitatory-inhibitory architecture.&quot;
+description = &quot;This maps a protocol-emitted status code into audit status.&quot;
+acceptable = &quot;The configured PASS code indicates the intended architecture.&quot;
+acceptable_basis = &quot;The code mapping is declared directly in config.&quot;
+</code></pre>
+<h3 id="reference_band_rows"><code>reference_band_rows</code></h3>
+<p>Definition:</p>
+<ul>
+<li>auto-generates one audit item per mapped literature row and compares the
+  observed group mean to an accepted band reconstructed from the reference row</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>literature rows with a property name, mean, standard deviation, group label,
+  and optional bounds or quantiles</li>
+</ul>
+<p>Required concepts:</p>
+<ul>
+<li><code>loader</code></li>
+<li><code>property_metric_map</code></li>
+<li><code>property_band_modes</code></li>
+</ul>
+<p>Supported band modes:</p>
+<ul>
+<li><code>symmetric_sd</code></li>
+<li><code>lognormal_sd</code></li>
+<li><code>beta_sd</code></li>
+<li><code>binary_indicator</code></li>
+<li><code>quantile_interval</code></li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+loader = &quot;csv:research_context/EXAMPLE_ephys.csv&quot;
+reference_source = &quot;Example et al. (2026)&quot;
+group_field = &quot;cell_type&quot;
+sigma_arg_name = &quot;reference_sigma_multiplier&quot;
+property_metric_map = {
+  &quot;Membrane Resting Voltage&quot; = &quot;resting_potential_mV&quot;,
+  &quot;ISI Coefficient of Variation&quot; = &quot;cv_isi&quot;,
+}
+property_band_modes = {
+  &quot;Membrane Resting Voltage&quot; = &quot;symmetric_sd&quot;,
+  &quot;ISI Coefficient of Variation&quot; = &quot;lognormal_sd&quot;,
+}
+property_lower_bounds = {
+  &quot;ISI Coefficient of Variation&quot; = 0.0,
+}
+title = &quot;Reference band placeholder&quot;
+criterion = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+description = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable_basis = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+</code></pre>
+<h3 id="note_presence"><code>note_presence</code></h3>
+<p>Definition:</p>
+<ul>
+<li>resolves matching note rows and surfaces them as a warning item so caveats
+  stay visible</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>protocol caveats</li>
+<li>reference-band caveats</li>
+<li>subtype or maturity caveats</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;note_presence&quot;
+check_id = &quot;protocol_caveats&quot;
+title = &quot;Notes / protocol caveats&quot;
+criterion = &quot;Relevant protocol caveats should remain visible whenever this validation is rendered.&quot;
+description = &quot;This surfaces caveats instead of burying them in raw CSV text.&quot;
+acceptable = &quot;All caveats relevant to the current protocol context are displayed here.&quot;
+acceptable_basis = &quot;The note set is loaded by matching the rows in scope.&quot;
+scope = &quot;fI_validation&quot;
+row_contexts = [
+  { loader = &quot;csv:research_context/EXAMPLE_protocols.csv&quot;, filter_field = &quot;protocol_id&quot;, filter_values = [&quot;EXAMPLE_PROTOCOL&quot;], as_protocol_context = true, property_name = &quot;FI Protocol&quot; },
+]
+</code></pre>
+<p>This rule usually emits:</p>
+<ul>
+<li><code>WARN</code> when matching notes were found</li>
+<li><code>PASS</code> when no matching notes were found</li>
+</ul>
+<p>That makes caveats visible without pretending they are hard failures.</p>
+<h3 id="reference_curve_match"><code>reference_curve_match</code></h3>
+<p>Definition:</p>
+<ul>
+<li>compares model and reference curves over shared current values and checks
+  error thresholds such as MAE and RMSE</li>
+</ul>
+<p>Use it for:</p>
+<ul>
+<li>current-rate curve comparisons</li>
+</ul>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_curve_match&quot;
+check_id = &quot;reference_curve_match&quot;
+loader = &quot;csv:research_context/EXAMPLE_fI_curve.csv&quot;
+protocol_evidence_key = &quot;fi_curve_rows&quot;
+reference_current_key = &quot;current_pA&quot;
+reference_value_key = &quot;firing_rate_Hz&quot;
+model_current_key = &quot;current_pA&quot;
+model_value_key = &quot;firing_rate_Hz&quot;
+maximum_mae = 25.0
+maximum_rmse = 35.0
+minimum_point_count = 10
+title = &quot;Model curve stays near the reference curve&quot;
+criterion = &quot;The model current-rate curve should stay within a moderate error band of the extracted reference points.&quot;
+description = &quot;This compares the model and reference curve point sets over shared current values.&quot;
+acceptable = &quot;The shared-current MAE and RMSE stay within the configured limits.&quot;
+acceptable_basis = &quot;The current thresholds are pragmatic first-pass tolerances for a curve comparison.&quot;
+</code></pre>
+<h2 id="warning-caveat-math-and-visualization-features">Warning, caveat, math, and visualization features</h2>
+<p>This section covers the features that control how validation items are rendered
+once they reach the audit dashboard.</p>
+<h3 id="warning-state-comparisons">Warning-state comparisons</h3>
+<p>There are three common ways to get a warning-state validation item:</p>
+<ol>
+<li>the rule itself emits <code>WARN</code></li>
+<li>the rule is configured with <code>pass_status = "WARN"</code></li>
+<li>the item resolves to <code>pending_review</code> or <code>provisional</code>, which adds a
+   warning reason when the item status is already <code>WARN</code></li>
+</ol>
+<p>Example of a comparison that stays warning-level even when it "passes":</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+check_id = &quot;example_warning_level_band&quot;
+pass_status = &quot;WARN&quot;
+fail_status = &quot;FAIL&quot;
+loader = &quot;csv:research_context/EXAMPLE_ephys.csv&quot;
+reference_source = &quot;Example et al. (2026)&quot;
+group_field = &quot;cell_type&quot;
+sigma_arg_name = &quot;reference_sigma_multiplier&quot;
+property_metric_map = { &quot;Skewed Latency&quot; = &quot;latency_ms&quot; }
+property_band_modes = { &quot;Skewed Latency&quot; = &quot;quantile_interval&quot; }
+title = &quot;Reference band placeholder&quot;
+criterion = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+description = &quot;This comparison remains a warning even when within range because it is informative but not yet strong enough to count as PASS.&quot;
+acceptable = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+acceptable_basis = &quot;Unused placeholder text; this rule auto-generates one item per mapped literature row.&quot;
+human_review_status = &quot;provisional&quot;
+</code></pre>
+<h3 id="notes-and-caveats">Notes and caveats</h3>
+<p>There are two main note/caveat paths:</p>
+<ul>
+<li><code>note_presence</code> to surface caveats as explicit warning items</li>
+<li><code>property_notes</code> or rule-emitted <code>note</code> text to attach an item-local caveat</li>
+</ul>
+<p>Example of item-local note text on generated reference-band items:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;reference_band_rows&quot;
+...
+property_notes = {
+  &quot;AHP Duration&quot; = &quot;Interpret with caution: current band is a temporary positive-only reconstruction.&quot;,
+}
+</code></pre>
+<h3 id="math-criteria">Math criteria</h3>
+<p>The dashboard can render:</p>
+<ul>
+<li><code>criterion_latex</code></li>
+<li><code>criterion_formulae</code></li>
+<li><code>criterion_definitions</code></li>
+</ul>
+<p>Built-in rules often generate these automatically. Custom rules can set them
+explicitly.</p>
+<p>Example:</p>
+<pre><code class="language-toml">[[checks]]
+kind = &quot;summary_metric_range&quot;
+check_id = &quot;example_soma_diameter_range&quot;
+metric_key = &quot;soma_diameter_um&quot;
+minimum = 8.0
+maximum = 12.0
+title = &quot;Soma diameter stays inside the accepted range&quot;
+criterion = &quot;The observed soma diameter should remain inside the accepted range.&quot;
+criterion_latex = '\left|\bar{x} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}'
+criterion_formulae = [
+  '\mu_{\mathrm{ref}} = 9.6',
+]
+criterion_definitions = [
+  { symbol = '\bar{x}', definition = 'observed group mean' },
+  { symbol = '\mu_{\mathrm{ref}}', definition = 'reference mean' },
+  { symbol = '\sigma_{\mathrm{ref}}', definition = 'reference standard deviation' },
+]
+description = &quot;This uses explicit criterion math for the rendered dashboard.&quot;
+acceptable = &quot;The observed value stays inside the configured range.&quot;
+acceptable_basis = &quot;The accepted interval is declared directly in the validation config.&quot;
+</code></pre>
+<h3 id="built-in-visual-behavior">Built-in visual behavior</h3>
+<p>Several maintained rule paths already render structured visuals:</p>
+<ul>
+<li><code>reference_band_rows</code></li>
+<li>persistent reference-interval visual</li>
+<li><code>reference_curve_match</code></li>
+<li>explicit current-versus-rate series graph</li>
+<li><code>protocol_executed</code></li>
+<li>current-rate series graph when protocol evidence includes <code>fi_curve_rows</code></li>
+</ul>
+<p>These do not need extra TOML visualization fields; the rule handlers emit them.</p>
+<h3 id="custom-series-visuals">Custom series visuals</h3>
+<p>Custom rule kinds can emit <code>series_visuals</code> so the dashboard renders a
+persistent plotted series in the card body.</p>
+<p>Example:</p>
+<pre><code class="language-python">from olfactorybulb.audit import series_visual_spec
+from olfactorybulb.audit.reference_validation_rules import register_validation_rule, _rule_item, _rule_status
+
+@register_validation_rule(&quot;example_series_rule&quot;)
+def example_series_rule(rule, context):
+    passed = True
+    evidence = {
+        &quot;currents_pA&quot;: [0.0, 50.0, 100.0, 150.0],
+        &quot;reference_values_Hz&quot;: [0.0, 2.0, 5.0, 8.6],
+        &quot;model_values_Hz&quot;: [0.0, 1.7, 4.5, 8.1],
+    }
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            series_visuals=[
+                series_visual_spec(
+                    keys=[&quot;currents_pA&quot;, &quot;reference_values_Hz&quot;, &quot;model_values_Hz&quot;],
+                    backend=&quot;matplotlib&quot;,
+                    style={&quot;line_width&quot;: 1.8, &quot;marker_size&quot;: 3.2},
+                )
+            ],
+        )
+    ]
+</code></pre>
+<h3 id="custom-companion-visuals">Custom companion visuals</h3>
+<p>Custom rule kinds can emit <code>companion_visuals</code> for compact scalar or sequence
+visuals such as numeric strips and sparklines.</p>
+<p>Example:</p>
+<pre><code class="language-python">from olfactorybulb.audit.reference_validation_rules import register_validation_rule, _rule_item, _rule_status
+
+@register_validation_rule(&quot;example_numeric_visual_rule&quot;)
+def example_numeric_visual_rule(rule, context):
+    passed = True
+    evidence = {
+        &quot;spike_count&quot;: 12,
+        &quot;response_latency_ms&quot;: 18.6,
+        &quot;sample_count&quot;: 40,
+        &quot;trial_values&quot;: [0.2, 0.6, 0.9, 1.4, 1.6],
+    }
+    return [
+        _rule_item(
+            rule,
+            status=_rule_status(rule, passed),
+            evidence=evidence,
+            companion_visuals=[
+                {&quot;kind&quot;: &quot;numeric_strip&quot;, &quot;keys&quot;: [&quot;spike_count&quot;, &quot;response_latency_ms&quot;, &quot;sample_count&quot;]},
+                {&quot;kind&quot;: &quot;numeric_sparkline&quot;, &quot;key&quot;: &quot;trial_values&quot;},
+            ],
+        )
+    ]
+</code></pre>
+<h3 id="status_reason"><code>status_reason</code></h3>
+<p>Custom rule kinds can set <code>status_reason</code> directly when a warning or failure
+needs a short explicit explanation.</p>
+<p>Example:</p>
+<pre><code class="language-python">from olfactorybulb.audit.reference_validation_rules import register_validation_rule, _rule_item
+
+@register_validation_rule(&quot;example_status_reason_rule&quot;)
+def example_status_reason_rule(rule, context):
+    return [
+        _rule_item(
+            rule,
+            status=&quot;WARN&quot;,
+            evidence={&quot;reason_code&quot;: 1},
+            status_reason=&quot;This item remains a warning because the comparison depends on an intentionally provisional mapping choice.&quot;,
+        )
+    ]
+</code></pre>
+<h2 id="definitions-glossary">Definitions glossary</h2>
+<h3 id="validation">validation</h3>
+<ul>
+<li>one declarative literature-backed comparison package: config plus protocol
+  plus rules</li>
+</ul>
+<h3 id="reference-dataset">reference dataset</h3>
+<ul>
+<li>the normalized literature side of the system</li>
+</ul>
+<h3 id="protocol-runner">protocol runner</h3>
+<ul>
+<li>code that executes the model-side experiment and emits metrics</li>
+</ul>
+<h3 id="metric">metric</h3>
+<ul>
+<li>one measured model-side value, such as <code>resting_potential_mV</code> or
+  <code>fi_gain_Hz_per_50pA</code></li>
+</ul>
+<h3 id="metric-row">metric row</h3>
+<ul>
+<li>one dictionary-like emitted record from the protocol runner</li>
+</ul>
+<h3 id="metric-group-field">metric group field</h3>
+<ul>
+<li>the metric key used to group rows before group-mean summary rules run</li>
+</ul>
+<h3 id="rule-kind">rule kind</h3>
+<ul>
+<li>the comparison logic family named by <code>kind</code> inside <code>[[checks]]</code></li>
+</ul>
+<h3 id="reference-band">reference band</h3>
+<ul>
+<li>the accepted interval reconstructed or read from a literature row</li>
+</ul>
+<h3 id="protocol-evidence">protocol evidence</h3>
+<ul>
+<li>extra structured evidence emitted by the protocol runner and surfaced in the
+  resulting audit item</li>
+</ul>
+<h3 id="row-context">row context</h3>
+<ul>
+<li>a configured set of reference rows used to resolve notes or filter
+  comparisons</li>
+</ul>
+<h3 id="synthetic-context">synthetic context</h3>
+<ul>
+<li>a manually declared context row used for note resolution when the needed
+  context is not already in a loaded CSV</li>
+</ul>
+<h3 id="caveat">caveat</h3>
+<ul>
+<li>a protocol, extraction, pooling, or interpretation warning that should stay
+  visible in the rendered output</li>
+</ul>
+<h3 id="validation-design-review">validation-design review</h3>
+<ul>
+<li>human review of the design choice behind a validation item, not of the
+  observed result row itself</li>
+</ul>
+<h2 id="final-checklist-for-adding-a-paper-metric">Final checklist for adding a paper metric</h2>
+<ol>
+<li>Decide whether the missing piece is dataset, protocol, rule, or config.</li>
+<li>Normalize the paper data before writing judgment logic.</li>
+<li>Keep protocol caveats and review metadata explicit.</li>
+<li>Prefer built-in rules before adding new code.</li>
+<li>Use <code>pending_review</code> by default for new scientific design choices.</li>
+<li>Use <code>provisional</code> only for acknowledged stopgaps.</li>
+<li>Use <code>accepted</code> only after human review.</li>
+<li>Use <code>not_applicable</code> for control-flow items such as skip items.</li>
+<li>Smoke-test with <code>--skip-neuron</code> first when appropriate.</li>
+<li>Run the full validation.</li>
+<li>Run <code>python tools/run_audit.py human_review_status</code>.</li>
+<li>Update this tutorial, the validation HOWTO, and the template whenever
+    statuses, top-level TOML sections, built-in protocols, or built-in rule
+    semantics change.</li>
+</ol>
+    </article>
+    <aside>
+      <div class="eyebrow">On This Page</div>
+      <div class="toc"><div class="toc">
+<ul>
+<li><a href="#reference-validation-tutorial">Reference Validation Tutorial</a><ul>
+<li><a href="#what-this-system-does">What this system does</a></li>
+<li><a href="#the-quickest-decision-tree">The quickest decision tree</a></li>
+<li><a href="#end-to-end-example-add-one-paper-metric">End-to-end example: add one paper metric</a><ul>
+<li><a href="#step-1-write-down-the-comparison-you-actually-want">Step 1: write down the comparison you actually want</a></li>
+<li><a href="#step-2-decide-which-layer-is-missing">Step 2: decide which layer is missing</a></li>
+<li><a href="#step-3-if-needed-add-the-paper-data-to-a-dataset">Step 3: if needed, add the paper data to a dataset</a></li>
+<li><a href="#step-4-confirm-the-protocol-runner-emits-the-model-side-metric">Step 4: confirm the protocol runner emits the model-side metric</a></li>
+<li><a href="#step-5-choose-the-right-rule-kind">Step 5: choose the right rule kind</a></li>
+<li><a href="#step-6-create-or-edit-the-validation-config">Step 6: create or edit the validation config</a></li>
+<li><a href="#step-7-add-the-specific-metric-comparison">Step 7: add the specific metric comparison</a></li>
+<li><a href="#step-8-set-validation-design-review-status">Step 8: set validation-design review status</a></li>
+<li><a href="#step-9-do-a-cheap-smoke-test-first">Step 9: do a cheap smoke test first</a></li>
+<li><a href="#step-10-run-the-full-validation">Step 10: run the full validation</a></li>
+<li><a href="#step-11-run-the-review-status-coverage-audit">Step 11: run the review-status coverage audit</a></li>
+<li><a href="#step-12-decide-what-can-be-promoted-from-pending-review">Step 12: decide what can be promoted from pending review</a></li>
+</ul>
+</li>
+<li><a href="#validation-design-review-statuses">Validation-design review statuses</a><ul>
+<li><a href="#accepted">accepted</a></li>
+<li><a href="#provisional">provisional</a></li>
+<li><a href="#pending_review">pending_review</a></li>
+<li><a href="#not_applicable">not_applicable</a></li>
+</ul>
+</li>
+<li><a href="#accepted-top-level-validation-toml-keys-and-sections">Accepted top-level validation TOML keys and sections</a><ul>
+<li><a href="#validation_id">validation_id</a></li>
+<li><a href="#title">title</a></li>
+<li><a href="#description">description</a></li>
+<li><a href="#protocol_runner">protocol_runner</a></li>
+<li><a href="#metric_group_field">metric_group_field</a></li>
+<li><a href="#notes_path">notes_path</a></li>
+<li><a href="#skip_neuron_mode">skip_neuron_mode</a></li>
+<li><a href="#extensions">extensions</a></li>
+<li><a href="#human_review">[human_review]</a></li>
+<li><a href="#defaults">[defaults]</a></li>
+<li><a href="#protocol">[protocol]</a></li>
+<li><a href="#skip_item">[skip_item]</a></li>
+<li><a href="#checks">[[checks]]</a></li>
+</ul>
+</li>
+<li><a href="#common-optional-per-check-features">Common optional per-check features</a><ul>
+<li><a href="#human_review_status-human_review_reviewer-human_review_note">human_review_status, human_review_reviewer, human_review_note</a></li>
+<li><a href="#enabled_when_arg_truthy">enabled_when_arg_truthy</a></li>
+<li><a href="#enabled_when_arg_falsey">enabled_when_arg_falsey</a></li>
+<li><a href="#enabled_when_arg_in-and-enabled_values">enabled_when_arg_in and enabled_values</a></li>
+<li><a href="#filter_field-filter_value-and-filter_values">filter_field, filter_value, and filter_values</a></li>
+<li><a href="#filter_values_arg">filter_values_arg</a></li>
+<li><a href="#evidence_metric_keys">evidence_metric_keys</a></li>
+<li><a href="#pass_status-and-fail_status">pass_status and fail_status</a></li>
+<li><a href="#row_contexts-as_protocol_context-and-property_name">row_contexts, as_protocol_context, and property_name</a></li>
+<li><a href="#synthetic_contexts">synthetic_contexts</a></li>
+<li><a href="#property_human_review_statuses-property_human_review_notes-and-property_human_review_reviewers">property_human_review_statuses, property_human_review_notes, and property_human_review_reviewers</a></li>
+<li><a href="#property_notes">property_notes</a></li>
+</ul>
+</li>
+<li><a href="#skip-modes">Skip modes</a><ul>
+<li><a href="#short_circuit">short_circuit</a></li>
+<li><a href="#protocol_handles_skip">protocol_handles_skip</a></li>
+</ul>
+</li>
+<li><a href="#built-in-protocols">Built-in protocols</a><ul>
+<li><a href="#burton_urban_mctc_current_clamp">burton_urban_mctc_current_clamp</a></li>
+<li><a href="#epl_fsi_current_clamp">epl_fsi_current_clamp</a></li>
+<li><a href="#epli_correctness_structural">epli_correctness_structural</a></li>
+<li><a href="#gc_intrinsic_current_clamp">gc_intrinsic_current_clamp</a></li>
+</ul>
+</li>
+<li><a href="#built-in-comparison-and-caveat-rule-kinds">Built-in comparison and caveat rule kinds</a><ul>
+<li><a href="#protocol_executed">protocol_executed</a></li>
+<li><a href="#all_finite_metric">all_finite_metric</a></li>
+<li><a href="#all_exact_metric">all_exact_metric</a></li>
+<li><a href="#group_ordering">group_ordering</a></li>
+<li><a href="#group_abs_diff_max">group_abs_diff_max</a></li>
+<li><a href="#group_positive">group_positive</a></li>
+<li><a href="#summary_metric_min">summary_metric_min</a></li>
+<li><a href="#summary_metric_max">summary_metric_max</a></li>
+<li><a href="#summary_metric_range">summary_metric_range</a></li>
+<li><a href="#summary_metric_status_map">summary_metric_status_map</a></li>
+<li><a href="#reference_band_rows">reference_band_rows</a></li>
+<li><a href="#note_presence">note_presence</a></li>
+<li><a href="#reference_curve_match">reference_curve_match</a></li>
+</ul>
+</li>
+<li><a href="#warning-caveat-math-and-visualization-features">Warning, caveat, math, and visualization features</a><ul>
+<li><a href="#warning-state-comparisons">Warning-state comparisons</a></li>
+<li><a href="#notes-and-caveats">Notes and caveats</a></li>
+<li><a href="#math-criteria">Math criteria</a></li>
+<li><a href="#built-in-visual-behavior">Built-in visual behavior</a></li>
+<li><a href="#custom-series-visuals">Custom series visuals</a></li>
+<li><a href="#custom-companion-visuals">Custom companion visuals</a></li>
+<li><a href="#status_reason">status_reason</a></li>
+</ul>
+</li>
+<li><a href="#definitions-glossary">Definitions glossary</a><ul>
+<li><a href="#validation">validation</a></li>
+<li><a href="#reference-dataset">reference dataset</a></li>
+<li><a href="#protocol-runner">protocol runner</a></li>
+<li><a href="#metric">metric</a></li>
+<li><a href="#metric-row">metric row</a></li>
+<li><a href="#metric-group-field">metric group field</a></li>
+<li><a href="#rule-kind">rule kind</a></li>
+<li><a href="#reference-band">reference band</a></li>
+<li><a href="#protocol-evidence">protocol evidence</a></li>
+<li><a href="#row-context">row context</a></li>
+<li><a href="#synthetic-context">synthetic context</a></li>
+<li><a href="#caveat">caveat</a></li>
+<li><a href="#validation-design-review">validation-design review</a></li>
+</ul>
+</li>
+<li><a href="#final-checklist-for-adding-a-paper-metric">Final checklist for adding a paper metric</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</div>
+    </aside>
+  </main>
+</body>
+</html>

@@ -179,8 +179,7 @@ python -m olfactorybulb.dashboard.control_center
 <p>That command:</p>
 <ul>
 <li>defaults to <code>serve</code></li>
-<li>auto-detects the active optimization campaign from the maintained status file
-  or optimization results tree</li>
+<li>starts with no optimization campaign selected unless you pass one explicitly</li>
 <li>starts with the audit tab idle; no audit is run until you ask for one</li>
 <li>defaults the audit runner selection to <code>all</code>, matching <code>python tools/run_audit.py</code></li>
 <li>opens on the audit tab first</li>
@@ -228,6 +227,9 @@ python -m olfactorybulb.dashboard.control_center serve \
 <li>the selector also exposes:</li>
 <li><code>default</code> -&gt; maintained repo-health profile</li>
 <li><code>all</code> -&gt; full registered audit sweep</li>
+<li>use the <code>Optimization campaign</code> selector to choose one of the discovered
+  campaigns under <code>results/notebook_runs/optimization/</code>; the shell no longer
+  picks one automatically</li>
 <li>use <code>Audit arguments</code> for audit-specific flags such as:</li>
 <li><code>--profile maintained</code></li>
 <li><code>--suite reference_bundles --details</code></li>
@@ -258,6 +260,8 @@ python -m olfactorybulb.dashboard.control_center serve \
 python -m olfactorybulb.dashboard.control_center serve \
   results/notebook_runs/optimization/codex_big_hfo_logs
 </code></pre>
+<p>If you omit the campaign path, the control center starts unselected and you
+choose a campaign from the optimization-tab selector.</p>
 <p>Render only the audit dashboard:</p>
 <pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
 python -m olfactorybulb.audit.dashboard burton_urban_fi --output-dir /tmp/burton_audit

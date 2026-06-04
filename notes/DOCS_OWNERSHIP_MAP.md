@@ -136,6 +136,21 @@ multiple places and to decide where a doc change should land first.
     - protocol-runner/rule extension workflow
     - human-review and band-selection expectations
 
+- `notes/REFERENCE_VALIDATION_TUTORIAL.md`
+  - Purpose: detailed end-to-end onboarding tutorial and field reference for
+    declarative literature validation.
+  - Owns:
+    - the single paper-to-audit walkthrough
+    - accepted top-level validation TOML keys and sections
+    - review-status definitions and examples
+    - built-in protocol catalog
+    - built-in rule-kind catalog
+    - warning/caveat/math/visualization feature examples
+  - Should not own:
+    - dataset-extraction mechanics already owned by `notes/REFERENCE_DATASET_HOWTO.md`
+    - low-level protocol implementation details better read from code once the
+      maintained user-facing behavior is already documented
+
 - `notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md`
   - Purpose: short system map.
   - Owns:
