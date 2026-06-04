@@ -142,13 +142,13 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                 ),
             ],
         )
-    if audit_id == "human_review_status":
+    if audit_id == "validation_design_review_status":
         return AuditReport(
-            audit_id="human_review_status",
-            title="Human review status",
+            audit_id="validation_design_review_status",
+            title="Validation design review status",
             items=[
                 AuditItem(
-                    check_id="human_review_status.short_item",
+                    check_id="validation_design_review_status.short_item",
                     status="PASS",
                     title="Short item",
                     criterion="Criterion",
@@ -176,12 +176,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "accepted_interval_mode": "lognormal_sd",
                         "accepted_interval_standard": "lognormal reference interval",
                     },
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.long_item",
+                    check_id="validation_design_review_status.long_item",
                     status="WARN",
                     title="Long item with warning and summary block",
                     criterion="Criterion",
@@ -197,14 +197,14 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "accepted_interval_mode": "lognormal_sd",
                         "accepted_interval_standard": "lognormal reference interval",
                     },
-                    status_reason="Validation-design choice is pending review.",
+                    status_reason="Validation-design choice is pending expert review.",
                     note="Expanded notes make this card taller.",
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.series_item",
+                    check_id="validation_design_review_status.series_item",
                     status="PASS",
                     title="Series item",
                     criterion="The firing-rate-versus-current evidence should render as a series graph.",
@@ -220,12 +220,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     series_visuals=[
                         series_visual_spec(keys=["currents_pA", "reference_values_Hz", "model_values_Hz"]),
                     ],
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.numeric_item",
+                    check_id="validation_design_review_status.numeric_item",
                     status="PASS",
                     title="Numeric item",
                     criterion="Scalar numeric evidence should render as a compact comparison strip.",
@@ -244,12 +244,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                             "keys": ["spike_count", "response_latency_ms", "sample_count"],
                         }
                     ],
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.numeric_plain_item",
+                    check_id="validation_design_review_status.numeric_plain_item",
                     status="PASS",
                     title="Plain numeric item",
                     criterion="Scalar numeric evidence should stay plain unless a companion visual is explicitly requested.",
@@ -262,12 +262,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                         "sample_count": 18,
                         "label": "Plain scalar metrics",
                     },
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.sequence_item",
+                    check_id="validation_design_review_status.sequence_item",
                     status="PASS",
                     title="Sequence item",
                     criterion="Implicit numeric sequence evidence should render as a sparkline.",
@@ -284,12 +284,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                             "key": "trial_values",
                         }
                     ],
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.notes_only_item",
+                    check_id="validation_design_review_status.notes_only_item",
                     status="PASS",
                     title="Notes-only item",
                     criterion="Criterion",
@@ -297,12 +297,12 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     acceptable="Acceptable",
                     acceptable_basis="Configured",
                     note="Protocol caveat without a warning status.",
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.warning_only_item",
+                    check_id="validation_design_review_status.warning_only_item",
                     status="WARN",
                     title="Warning-only item",
                     criterion="Criterion",
@@ -310,20 +310,20 @@ def _capture_run_audit_by_id(audit_id: str, audit_args: list[str], *, progress_c
                     acceptable="Acceptable",
                     acceptable_basis="Configured",
                     status_reason="Warning without notes or a numeric summary.",
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
                 AuditItem(
-                    check_id="human_review_status.no_persistent_body_item",
+                    check_id="validation_design_review_status.no_persistent_body_item",
                     status="PASS",
                     title="No persistent body item",
                     criterion="Criterion",
                     description="Description",
                     acceptable="Acceptable",
                     acceptable_basis="Configured",
-                    group_id="human_review_status",
-                    group_title="Human review status",
+                    group_id="validation_design_review_status",
+                    group_title="Validation design review status",
                     detail_level="summary",
                 ),
             ],
@@ -527,10 +527,10 @@ with TemporaryDirectory() as tmp:
         export_control_center(
             campaign_dir,
             output_dir=root / "control_center_custom",
-            audit_id="human_review_status",
+            audit_id="validation_design_review_status",
             run_audit_on_start=True,
         )
-    assert _run_audit_calls[-1] == ("human_review_status", [])
+    assert _run_audit_calls[-1] == ("validation_design_review_status", [])
 
 with TemporaryDirectory() as tmp:
     root = Path(tmp)
@@ -948,12 +948,12 @@ with TemporaryDirectory() as tmp:
                 "  const input = document.getElementById('control-center-audit-args');"
                 "  input.value = '--profile maintained';"
                 "  input.dispatchEvent(new Event('input', { bubbles: true }));"
-                "  select.value = 'human_review_status';"
+                "  select.value = 'validation_design_review_status';"
                 "  select.dispatchEvent(new Event('change', { bubbles: true }));"
                 "  return { auditId: select.value, auditArgs: input.value };"
                 "})()"
             )
-            assert blanked == {"auditId": "human_review_status", "auditArgs": ""}
+            assert blanked == {"auditId": "validation_design_review_status", "auditArgs": ""}
 
             preserved = client.eval(
                 "new Promise((resolve) => {"
@@ -964,11 +964,11 @@ with TemporaryDirectory() as tmp:
                 "  setTimeout(() => resolve({ auditId: select.value, auditArgs: input.value }), 2600);"
                 "})"
             )
-            assert preserved == {"auditId": "human_review_status", "auditArgs": "--custom-check"}
+            assert preserved == {"auditId": "validation_design_review_status", "auditArgs": "--custom-check"}
 
             status, _payload = _json_post(
                 f"{base_url.rstrip('/')}/__audit_run__",
-                {"audit_id": "human_review_status", "audit_args_text": ""},
+                {"audit_id": "validation_design_review_status", "audit_args_text": ""},
             )
             assert status == 202
             audit_ready = client.eval(
@@ -978,7 +978,7 @@ with TemporaryDirectory() as tmp:
                 "    try {"
                 "      const response = await fetch('/__control_center_state__', { cache: 'no-store' });"
                 "      const state = await response.json();"
-                "      if (state.audit && state.audit.status === 'ready' && state.audit.audit_id === 'human_review_status') { resolve(true); return; }"
+                "      if (state.audit && state.audit.status === 'ready' && state.audit.audit_id === 'validation_design_review_status') { resolve(true); return; }"
                 "    } catch (_error) {}"
                 "    if (Date.now() > deadline) { resolve(false); return; }"
                 "    setTimeout(tick, 125);"

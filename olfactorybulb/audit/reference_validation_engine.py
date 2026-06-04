@@ -10,7 +10,7 @@ from olfactorybulb.audit.reference_validation_config import (
     load_validation_extensions,
     load_reference_validation_config,
     validation_defaults,
-    validation_human_review_defaults,
+    validation_design_review_defaults,
     validation_protocol_defaults,
     validation_protocol_runner_id,
     validation_rule_specs,
@@ -88,7 +88,7 @@ def build_configured_skip_item(
     evidence = dict(spec.get("evidence", {}))
     for key in list(spec.get("evidence_arg_keys", [])):
         evidence[str(key)] = getattr(args, str(key), None)
-    review_defaults = validation_human_review_defaults(config)
+    review_defaults = validation_design_review_defaults(config)
     return AuditItem(
         check_id=str(spec["check_id"]),
         status=str(spec.get("status", "WARN")),
@@ -102,9 +102,21 @@ def build_configured_skip_item(
         acceptable_basis=str(spec.get("acceptable_basis", "")),
         evidence=evidence,
         note=str(spec.get("note", "")),
-        human_review_status=str(spec.get("human_review_status", review_defaults.get("default_status", ""))),
-        human_review_note=str(spec.get("human_review_note", review_defaults.get("default_note", ""))),
-        human_review_reviewer=str(spec.get("human_review_reviewer", review_defaults.get("default_reviewer", ""))),
+        validation_design_review_status=str(spec.get("validation_design_review_status", review_defaults.get("default_status", ""))),
+        validation_design_review_note=str(spec.get("validation_design_review_note", review_defaults.get("default_note", ""))),
+        validation_design_review_reviewer=str(spec.get("validation_design_review_reviewer", review_defaults.get("default_reviewer", ""))),
+        validation_design_review_required_expertise=str(
+            spec.get(
+                "validation_design_review_required_expertise",
+                review_defaults.get("default_required_expertise", ""),
+            )
+        ),
+        validation_design_review_focus=str(
+            spec.get(
+                "validation_design_review_focus",
+                review_defaults.get("default_focus", ""),
+            )
+        ),
     )
 
 

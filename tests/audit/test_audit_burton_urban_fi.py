@@ -145,9 +145,9 @@ with _burton_note_fixture():
     assert "N_BURTON_RECONSTRUCTED_POSITIVE_BANDS" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
     assert "N_BURTON_AHP_DURATION_PROVISIONAL" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
     assert "N_BURTON_ACCOMMODATION_TAU_PROVISIONAL" in item_by_id["burton_reference_band_caveats"].evidence["note_ids"]
-    assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].human_review_status == "accepted"
-    assert item_by_id["mc_t_ahp50_ms_within_uploaded_reference_band"].human_review_status == "provisional"
-    assert "provisional" in item_by_id["mc_t_ahp50_ms_within_uploaded_reference_band"].human_review_note.lower()
+    assert item_by_id["mc_cv_isi_within_uploaded_reference_band"].validation_design_review_status == "approved"
+    assert item_by_id["mc_t_ahp50_ms_within_uploaded_reference_band"].validation_design_review_status == "provisional"
+    assert "provisional" in item_by_id["mc_t_ahp50_ms_within_uploaded_reference_band"].validation_design_review_note.lower()
 
     tight_reference = BURTON_CSV_REFERENCES["MC"]["membrane_time_constant_ms"]
     custom_metrics = [dict(metric) for metric in fixture_metrics]
@@ -185,7 +185,7 @@ assert item_by_id_json["requested_birgiolas_models_registered"]["status"] == "PA
 assert item_by_id_json["birgiolas_model_morphology_skipped"]["status"] == "WARN"
 assert item_by_id_json["burton_urban_fi_skipped"]["evidence"]["jobs"] == 4
 assert item_by_id_json["burton_urban_fi_skipped"]["evidence"]["reference_sigma_multiplier"] == 2.0
-assert item_by_id_json["burton_urban_fi_skipped"]["human_review_status"] == "not_applicable"
+assert item_by_id_json["burton_urban_fi_skipped"]["validation_design_review_status"] == "not_applicable"
 
 generic = subprocess.run(
     [sys.executable, "tools/run_audit.py", "burton_urban_fi", "--skip-neuron", "--json"],
@@ -208,7 +208,7 @@ def _assert_new_sweep_payload(run: subprocess.CompletedProcess[str]) -> None:
     assert "burton_urban_fi.burton_urban_fi_skipped" in check_ids
     assert "burton_urban_fi.baseline_slice_population_counts" in check_ids
     assert "burton_urban_fi.requested_birgiolas_models_registered" in check_ids
-    assert any(check_id.startswith("human_review_status.") for check_id in check_ids)
+    assert any(check_id.startswith("validation_design_review_status.") for check_id in check_ids)
     assert any(check_id.startswith("epli_correctness.") for check_id in check_ids)
     expected_code = 1 if payload["summary"]["FAIL"] else 0
     assert run.returncode == expected_code

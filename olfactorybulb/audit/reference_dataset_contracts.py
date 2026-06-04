@@ -72,7 +72,7 @@ def _item(
         acceptable=acceptable,
         acceptable_basis=acceptable_basis,
         evidence=evidence or {},
-        human_review_status="not_applicable",
+        validation_design_review_status="not_applicable",
     )
 
 

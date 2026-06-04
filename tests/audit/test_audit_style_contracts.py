@@ -11,7 +11,7 @@ from olfactorybulb.audit.env_install import run as run_env_install
 from olfactorybulb.audit.epli_correctness import run as run_epli_correctness
 from olfactorybulb.audit.gc_intrinsic_validation import run as run_gc_intrinsic_validation
 from olfactorybulb.audit.hfo_feature_contracts import run as run_hfo_feature_contracts
-from olfactorybulb.audit.human_review_status import run as run_human_review_status
+from olfactorybulb.audit.validation_design_review_status import run as run_validation_design_review_status
 from olfactorybulb.audit.maintained_docs_integrity import run as run_maintained_docs_integrity
 from olfactorybulb.audit.reference_dataset_contracts import run as run_reference_dataset_contracts
 from olfactorybulb.audit.reference_dataset_status import run as run_reference_dataset_status
@@ -19,7 +19,7 @@ from olfactorybulb.audit.scratch_boundary import run as run_scratch_boundary
 from olfactorybulb.audit.test_suite_status import run as run_test_suite_status
 
 
-def _assert_human_metadata(report) -> None:
+def _assert_item_metadata(report) -> None:
     assert report.items, report.audit_id
     for item in report.items:
         assert item.title.strip(), item.check_id
@@ -39,7 +39,7 @@ env_report = run_env_install(
         launcher_timeout_seconds=1.0,
     )
 )
-_assert_human_metadata(env_report)
+_assert_item_metadata(env_report)
 
 burton_report = run_burton_urban(
     argparse.Namespace(
@@ -53,7 +53,7 @@ burton_report = run_burton_urban(
         jobs=1,
     )
 )
-_assert_human_metadata(burton_report)
+_assert_item_metadata(burton_report)
 
 epli_report = run_epli_correctness(
     argparse.Namespace(
@@ -62,7 +62,7 @@ epli_report = run_epli_correctness(
         reference_sigma_multiplier=2.0,
     )
 )
-_assert_human_metadata(epli_report)
+_assert_item_metadata(epli_report)
 
 gc_report = run_gc_intrinsic_validation(
     argparse.Namespace(
@@ -77,7 +77,7 @@ gc_report = run_gc_intrinsic_validation(
         reference_sigma_multiplier=2.0,
     )
 )
-_assert_human_metadata(gc_report)
+_assert_item_metadata(gc_report)
 
 epl_fsi_report = run_epl_fsi_intrinsic_validation(
     argparse.Namespace(
@@ -91,13 +91,13 @@ epl_fsi_report = run_epl_fsi_intrinsic_validation(
         reference_sigma_multiplier=2.0,
     )
 )
-_assert_human_metadata(epl_fsi_report)
+_assert_item_metadata(epl_fsi_report)
 
 hfo_report = run_hfo_feature_contracts(argparse.Namespace())
-_assert_human_metadata(hfo_report)
+_assert_item_metadata(hfo_report)
 
-human_review_report = run_human_review_status(argparse.Namespace())
-_assert_human_metadata(human_review_report)
+validation_design_review_report = run_validation_design_review_status(argparse.Namespace())
+_assert_item_metadata(validation_design_review_report)
 
 reference_dataset_report = run_reference_dataset_status(
     argparse.Namespace(
@@ -105,7 +105,7 @@ reference_dataset_report = run_reference_dataset_status(
         config_path=None,
     )
 )
-_assert_human_metadata(reference_dataset_report)
+_assert_item_metadata(reference_dataset_report)
 
 reference_dataset_contract_report = run_reference_dataset_contracts(
     argparse.Namespace(
@@ -113,13 +113,13 @@ reference_dataset_contract_report = run_reference_dataset_contracts(
         config_path=None,
     )
 )
-_assert_human_metadata(reference_dataset_contract_report)
+_assert_item_metadata(reference_dataset_contract_report)
 
 maintained_docs_report = run_maintained_docs_integrity(argparse.Namespace())
-_assert_human_metadata(maintained_docs_report)
+_assert_item_metadata(maintained_docs_report)
 
 scratch_boundary_report = run_scratch_boundary(argparse.Namespace())
-_assert_human_metadata(scratch_boundary_report)
+_assert_item_metadata(scratch_boundary_report)
 
 test_suite_report = run_test_suite_status(
     argparse.Namespace(
@@ -128,10 +128,10 @@ test_suite_report = run_test_suite_status(
         list_suites=False,
     )
 )
-_assert_human_metadata(test_suite_report)
+_assert_item_metadata(test_suite_report)
 
 new_sweep_report = run_new_sweep(["--skip-neuron", "--skip-imports"])
-_assert_human_metadata(new_sweep_report)
+_assert_item_metadata(new_sweep_report)
 
 prefixed_hfo_item = next(item for item in new_sweep_report.items if item.check_id == "hfo_feature_contracts.hfo_search_space_unique_paths")
 assert prefixed_hfo_item.description == next(

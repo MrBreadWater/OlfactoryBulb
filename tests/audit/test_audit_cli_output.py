@@ -46,9 +46,11 @@ sample_report = AuditReport(
             acceptable="The tufted-cell value must exceed the mitral-cell value.",
             acceptable_basis="This simplified sample uses an ordering rule instead of a numeric range.",
             note="This is only a note.",
-            human_review_status="accepted",
-            human_review_note="Manually reviewed and accepted.",
-            human_review_reviewer="human",
+            validation_design_review_status="approved",
+            validation_design_review_note="Protocol equivalence reviewed and approved.",
+            validation_design_review_reviewer="qualified_domain_expert",
+            validation_design_review_required_expertise="cellular_electrophysiology",
+            validation_design_review_focus="protocol_equivalence",
         ),
     ],
 )
@@ -105,7 +107,7 @@ assert "Observed group mean" in plain
 assert "Reconstructed log-space standard deviation" in plain
 assert "Why This Is A Warning" not in plain
 assert "Human Review" not in plain
-assert "Accepted | reviewer: human | Manually reviewed and accepted." not in plain
+assert "Approved | reviewer: qualified_domain_expert | Protocol equivalence reviewed and approved." not in plain
 
 colored = format_report(sample_report, color=True)
 assert "\033[" in colored

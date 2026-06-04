@@ -41,9 +41,9 @@ _PROFILES: dict[str, tuple[RepoHealthCheck, ...]] = {
             command=_py("tools/run_audit.py", "env_install", "--run-launcher-smoke"),
         ),
         RepoHealthCheck(
-            check_id="human_review_status",
+            check_id="validation_design_review_status",
             title="Validation design review coverage audit",
-            command=_py("tools/run_audit.py", "human_review_status"),
+            command=_py("tools/run_audit.py", "validation_design_review_status"),
         ),
         RepoHealthCheck(
             check_id="hfo_feature_contracts",
@@ -150,7 +150,7 @@ def _health_item(
         acceptable_basis=acceptable_basis,
         evidence=evidence or {},
         note=note,
-        human_review_status="not_applicable",
+        validation_design_review_status="not_applicable",
     )
 
 

@@ -161,7 +161,7 @@ Optional but useful:
 - `[defaults]`
 - `[protocol]`
 - `[skip_item]`
-- `[human_review]`
+- `[validation_design_review]`
 - `notes_path`
 - `skip_neuron_mode`
 
@@ -286,12 +286,9 @@ The framework now supports two skip behaviors:
 Every declarative validation item should resolve to a validation-design review
 state.
 
-The config key is still called `[human_review]` for compatibility, but the
-intended meaning is narrower than that name suggests.
-
 It means:
 
-- whether a human has reviewed the validation-design choice itself
+- whether an appropriately qualified expert has reviewed the validation-design choice itself
 - whether the chosen reference-band shape is acceptable
 - whether a pooling/separation rule is acceptable
 - whether a protocol-equivalence assumption is acceptable
@@ -299,31 +296,31 @@ It means:
 
 It does not mean:
 
-- that a human has manually checked this specific observed audit result
-- that a human has read and verified the full stack of code the audit uses
+- that someone has manually checked this specific observed audit result
+- that someone has read and verified the full stack of code the audit uses
 - that the underlying model implementation is therefore endorsed in general
 - that every upstream paper/source file was re-reviewed in full for this run
 
 Use the shared vocabulary:
 
-- `accepted`
+- `approved`
 - `provisional`
-- `pending_review`
+- `pending`
 - `not_applicable`
 
 At minimum, set:
 
 ```toml
-[human_review]
-default_status = "pending_review"
+[validation_design_review]
+default_status = "pending"
 ```
 
 Then override where needed:
 
-- `human_review_status` on a single check
-- `human_review_reviewer` and `human_review_note` on a single check
-- `property_human_review_statuses` for `reference_band_rows`
-- `property_human_review_notes` for per-property caveats
+- `validation_design_review_status` on a single check
+- `validation_design_review_reviewer` and `validation_design_review_note` on a single check
+- `property_validation_design_review_statuses` for `reference_band_rows`
+- `property_validation_design_review_notes` for per-property caveats
 
 Think of these as review fields for the test design, not for the observed run
 result.
@@ -331,18 +328,18 @@ result.
 Example:
 
 ```toml
-[human_review]
-default_status = "pending_review"
+[validation_design_review]
+default_status = "pending"
 
 [[checks]]
 kind = "reference_band_rows"
 ...
-human_review_reviewer = "human"
-property_human_review_statuses = {
-  "ISI Coefficient of Variation" = "accepted",
+validation_design_review_reviewer = "qualified_domain_expert"
+property_validation_design_review_statuses = {
+  "ISI Coefficient of Variation" = "approved",
   "AHP Duration" = "provisional",
 }
-property_human_review_notes = {
+property_validation_design_review_notes = {
   "AHP Duration" = "Temporary stopgap until source-backed quantiles are available.",
 }
 ```
@@ -351,18 +348,17 @@ Run the dedicated coverage audit to check this metadata:
 
 ```bash
 source tools/setup/activate_obgpu.sh OBGPU
-python tools/run_audit.py human_review_status
+python tools/run_audit.py validation_design_review_status
 ```
 
 That audit:
 
 - fails if any declarative item resolves to no review status
 - fails if a config uses an unknown status string
-- warns on `pending_review`
+- warns on `pending`
 - warns on `provisional`
 
-The audit title uses the clearer phrase `Validation design review status audit`
-even though the config key remains `human_review`.
+The audit title is `Validation design review status audit`.
 
 ## Built-in rule kinds
 

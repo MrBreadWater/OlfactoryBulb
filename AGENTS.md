@@ -661,49 +661,49 @@ contract for future sessions.
   review state.
 
 - Supported review statuses:
-  - `accepted`
+  - `approved`
   - `provisional`
-  - `pending_review`
+  - `pending`
   - `not_applicable`
 
-- Use `[human_review]` in validation configs.
-  - The key name is historical/compatibility-focused.
-  - The semantic meaning is review of the validation-design choice itself.
+- Use `[validation_design_review]` in validation configs.
+  - The semantic meaning is manual review by an appropriately qualified expert
+    of the validation-design choice itself.
   - At minimum:
-    - `[human_review]`
-    - `default_status = "pending_review"`
+    - `[validation_design_review]`
+    - `default_status = "pending"`
 
 - For `reference_band_rows`, per-property review state is preferred when not
   all metrics are at the same maturity:
-  - `property_human_review_statuses`
-  - `property_human_review_notes`
-  - `property_human_review_reviewers`
+  - `property_validation_design_review_statuses`
+  - `property_validation_design_review_notes`
+  - `property_validation_design_review_reviewers`
 
 - Run the coverage audit after changing validation configs:
-  - `python tools/run_audit.py human_review_status`
+  - `python tools/run_audit.py validation_design_review_status`
 
-- The `human_review_status` audit should:
+- The `validation_design_review_status` audit should:
   - fail on missing review status coverage
   - fail on unknown status strings
-  - warn on `pending_review`
+  - warn on `pending`
   - warn on `provisional`
 
 - Keep the semantics clear in human-facing renderers.
-  - Human-review metadata describes the review state of the underlying
-    validation rule or reference-band choice, not whether one specific observed
-    audit result row was manually checked after the fact.
+  - Validation-design review metadata describes the review state of the
+    underlying validation rule or reference-band choice, not whether one
+    specific observed audit result row was manually checked after the fact.
   - Good examples:
     - whether a reference-band distribution shape is acceptable
     - whether pooling/separation choices are acceptable
     - whether a protocol-equivalence assumption is acceptable
     - whether a manual extraction or mapping choice is acceptable
   - Non-examples:
-    - a human has verified the full code stack used by the audit
-    - a human has manually confirmed this specific PASS/WARN/FAIL outcome
-    - a human has re-reviewed every upstream source document in full for this run
-  - Do not render human-review metadata inline on individual audit result items
-    in the CLI or HTML dashboards unless the wording is explicitly reframed to
-    avoid that confusion.
+    - someone has verified the full code stack used by the audit
+    - someone has manually confirmed this specific PASS/WARN/FAIL outcome
+    - someone has re-reviewed every upstream source document in full for this run
+  - Do not render validation-design review metadata inline on individual audit
+    result items in the CLI or HTML dashboards unless the wording is explicitly
+    reframed to avoid that confusion.
 
 ## 8. Reference-band selection rules
 

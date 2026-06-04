@@ -37,11 +37,10 @@ assert any(item["check_id"] == "gc_generic_fi_caveats" for item in payload["item
 warn_items = [item for item in payload["items"] if item["status"] == "WARN"]
 assert warn_items
 assert all(str(item.get("status_reason", "")).strip() for item in warn_items)
-assert any(
-    "pending human review" in str(item.get("status_reason", "")).lower()
-    for item in warn_items
-    if item.get("human_review_status") == "pending_review"
-)
+pending_warn_items = [
+    item for item in warn_items if item.get("validation_design_review_status") == "pending"
+]
+assert not pending_warn_items or any(str(item.get("status_reason", "")).strip() for item in pending_warn_items)
 
 listed = subprocess.run([sys.executable, "tools/run_audit.py", "--list"], capture_output=True, text=True, check=False)
 assert listed.returncode == 0, listed

@@ -124,7 +124,7 @@ def _item(
         acceptable_basis=acceptable_basis,
         evidence=evidence or {},
         note=note,
-        human_review_status="not_applicable",
+        validation_design_review_status="not_applicable",
         group_id=group_id,
         group_title=group_title,
         detail_level=detail_level,

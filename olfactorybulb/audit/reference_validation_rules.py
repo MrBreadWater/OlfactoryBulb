@@ -128,47 +128,63 @@ def build_rule_items(
             known = ", ".join(sorted(RULE_HANDLERS))
             raise KeyError(f"Unknown validation rule kind {kind!r}. Known rule kinds: {known}") from exc
         rule_items = handler(rule, context)
-        _apply_rule_level_human_review(rule_items, rule, context)
+        _apply_rule_level_validation_design_review(rule_items, rule, context)
         items.extend(rule_items)
     return items
 
 
-def _config_human_review_defaults(context: ValidationRuleContext) -> dict[str, Any]:
-    defaults = context.config.get("human_review", {})
+def _config_validation_design_review_defaults(context: ValidationRuleContext) -> dict[str, Any]:
+    defaults = context.config.get("validation_design_review", {})
     return dict(defaults) if isinstance(defaults, dict) else {}
 
 
-def _resolved_rule_human_review(
+def _resolved_rule_validation_design_review(
     rule: dict[str, Any],
     context: ValidationRuleContext,
 ) -> dict[str, str]:
-    defaults = _config_human_review_defaults(context)
+    defaults = _config_validation_design_review_defaults(context)
     return {
-        "status": str(rule.get("human_review_status", defaults.get("default_status", ""))).strip(),
-        "note": str(rule.get("human_review_note", defaults.get("default_note", ""))).strip(),
-        "reviewer": str(rule.get("human_review_reviewer", defaults.get("default_reviewer", ""))).strip(),
+        "status": str(rule.get("validation_design_review_status", defaults.get("default_status", ""))).strip(),
+        "note": str(rule.get("validation_design_review_note", defaults.get("default_note", ""))).strip(),
+        "reviewer": str(rule.get("validation_design_review_reviewer", defaults.get("default_reviewer", ""))).strip(),
+        "required_expertise": str(
+            rule.get(
+                "validation_design_review_required_expertise",
+                defaults.get("default_required_expertise", ""),
+            )
+        ).strip(),
+        "focus": str(
+            rule.get(
+                "validation_design_review_focus",
+                defaults.get("default_focus", ""),
+            )
+        ).strip(),
     }
 
 
-def _apply_rule_level_human_review(
+def _apply_rule_level_validation_design_review(
     items: list[AuditItem],
     rule: dict[str, Any],
     context: ValidationRuleContext,
 ) -> None:
-    metadata = _resolved_rule_human_review(rule, context)
+    metadata = _resolved_rule_validation_design_review(rule, context)
     for item in items:
-        if not item.human_review_status and metadata["status"]:
-            item.human_review_status = metadata["status"]
-        if not item.human_review_note and metadata["note"]:
-            item.human_review_note = metadata["note"]
-        if not item.human_review_reviewer and metadata["reviewer"]:
-            item.human_review_reviewer = metadata["reviewer"]
+        if not item.validation_design_review_status and metadata["status"]:
+            item.validation_design_review_status = metadata["status"]
+        if not item.validation_design_review_note and metadata["note"]:
+            item.validation_design_review_note = metadata["note"]
+        if not item.validation_design_review_reviewer and metadata["reviewer"]:
+            item.validation_design_review_reviewer = metadata["reviewer"]
+        if not item.validation_design_review_required_expertise and metadata["required_expertise"]:
+            item.validation_design_review_required_expertise = metadata["required_expertise"]
+        if not item.validation_design_review_focus and metadata["focus"]:
+            item.validation_design_review_focus = metadata["focus"]
         if item.status == "WARN" and not item.status_reason:
-            if item.human_review_status == "pending_review":
+            if item.validation_design_review_status == "pending":
                 item.status_reason = (
-                    "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending human review."
+                    "This item is intentionally surfaced as a warning because the validation-design choice behind it is still pending expert review."
                 )
-            elif item.human_review_status == "provisional":
+            elif item.validation_design_review_status == "provisional":
                 item.status_reason = (
                     "This item is intentionally surfaced as a warning because the validation-design choice behind it is still provisional."
                 )
@@ -518,16 +534,32 @@ def _property_review_metadata(
     context: ValidationRuleContext,
     property_name: str,
 ) -> dict[str, str]:
-    defaults = _resolved_rule_human_review(rule, context)
+    defaults = _resolved_rule_validation_design_review(rule, context)
     return {
         "status": str(
-            _property_override(rule, "property_human_review_statuses", property_name, defaults["status"])
+            _property_override(rule, "property_validation_design_review_statuses", property_name, defaults["status"])
         ).strip(),
         "note": str(
-            _property_override(rule, "property_human_review_notes", property_name, defaults["note"])
+            _property_override(rule, "property_validation_design_review_notes", property_name, defaults["note"])
         ).strip(),
         "reviewer": str(
-            _property_override(rule, "property_human_review_reviewers", property_name, defaults["reviewer"])
+            _property_override(rule, "property_validation_design_review_reviewers", property_name, defaults["reviewer"])
+        ).strip(),
+        "required_expertise": str(
+            _property_override(
+                rule,
+                "property_validation_design_review_required_expertise",
+                property_name,
+                defaults["required_expertise"],
+            )
+        ).strip(),
+        "focus": str(
+            _property_override(
+                rule,
+                "property_validation_design_review_focuses",
+                property_name,
+                defaults["focus"],
+            )
         ).strip(),
     }
 
@@ -1109,9 +1141,11 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                 note=str(_property_override(rule, "property_notes", property_name, "")),
             )
         )
-        items[-1].human_review_status = review_metadata["status"]
-        items[-1].human_review_note = review_metadata["note"]
-        items[-1].human_review_reviewer = review_metadata["reviewer"]
+        items[-1].validation_design_review_status = review_metadata["status"]
+        items[-1].validation_design_review_note = review_metadata["note"]
+        items[-1].validation_design_review_reviewer = review_metadata["reviewer"]
+        items[-1].validation_design_review_required_expertise = review_metadata["required_expertise"]
+        items[-1].validation_design_review_focus = review_metadata["focus"]
     return items
 
 

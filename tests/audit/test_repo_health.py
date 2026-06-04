@@ -15,7 +15,7 @@ assert "--run-launcher-smoke" in quick_checks[0].command
 
 maintained_checks = repo_health_checks("maintained")
 maintained_ids = {check.check_id for check in maintained_checks}
-assert "human_review_status" in maintained_ids
+assert "validation_design_review_status" in maintained_ids
 assert "hfo_feature_contracts" in maintained_ids
 assert "maintained_test_suite" in maintained_ids
 assert "audit_dashboard_test_suite" in maintained_ids

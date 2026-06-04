@@ -232,7 +232,7 @@ def _burton_item(
         acceptable_basis=acceptable_basis,
         evidence=evidence or {},
         note=note,
-        human_review_status="not_applicable",
+        validation_design_review_status="not_applicable",
     )
 
 
@@ -993,7 +993,7 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
             "covered_property_count": len(uploaded_property_names),
             "covered_properties": uploaded_property_names,
         },
-        human_review_status="not_applicable",
+        validation_design_review_status="not_applicable",
     )
 
 
@@ -1024,7 +1024,7 @@ def _build_fi_protocol_caveat_item() -> AuditItem:
             acceptable="Relevant protocol caveats are displayed whenever matching notes exist for the protocol set in scope.",
             acceptable_basis="The note set is resolved from validation_notes.csv against the current protocol identifiers in scope.",
             evidence={"protocol_ids_in_scope": [BU2014_MC_TC_PROTOCOL_ID, BMU2024_EPL_FSI_PROTOCOL_ID], "notes": []},
-            human_review_status="not_applicable",
+            validation_design_review_status="not_applicable",
         )
     return AuditItem(
         check_id="fi_protocol_caveats",
@@ -1039,7 +1039,7 @@ def _build_fi_protocol_caveat_item() -> AuditItem:
             "notes": [note.message for note in matched_notes],
             "note_ids": [note.note_id for note in matched_notes],
         },
-        human_review_status="not_applicable",
+        validation_design_review_status="not_applicable",
     )
 
 
@@ -1601,7 +1601,7 @@ def run(args: argparse.Namespace) -> AuditReport:
                 "reference_sigma_multiplier": reference_sigma_multiplier,
                 "candidate_slice": candidate_slice,
             },
-            human_review_status="not_applicable",
+            validation_design_review_status="not_applicable",
         )
     return run_reference_validation(
         args=args,

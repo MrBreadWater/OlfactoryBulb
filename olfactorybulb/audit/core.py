@@ -12,10 +12,10 @@ from typing import Any, Iterable
 STATUS_RANK = {"FAIL": 3, "WARN": 2, "PASS": 1}
 STATUS_ORDER = ("FAIL", "WARN", "PASS")
 STATUS_COLOR = {"FAIL": "31", "WARN": "33", "PASS": "32"}
-KNOWN_HUMAN_REVIEW_STATUSES = (
-    "accepted",
+KNOWN_VALIDATION_DESIGN_REVIEW_STATUSES = (
+    "approved",
     "provisional",
-    "pending_review",
+    "pending",
     "not_applicable",
 )
 LABEL_COLOR = "36"
@@ -152,9 +152,11 @@ class AuditItem:
     companion_visuals: list[dict[str, Any]] = field(default_factory=list)
     note: str = ""
     status_reason: str = ""
-    human_review_status: str = ""
-    human_review_note: str = ""
-    human_review_reviewer: str = ""
+    validation_design_review_status: str = ""
+    validation_design_review_note: str = ""
+    validation_design_review_reviewer: str = ""
+    validation_design_review_required_expertise: str = ""
+    validation_design_review_focus: str = ""
     group_id: str = ""
     group_title: str = ""
     detail_level: str = "detail"
@@ -469,9 +471,9 @@ def status_reason_text(item: AuditItem) -> str:
     status = str(item.status or "").upper()
     if status != "WARN":
         return ""
-    review_status = str(item.human_review_status or "").strip()
-    if review_status == "pending_review":
-        return "Pending human review for the validation-design choice behind this check."
+    review_status = str(item.validation_design_review_status or "").strip()
+    if review_status == "pending":
+        return "Pending expert manual review of the validation-design choice behind this check."
     if review_status == "provisional":
         return "Provisional validation-design choice for this check."
     title_text = str(item.title or "").lower()
