@@ -448,8 +448,8 @@ property_validation_design_review_notes = {
 
 Definition:
 
-- the design choice exists and is runnable, but a human has not yet signed off
-  on it
+- the design choice exists and is runnable, but an appropriately qualified
+  person has not yet signed off on it
 
 Use it for:
 
@@ -457,6 +457,14 @@ Use it for:
 - new rule instances
 - new mapping choices
 - newly added literature bands
+
+Important:
+
+- this is the normal status for LLM-authored or LLM-assisted draft work
+- an LLM can help write the config, but that does not count as validation-design
+  review
+- `pending` is the explicit marker for "drafted and runnable, but not yet
+  scientifically approved by the right kind of reviewer"
 
 Example:
 
@@ -499,6 +507,31 @@ sections.
 
 If you need a new top-level section, add loader support and update this
 document, the template, and the HOWTO in the same task.
+
+## What "Expert" Means In This Repo
+
+In this repo, `expert`, `qualified_domain_expert`, and validation-design review
+all exist partly because LLM agents are an intended workflow surface.
+
+LLM agents can:
+
+- draft validation configs
+- suggest rule choices
+- help map paper metrics into normalized forms
+- write caveat text and documentation
+
+LLM agents cannot be treated as scientifically reliable reviewers.
+
+They do not count as validation-design review, even when the resulting config
+looks clean and runs successfully.
+
+For this metadata, `expert` means a human with the relevant domain background
+to judge the scientific validity of the design choice being made, for example:
+
+- whether a protocol mapping is biologically comparable
+- whether pooling or subtype separation is justified
+- whether a reconstructed reference band is acceptable
+- whether a manual extraction/mapping decision is scientifically defensible
 
 ### `validation_id`
 

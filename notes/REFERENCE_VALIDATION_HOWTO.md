@@ -294,6 +294,14 @@ It means:
 - whether a protocol-equivalence assumption is acceptable
 - whether a manual extraction or mapping choice is acceptable
 
+Why this field exists:
+
+- LLM-assisted drafting is a supported workflow in this repo
+- but LLM agents are not scientifically reliable enough to count as review
+- so this metadata exists to distinguish "an LLM or script assembled this
+  candidate validation design" from "an appropriately qualified person has
+  actually reviewed the scientific validity of that design choice"
+
 It does not mean:
 
 - that someone has manually checked this specific observed audit result
@@ -323,7 +331,8 @@ Then override where needed:
 - `property_validation_design_review_notes` for per-property caveats
 
 Think of these as review fields for the test design, not for the observed run
-result.
+result. In practice, they are also the boundary between LLM-assisted drafting
+and qualified scientific sign-off.
 
 Example:
 

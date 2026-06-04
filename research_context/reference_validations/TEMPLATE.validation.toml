@@ -17,6 +17,9 @@ metric_group_field = "cell_type"
 # validation-design choices such as distribution assumptions, pooling rules,
 # protocol matching, and manual extraction or mapping decisions. It is not
 # about whether someone re-checked one specific observed audit result row.
+# LLM agents may help draft these configs, but that does not count as review.
+# The point of this section is to record when a scientifically qualified person
+# has actually reviewed the underlying design choice.
 [validation_design_review]
 default_status = "pending"
 # default_reviewer = "qualified_domain_expert"

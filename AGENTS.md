@@ -669,6 +669,10 @@ contract for future sessions.
 - Use `[validation_design_review]` in validation configs.
   - The semantic meaning is manual review by an appropriately qualified expert
     of the validation-design choice itself.
+  - This repo intentionally allows LLM-assisted drafting as a first-class
+    workflow, but LLM output does not count as validation-design review.
+  - The purpose of this metadata is to mark where a scientifically qualified
+    person has actually checked the design choice behind the validation item.
   - At minimum:
     - `[validation_design_review]`
     - `default_status = "pending"`

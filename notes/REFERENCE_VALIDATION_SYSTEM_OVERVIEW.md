@@ -53,6 +53,32 @@ In practice that means:
 - different cell classes can stay separate by default
 - validation rules can be upgraded without rewriting the whole pipeline
 
+## Why "Expert Review" Exists
+
+This repository intentionally treats LLM-assisted authoring as a first-class
+workflow option for drafting datasets, validation configs, rule choices,
+protocol mappings, and documentation.
+
+That is useful for speed, but it is not enough for scientific trust.
+
+Large language models can help assemble a candidate validation design, but they
+are not reliable scientific reviewers. They can misread papers, flatten
+protocol caveats, overstate comparability, or quietly normalize a questionable
+assumption into something that looks clean in config.
+
+That is why the validation-design review metadata exists.
+
+When these docs say `expert` or `qualified_domain_expert`, they mean a person
+with the relevant scientific background to judge the validation-design choice
+itself, such as protocol equivalence, reference-band reconstruction, pooling
+strategy, or manual extraction/mapping decisions.
+
+It does not mean:
+
+- the LLM drafted the item and therefore it is reviewed
+- the current PASS/WARN/FAIL result is scientifically endorsed
+- every line of implementation code was audited manually
+
 ## Simplest Explanation Of How To Use It
 
 ### Fast path
