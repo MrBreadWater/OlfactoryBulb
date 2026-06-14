@@ -917,6 +917,479 @@ our need for:
 - caveat presentation
 - maintained dashboard UX
 
+## What Could Go Wrong During The Overhaul
+
+This section assumes the serious path is pursued:
+
+- fork `neuronunit`
+- migrate the scientific validation core toward that fork
+- keep the current repo as the provenance-aware application shell
+
+These are the main repo-specific failure modes.
+
+### 1. Environment support can fail before any scientific migration starts
+
+Current fact:
+
+- the maintained import verifier explicitly excludes the old neuronunit stack
+- `import sciunit` and `import neuronunit` currently fail in `OBGPU`
+
+Why this matters:
+
+- the migration can stall at packaging and compatibility before any actual
+  scientific value is gained
+- a forked `neuronunit` that only works in an older side environment would
+  recreate the same split-brain support problem we already have
+
+What could go wrong:
+
+- Python-version mismatches
+- stale dependency pins
+- incompatibility with current `neuron`, `numpy`, `scipy`, or `quantities`
+- import-time failures hidden from the maintained setup audits
+
+Repo surfaces affected:
+
+- [`tools/setup/verify_obgpu_python_imports.py`](../tools/setup/verify_obgpu_python_imports.py)
+- `OBGPU` activation and setup flow
+
+Mitigation:
+
+- make `sciunit` / `neuronunit` import support part of the maintained
+  environment contract before migrating scientific logic
+- add them to the maintained import verifier only after the support path is
+  actually stable
+
+### 2. We can end up with two scientific sources of truth
+
+Current fact:
+
+- the repo already has a maintained protocol/rule validation engine
+- the repo also already has a legacy `olfactorybulb.neuronunit` layer
+
+Why this matters:
+
+- a half-migration can leave the current protocol/rule engine and the new
+  NeuronUnit core both claiming authority over the same biological checks
+
+What could go wrong:
+
+- `burton_urban_fi` semantics live partly in rule handlers and partly in
+  NeuronUnit tests
+- one path gets updated while the other drifts
+- the dashboard renders one result while notebooks or researchers cite another
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/reference_validation_engine.py`](../olfactorybulb/audit/reference_validation_engine.py)
+- [`olfactorybulb/neuronunit/`](../olfactorybulb/neuronunit/)
+
+Mitigation:
+
+- migrate one validation family completely at a time
+- define a single authoritative execution path for each migrated family
+- make the deprecated path adapter-only or read-only as soon as possible
+
+### 3. The config compiler may become the new complexity sink
+
+Current fact:
+
+- the maintained validation layer is driven by declarative TOML configs
+- the config loader and engine have repo-specific semantics for defaults,
+  extensions, skip behavior, rule specs, and review metadata
+
+Why this matters:
+
+- if we rebase onto NeuronUnit, these TOMLs do not map 1:1 onto plain
+  `Model` / `Test` / `Score` objects
+
+What could go wrong:
+
+- the compiler from TOML to NeuronUnit suites becomes more complex than the
+  current system it replaced
+- repo-specific semantics such as `skip_neuron_mode`, `extensions`, or
+  `validation_design_review` become awkward bolt-ons
+- configuration errors become harder to explain because failures happen inside
+  a compile step plus a test-execution step
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/reference_validation_config.py`](../olfactorybulb/audit/reference_validation_config.py)
+- [`olfactorybulb/audit/reference_validation_engine.py`](../olfactorybulb/audit/reference_validation_engine.py)
+
+Mitigation:
+
+- keep the first compiler slice narrow
+- target one validation family
+- refuse to compile unsupported semantics implicitly; fail loudly when a TOML
+  field has no clean NeuronUnit mapping
+
+### 4. The migration can silently destroy the current band-policy guarantees
+
+Current fact:
+
+- the maintained rule engine requires explicit `property_band_modes` for every
+  property in `reference_band_rows`
+- this was added precisely because one-size-fits-all scoring was scientifically
+  unsafe
+
+Why this matters:
+
+- a naive SciUnit / NeuronUnit migration could accidentally collapse back to
+  "everything is a z-score around a mean and standard deviation"
+
+What could go wrong:
+
+- lognormal or bounded metrics get remapped to symmetric arithmetic scoring
+- positive-only metrics lose their current protections
+- the migration appears cleaner architecturally while scientifically regressing
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/reference_validation_rules.py`](../olfactorybulb/audit/reference_validation_rules.py)
+- current validation TOMLs
+
+Mitigation:
+
+- move band policy into the fork as an explicit first-class abstraction
+- do not allow a migration path that erases the per-property band-mode choice
+
+### 5. Review-state and caveat semantics can be lost or downgraded
+
+Current fact:
+
+- the maintained system explicitly carries validation-design review status,
+  reviewer, focus, and caveat/warning messaging into the audit outputs
+
+Why this matters:
+
+- these are part of the current scientific trust model, not decorative UI
+
+What could go wrong:
+
+- a migrated NeuronUnit result contains a score but no place for:
+  - approved / provisional / pending status
+  - caveat text
+  - warning reason
+- the dashboard loses the distinction between "failed scientifically" and
+  "scientifically provisional but still visible"
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/reference_validation_engine.py`](../olfactorybulb/audit/reference_validation_engine.py)
+- [`olfactorybulb/audit/core.py`](../olfactorybulb/audit/core.py)
+- [`olfactorybulb/audit/dashboard.py`](../olfactorybulb/audit/dashboard.py)
+
+Mitigation:
+
+- define review/caveat metadata in the fork before adapting results back into
+  `AuditReport`
+- treat review-state preservation as a migration gate, not an optional polish step
+
+### 6. Provenance can be weakened even if the new scientific core is better
+
+Current fact:
+
+- the repo has an explicit extraction and normalization engine for literature
+  datasets
+
+Why this matters:
+
+- provenance is easy to talk about abstractly, but easy to flatten during a
+  migration if the new core only wants "observation values"
+
+What could go wrong:
+
+- normalized rows get reduced to bare observations without source location
+- transformation lineage gets lost
+- caveat note IDs stop propagating
+- paper ingestion becomes "good enough for the test" but no longer auditable
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/reference_dataset_engine.py`](../olfactorybulb/audit/reference_dataset_engine.py)
+- normalized dataset CSV outputs
+
+Mitigation:
+
+- design provenance-bearing observation/reference objects first
+- make row-level source identity and transformation lineage mandatory in the
+  migrated scientific-core interface
+
+### 7. `AuditReport` adaptation can become lossy and misleading
+
+Current fact:
+
+- the current user-facing surface depends on `AuditItem` / `AuditReport`
+- the dashboard expects fields such as `criterion_latex`, `criterion_formulae`,
+  `criterion_definitions`, `series_visuals`, `note`, and `status_reason`
+
+Why this matters:
+
+- if NeuronUnit results are richer in one direction and poorer in another, the
+  adapter can quietly throw away meaning
+
+What could go wrong:
+
+- typed score objects get collapsed into simplistic PASS/WARN/FAIL without
+  enough explanation
+- NeuronUnit observations/predictions exist but the dashboard no longer gets
+  the math, visual, or warning structure it expects
+- two people reading the same result through two interfaces get different
+  interpretations
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/core.py`](../olfactorybulb/audit/core.py)
+- [`olfactorybulb/audit/dashboard.py`](../olfactorybulb/audit/dashboard.py)
+
+Mitigation:
+
+- define an explicit adapter contract
+- test round-tripping of one migrated suite into `AuditReport`
+- refuse silent field loss for caveats, criterion math, or visuals
+
+### 8. Dashboard regressions can make the migration look scientifically worse than it is
+
+Current fact:
+
+- the dashboard is already a major maintained product surface
+- it expects item cards, interval visuals, series visuals, compact warnings,
+  and rich criterion rendering
+
+Why this matters:
+
+- even a scientifically better core will look like a step backward if the UI
+  becomes less legible or less informative
+
+What could go wrong:
+
+- migrated tests render as raw JSON or generic score strings
+- current compact interval summaries disappear
+- f-I curve evidence no longer renders because the new result objects do not map
+  to current visual specs
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/dashboard.py`](../olfactorybulb/audit/dashboard.py)
+- [`olfactorybulb/dashboard/control_center.py`](../olfactorybulb/dashboard/control_center.py)
+
+Mitigation:
+
+- treat dashboard parity as part of the migration acceptance criteria
+- add suite-level views only after current single-item evidence remains intact
+
+### 9. Control-center orchestration can break on non-audit-shaped results
+
+Current fact:
+
+- the control center currently assumes audits, docs, and optimization all live
+  behind one shell and that audit runs emit report artifacts with the current
+  shape
+
+Why this matters:
+
+- a migration that changes the internal execution model can still break control
+  center orchestration even if command-line tests appear to pass
+
+What could go wrong:
+
+- state polling and session history no longer reflect migrated scientific runs
+- score-matrix or suite results do not fit the current audit-group model
+- optimization tab integrations cannot consume the new result shape
+
+Repo surfaces affected:
+
+- [`olfactorybulb/dashboard/control_center.py`](../olfactorybulb/dashboard/control_center.py)
+
+Mitigation:
+
+- keep the outer control-center contract stable
+- evolve the inner result schema behind adapters first
+
+### 10. Performance can regress badly if dependent predictions are not preserved
+
+Current fact:
+
+- the old NeuronUnit layer already had dependent-prediction caching
+- the maintained protocol runners currently bundle several measurements into one
+  execution path
+
+Why this matters:
+
+- a naive one-test-one-simulation migration can explode the runtime cost
+
+What could go wrong:
+
+- each score reruns a full protocol
+- optimization candidate evaluation becomes much slower
+- dashboard-triggered reruns become unusably expensive
+
+Repo surfaces affected:
+
+- protocol runners
+- optimization candidate evaluation paths
+
+Mitigation:
+
+- preserve multi-measurement protocol execution
+- require protocol-result caching before broadening migration scope
+
+### 11. Historical comparability can be lost
+
+Current fact:
+
+- the repo already has maintained audits, generated report artifacts, and human
+  interpretations of their current outputs
+
+Why this matters:
+
+- changing the scientific core can change not just formatting but actual
+  numerical behavior and status outcomes
+
+What could go wrong:
+
+- old PASS/WARN/FAIL judgments no longer match
+- it becomes hard to tell whether differences are scientific improvements or
+  migration bugs
+- previously reviewed validation choices become difficult to compare across versions
+
+Repo surfaces affected:
+
+- maintained audit outputs
+- checked-in or archived dashboard/report artifacts
+
+Mitigation:
+
+- keep before/after baselines for one migrated validation family
+- compare score-by-score and item-by-item, not just final status counts
+
+### 12. Test coverage can give false confidence
+
+Current fact:
+
+- the repo has many test modules, but only a small subset is surfaced through
+  the audit-visible grouped suites
+- many existing tests are infrastructure tests, not scientific-core equivalence
+  tests
+
+Why this matters:
+
+- "tests passed" may not mean the migration preserved scientific meaning
+
+What could go wrong:
+
+- dashboard and config smoke tests stay green while scientific semantics drift
+- migrated suites lack equivalence tests against the old maintained outputs
+
+Repo surfaces affected:
+
+- `tests/`
+- `test_suite_status` grouped suites
+
+Mitigation:
+
+- add focused equivalence tests for migrated scientific families
+- distinguish "software still runs" from "scientific judgments still mean the
+  same thing"
+
+### 13. The fork itself can become a second neglected codebase
+
+Current fact:
+
+- a forked NeuronUnit would become another maintained project surface
+
+Why this matters:
+
+- the migration only improves things if the fork is actively owned
+
+What could go wrong:
+
+- the fork accumulates local patches without release discipline
+- this repo depends on unreleased fork behavior
+- future agents and collaborators cannot tell what lives upstream, in the fork,
+  or only here
+
+Mitigation:
+
+- define release/versioning expectations for the fork up front
+- keep the boundary between forked library and application repo explicit
+
+### 14. Scope creep can derail the migration
+
+Current fact:
+
+- much of the current audit system has nothing to do with classical NeuronUnit
+  scientific testing
+
+Why this matters:
+
+- if the overhaul tries to move everything at once, it will burn time on the
+  least appropriate targets
+
+What could go wrong:
+
+- downloader tests, docs audits, dashboard shell checks, scratch-boundary
+  audits, and HFO contract audits get forced into a NeuronUnit-shaped design
+- migration energy is spent on non-scientific surfaces instead of the scientific core
+
+Repo surfaces affected:
+
+- [`olfactorybulb/audit/registry.py`](../olfactorybulb/audit/registry.py)
+- all non-scientific audits
+
+Mitigation:
+
+- explicitly scope the overhaul to the scientific validation core first
+- treat operational and infrastructure audits as separate concerns unless a
+  clear NeuronUnit abstraction genuinely helps them
+
+## Practical Risk Ranking
+
+Highest risk:
+
+1. environment and dependency instability
+2. split-brain scientific sources of truth
+3. loss of explicit band-policy and review/caveat semantics
+4. performance regression from broken caching
+5. lossy `AuditReport` adaptation
+
+Moderate risk:
+
+1. dashboard regression
+2. config compiler complexity
+3. historical comparability drift
+4. misleading test confidence
+5. fork maintenance overhead
+
+Lower risk, but still real:
+
+1. scope creep into non-scientific audits
+2. control-center orchestration friction
+
+## The Main Strategic Mistake To Avoid
+
+The biggest strategic mistake would be to interpret "move onto NeuronUnit" as
+"replace the current system wholesale."
+
+That path maximizes:
+
+- churn
+- ambiguity
+- temporary duplicate truths
+- UI regressions
+- setup breakage
+
+without guaranteeing that the scientifically valuable parts of the current
+system survive the transition.
+
+The safer strategy is:
+
+1. stabilize library support
+2. migrate one scientific validation family end to end
+3. prove parity plus improvement
+4. only then widen the migration surface
+
 ## What This Means for the Dashboard
 
 If the dashboard is going to become more useful for SciUnit-like workflows, the
