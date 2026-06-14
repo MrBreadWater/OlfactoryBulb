@@ -1367,6 +1367,346 @@ Lower risk, but still real:
 1. scope creep into non-scientific audits
 2. control-center orchestration friction
 
+## Strategies For Handling The Overhaul Risks
+
+The mitigations above are per-risk. This section turns them into an actual
+execution strategy.
+
+The guiding rule should be:
+
+- do not migrate by abstraction alone
+- migrate by **one fully verified scientific family at a time**
+
+### Strategy 1: Establish a supported library baseline before any scientific rewrite
+
+Purpose:
+
+- eliminate the packaging/setup risk first
+
+Concrete steps:
+
+1. make the forked `neuronunit` importable inside the maintained `OBGPU`
+   environment
+2. verify that `sciunit`, the fork, and their unit-handling dependencies work
+   under the same maintained path used for current audits
+3. add a temporary dedicated setup audit for fork readiness before wiring the
+   fork into any maintained scientific validation
+
+Required gate before proceeding:
+
+- maintained environment can import the fork reliably
+- import behavior is tested in the same path as the rest of the maintained
+  setup checks
+
+Why this works:
+
+- it prevents a scientific migration from being blocked by hidden environment
+  instability halfway through
+
+### Strategy 2: Define a hard source-of-truth rule per migrated validation family
+
+Purpose:
+
+- prevent split-brain scientific logic
+
+Concrete steps:
+
+1. choose one validation family, for example `burton_urban_fi`
+2. mark one execution path as authoritative for that family
+3. keep the old path only as:
+   - baseline comparator
+   - adapter target
+   - rollback path
+4. once the migrated path is accepted, stop editing the old scientific logic
+   for that family except to preserve baseline comparison fixtures
+
+Required gate before proceeding to the next family:
+
+- there is a documented authoritative path for the migrated family
+- the older path is no longer co-evolving semantically
+
+Why this works:
+
+- it avoids the most dangerous state, where two active implementations drift
+  while both still look legitimate
+
+### Strategy 3: Build a thin config compiler, not a second framework
+
+Purpose:
+
+- stop the config translation layer from becoming worse than the current engine
+
+Concrete steps:
+
+1. keep the current TOML surface for the first migration slice
+2. compile only the minimum supported subset into forked-NeuronUnit tests and
+   suites
+3. reject unsupported config features explicitly and early
+4. do not try to compile every current rule kind into the fork on day one
+
+Compiler design rule:
+
+- the compiler should be a **deterministic projection** from current config
+  semantics into forked-NeuronUnit primitives
+- it should not become a second hidden policy engine
+
+Required gate before broadening compiler scope:
+
+- one family compiles cleanly
+- error messages are clear
+- unsupported semantics fail loudly rather than degrading silently
+
+Why this works:
+
+- it keeps the migration visible and understandable instead of replacing one
+  bespoke layer with a more obscure bespoke layer
+
+### Strategy 4: Move scientific policy objects into the fork before migrating judgments
+
+Purpose:
+
+- preserve band policies, provenance, and review semantics
+
+Concrete steps:
+
+Before migrating real validations, define explicit fork-side abstractions for:
+
+- provenance-bearing observation/reference records
+- band-policy objects:
+  - symmetric
+  - lognormal
+  - beta/bounded
+  - quantile
+  - binary
+- review-state metadata
+- caveat / comparability metadata
+
+Required gate before judgment migration:
+
+- no migrated validation family may fall back to a generic z-score-only policy
+  unless that is the scientifically intended policy
+
+Why this works:
+
+- it prevents the migration from "succeeding" architecturally while regressing
+  scientifically
+
+### Strategy 5: Preserve protocol bundling and dependent-prediction reuse from day one
+
+Purpose:
+
+- avoid catastrophic runtime regression
+
+Concrete steps:
+
+1. identify which current maintained protocol runners bundle multiple
+   measurements from one execution
+2. model those as shared prediction/protocol-result objects in the forked core
+3. preserve or improve the old dependent-prediction cache behavior
+4. measure runtime before and after for each migrated family
+
+Required gate before using migrated suites in optimization or dashboard reruns:
+
+- repeated tests do not rerun the same expensive simulation unnecessarily
+- candidate evaluation cost stays within an acceptable multiplier of the current path
+
+Why this works:
+
+- it keeps the migration from becoming unusable in the places where scale
+  matters most
+
+### Strategy 6: Make `AuditReport` adaptation a first-class contract, not an afterthought
+
+Purpose:
+
+- protect the maintained CLI and dashboard surfaces
+
+Concrete steps:
+
+1. define an adapter spec from forked-NeuronUnit results into `AuditItem` /
+   `AuditReport`
+2. enumerate every current report feature that must survive:
+   - criterion text
+   - criterion math
+   - definitions
+   - warnings
+   - caveats
+   - review status
+   - series visuals
+   - compact interval visuals
+3. write explicit adapter tests for those fields
+
+Required gate before any migrated family is exposed in the control center:
+
+- the migrated family renders through the same maintained report path
+- no critical user-facing field is silently dropped
+
+Why this works:
+
+- it keeps the fork from fragmenting the user-facing surfaces into incompatible
+  result models
+
+### Strategy 7: Enforce before/after equivalence reviews per migrated family
+
+Purpose:
+
+- distinguish scientific improvement from migration bug
+
+Concrete steps:
+
+For each migrated family:
+
+1. run the old maintained path on a fixed baseline
+2. run the migrated path on the same baseline
+3. compare:
+   - per-item observations
+   - per-item scores or acceptance-band judgments
+   - final PASS/WARN/FAIL outcomes
+   - caveats and review metadata
+4. classify each difference as one of:
+   - intended scientific improvement
+   - adapter bug
+   - migration bug
+   - unresolved discrepancy
+
+Required gate before acceptance:
+
+- every meaningful difference is explained and recorded
+
+Why this works:
+
+- it prevents accidental semantic drift from being normalized into the new path
+
+### Strategy 8: Add migration-specific tests instead of trusting the existing test tree
+
+Purpose:
+
+- avoid false confidence from infrastructure-heavy test coverage
+
+Concrete steps:
+
+Add dedicated tests for:
+
+- fork import readiness
+- config compilation for migrated families
+- provenance preservation
+- band-policy preservation
+- review/caveat propagation
+- `AuditReport` adaptation parity
+- runtime caching behavior
+
+Important rule:
+
+- do not count generic dashboard or downloader smoke tests as evidence that the
+  scientific migration is correct
+
+Why this works:
+
+- it aligns the tests with the actual migration risks
+
+### Strategy 9: Keep the dashboard stable while expanding it
+
+Purpose:
+
+- stop UI churn from obscuring scientific progress
+
+Concrete steps:
+
+1. preserve the existing item-card path for migrated families first
+2. only add score-matrix or suite-level views after the single-item audit view
+   remains correct
+3. require dashboard parity for:
+   - interval displays
+   - series graphs
+   - warnings/caveats
+   - criterion math
+
+Required gate before enabling new suite views by default:
+
+- legacy-style per-item interpretation remains available and correct
+
+Why this works:
+
+- it keeps the new suite semantics additive rather than destructive
+
+### Strategy 10: Separate core fork ownership from application ownership
+
+Purpose:
+
+- stop the fork from turning into another ambiguous local patch pile
+
+Concrete steps:
+
+1. define what belongs in the fork versus this repo
+2. version and tag fork releases
+3. avoid depending on unreleased fork behavior for long periods
+4. record which repo features are:
+   - upstream SciUnit concepts
+   - fork-specific NeuronUnit additions
+   - OlfactoryBulb application behavior
+
+Why this works:
+
+- it preserves maintainability and makes future contributions legible
+
+## Recommended Migration Sequence
+
+The safest overall strategy is:
+
+### Phase 0: Fork readiness
+
+- make the fork installable/importable in `OBGPU`
+- verify unit-handling support
+- define ownership/versioning expectations
+
+### Phase 1: Scientific primitives
+
+- add provenance-bearing observation/reference objects
+- add band-policy abstractions
+- add review/caveat metadata carriers
+- add shared prediction/protocol-result caching semantics
+
+### Phase 2: One-family pilot
+
+- choose one family, preferably `burton_urban_fi`
+- compile the existing config into forked-NeuronUnit structures
+- adapt results back into `AuditReport`
+- compare old versus new outputs exhaustively
+
+### Phase 3: Dashboard extension
+
+- keep current item-card rendering
+- add optional suite / score-matrix views for the migrated family
+- confirm control-center compatibility
+
+### Phase 4: Broaden cautiously
+
+- only migrate the next family after the previous one has:
+  - environment stability
+  - parity or explained improvement
+  - adapter stability
+  - acceptable runtime
+
+## Rollback Strategy
+
+The overhaul should be run so that rollback is always possible.
+
+Required rollback rules:
+
+1. keep the old maintained path runnable for the current pilot family until the
+   migrated path is accepted
+2. keep baseline result artifacts for comparison
+3. do not delete current config or report surfaces during the pilot
+4. if one of the highest-risk failures appears:
+   - packaging instability
+   - semantic drift without explanation
+   - major runtime regression
+   - loss of caveat/review/provenance behavior
+   then freeze scope expansion and revert to the last accepted family boundary
+
+This matters because a migration that cannot be rolled back is too easy to
+continue just because it has already consumed time.
+
 ## The Main Strategic Mistake To Avoid
 
 The biggest strategic mistake would be to interpret "move onto NeuronUnit" as
