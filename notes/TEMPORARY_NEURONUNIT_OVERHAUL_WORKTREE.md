@@ -34,6 +34,19 @@ artifact noise. This separate worktree exists so the overhaul can be developed,
 committed, and reviewed on its own branch without dragging those unrelated
 changes into the same branch history.
 
+## Related local state
+
+- SciUnit creates a local user config directory at
+  `/home/michael/.sciunit/` on first import.
+- Current observed file:
+  `/home/michael/.sciunit/config.json`
+- Why it matters:
+  this branch now uses SciUnit-backed import and validation helpers, so future
+  agents should expect that config path to exist while working on the overhaul.
+- Cleanup:
+  delete `/home/michael/.sciunit/` only if you intentionally want to reset the
+  local SciUnit user state for this machine.
+
 ## When to remove the worktree itself
 
 Remove the worktree when one of these is true:

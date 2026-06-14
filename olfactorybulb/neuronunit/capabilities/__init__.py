@@ -1,6 +1,6 @@
 # MOCKS for autodoc
 import quantities as pq
-if pq.__module__ == 'sphinx.ext.autodoc.mock':
+if getattr(getattr(pq, "mV", None).__class__, "__module__", "") == "sphinx.ext.autodoc.importer":
     pq.mV = pq.ms = pq.Hz = 1
 # END MOCKS
 
@@ -44,4 +44,16 @@ class SupportsSettingStopTime(sciunit.Capability):
         :param temperature: the simulator stop time in ms
         :return: Nothing
         '''
+        raise NotImplementedError()
+
+
+class ProvidesMetricSummary(sciunit.Capability):
+    """Indicates that a model can expose summarized validation metrics."""
+
+    def get_metric_summary(self, group, metric_key, unit_text=""):
+        """
+        Return the summarized metric value for one validation group and key.
+
+        Implementations may return either a naked float or a quantities value.
+        """
         raise NotImplementedError()

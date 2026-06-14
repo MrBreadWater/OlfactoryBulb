@@ -7,7 +7,10 @@ if pq.mV.__class__.__module__ == 'sphinx.ext.autodoc.importer':
 from abc import abstractmethod
 
 from neuronunit import capabilities as ncap
-from neuronunit.tests.base import VmTest
+try:
+    from neuronunit.tests.base import VmTest
+except ModuleNotFoundError:
+    from neuronunit.tests import VmTest
 from olfactorybulb.neuronunit.tests.utilities import get_APs, cache
 from sciunit import capabilities as scap
 

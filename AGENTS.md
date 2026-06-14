@@ -175,6 +175,11 @@ contract for future sessions.
   maintained environment audit:
   - `python tools/run_audit.py env_install`
   - Use that instead of relying on ad hoc import spot-checks alone.
+- On branches that actively migrate the SciUnit / NeuronUnit scientific core,
+  also run:
+  - `python tools/setup/verify_neuronunit_overhaul_imports.py`
+  - Keep this as a narrower fork-readiness gate until the overhaul is mature
+    enough to justify folding those imports into the main maintained env audit.
 
 ## 2. Verification standard
 

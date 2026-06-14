@@ -8,7 +8,6 @@ from typing import Any, Callable, Iterable
 import math
 
 import numpy as np
-from scipy.stats import beta as beta_distribution
 
 from olfactorybulb.audit import AuditItem, series_visual_spec
 from olfactorybulb.audit.criterion_math import (
@@ -29,6 +28,20 @@ from olfactorybulb.audit.reference_data import (
     load_normalized_legacy_mc_tc_rows,
 )
 from olfactorybulb.audit.reference_notes import load_notes, notes_for_rows
+from olfactorybulb.neuronunit.reference_bands import (
+    ProvenanceRecord,
+    ReferenceAcceptanceBand,
+    ReferenceBandObservation,
+    ReferenceBandPolicy,
+    ValidationReview,
+    compute_reference_acceptance_band,
+    sigma_phrase as _sigma_phrase,
+)
+from olfactorybulb.neuronunit.reference_validation_suite import (
+    ReferenceBandCase,
+    audit_items_from_reference_band_suite,
+    compile_reference_band_suite,
+)
 
 
 @dataclass(frozen=True)
@@ -38,20 +51,6 @@ class ValidationRuleContext:
     args: Any
     config: dict[str, Any]
     protocol_result: Any | None = None
-
-
-@dataclass(frozen=True)
-class ReferenceAcceptanceBand:
-    low: float
-    high: float
-    mode: str
-    standard_label: str
-    raw_low: float
-    raw_high: float
-    lower_bound: float | None
-    upper_bound: float | None
-    description: str
-    sigma_multiplier: float = 2.0
 
 
 RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
@@ -257,19 +256,6 @@ def _is_finite_number(value: Any) -> bool:
     return math.isfinite(number)
 
 
-def _sigma_phrase(sigma_multiplier: float) -> str:
-    if np.isclose(float(sigma_multiplier), 2.0):
-        return "two standard deviations"
-    if np.isclose(float(sigma_multiplier), 1.0):
-        return "one standard deviation"
-    return f"{rounded(float(sigma_multiplier), 3)} standard deviations"
-
-
-def _central_mass_from_sigma(sigma_multiplier: float) -> float:
-    sigma = abs(float(sigma_multiplier))
-    return float(math.erf(sigma / math.sqrt(2.0)))
-
-
 def _optional_float(value: Any) -> float | None:
     if value is None or value == "":
         return None
@@ -278,148 +264,6 @@ def _optional_float(value: Any) -> float | None:
     except (TypeError, ValueError):
         return None
     return number if math.isfinite(number) else None
-
-
-def compute_reference_acceptance_band(
-    *,
-    reference_mean: float,
-    reference_sd: float,
-    sigma_multiplier: float,
-    band_mode: str = "symmetric_sd",
-    lower_bound: float | None = None,
-    upper_bound: float | None = None,
-    quantile_low: float | None = None,
-    quantile_high: float | None = None,
-    quantile_low_label: str | None = None,
-    quantile_high_label: str | None = None,
-) -> ReferenceAcceptanceBand:
-    mode = str(band_mode or "symmetric_sd").strip()
-    sigma_phrase = _sigma_phrase(sigma_multiplier)
-    if mode == "symmetric_sd":
-        raw_low = float(reference_mean - reference_sd * sigma_multiplier)
-        raw_high = float(reference_mean + reference_sd * sigma_multiplier)
-        standard_label = "symmetric reference interval"
-        description = (
-            f"the uploaded arithmetic mean plus or minus {sigma_phrase}"
-        )
-    elif mode == "lognormal_sd":
-        if reference_mean <= 0.0:
-            raise ValueError(
-                "lognormal_sd acceptance bands require a strictly positive reference mean"
-            )
-        if reference_sd < 0.0:
-            raise ValueError(
-                "lognormal_sd acceptance bands require a non-negative reference standard deviation"
-            )
-        variance_ratio = (float(reference_sd) / float(reference_mean)) ** 2
-        sigma_log = math.sqrt(math.log1p(variance_ratio))
-        mu_log = math.log(float(reference_mean)) - 0.5 * sigma_log**2
-        raw_low = float(math.exp(mu_log - float(sigma_multiplier) * sigma_log))
-        raw_high = float(math.exp(mu_log + float(sigma_multiplier) * sigma_log))
-        standard_label = "lognormal reference interval"
-        description = (
-            f"a lognormal interval reconstructed from the uploaded arithmetic mean and standard deviation "
-            f"over {sigma_phrase}"
-        )
-    elif mode == "beta_sd":
-        if reference_mean < 0.0 or reference_mean > 1.0:
-            raise ValueError(
-                "beta_sd acceptance bands require a reference mean between 0 and 1"
-            )
-        if reference_sd < 0.0:
-            raise ValueError(
-                "beta_sd acceptance bands require a non-negative reference standard deviation"
-            )
-        variance = float(reference_sd) ** 2
-        if variance == 0.0:
-            raw_low = float(reference_mean)
-            raw_high = float(reference_mean)
-            coverage_fraction = _central_mass_from_sigma(sigma_multiplier)
-            standard_label = "bounded probability interval"
-            description = (
-                f"an exact point interval at the uploaded mean because the reported standard deviation is zero; "
-                f"the nominal central-mass target implied by {sigma_phrase} would have been {rounded(coverage_fraction * 100.0)} percent"
-            )
-        else:
-            maximum_variance = float(reference_mean) * (1.0 - float(reference_mean))
-            if variance >= maximum_variance:
-                raise ValueError(
-                    "beta_sd acceptance bands require variance smaller than mean*(1-mean) "
-                    "to reconstruct valid beta-distribution parameters"
-                )
-            concentration = maximum_variance / variance - 1.0
-            alpha = float(reference_mean) * concentration
-            beta_param = (1.0 - float(reference_mean)) * concentration
-            coverage_fraction = _central_mass_from_sigma(sigma_multiplier)
-            tail_probability = (1.0 - coverage_fraction) / 2.0
-            raw_low = float(beta_distribution.ppf(tail_probability, alpha, beta_param))
-            raw_high = float(beta_distribution.ppf(1.0 - tail_probability, alpha, beta_param))
-            standard_label = "bounded probability interval"
-            description = (
-                f"a beta-distribution interval reconstructed from the uploaded arithmetic mean and standard deviation, "
-                f"with central mass matched to the normal-space coverage implied by {sigma_phrase} "
-                f"({rounded(coverage_fraction * 100.0)} percent)"
-            )
-    elif mode == "quantile_interval":
-        if quantile_low is None or quantile_high is None:
-            raise ValueError(
-                "quantile_interval acceptance bands require explicit quantile_low and quantile_high values"
-            )
-        low_label = str(quantile_low_label or "reported lower quantile").strip()
-        high_label = str(quantile_high_label or "reported upper quantile").strip()
-        raw_low = float(quantile_low)
-        raw_high = float(quantile_high)
-        standard_label = "reported quantile interval"
-        description = (
-            f"the explicitly reported quantile interval from {low_label} to {high_label}"
-        )
-    elif mode == "binary_indicator":
-        if not np.isclose(reference_mean, round(reference_mean)) or int(round(reference_mean)) not in (0, 1):
-            raise ValueError(
-                "binary_indicator acceptance bands require the reference mean to encode an exact binary indicator of 0 or 1"
-            )
-        raw_low = float(int(round(reference_mean)))
-        raw_high = float(int(round(reference_mean)))
-        standard_label = "exact binary indicator"
-        description = (
-            "the exact binary indicator encoded by the uploaded reference row; the reported standard deviation is ignored "
-            "because this metric is categorical rather than continuous"
-        )
-    else:
-        raise ValueError(
-            f"Unknown reference-band mode {mode!r}. Supported modes: "
-            "'symmetric_sd', 'lognormal_sd', 'beta_sd', 'quantile_interval', 'binary_indicator'."
-        )
-
-    low = raw_low
-    high = raw_high
-    bound_notes: list[str] = []
-    if lower_bound is not None:
-        if low < float(lower_bound):
-            low = float(lower_bound)
-            bound_notes.append(f"lower-bounded at {rounded(float(lower_bound))}")
-    if upper_bound is not None:
-        if high > float(upper_bound):
-            high = float(upper_bound)
-            bound_notes.append(f"upper-bounded at {rounded(float(upper_bound))}")
-    if high < low:
-        raise ValueError(
-            f"Reference acceptance band bounds are inconsistent after clipping: low={low}, high={high}"
-        )
-    if bound_notes:
-        description = f"{description}, then {' and '.join(bound_notes)}"
-    return ReferenceAcceptanceBand(
-        low=float(low),
-        high=float(high),
-        mode=mode,
-        standard_label=standard_label,
-        raw_low=float(raw_low),
-        raw_high=float(raw_high),
-        lower_bound=lower_bound,
-        upper_bound=upper_bound,
-        description=description,
-        sigma_multiplier=float(sigma_multiplier),
-    )
 
 
 def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1011,7 +855,7 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
     default_lower_bound = _optional_float(rule.get("default_lower_bound"))
     default_upper_bound = _optional_float(rule.get("default_upper_bound"))
     rows = _filter_rows(_load_rows(loader), rule, args=context.args)
-    items: list[AuditItem] = []
+    cases: list[ReferenceBandCase] = []
     for row in rows:
         if reference_source and str(row.get("Source", "")).strip() != reference_source:
             continue
@@ -1083,42 +927,16 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
             quantile_low_label=quantile_low_label,
             quantile_high_label=quantile_high_label,
         )
-        accepted_low = band.low
-        accepted_high = band.high
-        passed = _is_finite_number(observed_value) and accepted_low <= observed_value <= accepted_high
         item_id = f"{group.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_")
-        evidence_key = f"{group}_mean"
         unit_text = str(row.get("unit", "")).strip()
-        evidence_payload: dict[str, Any] = {
-            evidence_key: observed_value,
-            "reference_mean": reference_mean,
-            "reference_unit": unit_text,
-            "accepted_low": accepted_low,
-            "accepted_high": accepted_high,
-            "accepted_sigma_multiplier": sigma_multiplier,
-            "accepted_interval_mode": band.mode,
-            "accepted_interval_standard": band.standard_label,
-            "__reference_annotations__": {evidence_key: _reference_annotation(row)},
-        }
-        if lower_bound is not None:
-            evidence_payload["accepted_lower_bound"] = lower_bound
-        if upper_bound is not None:
-            evidence_payload["accepted_upper_bound"] = upper_bound
-        if not np.isclose(band.raw_low, band.low):
-            evidence_payload["unbounded_low"] = band.raw_low
-        if not np.isclose(band.raw_high, band.high):
-            evidence_payload["unbounded_high"] = band.raw_high
-        evidence = _rounded_dict(evidence_payload)
-        range_text = f"between {rounded(accepted_low)} and {rounded(accepted_high)}"
+        range_text = f"between {rounded(band.low)} and {rounded(band.high)}"
         if unit_text:
             range_text = f"{range_text} {unit_text}"
         review_metadata = _property_review_metadata(rule, context, property_name)
         criterion_math = criterion_math_for_reference_band(group, property_name, band)
-        items.append(
-            _rule_item(
-                rule,
+        cases.append(
+            ReferenceBandCase(
                 check_id=item_id,
-                status=_rule_status(rule, passed),
                 title=_title_text_for_band(group, property_name, band),
                 criterion=_criterion_text_for_band(group, property_name, band, sigma_phrase),
                 criterion_latex=criterion_math.latex,
@@ -1137,16 +955,44 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                     f"{band.standard_label}: {band.description}. "
                     f"The sigma multiplier comes from '{sigma_arg_name}' when that standard needs one."
                 ),
-                evidence=evidence,
                 note=str(_property_override(rule, "property_notes", property_name, "")),
+                observation=ReferenceBandObservation(
+                    property_name=property_name,
+                    group=group,
+                    metric_key=metric_key,
+                    reference_mean=reference_mean,
+                    reference_sd=reference_sd,
+                    unit_text=unit_text,
+                    policy=ReferenceBandPolicy(
+                        mode=band_mode,
+                        sigma_multiplier=sigma_multiplier,
+                        lower_bound=lower_bound,
+                        upper_bound=upper_bound,
+                        quantile_low=quantile_low,
+                        quantile_high=quantile_high,
+                        quantile_low_label=quantile_low_label,
+                        quantile_high_label=quantile_high_label,
+                    ),
+                    provenance=ProvenanceRecord.from_row(row),
+                    review=ValidationReview(
+                        status=review_metadata["status"],
+                        note=review_metadata["note"],
+                        reviewer=review_metadata["reviewer"],
+                        required_expertise=review_metadata["required_expertise"],
+                        focus=review_metadata["focus"],
+                    ),
+                ),
+                reference_annotation=_reference_annotation(row),
+                pass_status=str(rule.get("pass_status", "PASS")),
+                fail_status=str(rule.get("fail_status", "FAIL")),
             )
         )
-        items[-1].validation_design_review_status = review_metadata["status"]
-        items[-1].validation_design_review_note = review_metadata["note"]
-        items[-1].validation_design_review_reviewer = review_metadata["reviewer"]
-        items[-1].validation_design_review_required_expertise = review_metadata["required_expertise"]
-        items[-1].validation_design_review_focus = review_metadata["focus"]
-    return items
+    compiled = compile_reference_band_suite(
+        cases=cases,
+        summary=context.summary,
+        suite_name=str(rule.get("suite_name", rule.get("title", "reference-band-suite"))),
+    )
+    return audit_items_from_reference_band_suite(compiled)
 
 
 @register_validation_rule("note_presence")

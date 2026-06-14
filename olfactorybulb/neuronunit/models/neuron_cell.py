@@ -8,7 +8,7 @@ from olfactorybulb.neuronunit.tests.utilities import get_zero_crossings_neg2pos
 
 # MOCKS for autodoc
 import quantities as pq
-if pq.__module__ == 'sphinx.ext.autodoc.mock':
+if getattr(getattr(pq, "mV", None).__class__, "__module__", "") == "sphinx.ext.autodoc.importer":
     pq.nA = pq.mV = pq.ms = pq.Hz = 1
 # END MOCKS
 

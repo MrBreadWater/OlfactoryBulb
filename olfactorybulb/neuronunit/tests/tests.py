@@ -3,7 +3,10 @@ plot = False
 
 from matplotlib import pyplot as plt
 from neuronunit import capabilities as ncap
-from neuronunit.tests.base import scores
+try:
+    from neuronunit.tests.base import scores
+except ModuleNotFoundError:
+    import sciunit.scores as scores
 from sciunit import capabilities as scap
 
 from olfactorybulb.neuronunit import capabilities as obncap

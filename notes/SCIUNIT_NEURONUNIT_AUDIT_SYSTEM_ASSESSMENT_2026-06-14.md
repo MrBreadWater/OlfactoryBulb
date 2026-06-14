@@ -1856,6 +1856,40 @@ building a different maintained layer around it.
    If SciUnit-like abstractions are added, aim them at the second category
    rather than trying to force the entire `tests/` tree into one framework.
 
+## Current Overhaul-Branch Progress
+
+The dedicated `neuronunit-overhaul` branch now has a first real migrated slice
+instead of note-only planning:
+
+1. `environment-modern.yml` now records the currently required SciUnit-side
+   packages for this branch:
+   - `quantities==0.16.4`
+   - `neo==0.14.4`
+   - `sciunit==0.2.8`
+   - `neuronunit==0.1.8.2`
+2. A dedicated readiness gate exists at
+   [`tools/setup/verify_neuronunit_overhaul_imports.py`](../tools/setup/verify_neuronunit_overhaul_imports.py)
+   so the branch can verify SciUnit / NeuronUnit / quantities / neo imports
+   plus the repo-local NeuronUnit bridge modules without claiming the full main
+   OBGPU surface has already migrated.
+3. The maintained `reference_band_rows` rule family now executes through a
+   SciUnit-backed bridge in:
+   - [`olfactorybulb/neuronunit/reference_bands.py`](../olfactorybulb/neuronunit/reference_bands.py)
+   - [`olfactorybulb/neuronunit/reference_validation_suite.py`](../olfactorybulb/neuronunit/reference_validation_suite.py)
+4. That bridge introduces:
+   - provenance-bearing reference observations
+   - explicit band-policy objects
+   - validation-review metadata attached to observations
+   - a SciUnit `Model` / `TestSuite` / `Score` execution path
+   - adaptation back into the maintained `AuditItem` / `AuditReport` shell
+5. The repo-local legacy `olfactorybulb.neuronunit` imports were also patched
+   to tolerate the current upstream package layout instead of assuming the
+   older `neuronunit.tests.base` module path.
+
+This does **not** mean the overhaul is complete. It means one important
+scientific-core judgment family is now moving under NeuronUnit/SciUnit-style
+semantics while the maintained audit shell stays intact.
+
 ## Source Pointers
 
 ### Repo-local

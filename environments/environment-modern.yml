@@ -40,3 +40,7 @@ dependencies:
       - blenderneuron==2.0.4
       - lfpsimpy==0.1.1
       - natsort==8.4.0
+      - quantities==0.16.4
+      - neo==0.14.4
+      - sciunit==0.2.8
+      - neuronunit==0.1.8.2
