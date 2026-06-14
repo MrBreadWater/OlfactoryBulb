@@ -57,3 +57,13 @@ class ProvidesMetricSummary(sciunit.Capability):
         Implementations may return either a naked float or a quantities value.
         """
         raise NotImplementedError()
+
+
+class ProvidesMetricRows(sciunit.Capability):
+    """Indicates that a model can expose per-row validation metrics."""
+
+    def get_metric_value_map(self, metric_key, entity_key="cell_name"):
+        """
+        Return a mapping from audited-row identity to the requested metric value.
+        """
+        raise NotImplementedError()

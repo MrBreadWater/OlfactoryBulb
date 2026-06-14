@@ -42,6 +42,11 @@ from olfactorybulb.neuronunit.reference_validation_suite import (
     audit_items_from_reference_band_suite,
     compile_reference_band_suite,
 )
+from olfactorybulb.neuronunit.comparison_validation_suite import (
+    ComparisonRuleCase,
+    audit_items_from_comparison_rule_suite,
+    compile_comparison_rule_suite,
+)
 from olfactorybulb.neuronunit.summary_validation_suite import (
     SummaryRuleCase,
     audit_items_from_summary_rule_suite,
@@ -67,6 +72,13 @@ SUMMARY_RULE_KINDS = {
     "summary_metric_max",
     "summary_metric_range",
     "summary_metric_status_map",
+}
+COMPARISON_RULE_KINDS = {
+    "all_finite_metric",
+    "all_exact_metric",
+    "group_ordering",
+    "group_abs_diff_max",
+    "group_positive",
 }
 
 
@@ -127,6 +139,7 @@ def build_rule_items(
 ) -> list[AuditItem]:
     items: list[AuditItem] = []
     pending_summary_rules: list[dict[str, Any]] = []
+    pending_comparison_rules: list[dict[str, Any]] = []
 
     def flush_pending_summary_rules() -> None:
         nonlocal pending_summary_rules
@@ -138,6 +151,16 @@ def build_rule_items(
             items.append(item)
         pending_summary_rules = []
 
+    def flush_pending_comparison_rules() -> None:
+        nonlocal pending_comparison_rules
+        if not pending_comparison_rules:
+            return
+        generated_items = _build_comparison_rule_items(pending_comparison_rules, context)
+        for rule, item in zip(pending_comparison_rules, generated_items, strict=False):
+            _apply_rule_level_validation_design_review([item], rule, context)
+            items.append(item)
+        pending_comparison_rules = []
+
     for rule in rules:
         if not _rule_enabled(rule, context.args):
             continue
@@ -145,9 +168,15 @@ def build_rule_items(
         if not kind:
             raise ValueError("Validation rule is missing required 'kind'")
         if kind in SUMMARY_RULE_KINDS:
+            flush_pending_comparison_rules()
             pending_summary_rules.append(rule)
             continue
+        if kind in COMPARISON_RULE_KINDS:
+            flush_pending_summary_rules()
+            pending_comparison_rules.append(rule)
+            continue
         flush_pending_summary_rules()
+        flush_pending_comparison_rules()
         try:
             handler = RULE_HANDLERS[kind]
         except KeyError as exc:
@@ -157,6 +186,7 @@ def build_rule_items(
         _apply_rule_level_validation_design_review(rule_items, rule, context)
         items.extend(rule_items)
     flush_pending_summary_rules()
+    flush_pending_comparison_rules()
     return items
 
 
@@ -638,6 +668,109 @@ def _build_summary_rule_items(
     return audit_items_from_summary_rule_suite(compiled)
 
 
+def _comparison_rule_case(rule: dict[str, Any], context: ValidationRuleContext) -> ComparisonRuleCase:
+    kind = str(rule["kind"])
+    metric_key = str(rule["metric_key"])
+    entity_key = str(rule.get("entity_key", "cell_name"))
+    base_kwargs = {
+        "rule_kind": kind,
+        "check_id": str(rule["check_id"]),
+        "title": str(rule["title"]),
+        "criterion": str(rule["criterion"]),
+        "criterion_latex": str(rule.get("criterion_latex", "")),
+        "criterion_formulae": list(rule.get("criterion_formulae", [])),
+        "criterion_definitions": list(rule.get("criterion_definitions", [])),
+        "description": str(rule["description"]),
+        "acceptable": str(rule["acceptable"]),
+        "acceptable_basis": str(rule["acceptable_basis"]),
+        "note": str(rule.get("note", "")),
+        "metric_key": metric_key,
+        "entity_key": entity_key,
+        "pass_status": str(rule.get("pass_status", "PASS")),
+        "fail_status": str(rule.get("fail_status", "FAIL")),
+    }
+    if kind == "all_finite_metric":
+        return ComparisonRuleCase(**base_kwargs)
+    if kind == "all_exact_metric":
+        criterion_math = criterion_math_for_exact_metric(metric_key)
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = criterion_math.latex
+        case_kwargs["criterion_definitions"] = criterion_math.definitions
+        case_kwargs["expected"] = float(rule.get("expected", 0.0))
+        case_kwargs["tolerance"] = float(rule.get("tolerance", 1e-9))
+        return ComparisonRuleCase(**case_kwargs)
+    if kind == "group_ordering":
+        left_group = str(rule["left_group"])
+        right_group = str(rule["right_group"])
+        operator = str(rule.get("operator", ">")).strip()
+        left_symbol = group_mean_symbol(left_group)
+        right_symbol = group_mean_symbol(right_group)
+        criterion_math = criterion_math_for_ordering(right_symbol, operator, left_symbol)
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = criterion_math.latex
+        case_kwargs["criterion_definitions"] = [
+            {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
+            {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},
+        ]
+        case_kwargs["left_group"] = left_group
+        case_kwargs["right_group"] = right_group
+        case_kwargs["operator"] = operator
+        return ComparisonRuleCase(**case_kwargs)
+    if kind == "group_abs_diff_max":
+        left_group = str(rule["left_group"])
+        right_group = str(rule["right_group"])
+        max_difference = float(rule["max_difference"])
+        left_symbol = group_mean_symbol(left_group)
+        right_symbol = group_mean_symbol(right_group)
+        criterion_math = criterion_math_for_absolute_difference(
+            left_symbol,
+            right_symbol,
+            max_difference,
+            definitions=[
+                {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
+                {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},
+            ],
+        )
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = criterion_math.latex
+        case_kwargs["criterion_definitions"] = criterion_math.definitions
+        case_kwargs["left_group"] = left_group
+        case_kwargs["right_group"] = right_group
+        case_kwargs["max_difference"] = max_difference
+        return ComparisonRuleCase(**case_kwargs)
+    if kind == "group_positive":
+        groups = tuple(str(group) for group in rule.get("groups", []))
+        if not groups:
+            raise ValueError("group_positive rule requires non-empty 'groups'")
+        group_symbols = [group_mean_symbol(group) for group in groups]
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = " \\wedge ".join(rf"{symbol} > 0" for symbol in group_symbols)
+        case_kwargs["criterion_definitions"] = [
+            {"symbol": symbol, "definition": f"{group} mean {metric_key}"}
+            for symbol, group in zip(group_symbols, groups, strict=False)
+        ]
+        case_kwargs["groups"] = groups
+        return ComparisonRuleCase(**case_kwargs)
+    raise ValueError(f"Unsupported comparison rule kind {kind!r}")
+
+
+def _build_comparison_rule_items(
+    rules: list[dict[str, Any]],
+    context: ValidationRuleContext,
+) -> list[AuditItem]:
+    if not rules:
+        return []
+    cases = [_comparison_rule_case(rule, context) for rule in rules]
+    suite_name = f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.comparison_rules"
+    compiled = compile_comparison_rule_suite(
+        cases=cases,
+        summary=context.summary,
+        metrics=context.metrics,
+        suite_name=suite_name,
+    )
+    return audit_items_from_comparison_rule_suite(compiled)
+
+
 def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:
     path_text = str(rule.get("notes_path") or context.config.get("notes_path") or "").strip()
     if not path_text:
@@ -693,146 +826,27 @@ def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> 
 
 @register_validation_rule("all_finite_metric")
 def _all_finite_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    entity_key = str(rule.get("entity_key", "cell_name"))
-    failing = {
-        str(metric.get(entity_key, f"row_{index}")): metric.get(metric_key)
-        for index, metric in enumerate(context.metrics)
-        if not _is_finite_number(metric.get(metric_key))
-    }
-    evidence = {"metric_key": metric_key, "cell_count": len(context.metrics), "failing_values": _rounded_dict(failing)}
-    return [_rule_item(rule, status=_rule_status(rule, not failing), evidence=evidence)]
+    return _build_comparison_rule_items([rule], context)
 
 
 @register_validation_rule("all_exact_metric")
 def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    entity_key = str(rule.get("entity_key", "cell_name"))
-    expected = float(rule.get("expected", 0.0))
-    tolerance = float(rule.get("tolerance", 1e-9))
-    criterion_math = criterion_math_for_exact_metric(metric_key)
-    failing = {
-        str(metric.get(entity_key, f"row_{index}")): metric.get(metric_key)
-        for index, metric in enumerate(context.metrics)
-        if not (_is_finite_number(metric.get(metric_key)) and abs(float(metric.get(metric_key)) - expected) <= tolerance)
-    }
-    evidence = {
-        "metric_key": metric_key,
-        "expected": expected,
-        "tolerance": tolerance,
-        "failing_values": _rounded_dict(failing),
-    }
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, not failing),
-            evidence=evidence,
-            criterion_latex=criterion_math.latex,
-            criterion_definitions=criterion_math.definitions,
-        )
-    ]
+    return _build_comparison_rule_items([rule], context)
 
 
 @register_validation_rule("group_ordering")
 def _group_ordering(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    left_group = str(rule["left_group"])
-    right_group = str(rule["right_group"])
-    operator = str(rule.get("operator", ">")).strip()
-    left_value = _group_mean(context.summary, left_group, metric_key)
-    right_value = _group_mean(context.summary, right_group, metric_key)
-    if operator == ">":
-        passed = right_value > left_value
-        diff = right_value - left_value
-    elif operator == "<":
-        passed = right_value < left_value
-        diff = right_value - left_value
-    else:
-        raise ValueError(f"Unsupported group_ordering operator {operator!r}")
-    left_symbol = group_mean_symbol(left_group)
-    right_symbol = group_mean_symbol(right_group)
-    criterion_math = criterion_math_for_ordering(right_symbol, operator, left_symbol)
-    evidence = _rounded_dict(
-        {
-            f"{left_group}_mean": left_value,
-            f"{right_group}_mean": right_value,
-            f"{right_group}_minus_{left_group}": diff,
-        }
-    )
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, passed),
-            evidence=evidence,
-            criterion_latex=criterion_math.latex,
-            criterion_definitions=[
-                {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
-                {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},
-            ],
-        )
-    ]
+    return _build_comparison_rule_items([rule], context)
 
 
 @register_validation_rule("group_abs_diff_max")
 def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    left_group = str(rule["left_group"])
-    right_group = str(rule["right_group"])
-    max_difference = float(rule["max_difference"])
-    left_value = _group_mean(context.summary, left_group, metric_key)
-    right_value = _group_mean(context.summary, right_group, metric_key)
-    difference = abs(right_value - left_value)
-    left_symbol = group_mean_symbol(left_group)
-    right_symbol = group_mean_symbol(right_group)
-    criterion_math = criterion_math_for_absolute_difference(
-        left_symbol,
-        right_symbol,
-        max_difference,
-        definitions=[
-            {"symbol": left_symbol, "definition": f"{left_group} mean {metric_key}"},
-            {"symbol": right_symbol, "definition": f"{right_group} mean {metric_key}"},
-        ],
-    )
-    evidence = _rounded_dict(
-        {
-            f"{left_group}_mean": left_value,
-            f"{right_group}_mean": right_value,
-            "absolute_difference": difference,
-            "max_difference": max_difference,
-        }
-    )
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, difference <= max_difference),
-            evidence=evidence,
-            criterion_latex=criterion_math.latex,
-            criterion_definitions=criterion_math.definitions,
-        )
-    ]
+    return _build_comparison_rule_items([rule], context)
 
 
 @register_validation_rule("group_positive")
 def _group_positive(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    groups = [str(group) for group in rule.get("groups", [])]
-    if not groups:
-        raise ValueError("group_positive rule requires non-empty 'groups'")
-    group_symbols = [group_mean_symbol(group) for group in groups]
-    evidence = _rounded_dict({f"{group}_mean": _group_mean(context.summary, group, metric_key) for group in groups})
-    passed = all(_is_finite_number(_group_mean(context.summary, group, metric_key)) and _group_mean(context.summary, group, metric_key) > 0.0 for group in groups)
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, passed),
-            evidence=evidence,
-            criterion_latex=" \\wedge ".join(rf"{symbol} > 0" for symbol in group_symbols),
-            criterion_definitions=[
-                {"symbol": symbol, "definition": f"{group} mean {metric_key}"}
-                for symbol, group in zip(group_symbols, groups, strict=False)
-            ],
-        )
-    ]
+    return _build_comparison_rule_items([rule], context)
 
 
 @register_validation_rule("summary_metric_min")

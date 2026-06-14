@@ -1896,14 +1896,26 @@ instead of note-only planning:
    [`epli_correctness.validation.toml`](../research_context/reference_validations/epli_correctness.validation.toml)
    family end to end, because that validation is entirely composed of those
    summary-rule kinds.
-8. Current verified branch state for `epli_correctness`:
-   - `python tools/run_reference_validation.py --validation-id epli_correctness --skip-neuron --json`
-   - `python tools/run_reference_validation.py --validation-id epli_correctness --json`
-   - `python tools/run_audit.py epli_correctness --json`
-   all produce a maintained report surface successfully on this branch, and
-   the current full run reports `20` items with summary
-   `{'FAIL': 1, 'PASS': 16, 'WARN': 3}`.
-9. The branch now also vendors the two legacy MC/TC electrophysiology CSVs
+8. A third bridge now covers the maintained exactness/comparison-rule family in:
+   - [`olfactorybulb/neuronunit/comparison_validation_suite.py`](../olfactorybulb/neuronunit/comparison_validation_suite.py)
+   - contiguous runs of
+     `all_finite_metric` / `all_exact_metric` /
+     `group_ordering` / `group_abs_diff_max` / `group_positive`
+     are compiled into one SciUnit-backed suite by
+     [`olfactorybulb/audit/reference_validation_rules.py`](../olfactorybulb/audit/reference_validation_rules.py)
+9. That third bridge is enough to migrate the maintained directional and
+   exactness portion of
+   [`burton_urban_fi.validation.toml`](../research_context/reference_validations/burton_urban_fi.validation.toml)
+   into the same SciUnit-backed core instead of leaving those judgments in
+   bespoke rule handlers.
+10. Current verified branch state for `epli_correctness`:
+    - `python tools/run_reference_validation.py --validation-id epli_correctness --skip-neuron --json`
+    - `python tools/run_reference_validation.py --validation-id epli_correctness --json`
+    - `python tools/run_audit.py epli_correctness --json`
+    all produce a maintained report surface successfully on this branch, and
+    the current full run reports `20` items with summary
+    `{'FAIL': 1, 'PASS': 16, 'WARN': 3}`.
+11. The branch now also vendors the two legacy MC/TC electrophysiology CSVs
    still consumed directly by the maintained `burton_urban_fi` path:
    - `research_context/MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv`
    - `research_context/MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv`
@@ -1911,6 +1923,15 @@ instead of note-only planning:
    The longer-term target is to migrate that dependency behind a committed
    dataset/observation contract instead of leaving it as an ad hoc legacy file
    read.
+12. Current verified branch state for the maintained non-skip Burton
+    validation path:
+    - `python tools/run_reference_validation.py --validation-id burton_urban_fi --cell-count 1 --jobs 1 --json`
+    - `python tools/run_audit.py burton_urban_fi --cell-count 1 --jobs 1 --json`
+    produces a maintained report surface successfully on this branch, and the
+    current one-MC/one-TC validation run reports `46` items with summary
+    `{'FAIL': 15, 'PASS': 29, 'WARN': 2}`, while the audit-wrapper path reports
+    `52` items with summary `{'FAIL': 15, 'PASS': 35, 'WARN': 2}` because it
+    includes the maintained preflight/context checks around the same protocol.
 
 This does **not** mean the overhaul is complete. It means one important
 scientific-core judgment family is now moving under NeuronUnit/SciUnit-style

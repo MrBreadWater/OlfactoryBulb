@@ -11,7 +11,7 @@ import sciunit
 
 from olfactorybulb.audit import AuditItem
 from olfactorybulb.audit.core import rounded
-from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
+from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceBandObservation,
     measurement_with_unit,
@@ -37,16 +37,30 @@ class ReferenceBandCase:
     fail_status: str = "FAIL"
 
 
-class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary):
+class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMetricRows):
     """SciUnit model wrapper around the maintained summary metric table."""
 
-    def __init__(self, *, summary: dict[str, dict[str, float]], name: str = "reference-validation-summary-model") -> None:
+    def __init__(
+        self,
+        *,
+        summary: dict[str, dict[str, float]],
+        metrics: list[dict[str, Any]] | None = None,
+        name: str = "reference-validation-summary-model",
+    ) -> None:
         super().__init__(name=name)
         self.summary = summary
+        self.metrics = list(metrics or [])
 
     def get_metric_summary(self, group: str, metric_key: str, *, unit_text: str = "") -> float | pq.Quantity:
         value = float(self.summary.get(group, {}).get(metric_key, float("nan")))
         return measurement_with_unit(value, unit_text)
+
+    def get_metric_value_map(self, metric_key: str, entity_key: str = "cell_name") -> dict[str, Any]:
+        values: dict[str, Any] = {}
+        for index, row in enumerate(self.metrics):
+            entity = str(row.get(entity_key, f"row_{index}"))
+            values[entity] = row.get(metric_key)
+        return values
 
 
 class ReferenceBandScore(sciunit.Score):
