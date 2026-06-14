@@ -580,6 +580,11 @@ contract for future sessions.
     Do not infer series-comparison compatibility from field names alone.
     Maintained validations should declare reference/model axis units,
     comparison units, and any needed axis transform explicitly.
+  - `reference_curve_match` should also declare `alignment_policy`,
+    `distribution_kind`, and `score_family` explicitly; do not let the
+    maintained path silently fall back to hidden series-comparison semantics.
+    Series-comparison evidence should keep the chosen score family plus compact
+    reference/model provenance summaries visible in the emitted item payload.
 
 ## 5b. Reusable infrastructure extraction rules
 

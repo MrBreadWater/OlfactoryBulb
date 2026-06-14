@@ -395,6 +395,29 @@ For `reference_curve_match`, treat axis metadata as part of the rule contract:
 - declare comparison units explicitly
 - use an explicit transform when the model and reference axes are not already
   the same physical quantity
+- declare `alignment_policy`, `distribution_kind`, and `score_family`
+  explicitly; there is no silent policy fallback
+
+Current maintained series-comparison policy choices are:
+
+- `alignment_policy = "exact_transformed_x"`
+  - compare only shared x bins after unit conversion and any explicit
+    transform
+- `distribution_kind = "empirical_by_x"`
+  - treat duplicate x values as an empirical response distribution at each x
+- `score_family`
+  - `residual_only`
+  - `welch_only`
+  - `hybrid_residual_welch`
+
+Use `minimum_median_welch_pvalue` only with a Welch-based `score_family`.
+When you use a Welch-based `score_family`, also declare
+`pvalue_aggregation = "median"` explicitly so the aggregation rule is part of
+the config rather than an implicit implementation detail.
+The current maintained EPL-FSI example-cell comparison uses
+`score_family = "residual_only"` because the model side usually exposes one
+response trace per current step, so a formal per-bin two-sample test is not
+the main decision criterion there.
 
 ## Choosing acceptable bands for literature rows
 

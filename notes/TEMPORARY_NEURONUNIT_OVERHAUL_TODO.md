@@ -45,24 +45,28 @@ Remove this file when the listed items are either:
 
 ## Decision points to resolve before or during implementation
 
-- [ ] Choose the maintained name for the new abstraction:
-      `series comparison`, `series observation`, `curve comparison`, or
-      `current-conditioned response distribution`.
-- [ ] Decide the minimum alignment policies we support in v1:
-      - exact shared x only
-      - duplicate-x aggregation
-      - interpolation/resampling
-      - transformed-axis comparison
-- [ ] Decide the first score family:
-      - MAE / RMSE with unit awareness
-      - distribution-distance metric
-      - formal statistical-test score
-      - hybrid score with attached diagnostics
-- [ ] Decide what provenance belongs on the series observation object:
-      source rows, protocol metadata, extraction method, alignment policy,
-      transform used, and any caveats about example-cell vs population data.
-- [ ] Decide how much of the graph-ready aligned data should be emitted from the
+- [x] Choose the maintained name for the new abstraction:
+      `series comparison`.
+- [x] Decide the minimum alignment policies we support in v1:
+      - exact shared transformed x only
+      - duplicate-x aggregation into empirical per-x distributions
+      - explicit transformed-axis comparison
+      - interpolation/resampling deferred until a later slice
+- [x] Decide the first score family:
+      - supported v1 score families:
+        - `residual_only`
+        - `welch_only`
+        - `hybrid_residual_welch`
+      - current maintained EPL-FSI use:
+        - `residual_only`
+- [x] Decide what provenance belongs on the series observation object:
+      source rows, source file/location/url, protocol ids, extraction method,
+      sample scope, rate definition, note ids, alignment policy, transform
+      used, and compact row/series counts.
+- [x] Decide how much of the graph-ready aligned data should be emitted from the
       SciUnit side versus reconstructed in the audit shell.
+      The SciUnit side now emits aligned mean-series arrays plus sd/count
+      diagnostics and provenance summaries; the audit shell owns rendering.
 
 ## Migration targets
 

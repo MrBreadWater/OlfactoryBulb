@@ -77,3 +77,13 @@ class ProvidesProtocolEvidenceRows(sciunit.Capability):
         Return the row collection associated with one protocol-evidence key.
         """
         raise NotImplementedError()
+
+
+class ProvidesProtocolEvidenceMap(sciunit.Capability):
+    """Indicates that a model can expose the full protocol-evidence payload."""
+
+    def get_protocol_evidence_map(self):
+        """
+        Return the protocol-evidence mapping for the current validation run.
+        """
+        raise NotImplementedError()

@@ -868,6 +868,15 @@ reference_current_key = "current_pA"
 reference_value_key = "firing_rate_Hz"
 model_current_key = "current_pA"
 model_value_key = "firing_rate_Hz"
+reference_x_unit_text = "pA"
+reference_y_unit_text = "Hz"
+model_x_unit_text = "pA"
+model_y_unit_text = "Hz"
+comparison_x_unit_text = "pA"
+comparison_y_unit_text = "Hz"
+alignment_policy = "exact_transformed_x"
+distribution_kind = "empirical_by_x"
+score_family = "residual_only"
 maximum_mae = 20.0
 maximum_rmse = 30.0
 minimum_point_count = 5
@@ -1586,6 +1595,9 @@ comparison_x_unit_text = "pA"
 comparison_y_unit_text = "Hz"
 x_quantity_name = "Injected current"
 y_quantity_name = "Firing rate"
+alignment_policy = "exact_transformed_x"
+distribution_kind = "empirical_by_x"
+score_family = "residual_only"
 maximum_mae = 25.0
 maximum_rmse = 35.0
 minimum_point_count = 10
@@ -1601,11 +1613,28 @@ Important details:
 - `reference_x_unit_text`, `reference_y_unit_text`, `model_x_unit_text`,
   `model_y_unit_text`, `comparison_x_unit_text`, and
   `comparison_y_unit_text` are mandatory
+- `alignment_policy`, `distribution_kind`, and `score_family` are also
+  mandatory; the maintained path does not silently choose them for you
 - the current implementation aligns bins using exact shared transformed x
   values after unit conversion and optional explicit affine transforms
+- the current maintained distribution policy is `empirical_by_x`, which keeps
+  duplicate x values as a response distribution instead of collapsing them
+  before comparison
+- `score_family = "residual_only"` gates on MAE/RMSE thresholds only
+- `score_family = "welch_only"` gates on the configured
+  `minimum_median_welch_pvalue`
+- `score_family = "hybrid_residual_welch"` requires both the residual and
+  Welch gates to pass
+- only Welch-based score families should declare
+  `minimum_median_welch_pvalue`
+- Welch-based score families should also declare
+  `pvalue_aggregation = "median"` explicitly
 - if the model x-axis is not expressed in the same physical quantity as the
   reference, declare the mapping explicitly with `model_x_transform` instead of
   pretending the field names are already comparable
+- the emitted evidence now carries both the aligned mean-series arrays used for
+  dashboard plotting and compact provenance summaries for the reference and
+  model row bundles
 
 ## Warning, caveat, math, and visualization features
 

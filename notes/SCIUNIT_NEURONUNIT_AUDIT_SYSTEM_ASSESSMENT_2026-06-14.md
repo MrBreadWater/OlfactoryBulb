@@ -1964,10 +1964,27 @@ for that area is tracked in:
 - [`notes/TEMPORARY_NEURONUNIT_OVERHAUL_TODO.md`](./TEMPORARY_NEURONUNIT_OVERHAUL_TODO.md)
 
 The open design questions are no longer whether to add the abstraction, but how
-far to generalize it next:
+far to generalize it next. The branch now treats the maintained v1 contract as:
+
+- abstraction name: `series comparison`
+- alignment policy: exact shared transformed x bins only
+- distribution policy: empirical per-x response distributions
+- score-family choices:
+  - `residual_only`
+  - `welch_only`
+  - `hybrid_residual_welch`
+- emitted evidence:
+  - aligned mean-series arrays for plotting
+  - residual diagnostics
+  - optional Welch-test diagnostics
+  - compact reference/model provenance summaries
+  - model-side protocol context when that metadata is available in the
+    protocol-evidence bundle
+
+The remaining open questions are now narrower:
 
 - richer statistical score semantics beyond the current MAE/RMSE-plus-diagnostics
-  first pass
+  plus optional Welch-gate first pass
 - broader transform policies beyond exact transformed x-bin alignment
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path

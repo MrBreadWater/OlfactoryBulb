@@ -14,7 +14,10 @@ import sciunit
 
 from olfactorybulb.audit import AuditItem, series_visual_spec
 from olfactorybulb.audit.core import rounded
-from olfactorybulb.neuronunit.capabilities import ProvidesProtocolEvidenceRows
+from olfactorybulb.neuronunit.capabilities import (
+    ProvidesProtocolEvidenceMap,
+    ProvidesProtocolEvidenceRows,
+)
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 
@@ -157,6 +160,8 @@ class SeriesComparisonPolicy:
     x_precision_digits: int = 6
     alignment_policy: str = "exact_transformed_x"
     distribution_kind: str = "empirical_by_x"
+    score_family: str = "residual_only"
+    pvalue_aggregation: str = "median"
 
 
 @dataclass(frozen=True)
@@ -229,6 +234,12 @@ class SeriesComparisonScore(sciunit.Score):
         return self.status
 
 
+@dataclass(frozen=True)
+class SeriesPredictionBundle:
+    rows: list[dict[str, Any]]
+    context: dict[str, Any]
+
+
 def _series_bins(
     rows: list[dict[str, Any]],
     *,
@@ -275,8 +286,98 @@ def _series_id_count(rows: list[dict[str, Any]], *, series_id_key: str) -> int:
     )
 
 
+def _metadata_values(rows: list[dict[str, Any]], *keys: str) -> list[str]:
+    values: set[str] = set()
+    for row in rows:
+        for key in keys:
+            text = str(row.get(key, "")).strip()
+            if text:
+                values.add(text)
+    return sorted(values)
+
+
+def _note_id_values(rows: list[dict[str, Any]]) -> list[str]:
+    note_ids: set[str] = set()
+    for row in rows:
+        raw = str(row.get("note_ids", "")).strip()
+        if not raw:
+            continue
+        for token in raw.replace(",", ";").split(";"):
+            token = token.strip()
+            if token:
+                note_ids.add(token)
+    return sorted(note_ids)
+
+
+def _is_scalar_metadata(value: Any) -> bool:
+    return value is None or isinstance(value, (bool, int, float, str))
+
+
+def _compact_context_value(value: Any) -> Any:
+    if _is_scalar_metadata(value):
+        if isinstance(value, float) and math.isfinite(value):
+            return rounded(float(value))
+        return value
+    if isinstance(value, list) and all(_is_scalar_metadata(item) for item in value):
+        compact_items = []
+        for item in value:
+            if isinstance(item, float) and math.isfinite(item):
+                compact_items.append(rounded(float(item)))
+            else:
+                compact_items.append(item)
+        return compact_items
+    return None
+
+
+def _protocol_context_summary(context: dict[str, Any], *, exclude_keys: set[str]) -> dict[str, Any]:
+    summary: dict[str, Any] = {}
+    for key in sorted(context):
+        if key in exclude_keys:
+            continue
+        compact_value = _compact_context_value(context[key])
+        if compact_value is not None:
+            summary[key] = compact_value
+    return summary
+
+
+def _series_provenance_summary(
+    rows: list[dict[str, Any]],
+    *,
+    series_id_key: str,
+    x_key: str,
+    y_key: str,
+    x_unit_text: str,
+    y_unit_text: str,
+    context: dict[str, Any] | None = None,
+    exclude_context_keys: set[str] | None = None,
+) -> dict[str, Any]:
+    summary = {
+        "row_count": len(rows),
+        "series_count": _series_id_count(rows, series_id_key=series_id_key),
+        "series_ids": _metadata_values(rows, series_id_key) if series_id_key else [],
+        "x_key": x_key,
+        "y_key": y_key,
+        "x_unit_text": x_unit_text,
+        "y_unit_text": y_unit_text,
+        "sources": _metadata_values(rows, "source"),
+        "source_files": _metadata_values(rows, "source_file"),
+        "source_locations": _metadata_values(rows, "source_location"),
+        "source_urls": _metadata_values(rows, "source_url"),
+        "protocol_ids": _metadata_values(rows, "protocol_id"),
+        "extraction_methods": _metadata_values(rows, "extraction_method"),
+        "sample_scopes": _metadata_values(rows, "sample_scope"),
+        "rate_definitions": _metadata_values(rows, "rate_definition"),
+        "note_ids": _note_id_values(rows),
+    }
+    if context:
+        context_summary = _protocol_context_summary(context, exclude_keys=set(exclude_context_keys or set()))
+        if context_summary:
+            summary["protocol_context"] = context_summary
+    return summary
+
+
 class SeriesComparisonTest(sciunit.Test):
-    required_capabilities = (ProvidesProtocolEvidenceRows,)
+    required_capabilities = (ProvidesProtocolEvidenceRows, ProvidesProtocolEvidenceMap)
     score_type = SeriesComparisonScore
 
     def __init__(self, case: SeriesComparisonCase) -> None:
@@ -291,6 +392,8 @@ class SeriesComparisonTest(sciunit.Test):
             "comparison_y_unit_text": case.observation.comparison_y_unit_text,
             "alignment_policy": case.observation.policy.alignment_policy,
             "distribution_kind": case.observation.policy.distribution_kind,
+            "score_family": case.observation.policy.score_family,
+            "pvalue_aggregation": case.observation.policy.pvalue_aggregation,
         }
         super().__init__(observation=observation, name=case.title)
 
@@ -305,6 +408,8 @@ class SeriesComparisonTest(sciunit.Test):
             "comparison_y_unit_text",
             "alignment_policy",
             "distribution_kind",
+            "score_family",
+            "pvalue_aggregation",
         }
         missing = sorted(required - set(observation))
         if missing:
@@ -312,12 +417,49 @@ class SeriesComparisonTest(sciunit.Test):
                 f"SeriesComparisonTest observation is missing required keys: {', '.join(missing)}"
             )
 
-    def generate_prediction(self, model: ReferenceValidationModel) -> list[dict[str, Any]]:
-        return model.get_protocol_evidence_rows(self.case.observation.protocol_evidence_key)
+    def generate_prediction(self, model: ReferenceValidationModel) -> SeriesPredictionBundle:
+        return SeriesPredictionBundle(
+            rows=model.get_protocol_evidence_rows(self.case.observation.protocol_evidence_key),
+            context=model.get_protocol_evidence_map(),
+        )
 
-    def compute_score(self, observation: dict[str, Any], prediction: list[dict[str, Any]]) -> SeriesComparisonScore:
+    def compute_score(self, observation: dict[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
         del observation
         obs = self.case.observation
+        prediction_rows = list(prediction.rows)
+        prediction_context = dict(prediction.context)
+        if obs.policy.alignment_policy != "exact_transformed_x":
+            raise ValueError(
+                f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
+                "the current bridge only supports exact shared transformed x bins"
+            )
+        if obs.policy.distribution_kind != "empirical_by_x":
+            raise ValueError(
+                f"Unsupported series distribution kind {obs.policy.distribution_kind!r}; "
+                "the current bridge only supports empirical per-x distributions"
+            )
+        if obs.policy.pvalue_aggregation != "median":
+            raise ValueError(
+                f"Unsupported series p-value aggregation {obs.policy.pvalue_aggregation!r}; "
+                "the current bridge only supports median aggregation"
+            )
+        if obs.policy.score_family not in {"residual_only", "welch_only", "hybrid_residual_welch"}:
+            raise ValueError(
+                f"Unsupported series score family {obs.policy.score_family!r}; "
+                "expected one of residual_only, welch_only, hybrid_residual_welch"
+            )
+        if obs.policy.score_family in {"welch_only", "hybrid_residual_welch"} and (
+            obs.policy.minimum_median_welch_pvalue is None
+        ):
+            raise ValueError(
+                f"Series score family {obs.policy.score_family!r} requires an explicit "
+                "'minimum_median_welch_pvalue' threshold"
+            )
+        if obs.policy.score_family == "residual_only" and obs.policy.minimum_median_welch_pvalue is not None:
+            raise ValueError(
+                "Series score family 'residual_only' should not also declare "
+                "'minimum_median_welch_pvalue'; use a Welch-based score family instead"
+            )
         reference_bins = _series_bins(
             obs.reference_rows,
             x_key=obs.reference_x_key,
@@ -331,7 +473,7 @@ class SeriesComparisonTest(sciunit.Test):
             precision_digits=obs.policy.x_precision_digits,
         )
         model_bins = _series_bins(
-            list(prediction),
+            prediction_rows,
             x_key=obs.model_x_key,
             y_key=obs.model_y_key,
             x_unit_text=obs.model_x_unit_text,
@@ -366,19 +508,24 @@ class SeriesComparisonTest(sciunit.Test):
         ]
         finite_welch_pvalues = [value for value in welch_pvalues if _is_finite_number(value)]
         median_welch_pvalue = float(np.median(finite_welch_pvalues)) if finite_welch_pvalues else float("nan")
-        passed = (
+        residual_gate_passed = (
             len(shared_x_values) >= int(obs.policy.minimum_point_count)
             and _is_finite_number(mae)
             and mae <= float(obs.policy.maximum_mae)
             and _is_finite_number(rmse)
             and rmse <= float(obs.policy.maximum_rmse)
         )
-        if obs.policy.minimum_median_welch_pvalue is not None:
-            passed = (
-                passed
-                and _is_finite_number(median_welch_pvalue)
-                and median_welch_pvalue >= float(obs.policy.minimum_median_welch_pvalue)
-            )
+        pvalue_gate_passed = (
+            _is_finite_number(median_welch_pvalue)
+            and obs.policy.minimum_median_welch_pvalue is not None
+            and median_welch_pvalue >= float(obs.policy.minimum_median_welch_pvalue)
+        )
+        if obs.policy.score_family == "residual_only":
+            passed = residual_gate_passed
+        elif obs.policy.score_family == "welch_only":
+            passed = len(shared_x_values) >= int(obs.policy.minimum_point_count) and pvalue_gate_passed
+        else:
+            passed = residual_gate_passed and pvalue_gate_passed
         evidence = {
             obs.visual_x_key: _rounded_list(shared_x_values),
             obs.visual_reference_y_key: _rounded_list(reference_mean_values),
@@ -397,13 +544,20 @@ class SeriesComparisonTest(sciunit.Test):
             "maximum_rmse_Hz": rounded(float(obs.policy.maximum_rmse))
             if _is_finite_number(obs.policy.maximum_rmse)
             else obs.policy.maximum_rmse,
+            "score_family": obs.policy.score_family,
             "welch_pvalues": _rounded_list(finite_welch_pvalues)
             if len(finite_welch_pvalues) == len(welch_pvalues)
             else [rounded(float(value)) if _is_finite_number(value) else None for value in welch_pvalues],
             "median_welch_pvalue": rounded(median_welch_pvalue)
             if _is_finite_number(median_welch_pvalue)
             else median_welch_pvalue,
+            "minimum_median_welch_pvalue": rounded(float(obs.policy.minimum_median_welch_pvalue))
+            if _is_finite_number(obs.policy.minimum_median_welch_pvalue)
+            else obs.policy.minimum_median_welch_pvalue,
             "finite_welch_pvalue_count": len(finite_welch_pvalues),
+            "pvalue_aggregation": obs.policy.pvalue_aggregation,
+            "residual_gate_passed": residual_gate_passed,
+            "pvalue_gate_passed": pvalue_gate_passed,
             "alignment_policy": obs.policy.alignment_policy,
             "distribution_kind": obs.policy.distribution_kind,
             "x_quantity_name": obs.x_quantity_name,
@@ -411,12 +565,36 @@ class SeriesComparisonTest(sciunit.Test):
             "comparison_x_unit_text": obs.comparison_x_unit_text,
             "comparison_y_unit_text": obs.comparison_y_unit_text,
             "reference_series_count": _series_id_count(obs.reference_rows, series_id_key=obs.reference_series_id_key),
-            "model_series_count": _series_id_count(list(prediction), series_id_key=obs.model_series_id_key),
+            "model_series_count": _series_id_count(prediction_rows, series_id_key=obs.model_series_id_key),
             "reference_x_transform": obs.reference_x_transform.description(),
             "model_x_transform": obs.model_x_transform.description(),
+            "reference_provenance": _series_provenance_summary(
+                obs.reference_rows,
+                series_id_key=obs.reference_series_id_key,
+                x_key=obs.reference_x_key,
+                y_key=obs.reference_y_key,
+                x_unit_text=obs.reference_x_unit_text,
+                y_unit_text=obs.reference_y_unit_text,
+            ),
+            "model_provenance": _series_provenance_summary(
+                prediction_rows,
+                series_id_key=obs.model_series_id_key,
+                x_key=obs.model_x_key,
+                y_key=obs.model_y_key,
+                x_unit_text=obs.model_x_unit_text,
+                y_unit_text=obs.model_y_unit_text,
+                context=prediction_context,
+                exclude_context_keys={obs.protocol_evidence_key},
+            ),
         }
         status = self.case.pass_status if passed else self.case.fail_status
-        score_value = mae if _is_finite_number(mae) else float("inf")
+        if obs.policy.score_family == "welch_only":
+            if _is_finite_number(median_welch_pvalue) and obs.policy.minimum_median_welch_pvalue is not None:
+                score_value = float(obs.policy.minimum_median_welch_pvalue) - float(median_welch_pvalue)
+            else:
+                score_value = float("inf")
+        else:
+            score_value = mae if _is_finite_number(mae) else float("inf")
         return SeriesComparisonScore(score_value, status=status, evidence=evidence, case=self.case)
 
 
@@ -495,6 +673,7 @@ __all__ = [
     "SeriesComparisonPolicy",
     "SeriesComparisonScore",
     "SeriesComparisonTest",
+    "SeriesPredictionBundle",
     "SeriesDistributionObservation",
     "audit_items_from_series_comparison_suite",
     "compile_series_comparison_suite",

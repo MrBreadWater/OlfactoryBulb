@@ -14,6 +14,7 @@ from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesMetricRows,
     ProvidesMetricSummary,
+    ProvidesProtocolEvidenceMap,
     ProvidesProtocolEvidenceRows,
 )
 from olfactorybulb.neuronunit.reference_bands import (
@@ -41,7 +42,13 @@ class ReferenceBandCase:
     fail_status: str = "FAIL"
 
 
-class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMetricRows, ProvidesProtocolEvidenceRows):
+class ReferenceValidationModel(
+    sciunit.Model,
+    ProvidesMetricSummary,
+    ProvidesMetricRows,
+    ProvidesProtocolEvidenceRows,
+    ProvidesProtocolEvidenceMap,
+):
     """SciUnit model wrapper around the maintained summary metric table."""
 
     def __init__(
@@ -73,6 +80,17 @@ class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMet
         if not isinstance(rows, list):
             return []
         return [dict(row) for row in rows]
+
+    def get_protocol_evidence_map(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        for key, value in self.protocol_evidence.items():
+            if isinstance(value, list) and value and all(isinstance(row, dict) for row in value):
+                payload[key] = [dict(row) for row in value]
+            elif isinstance(value, dict):
+                payload[key] = dict(value)
+            else:
+                payload[key] = value
+        return payload
 
 
 class ReferenceBandScore(sciunit.Score):

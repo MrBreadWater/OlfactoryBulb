@@ -1081,6 +1081,17 @@ def _required_unit_text(rule: dict[str, Any], key: str) -> str:
     return str(rule.get(key, "")).strip()
 
 
+def _required_rule_choice(rule: dict[str, Any], key: str) -> str:
+    if key not in rule:
+        raise ValueError(
+            f"reference_curve_match requires explicit {key!r}; do not let series-comparison policy fall back silently"
+        )
+    value = str(rule.get(key, "")).strip()
+    if not value:
+        raise ValueError(f"reference_curve_match requires non-empty {key!r}")
+    return value
+
+
 def _axis_transform(rule: dict[str, Any], key: str) -> AxisTransform:
     raw = rule.get(key, {})
     if raw in (None, "", {}):
@@ -1100,6 +1111,11 @@ def _series_comparison_case(
     rule: dict[str, Any],
     reference_rows: list[dict[str, Any]],
 ) -> SeriesComparisonCase:
+    score_family = _required_rule_choice(rule, "score_family")
+    if score_family in {"welch_only", "hybrid_residual_welch"}:
+        pvalue_aggregation = _required_rule_choice(rule, "pvalue_aggregation")
+    else:
+        pvalue_aggregation = str(rule.get("pvalue_aggregation", "median")).strip()
     observation = SeriesDistributionObservation(
         protocol_evidence_key=str(rule.get("protocol_evidence_key", "fi_curve_rows")),
         reference_rows=reference_rows,
@@ -1135,8 +1151,10 @@ def _series_comparison_case(
                 else None
             ),
             x_precision_digits=int(rule.get("current_precision_digits", 6)),
-            alignment_policy=str(rule.get("alignment_policy", "exact_transformed_x")),
-            distribution_kind=str(rule.get("distribution_kind", "empirical_by_x")),
+            alignment_policy=_required_rule_choice(rule, "alignment_policy"),
+            distribution_kind=_required_rule_choice(rule, "distribution_kind"),
+            score_family=score_family,
+            pvalue_aggregation=pvalue_aggregation,
         ),
     )
     return SeriesComparisonCase(

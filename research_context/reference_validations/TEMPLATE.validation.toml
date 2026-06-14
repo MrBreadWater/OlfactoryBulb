@@ -292,6 +292,12 @@ validation_design_review_status = "pending"
 # comparison_y_unit_text = "Hz"
 # x_quantity_name = "Injected current"
 # y_quantity_name = "Firing rate"
+# alignment_policy = "exact_transformed_x"
+# distribution_kind = "empirical_by_x"
+# score_family = "residual_only"
+# Optional when using a Welch-based score family:
+# pvalue_aggregation = "median"
+# minimum_median_welch_pvalue = 0.05
 # Optional explicit transforms when the model and reference x/y quantities are
 # not already expressed in the same unit or not the same physical quantity.
 # model_x_transform = { kind = "affine", scale = 1000.0, offset = 0.0, output_unit_text = "pA" }
