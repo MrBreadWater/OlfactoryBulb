@@ -1885,6 +1885,32 @@ instead of note-only planning:
 5. The repo-local legacy `olfactorybulb.neuronunit` imports were also patched
    to tolerate the current upstream package layout instead of assuming the
    older `neuronunit.tests.base` module path.
+6. A second bridge now covers the summary/comparison-rule family in:
+   - [`olfactorybulb/neuronunit/summary_validation_suite.py`](../olfactorybulb/neuronunit/summary_validation_suite.py)
+   - contiguous runs of
+     `summary_metric_min` / `summary_metric_max` /
+     `summary_metric_range` / `summary_metric_status_map`
+     are compiled into one SciUnit-backed suite by
+     [`olfactorybulb/audit/reference_validation_rules.py`](../olfactorybulb/audit/reference_validation_rules.py)
+7. That second bridge is enough to migrate the maintained
+   [`epli_correctness.validation.toml`](../research_context/reference_validations/epli_correctness.validation.toml)
+   family end to end, because that validation is entirely composed of those
+   summary-rule kinds.
+8. Current verified branch state for `epli_correctness`:
+   - `python tools/run_reference_validation.py --validation-id epli_correctness --skip-neuron --json`
+   - `python tools/run_reference_validation.py --validation-id epli_correctness --json`
+   - `python tools/run_audit.py epli_correctness --json`
+   all produce a maintained report surface successfully on this branch, and
+   the current full run reports `20` items with summary
+   `{'FAIL': 1, 'PASS': 16, 'WARN': 3}`.
+9. The branch now also vendors the two legacy MC/TC electrophysiology CSVs
+   still consumed directly by the maintained `burton_urban_fi` path:
+   - `research_context/MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv`
+   - `research_context/MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv`
+   This is a reproducibility fix for clean worktrees, not the final design.
+   The longer-term target is to migrate that dependency behind a committed
+   dataset/observation contract instead of leaving it as an ad hoc legacy file
+   read.
 
 This does **not** mean the overhaul is complete. It means one important
 scientific-core judgment family is now moving under NeuronUnit/SciUnit-style

@@ -1,0 +1,18 @@
+Property,mean +/- sd,n,Source,Notes
+AHP Amplitude,16.8 +/- 3.3,12,Burton & Urban (2014),mV
+AHP Duration,20.5 +/- 20.1,28,Burton & Urban (2014),ms
+AP Amplitude,72.1 +/- 5.5,12,Burton & Urban (2014),mV
+AP Threshold,-55.5 +/- 2.9,12,Burton & Urban (2014),mV
+AP Width at Half-height,0.87 +/- 0.1,12,Burton & Urban (2014),ms
+Capacitance,188.8 +/- 110,28,Burton & Urban (2014),pF
+FI Curve Slope,406 +/- 144,28,Burton & Urban (2014),Hz/nA - PRIMARY spike-frequency-vs-drive metric
+ISI Coefficient of Variation,0.8 +/- 0.43,28,Burton & Urban (2014),Dimensionless - TC firing is irregular
+Input Resistance,89.8 +/- 34.8,6,Fukunaga et al. (2012),MOhm
+Input Resistance,111.8 +/- 51.6,28,Burton & Urban (2014),MOhm
+Membrane Resting Voltage,-68.5 +/- 4.7,28,Burton & Urban (2014),mV
+Membrane Time Constant,18.8 +/- 8.6,28,Burton & Urban (2014),ms
+Rebound Potential Presence,1 +/- 1,28,Burton & Urban (2014),Binary
+Rheobase Current,94.6 +/- 49.7,28,Burton & Urban (2014),pA
+Sag Amplitude,-4.4 +/- 6.1,28,Burton & Urban (2014),mV
+Spiking Rate Accommodation,-20.2 +/- 19.1,28,Burton & Urban (2014),Hz - drop in instantaneous rate over a step
+Spiking Rate Accom. Time Constant,585 +/- 664,28,Burton & Urban (2014),ms

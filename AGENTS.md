@@ -571,6 +571,11 @@ contract for future sessions.
   - human review status belongs in validation metadata
   - default behavior should preserve separation across incompatible targets
     rather than silently pooling them
+  - if a maintained validation or audit still reads a concrete
+    `research_context/*.csv` file directly, that file must be committed in the
+    branch or the loader must be redirected to a committed dataset output.
+    Clean worktrees must not depend on borrowing untracked local reference CSVs
+    from some other checkout.
 
 ## 5b. Reusable infrastructure extraction rules
 

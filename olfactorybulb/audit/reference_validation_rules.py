@@ -42,6 +42,11 @@ from olfactorybulb.neuronunit.reference_validation_suite import (
     audit_items_from_reference_band_suite,
     compile_reference_band_suite,
 )
+from olfactorybulb.neuronunit.summary_validation_suite import (
+    SummaryRuleCase,
+    audit_items_from_summary_rule_suite,
+    compile_summary_rule_suite,
+)
 
 
 @dataclass(frozen=True)
@@ -57,6 +62,12 @@ RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
 
 
 RULE_HANDLERS: dict[str, RuleHandler] = {}
+SUMMARY_RULE_KINDS = {
+    "summary_metric_min",
+    "summary_metric_max",
+    "summary_metric_range",
+    "summary_metric_status_map",
+}
 
 
 REFERENCE_ROW_LOADERS: dict[str, Callable[[], list[dict[str, Any]]]] = {
@@ -115,12 +126,28 @@ def build_rule_items(
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
     items: list[AuditItem] = []
+    pending_summary_rules: list[dict[str, Any]] = []
+
+    def flush_pending_summary_rules() -> None:
+        nonlocal pending_summary_rules
+        if not pending_summary_rules:
+            return
+        generated_items = _build_summary_rule_items(pending_summary_rules, context)
+        for rule, item in zip(pending_summary_rules, generated_items, strict=False):
+            _apply_rule_level_validation_design_review([item], rule, context)
+            items.append(item)
+        pending_summary_rules = []
+
     for rule in rules:
         if not _rule_enabled(rule, context.args):
             continue
         kind = str(rule.get("kind") or "").strip()
         if not kind:
             raise ValueError("Validation rule is missing required 'kind'")
+        if kind in SUMMARY_RULE_KINDS:
+            pending_summary_rules.append(rule)
+            continue
+        flush_pending_summary_rules()
         try:
             handler = RULE_HANDLERS[kind]
         except KeyError as exc:
@@ -129,6 +156,7 @@ def build_rule_items(
         rule_items = handler(rule, context)
         _apply_rule_level_validation_design_review(rule_items, rule, context)
         items.extend(rule_items)
+    flush_pending_summary_rules()
     return items
 
 
@@ -525,6 +553,91 @@ def _summary_evidence(
     return _rounded_dict(evidence)
 
 
+def _summary_rule_case(rule: dict[str, Any], context: ValidationRuleContext) -> SummaryRuleCase:
+    kind = str(rule["kind"])
+    metric_key = str(rule["metric_key"])
+    group = _summary_group(rule, context)
+    observed_symbol = group_mean_symbol(group)
+    base_kwargs = {
+        "rule_kind": kind,
+        "check_id": str(rule["check_id"]),
+        "title": str(rule["title"]),
+        "criterion": str(rule["criterion"]),
+        "criterion_latex": str(rule.get("criterion_latex", "")),
+        "criterion_formulae": list(rule.get("criterion_formulae", [])),
+        "criterion_definitions": list(rule.get("criterion_definitions", [])),
+        "description": str(rule["description"]),
+        "acceptable": str(rule["acceptable"]),
+        "acceptable_basis": str(rule["acceptable_basis"]),
+        "note": str(rule.get("note", "")),
+        "metric_key": metric_key,
+        "group": group,
+        "evidence_metric_keys": [str(metric).strip() for metric in rule.get("evidence_metric_keys", []) if str(metric).strip()],
+        "pass_status": str(rule.get("pass_status", "PASS")),
+        "fail_status": str(rule.get("fail_status", "FAIL")),
+        "default_status": str(rule.get("default_status", "FAIL")),
+    }
+    if kind == "summary_metric_min":
+        minimum = float(rule["minimum"])
+        criterion_math = criterion_math_for_lower_bound(
+            observed_symbol,
+            minimum,
+            definitions=[{"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"}],
+        )
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = criterion_math.latex
+        case_kwargs["criterion_definitions"] = criterion_math.definitions
+        case_kwargs["minimum"] = minimum
+        return SummaryRuleCase(**case_kwargs)
+    if kind == "summary_metric_max":
+        maximum = float(rule["maximum"])
+        criterion_math = criterion_math_for_upper_bound(
+            observed_symbol,
+            maximum,
+            definitions=[{"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"}],
+        )
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = criterion_math.latex
+        case_kwargs["criterion_definitions"] = criterion_math.definitions
+        case_kwargs["maximum"] = maximum
+        return SummaryRuleCase(**case_kwargs)
+    if kind == "summary_metric_range":
+        minimum = float(rule.get("minimum", float("-inf")))
+        maximum = float(rule.get("maximum", float("inf")))
+        criterion_math = criterion_math_for_closed_range(
+            observed_symbol,
+            minimum,
+            maximum,
+            definitions=[{"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"}],
+        )
+        case_kwargs = dict(base_kwargs)
+        case_kwargs["criterion_latex"] = criterion_math.latex
+        case_kwargs["criterion_definitions"] = criterion_math.definitions
+        case_kwargs["minimum"] = minimum
+        case_kwargs["maximum"] = maximum
+        return SummaryRuleCase(**case_kwargs)
+    if kind == "summary_metric_status_map":
+        return SummaryRuleCase(
+            **base_kwargs,
+            pass_values=tuple(float(value) for value in rule.get("pass_values", [])),
+            warn_values=tuple(float(value) for value in rule.get("warn_values", [])),
+            fail_values=tuple(float(value) for value in rule.get("fail_values", [])),
+        )
+    raise ValueError(f"Unsupported summary rule kind {kind!r}")
+
+
+def _build_summary_rule_items(
+    rules: list[dict[str, Any]],
+    context: ValidationRuleContext,
+) -> list[AuditItem]:
+    if not rules:
+        return []
+    cases = [_summary_rule_case(rule, context) for rule in rules]
+    suite_name = f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.summary_rules"
+    compiled = compile_summary_rule_suite(cases=cases, summary=context.summary, suite_name=suite_name)
+    return audit_items_from_summary_rule_suite(compiled)
+
+
 def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:
     path_text = str(rule.get("notes_path") or context.config.get("notes_path") or "").strip()
     if not path_text:
@@ -724,122 +837,22 @@ def _group_positive(rule: dict[str, Any], context: ValidationRuleContext) -> lis
 
 @register_validation_rule("summary_metric_min")
 def _summary_metric_min(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    minimum = float(rule["minimum"])
-    group = _summary_group(rule, context)
-    observed = _group_mean(context.summary, group, metric_key)
-    passed = _is_finite_number(observed) and observed >= minimum
-    observed_symbol = group_mean_symbol(group)
-    criterion_math = criterion_math_for_lower_bound(
-        observed_symbol,
-        minimum,
-        definitions=[
-            {"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"},
-        ],
-    )
-    evidence = _summary_evidence(rule, context, group=group, base={"group": group, "observed": observed, "minimum": minimum})
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, passed),
-            evidence=evidence,
-            criterion_latex=criterion_math.latex,
-            criterion_definitions=criterion_math.definitions,
-        )
-    ]
+    return _build_summary_rule_items([rule], context)
 
 
 @register_validation_rule("summary_metric_max")
 def _summary_metric_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    maximum = float(rule["maximum"])
-    group = _summary_group(rule, context)
-    observed = _group_mean(context.summary, group, metric_key)
-    passed = _is_finite_number(observed) and observed <= maximum
-    observed_symbol = group_mean_symbol(group)
-    criterion_math = criterion_math_for_upper_bound(
-        observed_symbol,
-        maximum,
-        definitions=[
-            {"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"},
-        ],
-    )
-    evidence = _summary_evidence(rule, context, group=group, base={"group": group, "observed": observed, "maximum": maximum})
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, passed),
-            evidence=evidence,
-            criterion_latex=criterion_math.latex,
-            criterion_definitions=criterion_math.definitions,
-        )
-    ]
+    return _build_summary_rule_items([rule], context)
 
 
 @register_validation_rule("summary_metric_range")
 def _summary_metric_range(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    minimum = float(rule.get("minimum", float("-inf")))
-    maximum = float(rule.get("maximum", float("inf")))
-    group = _summary_group(rule, context)
-    observed = _group_mean(context.summary, group, metric_key)
-    passed = _is_finite_number(observed) and minimum <= observed <= maximum
-    observed_symbol = group_mean_symbol(group)
-    criterion_math = criterion_math_for_closed_range(
-        observed_symbol,
-        minimum,
-        maximum,
-        definitions=[
-            {"symbol": observed_symbol, "definition": f"{group} mean {metric_key}"},
-        ],
-    )
-    evidence = _summary_evidence(
-        rule,
-        context,
-        group=group,
-        base={"group": group, "observed": observed, "minimum": minimum, "maximum": maximum},
-    )
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, passed),
-            evidence=evidence,
-            criterion_latex=criterion_math.latex,
-            criterion_definitions=criterion_math.definitions,
-        )
-    ]
+    return _build_summary_rule_items([rule], context)
 
 
 @register_validation_rule("summary_metric_status_map")
 def _summary_metric_status_map(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    metric_key = str(rule["metric_key"])
-    group = _summary_group(rule, context)
-    observed = _group_mean(context.summary, group, metric_key)
-    pass_values = {float(value) for value in rule.get("pass_values", [])}
-    warn_values = {float(value) for value in rule.get("warn_values", [])}
-    fail_values = {float(value) for value in rule.get("fail_values", [])}
-    observed_value = float(observed) if _is_finite_number(observed) else float("nan")
-    if observed_value in pass_values:
-        status = "PASS"
-    elif observed_value in warn_values:
-        status = "WARN"
-    elif observed_value in fail_values or not _is_finite_number(observed_value):
-        status = "FAIL"
-    else:
-        status = str(rule.get("default_status", "FAIL"))
-    evidence = _summary_evidence(
-        rule,
-        context,
-        group=group,
-        base={
-            "group": group,
-            "observed": observed,
-            "pass_values": sorted(pass_values),
-            "warn_values": sorted(warn_values),
-            "fail_values": sorted(fail_values),
-        },
-    )
-    return [_rule_item(rule, status=status, evidence=evidence)]
+    return _build_summary_rule_items([rule], context)
 
 
 @register_validation_rule("reference_band_rows")
