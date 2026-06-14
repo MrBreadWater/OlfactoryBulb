@@ -68,6 +68,63 @@ Today it exposes three suite IDs:
 
 This is useful and maintained, but it is orthogonal to SciUnit.
 
+#### Current audit-visible unit-test inventory
+
+As of this note:
+
+- the repo contains `123` `tests/test_*.py` modules in total
+- only `14` of those modules are currently surfaced through the audit system's
+  grouped `test_suite_status` entrypoint
+
+The total raw test inventory is currently distributed as:
+
+- `60` under `tests/neuroinfra/`
+- `19` under `tests/olfactorybulb/`
+- `16` under `tests/audit/`
+- `8` under `tests/reference/`
+- `7` under `tests/cell_models/`
+- `5` under `tests/hfo/`
+- `4` under `tests/slice/`
+- `2` under `tests/simulation/`
+- `2` under `tests/integration/`
+
+The audit-visible grouped suites are currently:
+
+- `maintained_core`:
+  - `tests.integration.test_config_helpers`
+  - `tests.reference.test_reference_validation_engine`
+  - `tests.reference.test_reference_data_sanity`
+- `reference_bundles`:
+  - `tests.reference.test_reference_dataset_engine`
+  - `tests.reference.test_download_epl_fsi_reference_sources`
+  - `tests.reference.test_pv_crh_epl_fsi_reference_data`
+  - `tests.reference.test_download_gc_reference_sources`
+  - `tests.reference.test_gc_reference_data`
+- `audit_surface`:
+  - `tests.audit.test_repo_health`
+  - `tests.audit.test_audit_cli_output`
+  - `tests.audit.test_audit_dashboard`
+  - `tests.audit.test_audit_style_contracts`
+  - `tests.neuroinfra.dashboard.test_neuroinfra_dashboard_shell`
+  - `tests.integration.test_control_center_dashboard`
+
+That matters for the redundancy question:
+
+- these audit-visible unit tests are mostly infrastructure, contract,
+  dashboard, downloader, and smoke-test modules
+- they are generally **not** the sort of scientific model-validation tests that
+  SciUnit or NeuronUnit were designed to formalize
+- only a small portion of the current audit-visible test surface is even
+  conceptually adjacent to SciUnit, mainly the reference-validation-engine
+  smoke coverage
+
+So if someone says "a lot of our unit-test work is redundant with SciUnit," the
+correct answer is:
+
+- that is **false** for most of the current developer test inventory
+- it is only materially true for the biological validation slice discussed
+  later in this note
+
 ### 2. Maintained literature / audit system
 
 The maintained scientific validation surface is the combination of:
@@ -457,6 +514,29 @@ provide in a maintained, user-facing way:
 - current CLI and dashboard presentation
 - structural correctness audits beyond classical single-cell score tests
 
+### Specifically not redundant for the audit-visible unit-test suites
+
+For the three `test_suite_status` suites currently visible through the audit
+system:
+
+- `maintained_core` is mostly smoke coverage for notebook/config wiring and the
+  declarative validation engine itself
+- `reference_bundles` is downloader, extraction, and normalization coverage
+- `audit_surface` is reporting/dashboard/shell coverage
+
+Those suites are software-quality checks for the maintained platform. They are
+not substitutes for SciUnit, and SciUnit is not a substitute for them.
+
+The only meaningful overlap with SciUnit-style concepts in those audit-visible
+developer suites is indirect:
+
+- `tests.reference.test_reference_validation_engine` covers a system that plays
+  a role similar to a scientific test runner
+- some dashboard tests exercise presentation of scientific judgment results
+
+But even there, the tests are about repo behavior and rendering contracts, not
+about formal model-vs-data scoring semantics.
+
 ## Practical Recommendation
 
 ### Recommendation 1: Do not make maintained OBGPU depend directly on legacy NeuronUnit
@@ -502,6 +582,16 @@ High-value candidates:
   interfaces
 - reusable protocol-result caching keyed by model identity, protocol settings,
   and measurement request
+
+This recommendation applies primarily to:
+
+- declarative literature validations
+- protocol-backed scientific audits
+- optimization candidate evaluation surfaces
+
+It does **not** imply migrating ordinary downloader tests, shell tests,
+dashboard rendering tests, or other software smoke tests into a SciUnit-like
+framework.
 
 ### Recommendation 4: If legacy NeuronUnit execution is revived, wrap it as an adapter
 
@@ -634,6 +724,11 @@ building a different maintained layer around it.
 5. If legacy NeuronUnit execution becomes scientifically valuable again, revive
    it as an optional adapter-backed subsystem with its own supported
    environment, not as an implicit dependency of the maintained OBGPU path.
+6. Keep the distinction sharp between:
+   - developer test suites for software correctness
+   - scientific validation suites for model-vs-data judgment
+   If SciUnit-like abstractions are added, aim them at the second category
+   rather than trying to force the entire `tests/` tree into one framework.
 
 ## Source Pointers
 
