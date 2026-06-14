@@ -1553,12 +1553,18 @@ That makes caveats visible without pretending they are hard failures.
 
 Definition:
 
-- compares model and reference curves over shared current values and checks
-  error thresholds such as MAE and RMSE
+- compares model and reference series as current-conditioned empirical
+  distributions over shared transformed x values
+- keeps unit metadata explicit for both axes
+- still reports practical residual diagnostics such as MAE and RMSE over the
+  aligned per-bin mean responses
 
 Use it for:
 
-- current-rate curve comparisons
+- current-rate or similar series comparisons where duplicate or repeated x
+  values should be treated as a distribution rather than silently averaged
+- comparisons where the model and reference axes may need an explicit declared
+  transform
 
 Example:
 
@@ -1572,15 +1578,34 @@ reference_current_key = "current_pA"
 reference_value_key = "firing_rate_Hz"
 model_current_key = "current_pA"
 model_value_key = "firing_rate_Hz"
+reference_x_unit_text = "pA"
+reference_y_unit_text = "Hz"
+model_x_unit_text = "pA"
+model_y_unit_text = "Hz"
+comparison_x_unit_text = "pA"
+comparison_y_unit_text = "Hz"
+x_quantity_name = "Injected current"
+y_quantity_name = "Firing rate"
 maximum_mae = 25.0
 maximum_rmse = 35.0
 minimum_point_count = 10
 title = "Model curve stays near the reference curve"
 criterion = "The model current-rate curve should stay within a moderate error band of the extracted reference points."
-description = "This compares the model and reference curve point sets over shared current values."
+description = "This compares the model and reference series over shared transformed x values, treating duplicate x points as empirical distributions."
 acceptable = "The shared-current MAE and RMSE stay within the configured limits."
 acceptable_basis = "The current thresholds are pragmatic first-pass tolerances for a curve comparison."
 ```
+
+Important details:
+
+- `reference_x_unit_text`, `reference_y_unit_text`, `model_x_unit_text`,
+  `model_y_unit_text`, `comparison_x_unit_text`, and
+  `comparison_y_unit_text` are mandatory
+- the current implementation aligns bins using exact shared transformed x
+  values after unit conversion and optional explicit affine transforms
+- if the model x-axis is not expressed in the same physical quantity as the
+  reference, declare the mapping explicitly with `model_x_transform` instead of
+  pretending the field names are already comparable
 
 ## Warning, caveat, math, and visualization features
 

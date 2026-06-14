@@ -1908,14 +1908,24 @@ instead of note-only planning:
    [`burton_urban_fi.validation.toml`](../research_context/reference_validations/burton_urban_fi.validation.toml)
    into the same SciUnit-backed core instead of leaving those judgments in
    bespoke rule handlers.
-10. Current verified branch state for `epli_correctness`:
+10. A fourth bridge now covers unit-aware series/distribution comparison in:
+    - [`olfactorybulb/neuronunit/series_validation_suite.py`](../olfactorybulb/neuronunit/series_validation_suite.py)
+    - the maintained `reference_curve_match` rule now compiles into that
+      SciUnit-backed series core through
+      [`olfactorybulb/audit/reference_validation_rules.py`](../olfactorybulb/audit/reference_validation_rules.py)
+11. That fourth bridge makes `reference_curve_match` explicitly:
+    - unit-aware on both axes
+    - transform-aware for mismatched model/reference axis quantities
+    - distribution-oriented over duplicate x bins instead of silently reducing
+      the data to one point per x before comparison
+12. Current verified branch state for `epli_correctness`:
     - `python tools/run_reference_validation.py --validation-id epli_correctness --skip-neuron --json`
     - `python tools/run_reference_validation.py --validation-id epli_correctness --json`
     - `python tools/run_audit.py epli_correctness --json`
     all produce a maintained report surface successfully on this branch, and
     the current full run reports `20` items with summary
     `{'FAIL': 1, 'PASS': 16, 'WARN': 3}`.
-11. The branch now also vendors the two legacy MC/TC electrophysiology CSVs
+13. The branch now also vendors the two legacy MC/TC electrophysiology CSVs
    still consumed directly by the maintained `burton_urban_fi` path:
    - `research_context/MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv`
    - `research_context/MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv`
@@ -1923,7 +1933,7 @@ instead of note-only planning:
    The longer-term target is to migrate that dependency behind a committed
    dataset/observation contract instead of leaving it as an ad hoc legacy file
    read.
-12. Current verified branch state for the maintained non-skip Burton
+14. Current verified branch state for the maintained non-skip Burton
     validation path:
     - `python tools/run_reference_validation.py --validation-id burton_urban_fi --cell-count 1 --jobs 1 --json`
     - `python tools/run_audit.py burton_urban_fi --cell-count 1 --jobs 1 --json`
@@ -1932,30 +1942,35 @@ instead of note-only planning:
     `{'FAIL': 15, 'PASS': 29, 'WARN': 2}`, while the audit-wrapper path reports
     `52` items with summary `{'FAIL': 15, 'PASS': 35, 'WARN': 2}` because it
     includes the maintained preflight/context checks around the same protocol.
+15. Current verified branch state for the maintained EPL-FSI series-comparison
+    path:
+    - `python tools/run_reference_validation.py --validation-id epl_fsi_intrinsic_validation --cell-models SyntheticEPL2026.PVCRH_FSI1 --jobs 1 --json`
+    - `python tools/run_audit.py epl_fsi_intrinsic_validation --cell-models SyntheticEPL2026.PVCRH_FSI1 --jobs 1 --json`
+    both produce a maintained report surface successfully on this branch, and
+    the current run reports `19` items with summary
+    `{'FAIL': 12, 'PASS': 6, 'WARN': 1}`. The migrated
+    `epl_fsi_reference_curve_match` item reports `matched_point_count = 12`
+    and now carries explicit comparison-axis unit metadata such as
+    `comparison_x_unit_text = "pA"`.
 
 This does **not** mean the overhaul is complete. It means one important
 scientific-core judgment family is now moving under NeuronUnit/SciUnit-style
 semantics while the maintained audit shell stays intact.
 
-## Recorded next target
+## Series-comparison follow-up
 
-The next explicitly chosen scientific-core slice is a **unit-aware,
-distribution-oriented series-comparison abstraction** to replace the current
-ad hoc `reference_curve_match` rule path.
-
-The reasons to treat this as a first-class next step are now explicit:
-
-- unit handling is mandatory, not optional
-- the current literature/model comparison may involve mismatched physical
-  quantities on the x-axis, such as point current versus current flux, so the
-  abstraction must make the x-axis quantity and any transform explicit
-- series comparison is broadly useful beyond a single EPL-FSI rule
-- a distribution-oriented observation type integrates more naturally with the
-  branch direction toward provenance-bearing statistical observations than a
-  purely curve-specific helper would
-
-The current temporary branch-local working list for that slice is:
+The first series-comparison slice is now implemented. Remaining follow-up work
+for that area is tracked in:
 - [`notes/TEMPORARY_NEURONUNIT_OVERHAUL_TODO.md`](./TEMPORARY_NEURONUNIT_OVERHAUL_TODO.md)
+
+The open design questions are no longer whether to add the abstraction, but how
+far to generalize it next:
+
+- richer statistical score semantics beyond the current MAE/RMSE-plus-diagnostics
+  first pass
+- broader transform policies beyond exact transformed x-bin alignment
+- more explicit provenance-bearing series observation objects if future
+  validations need more than the current EPL-FSI example-cell path
 
 ## Source Pointers
 

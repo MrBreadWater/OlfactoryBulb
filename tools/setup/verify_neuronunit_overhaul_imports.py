@@ -28,6 +28,7 @@ REPO_IMPORTS = [
     "olfactorybulb.neuronunit.models.neuron_cell",
     "olfactorybulb.neuronunit.reference_bands",
     "olfactorybulb.neuronunit.comparison_validation_suite",
+    "olfactorybulb.neuronunit.series_validation_suite",
     "olfactorybulb.neuronunit.summary_validation_suite",
     "olfactorybulb.neuronunit.reference_validation_suite",
     "olfactorybulb.audit.reference_validation_rules",

@@ -576,6 +576,10 @@ contract for future sessions.
     branch or the loader must be redirected to a committed dataset output.
     Clean worktrees must not depend on borrowing untracked local reference CSVs
     from some other checkout.
+  - `reference_curve_match` now has an explicit unit/transform contract.
+    Do not infer series-comparison compatibility from field names alone.
+    Maintained validations should declare reference/model axis units,
+    comparison units, and any needed axis transform explicitly.
 
 ## 5b. Reusable infrastructure extraction rules
 

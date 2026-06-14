@@ -64,19 +64,9 @@
       "output_rel": "maintained/notes/porting/MODERN_NEURON_PORT_NOTES.html",
       "source_rel": "notes/porting/MODERN_NEURON_PORT_NOTES.md",
       "title": "Modern NEURON / OBGPU Notes"
-    },
-    {
-      "output_rel": "maintained/research_context/manual_reference_templates/README.html",
-      "source_rel": "research_context/manual_reference_templates/README.md",
-      "title": "Manual Reference Extraction Templates"
-    },
-    {
-      "output_rel": "maintained/notes/REFERENCE_VALIDATION_TUTORIAL.html",
-      "source_rel": "notes/REFERENCE_VALIDATION_TUTORIAL.md",
-      "title": "Reference Validation Tutorial"
     }
   ],
-  "generated_at": "2026-06-04T16:52:32",
+  "generated_at": "2026-06-14T18:49:57",
   "sections": [
     {
       "pages": [

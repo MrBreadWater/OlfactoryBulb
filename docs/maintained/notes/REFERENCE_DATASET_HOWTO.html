@@ -137,20 +137,20 @@
       </p>
       <h1 id="reference-dataset-how-to">Reference Dataset How-To</h1>
 <p>If you want the shortest explanation first, start with:
-<a href="REFERENCE_VALIDATION_SYSTEM_OVERVIEW.html">REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</a></p>
+<a href="/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md">REFERENCE_VALIDATION_SYSTEM_OVERVIEW.md</a></p>
 <p>If you need to fill unresolved literature gaps by hand, use:
-<a href="../research_context/manual_reference_templates/README.html">manual_reference_templates/README.md</a></p>
+<a href="/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md">manual_reference_templates/README.md</a></p>
 <p>If you need the boundary between raw sources, configs, manual intake, and
 generated canonical outputs, see:
-<a href="../research_context/README.html">research_context/README.md</a></p>
+<a href="/home/michael/OlfactoryBulb/research_context/README.md">research_context/README.md</a></p>
 <p>If you want the maintained web shell that combines docs, audits, and
 optimization surfaces, see:
-<a href="DASHBOARD_SHELL_HOWTO.html">DASHBOARD_SHELL_HOWTO.md</a></p>
+<a href="/home/michael/OlfactoryBulb/notes/DASHBOARD_SHELL_HOWTO.md">DASHBOARD_SHELL_HOWTO.md</a></p>
 <p>This guide explains how to add and maintain a declarative reference-data
 dataset in this repository.</p>
 <p>If you also need to run model-side literature validation against those
 normalized rows, use the companion guide:
-<a href="REFERENCE_VALIDATION_HOWTO.html">REFERENCE_VALIDATION_HOWTO.md</a>.</p>
+<a href="/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_HOWTO.md">REFERENCE_VALIDATION_HOWTO.md</a>.</p>
 <p>The system is meant for structured, protocol-aware validation targets such as:</p>
 <ul>
 <li>intrinsic electrophysiology summary tables</li>
@@ -174,19 +174,19 @@ If a paper only exposes a plotted curve, keep that gap in
 <h2 id="where-the-pieces-live">Where the pieces live</h2>
 <ul>
 <li>Dataset config template:
-  <a href="../../../research_context/reference_datasets/TEMPLATE.dataset.toml" data-served-href="/repo/research_context/reference_datasets/TEMPLATE.dataset.toml">research_context/reference_datasets/TEMPLATE.dataset.toml</a></li>
+  <a href="/home/michael/OlfactoryBulb/research_context/reference_datasets/TEMPLATE.dataset.toml">research_context/reference_datasets/TEMPLATE.dataset.toml</a></li>
 <li>Current example dataset:
-  <a href="../../../research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml" data-served-href="/repo/research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml">research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml</a></li>
+  <a href="/home/michael/OlfactoryBulb/research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml">research_context/reference_datasets/pv_crh_epl_fsi.dataset.toml</a></li>
 <li>Generic downloader:
-  <a href="../../../tools/download_reference_dataset_sources.py" data-served-href="/repo/tools/download_reference_dataset_sources.py">tools/download_reference_dataset_sources.py</a></li>
+  <a href="/home/michael/OlfactoryBulb/tools/download_reference_dataset_sources.py">tools/download_reference_dataset_sources.py</a></li>
 <li>Generic extractor:
-  <a href="../../../tools/extract_reference_dataset.py" data-served-href="/repo/tools/extract_reference_dataset.py">tools/extract_reference_dataset.py</a></li>
+  <a href="/home/michael/OlfactoryBulb/tools/extract_reference_dataset.py">tools/extract_reference_dataset.py</a></li>
 <li>Generic config loader:
-  <a href="../../../olfactorybulb/audit/reference_dataset_config.py" data-served-href="/repo/olfactorybulb/audit/reference_dataset_config.py">olfactorybulb/audit/reference_dataset_config.py</a></li>
+  <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_dataset_config.py">olfactorybulb/audit/reference_dataset_config.py</a></li>
 <li>Generic extraction engine:
-  <a href="../../../olfactorybulb/audit/reference_dataset_engine.py" data-served-href="/repo/olfactorybulb/audit/reference_dataset_engine.py">olfactorybulb/audit/reference_dataset_engine.py</a></li>
+  <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_dataset_engine.py">olfactorybulb/audit/reference_dataset_engine.py</a></li>
 <li>Generic source acquisition:
-  <a href="../../../olfactorybulb/audit/reference_sources.py" data-served-href="/repo/olfactorybulb/audit/reference_sources.py">olfactorybulb/audit/reference_sources.py</a></li>
+  <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_sources.py">olfactorybulb/audit/reference_sources.py</a></li>
 </ul>
 <h2 id="what-a-dataset-produces">What a dataset produces</h2>
 <p>Every dataset config declares output filenames for:</p>

@@ -12,34 +12,34 @@ Remove this file when the listed items are either:
 
 ## Current next slice: unit-aware series comparison
 
-- [ ] Replace the current ad hoc `reference_curve_match` rule implementation
+- [x] Replace the current ad hoc `reference_curve_match` rule implementation
       with a SciUnit-backed series-comparison core.
-- [ ] Treat unit handling as mandatory for series comparison, not optional.
-- [ ] Make the series observation explicit about what the x-axis quantity is:
+- [x] Treat unit handling as mandatory for series comparison, not optional.
+- [x] Make the series observation explicit about what the x-axis quantity is:
       for example point current, current density, current flux, or another
       transformed drive quantity.
-- [ ] Support explicit x-axis transforms so a comparison can declare how to map
+- [x] Support explicit x-axis transforms so a comparison can declare how to map
       between model output and literature reference coordinates when they are
       not expressed in the same physical quantity.
-- [ ] Carry axis-unit metadata through the observation / prediction / score
+- [x] Carry axis-unit metadata through the observation / prediction / score
       path using `quantities`, rather than relying on field-name conventions
       like `current_pA` or `firing_rate_Hz`.
 
 ## Distribution-oriented comparison direction
 
-- [ ] Do not lock the library abstraction to only “curves”.
-- [ ] Prefer a more general “series observation” or “current-conditioned
+- [x] Do not lock the library abstraction to only “curves”.
+- [x] Prefer a more general “series observation” or “current-conditioned
       response distribution” concept that can handle:
       - duplicate x-values
       - unaligned x-values
       - sparse overlap
       - pointwise series as a limiting case
-- [ ] First-pass approximation should be simple and robust, not overfitted:
+- [x] First-pass approximation should be simple and robust, not overfitted:
       likely a current-conditioned distribution summary with explicit alignment
       policy and residual statistics.
-- [ ] Keep the door open to standard statistical tests or p-value based scores,
+- [x] Keep the door open to standard statistical tests or p-value based scores,
       but do not force the first version to pretend precision we do not have.
-- [ ] The first design should be able to express both:
+- [x] The first design should be able to express both:
       - deterministic example-cell comparisons
       - literature-derived distributions or pooled repeated-current datasets
 
@@ -66,12 +66,12 @@ Remove this file when the listed items are either:
 
 ## Migration targets
 
-- [ ] Migrate `reference_curve_match` in
+- [x] Migrate `reference_curve_match` in
       `epl_fsi_intrinsic_validation.validation.toml` to the new SciUnit-backed
       series-comparison core.
-- [ ] Add direct bridge tests analogous to the reference-band, summary-rule,
+- [x] Add direct bridge tests analogous to the reference-band, summary-rule,
       and comparison-rule suite tests.
-- [ ] Add at least one maintained audit smoke test that exercises the new
+- [x] Add at least one maintained audit smoke test that exercises the new
       series-comparison path end-to-end.
-- [ ] Update the overhaul assessment note once the series-comparison contract is
+- [x] Update the overhaul assessment note once the series-comparison contract is
       concrete enough to describe precisely.

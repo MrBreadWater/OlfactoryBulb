@@ -145,8 +145,8 @@
 </ul>
 <p>The maintained source of truth is now:</p>
 <ul>
-<li>pinned upstream ref: <a href="../../../../third_party_patches/nrn/manifest.json" data-served-href="/repo/third_party_patches/nrn/manifest.json">third_party_patches/nrn/manifest.json</a></li>
-<li>patch files: <a href="../../../../third_party_patches/nrn" data-served-href="/repo/third_party_patches/nrn">third_party_patches/nrn</a></li>
+<li>pinned upstream ref: <a href="/home/alek/OlfactoryBulb/third_party_patches/nrn/manifest.json">third_party_patches/nrn/manifest.json</a></li>
+<li>patch files: <a href="/home/alek/OlfactoryBulb/third_party_patches/nrn">third_party_patches/nrn</a></li>
 </ul>
 <p><code>external/nrn-9.0.1</code> is treated as a resettable checkout cache, not the long-term home of local edits.</p>
 <h2 id="build-flow">Build Flow</h2>
@@ -155,7 +155,7 @@
 </code></pre>
 <p>What the setup script now does:</p>
 <ol>
-<li>creates or updates the conda env from <a href="../../../../environments/environment-modern.yml" data-served-href="/repo/environments/environment-modern.yml">environment-modern.yml</a></li>
+<li>creates or updates the conda env from <a href="/home/alek/OlfactoryBulb/environments/environment-modern.yml">environment-modern.yml</a></li>
 <li>resets the NEURON source tree to the pinned upstream ref from the manifest</li>
 <li>reapplies the repo patch stack</li>
 <li>builds and installs NEURON/CoreNEURON</li>
@@ -169,8 +169,8 @@
 <li>the setup path derives the active env's <code>site-packages</code> path and <code>libpython</code> path dynamically instead of assuming Python <code>3.11</code></li>
 <li>the setup path derives <code>CUDAToolkit_ROOT</code> and <code>libcudart</code> from module-provided CUDA installs when they are not under <code>/usr/local/cuda</code></li>
 <li>the main build path is intended for generic Linux GPU hosts, not just the Jetson</li>
-<li><a href="../../../../tools/setup/setup_nvhpc_jetson.sh" data-served-href="/repo/tools/setup/setup_nvhpc_jetson.sh">setup_nvhpc_jetson.sh</a> remains a Jetson-specific helper, not the primary OBGPU build workflow</li>
-<li>any NEURON/CoreNEURON portability fix must land in <a href="../../../../third_party_patches/nrn" data-served-href="/repo/third_party_patches/nrn">third_party_patches/nrn</a>, not as an ad hoc edit inside <code>external/nrn-9.0.1</code></li>
+<li><a href="/home/alek/OlfactoryBulb/tools/setup/setup_nvhpc_jetson.sh">setup_nvhpc_jetson.sh</a> remains a Jetson-specific helper, not the primary OBGPU build workflow</li>
+<li>any NEURON/CoreNEURON portability fix must land in <a href="/home/alek/OlfactoryBulb/third_party_patches/nrn">third_party_patches/nrn</a>, not as an ad hoc edit inside <code>external/nrn-9.0.1</code></li>
 </ul>
 <h2 id="runtime-defaults">Runtime Defaults</h2>
 <p>The notebook config distinguishes local execution settings from remote Slurm
@@ -209,9 +209,9 @@ OpenSSH/rsync path is no longer maintained.</p>
 </ul>
 <p>See:</p>
 <ul>
-<li><a href="SOL_REMOTE_WORKFLOW.html">SOL_REMOTE_WORKFLOW.md</a></li>
-<li><a href="../../../../obgpu_experiment_helpers.py" data-served-href="/repo/obgpu_experiment_helpers.py">obgpu_experiment_helpers.py</a></li>
-<li><a href="../../../../tools/remote" data-served-href="/repo/tools/remote">tools/remote</a></li>
+<li><a href="/home/alek/OlfactoryBulb/notes/porting/SOL_REMOTE_WORKFLOW.md">SOL_REMOTE_WORKFLOW.md</a></li>
+<li><a href="/home/alek/OlfactoryBulb/obgpu_experiment_helpers.py">obgpu_experiment_helpers.py</a></li>
+<li><a href="/home/alek/OlfactoryBulb/tools/remote">tools/remote</a></li>
 </ul>
 <p>For interactive Sol shells, the supported activation helper is:</p>
 <pre><code class="language-bash">source tools/setup/activate_sol_obgpu.sh
@@ -255,8 +255,8 @@ export SOL_CUDA_MODULE=&lt;module&gt;
 </ol>
 <p>See:</p>
 <ul>
-<li><a href="NEURON_UPGRADE_WORKFLOW.html">NEURON_UPGRADE_WORKFLOW.md</a></li>
-<li><a href="../../../../tools/setup/check_nrn_upgrade.py" data-served-href="/repo/tools/setup/check_nrn_upgrade.py">check_nrn_upgrade.py</a></li>
+<li><a href="/home/alek/OlfactoryBulb/notes/porting/NEURON_UPGRADE_WORKFLOW.md">NEURON_UPGRADE_WORKFLOW.md</a></li>
+<li><a href="/home/alek/OlfactoryBulb/tools/setup/check_nrn_upgrade.py">check_nrn_upgrade.py</a></li>
 </ul>
     </article>
     <aside>

@@ -67,3 +67,13 @@ class ProvidesMetricRows(sciunit.Capability):
         Return a mapping from audited-row identity to the requested metric value.
         """
         raise NotImplementedError()
+
+
+class ProvidesProtocolEvidenceRows(sciunit.Capability):
+    """Indicates that a model can expose protocol-evidence row collections."""
+
+    def get_protocol_evidence_rows(self, evidence_key):
+        """
+        Return the row collection associated with one protocol-evidence key.
+        """
+        raise NotImplementedError()

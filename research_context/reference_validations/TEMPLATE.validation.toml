@@ -284,12 +284,23 @@ validation_design_review_status = "pending"
 # reference_value_key = "firing_rate_Hz"
 # model_current_key = "current_pA"
 # model_value_key = "firing_rate_Hz"
+# reference_x_unit_text = "pA"
+# reference_y_unit_text = "Hz"
+# model_x_unit_text = "pA"
+# model_y_unit_text = "Hz"
+# comparison_x_unit_text = "pA"
+# comparison_y_unit_text = "Hz"
+# x_quantity_name = "Injected current"
+# y_quantity_name = "Firing rate"
+# Optional explicit transforms when the model and reference x/y quantities are
+# not already expressed in the same unit or not the same physical quantity.
+# model_x_transform = { kind = "affine", scale = 1000.0, offset = 0.0, output_unit_text = "pA" }
 # maximum_mae = 20.0
 # maximum_rmse = 30.0
 # minimum_point_count = 5
 # title = "Model curve stays near the extracted reference curve"
 # criterion = "Explain the accepted curve mismatch threshold."
-# description = "Use this when both the model protocol and the extracted reference bundle provide current-versus-rate point sets."
+# description = "Use this when both the model protocol and the extracted reference bundle provide series point sets, and declare the axis units explicitly."
 # acceptable = "The matched current points satisfy the configured error thresholds."
 # acceptable_basis = "The current thresholds are declared directly in the validation config."
 

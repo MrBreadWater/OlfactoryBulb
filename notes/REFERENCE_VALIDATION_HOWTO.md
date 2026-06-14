@@ -389,6 +389,13 @@ The built-in rule layer already covers common cases:
 
 Use config alone whenever one of these can express the paper cleanly.
 
+For `reference_curve_match`, treat axis metadata as part of the rule contract:
+
+- declare reference/model x and y units explicitly
+- declare comparison units explicitly
+- use an explicit transform when the model and reference axes are not already
+  the same physical quantity
+
 ## Choosing acceptable bands for literature rows
 
 `reference_band_rows` no longer assumes that every metric should use the same

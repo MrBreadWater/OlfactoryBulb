@@ -11,7 +11,11 @@ import sciunit
 
 from olfactorybulb.audit import AuditItem
 from olfactorybulb.audit.core import rounded
-from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
+from olfactorybulb.neuronunit.capabilities import (
+    ProvidesMetricRows,
+    ProvidesMetricSummary,
+    ProvidesProtocolEvidenceRows,
+)
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceBandObservation,
     measurement_with_unit,
@@ -37,7 +41,7 @@ class ReferenceBandCase:
     fail_status: str = "FAIL"
 
 
-class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMetricRows):
+class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMetricRows, ProvidesProtocolEvidenceRows):
     """SciUnit model wrapper around the maintained summary metric table."""
 
     def __init__(
@@ -45,11 +49,13 @@ class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMet
         *,
         summary: dict[str, dict[str, float]],
         metrics: list[dict[str, Any]] | None = None,
+        protocol_evidence: dict[str, Any] | None = None,
         name: str = "reference-validation-summary-model",
     ) -> None:
         super().__init__(name=name)
         self.summary = summary
         self.metrics = list(metrics or [])
+        self.protocol_evidence = dict(protocol_evidence or {})
 
     def get_metric_summary(self, group: str, metric_key: str, *, unit_text: str = "") -> float | pq.Quantity:
         value = float(self.summary.get(group, {}).get(metric_key, float("nan")))
@@ -61,6 +67,12 @@ class ReferenceValidationModel(sciunit.Model, ProvidesMetricSummary, ProvidesMet
             entity = str(row.get(entity_key, f"row_{index}"))
             values[entity] = row.get(metric_key)
         return values
+
+    def get_protocol_evidence_rows(self, evidence_key: str) -> list[dict[str, Any]]:
+        rows = self.protocol_evidence.get(evidence_key, [])
+        if not isinstance(rows, list):
+            return []
+        return [dict(row) for row in rows]
 
 
 class ReferenceBandScore(sciunit.Score):

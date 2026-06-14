@@ -140,10 +140,10 @@
 it exists.</p>
 <p>If you later need the implementation details:</p>
 <ul>
-<li>full paper-to-audit tutorial and field reference: <a href="REFERENCE_VALIDATION_TUTORIAL.html">REFERENCE_VALIDATION_TUTORIAL.md</a></li>
-<li>dataset ingestion: <a href="REFERENCE_DATASET_HOWTO.html">REFERENCE_DATASET_HOWTO.md</a></li>
-<li>simulation-backed validation: <a href="REFERENCE_VALIDATION_HOWTO.html">REFERENCE_VALIDATION_HOWTO.md</a></li>
-<li>manual intake templates: <a href="../research_context/manual_reference_templates/README.html">manual_reference_templates/README.md</a></li>
+<li>full paper-to-audit tutorial and field reference: <a href="/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_TUTORIAL.md">REFERENCE_VALIDATION_TUTORIAL.md</a></li>
+<li>dataset ingestion: <a href="/home/michael/OlfactoryBulb/notes/REFERENCE_DATASET_HOWTO.md">REFERENCE_DATASET_HOWTO.md</a></li>
+<li>simulation-backed validation: <a href="/home/michael/OlfactoryBulb/notes/REFERENCE_VALIDATION_HOWTO.md">REFERENCE_VALIDATION_HOWTO.md</a></li>
+<li>manual intake templates: <a href="/home/michael/OlfactoryBulb/research_context/manual_reference_templates/README.md">manual_reference_templates/README.md</a></li>
 </ul>
 <h2 id="what-this-system-is">What This System Is</h2>
 <p>This repository has a structured reference-validation system for literature-backed
@@ -181,6 +181,26 @@ or notebooks. They are converted into explicit, reusable validation targets.</p>
 <li>protocol caveats travel with the data</li>
 <li>different cell classes can stay separate by default</li>
 <li>validation rules can be upgraded without rewriting the whole pipeline</li>
+</ul>
+<h2 id="why-expert-review-exists">Why "Expert Review" Exists</h2>
+<p>This repository intentionally treats LLM-assisted authoring as a first-class
+workflow option for drafting datasets, validation configs, rule choices,
+protocol mappings, and documentation.</p>
+<p>That is useful for speed, but it is not enough for scientific trust.</p>
+<p>Large language models can help assemble a candidate validation design, but they
+are not reliable scientific reviewers. They can misread papers, flatten
+protocol caveats, overstate comparability, or quietly normalize a questionable
+assumption into something that looks clean in config.</p>
+<p>That is why the validation-design review metadata exists.</p>
+<p>When these docs say <code>expert</code> or <code>qualified_domain_expert</code>, they mean a person
+with the relevant scientific background to judge the validation-design choice
+itself, such as protocol equivalence, reference-band reconstruction, pooling
+strategy, or manual extraction/mapping decisions.</p>
+<p>It does not mean:</p>
+<ul>
+<li>the LLM drafted the item and therefore it is reviewed</li>
+<li>the current PASS/WARN/FAIL result is scientifically endorsed</li>
+<li>every line of implementation code was audited manually</li>
 </ul>
 <h2 id="simplest-explanation-of-how-to-use-it">Simplest Explanation Of How To Use It</h2>
 <h3 id="fast-path">Fast path</h3>
@@ -293,6 +313,7 @@ are the shortest path.</p>
 <li><a href="#what-this-system-is">What This System Is</a></li>
 <li><a href="#why-we-needed-it">Why We Needed It</a></li>
 <li><a href="#why-it-is-worth-using">Why It Is Worth Using</a></li>
+<li><a href="#why-expert-review-exists">Why "Expert Review" Exists</a></li>
 <li><a href="#simplest-explanation-of-how-to-use-it">Simplest Explanation Of How To Use It</a><ul>
 <li><a href="#fast-path">Fast path</a></li>
 <li><a href="#optional-details">Optional details</a></li>

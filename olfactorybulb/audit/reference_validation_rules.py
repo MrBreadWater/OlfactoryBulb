@@ -47,6 +47,14 @@ from olfactorybulb.neuronunit.comparison_validation_suite import (
     audit_items_from_comparison_rule_suite,
     compile_comparison_rule_suite,
 )
+from olfactorybulb.neuronunit.series_validation_suite import (
+    AxisTransform,
+    SeriesComparisonCase,
+    SeriesComparisonPolicy,
+    SeriesDistributionObservation,
+    audit_items_from_series_comparison_suite,
+    compile_series_comparison_suite,
+)
 from olfactorybulb.neuronunit.summary_validation_suite import (
     SummaryRuleCase,
     audit_items_from_summary_rule_suite,
@@ -781,23 +789,6 @@ def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | 
     return path
 
 
-def _curve_points_by_current(
-    rows: list[dict[str, Any]],
-    *,
-    current_key: str,
-    value_key: str,
-    precision_digits: int = 6,
-) -> dict[float, float]:
-    buckets: dict[float, list[float]] = {}
-    for row in rows:
-        if not (_is_finite_number(row.get(current_key)) and _is_finite_number(row.get(value_key))):
-            continue
-        current_value = round(float(row[current_key]), int(precision_digits))
-        value = float(row[value_key])
-        buckets.setdefault(current_value, []).append(value)
-    return {current: float(np.mean(values)) for current, values in sorted(buckets.items())}
-
-
 @register_validation_rule("protocol_executed")
 def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
@@ -1069,72 +1060,100 @@ def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list
 @register_validation_rule("reference_curve_match")
 def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     loader = str(rule["loader"])
-    protocol_evidence_key = str(rule.get("protocol_evidence_key", "fi_curve_rows"))
-    reference_current_key = str(rule.get("reference_current_key", "current_pA"))
-    reference_value_key = str(rule.get("reference_value_key", "firing_rate_Hz"))
-    model_current_key = str(rule.get("model_current_key", "current_pA"))
-    model_value_key = str(rule.get("model_value_key", "firing_rate_Hz"))
-    max_mae = float(rule.get("maximum_mae", float("inf")))
-    max_rmse = float(rule.get("maximum_rmse", float("inf")))
-    min_points = int(rule.get("minimum_point_count", 1))
-
     reference_rows = _filter_rows(_load_rows(loader), rule, args=context.args)
-    model_rows = list((getattr(context.protocol_result, "protocol_evidence", {}) or {}).get(protocol_evidence_key, []))
-    precision_digits = int(rule.get("current_precision_digits", 6))
-    reference_curve = _curve_points_by_current(
-        reference_rows,
-        current_key=reference_current_key,
-        value_key=reference_value_key,
-        precision_digits=precision_digits,
+    case = _series_comparison_case(rule, reference_rows)
+    protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
+    compiled = compile_series_comparison_suite(
+        cases=[case],
+        summary=context.summary,
+        metrics=context.metrics,
+        protocol_evidence=protocol_evidence,
+        suite_name=str(rule.get("suite_name", rule.get("title", "series-comparison-suite"))),
     )
-    model_curve = _curve_points_by_current(
-        model_rows,
-        current_key=model_current_key,
-        value_key=model_value_key,
-        precision_digits=precision_digits,
-    )
-    shared_currents = sorted(set(reference_curve).intersection(model_curve))
-    diffs = [abs(model_curve[current] - reference_curve[current]) for current in shared_currents]
-    mae = float(np.mean(diffs)) if diffs else float("nan")
-    rmse = float(np.sqrt(np.mean(np.square(diffs)))) if diffs else float("nan")
-    max_abs = float(np.max(diffs)) if diffs else float("nan")
-    passed = (
-        len(shared_currents) >= min_points
-        and _is_finite_number(mae)
-        and mae <= max_mae
-        and _is_finite_number(rmse)
-        and rmse <= max_rmse
-    )
-    evidence = _rounded_dict(
-        {
-            "matched_point_count": len(shared_currents),
-            "currents_pA": shared_currents,
-            "reference_values_Hz": [reference_curve[current] for current in shared_currents],
-            "model_values_Hz": [model_curve[current] for current in shared_currents],
-            "mean_absolute_error_Hz": mae,
-            "root_mean_square_error_Hz": rmse,
-            "max_absolute_error_Hz": max_abs,
-            "maximum_mae_Hz": max_mae,
-            "maximum_rmse_Hz": max_rmse,
-        }
-    )
-    return [
-        _rule_item(
-            rule,
-            status=_rule_status(rule, passed),
-            evidence=evidence,
-            series_visuals=[
-                series_visual_spec(
-                    keys=["currents_pA", "reference_values_Hz", "model_values_Hz"],
-                    style={
-                        "line_width": 1.8,
-                        "marker_size": 3.2,
-                        "legend_loc": "lower center",
-                    },
-                )
-            ],
+    return audit_items_from_series_comparison_suite(compiled)
+
+
+def _required_unit_text(rule: dict[str, Any], key: str) -> str:
+    if key not in rule:
+        raise ValueError(
+            f"reference_curve_match requires explicit {key!r}; do not infer series-comparison units from field names"
         )
-    ]
+    return str(rule.get(key, "")).strip()
+
+
+def _axis_transform(rule: dict[str, Any], key: str) -> AxisTransform:
+    raw = rule.get(key, {})
+    if raw in (None, "", {}):
+        return AxisTransform()
+    if not isinstance(raw, dict):
+        raise ValueError(f"{key} must be a table/dict when provided")
+    return AxisTransform(
+        kind=str(raw.get("kind", "identity")),
+        scale=float(raw.get("scale", 1.0)),
+        offset=float(raw.get("offset", 0.0)),
+        input_unit_text=str(raw.get("input_unit_text", "")).strip(),
+        output_unit_text=str(raw.get("output_unit_text", "")).strip(),
+    )
+
+
+def _series_comparison_case(
+    rule: dict[str, Any],
+    reference_rows: list[dict[str, Any]],
+) -> SeriesComparisonCase:
+    observation = SeriesDistributionObservation(
+        protocol_evidence_key=str(rule.get("protocol_evidence_key", "fi_curve_rows")),
+        reference_rows=reference_rows,
+        reference_x_key=str(rule.get("reference_current_key", "current_pA")),
+        reference_y_key=str(rule.get("reference_value_key", "firing_rate_Hz")),
+        model_x_key=str(rule.get("model_current_key", "current_pA")),
+        model_y_key=str(rule.get("model_value_key", "firing_rate_Hz")),
+        reference_x_unit_text=_required_unit_text(rule, "reference_x_unit_text"),
+        reference_y_unit_text=_required_unit_text(rule, "reference_y_unit_text"),
+        model_x_unit_text=_required_unit_text(rule, "model_x_unit_text"),
+        model_y_unit_text=_required_unit_text(rule, "model_y_unit_text"),
+        comparison_x_unit_text=_required_unit_text(rule, "comparison_x_unit_text"),
+        comparison_y_unit_text=_required_unit_text(rule, "comparison_y_unit_text"),
+        reference_x_transform=_axis_transform(rule, "reference_x_transform"),
+        reference_y_transform=_axis_transform(rule, "reference_y_transform"),
+        model_x_transform=_axis_transform(rule, "model_x_transform"),
+        model_y_transform=_axis_transform(rule, "model_y_transform"),
+        reference_series_id_key=str(rule.get("reference_series_id_key", "cell_id")),
+        model_series_id_key=str(rule.get("model_series_id_key", "cell_name")),
+        x_quantity_name=str(rule.get("x_quantity_name", "Injected current")),
+        y_quantity_name=str(rule.get("y_quantity_name", "Firing rate")),
+        visual_x_key=str(rule.get("visual_x_key", "currents_pA")),
+        visual_reference_y_key=str(rule.get("visual_reference_y_key", "reference_values_Hz")),
+        visual_model_y_key=str(rule.get("visual_model_y_key", "model_values_Hz")),
+        visual_kind=str(rule.get("visual_kind", "fi_curve")),
+        policy=SeriesComparisonPolicy(
+            minimum_point_count=int(rule.get("minimum_point_count", 1)),
+            maximum_mae=float(rule.get("maximum_mae", float("inf"))),
+            maximum_rmse=float(rule.get("maximum_rmse", float("inf"))),
+            minimum_median_welch_pvalue=(
+                float(rule["minimum_median_welch_pvalue"])
+                if "minimum_median_welch_pvalue" in rule and rule.get("minimum_median_welch_pvalue") is not None
+                else None
+            ),
+            x_precision_digits=int(rule.get("current_precision_digits", 6)),
+            alignment_policy=str(rule.get("alignment_policy", "exact_transformed_x")),
+            distribution_kind=str(rule.get("distribution_kind", "empirical_by_x")),
+        ),
+    )
+    return SeriesComparisonCase(
+        check_id=str(rule["check_id"]),
+        title=str(rule["title"]),
+        criterion=str(rule["criterion"]),
+        criterion_latex=str(rule.get("criterion_latex", "")),
+        criterion_formulae=list(rule.get("criterion_formulae", [])),
+        criterion_definitions=list(rule.get("criterion_definitions", [])),
+        description=str(rule["description"]),
+        acceptable=str(rule["acceptable"]),
+        acceptable_basis=str(rule["acceptable_basis"]),
+        note=str(rule.get("note", "")),
+        observation=observation,
+        pass_status=str(rule.get("pass_status", "PASS")),
+        fail_status=str(rule.get("fail_status", "FAIL")),
+    )
 
 
 __all__ = [
