@@ -1937,6 +1937,26 @@ This does **not** mean the overhaul is complete. It means one important
 scientific-core judgment family is now moving under NeuronUnit/SciUnit-style
 semantics while the maintained audit shell stays intact.
 
+## Recorded next target
+
+The next explicitly chosen scientific-core slice is a **unit-aware,
+distribution-oriented series-comparison abstraction** to replace the current
+ad hoc `reference_curve_match` rule path.
+
+The reasons to treat this as a first-class next step are now explicit:
+
+- unit handling is mandatory, not optional
+- the current literature/model comparison may involve mismatched physical
+  quantities on the x-axis, such as point current versus current flux, so the
+  abstraction must make the x-axis quantity and any transform explicit
+- series comparison is broadly useful beyond a single EPL-FSI rule
+- a distribution-oriented observation type integrates more naturally with the
+  branch direction toward provenance-bearing statistical observations than a
+  purely curve-specific helper would
+
+The current temporary branch-local working list for that slice is:
+- [`notes/TEMPORARY_NEURONUNIT_OVERHAUL_TODO.md`](./TEMPORARY_NEURONUNIT_OVERHAUL_TODO.md)
+
 ## Source Pointers
 
 ### Repo-local
