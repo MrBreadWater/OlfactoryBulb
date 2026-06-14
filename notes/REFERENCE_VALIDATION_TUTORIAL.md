@@ -1689,6 +1689,10 @@ Several maintained rule paths already render structured visuals:
   - explicit current-versus-rate series graph
 - `protocol_executed`
   - current-rate series graph when protocol evidence includes `fi_curve_rows`
+  - when those rows contain multiple model cells, the dashboard now plots one
+    labeled curve per cell instead of collapsing them into one anonymous line
+  - when target/reference point rows are also present, the dashboard can
+    overlay them as a separate target series
 
 These do not need extra TOML visualization fields; the rule handlers emit them.
 
@@ -1725,6 +1729,21 @@ def example_series_rule(rule, context):
             ],
         )
     ]
+```
+
+For row-based current-rate evidence, use `row_sources` instead of flattening
+the rows into one array pair:
+
+```python
+series_visual_spec(
+    title="Model vs target f-I curves",
+    row_sources=[
+        {"key": "reference_fi_curve_rows", "label": "Target", "role": "reference"},
+        {"key": "model_fi_curve_rows", "group_by": ["cell_name"], "role": "model"},
+    ],
+    backend="matplotlib",
+    style={"line_width": 1.8, "marker_size": 3.2},
+)
 ```
 
 ### Custom companion visuals

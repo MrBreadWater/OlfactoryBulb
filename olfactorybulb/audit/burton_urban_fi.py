@@ -15,7 +15,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 from olfactorybulb.audit.criterion_math import criterion_math_for_reference_band
-from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded
+from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded, series_visual_spec
 from olfactorybulb.audit.reference_data import (
     BMU2024_EPL_FSI_PROTOCOL_ID,
     BU2014_MC_TC_PROTOCOL_ID,
@@ -1070,6 +1070,16 @@ def build_validation_items(
         "cell_count": len(metrics),
         "cell_names": [metric["cell_name"] for metric in metrics],
     }
+    protocol_evidence["fi_curve_rows"] = [
+        {
+            "cell_name": str(metric["cell_name"]),
+            "cell_type": str(metric["cell_type"]),
+            "current_pA": rounded(float(current_pA), 3),
+            "firing_rate_Hz": rounded(float(rate_hz), 3),
+        }
+        for metric in metrics
+        for current_pA, rate_hz in zip(protocol_evidence["step_currents_pA"], metric.get("firing_rates_by_step_Hz", []))
+    ]
     items.append(
         AuditItem(
             check_id="burton_urban_protocol_executed",
@@ -1080,6 +1090,23 @@ def build_validation_items(
             acceptable="At least one audited cell metric record must be produced, and the evidence should list the full current-step protocol that was executed.",
             acceptable_basis="This rule is an implementation sanity check rather than a literature tolerance band. The audit either ran the intended protocol and produced metrics, or it did not.",
             evidence=protocol_evidence,
+            series_visuals=[
+                series_visual_spec(
+                    title="Model f-I curves",
+                    row_sources=[
+                        {
+                            "key": "fi_curve_rows",
+                            "group_by": ["cell_type", "cell_name"],
+                            "role": "model",
+                        }
+                    ],
+                    style={
+                        "line_width": 1.8,
+                        "marker_size": 3.2,
+                        "legend_loc": "lower center",
+                    },
+                )
+            ],
         )
     )
 
@@ -1546,10 +1573,37 @@ def build_validation_items(
     *,
     reference_sigma_multiplier: float = 2.0,
 ) -> list[AuditItem]:
-    del protocol
     config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
     args = argparse.Namespace(reference_sigma_multiplier=reference_sigma_multiplier)
-    protocol_result = ProtocolRunResult(metrics=metrics, protocol_evidence={}, group_field="cell_type")
+    protocol_evidence = {
+        "target_vm_mV": protocol.target_vm_mV,
+        "step_duration_ms": protocol.step_duration_ms,
+        "step_currents_pA": [rounded(float(value * 1000.0), 1) for value in protocol.current_steps_nA],
+        "hyperpolarizing_currents_pA": [
+            rounded(float(value * 1000.0), 1)
+            for value in np.arange(
+                protocol.hyperpolarizing_start_nA,
+                protocol.hyperpolarizing_stop_nA + protocol.hyperpolarizing_increment_nA * 0.5,
+                protocol.hyperpolarizing_increment_nA,
+            )
+        ],
+        "cell_count": len(metrics),
+        "cell_names": [metric["cell_name"] for metric in metrics],
+        "fi_curve_rows": [
+            {
+                "cell_name": str(metric["cell_name"]),
+                "cell_type": str(metric["cell_type"]),
+                "current_pA": rounded(float(current_pA), 3),
+                "firing_rate_Hz": rounded(float(rate_hz), 3),
+            }
+            for metric in metrics
+            for current_pA, rate_hz in zip(
+                [rounded(float(value * 1000.0), 1) for value in protocol.current_steps_nA],
+                metric.get("firing_rates_by_step_Hz", []),
+            )
+        ],
+    }
+    protocol_result = ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")
     return [_build_uploaded_reference_coverage_item()] + build_reference_validation_items(
         metrics=metrics,
         args=args,

@@ -209,6 +209,21 @@ series_visuals = [
 
 Use `backend="matplotlib"` for the standard plots and reserve `backend="svg"`
 for compact bespoke renderers that really need hand-tuned HTML/SVG behavior.
+If the evidence is row-based rather than pre-assembled arrays, use
+`row_sources` so the dashboard can plot every model curve separately and
+overlay target curves when reference point rows exist:
+
+```python
+series_visual_spec(
+    title="Model vs target f-I curves",
+    row_sources=[
+        {"key": "reference_fi_curve_rows", "label": "Target", "role": "reference"},
+        {"key": "model_fi_curve_rows", "group_by": ["cell_name"], "role": "model"},
+    ],
+    backend="matplotlib",
+    style={"line_width": 1.8, "marker_size": 3.2},
+)
+```
 
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting

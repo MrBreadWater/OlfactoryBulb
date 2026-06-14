@@ -1250,6 +1250,19 @@ def _run_registered_burton_protocol(args: argparse.Namespace, protocol_config: d
         "cell_count": len(metrics),
         "cell_names": [metric["cell_name"] for metric in metrics],
         "cell_types": ",".join(cell_types),
+        "fi_curve_rows": [
+            {
+                "cell_name": str(metric["cell_name"]),
+                "cell_type": str(metric["cell_type"]),
+                "current_pA": float(current_pA),
+                "firing_rate_Hz": float(rate_hz),
+            }
+            for metric in metrics
+            for current_pA, rate_hz in zip(
+                [float(value * 1000.0) for value in protocol.current_steps_nA],
+                metric.get("firing_rates_by_step_Hz", []),
+            )
+        ],
     }
     protocol_evidence.update(_adp_metric_evidence(metrics, group_field="cell_type"))
     return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")

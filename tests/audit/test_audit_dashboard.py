@@ -113,6 +113,65 @@ sample_report = AuditReport(
             group_title="Audit gamma",
         ),
         AuditItem(
+            check_id="audit_gamma.gamma_grouped_fi_rows",
+            status="PASS",
+            title="Gamma grouped f-I rows",
+            criterion="Multiple model f-I curves should render as separate labeled series when fi_curve_rows include more than one cell.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "fi_curve_rows": [
+                    {"cell_name": "GC1", "current_pA": 0.0, "firing_rate_Hz": 0.0},
+                    {"cell_name": "GC1", "current_pA": 50.0, "firing_rate_Hz": 2.0},
+                    {"cell_name": "GC1", "current_pA": 100.0, "firing_rate_Hz": 6.0},
+                    {"cell_name": "GC2", "current_pA": 0.0, "firing_rate_Hz": 0.0},
+                    {"cell_name": "GC2", "current_pA": 50.0, "firing_rate_Hz": 3.0},
+                    {"cell_name": "GC2", "current_pA": 100.0, "firing_rate_Hz": 7.0},
+                ],
+            },
+            series_visuals=[
+                series_visual_spec(
+                    title="Model f-I curves",
+                    row_sources=[{"key": "fi_curve_rows", "group_by": ["cell_name"], "role": "model"}],
+                )
+            ],
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
+            check_id="audit_gamma.gamma_target_curve",
+            status="PASS",
+            title="Gamma target curve",
+            criterion="Target and model f-I curves should render together when both row sets are present.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "reference_fi_curve_rows": [
+                    {"series_label": "Target", "current_pA": 50.0, "firing_rate_Hz": 4.0},
+                    {"series_label": "Target", "current_pA": 100.0, "firing_rate_Hz": 9.0},
+                    {"series_label": "Target", "current_pA": 150.0, "firing_rate_Hz": 14.0},
+                ],
+                "model_fi_curve_rows": [
+                    {"cell_name": "SyntheticEPL2026.PVCRH_FSI1", "current_pA": 50.0, "firing_rate_Hz": 3.2},
+                    {"cell_name": "SyntheticEPL2026.PVCRH_FSI1", "current_pA": 100.0, "firing_rate_Hz": 8.2},
+                    {"cell_name": "SyntheticEPL2026.PVCRH_FSI1", "current_pA": 150.0, "firing_rate_Hz": 12.6},
+                ],
+            },
+            series_visuals=[
+                series_visual_spec(
+                    title="Model vs target f-I curves",
+                    row_sources=[
+                        {"key": "reference_fi_curve_rows", "label": "Target", "role": "reference"},
+                        {"key": "model_fi_curve_rows", "group_by": ["cell_name"], "role": "model"},
+                    ],
+                )
+            ],
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
             check_id="audit_delta.delta_formulae_only",
             status="PASS",
             title="Delta formulae only",
@@ -284,6 +343,12 @@ with TemporaryDirectory() as tmp:
     assert html.count("<text") >= 8
     assert html.count("<path") >= 1
     assert "Observed sweep" in html
+    assert "Model f-I curves" in html
+    assert "Model vs target f-I curves" in html
+    assert "GC1" in html
+    assert "GC2" in html
+    assert "Target" in html
+    assert "SyntheticEPL2026.PVCRH_FSI1" in html
     assert "data-numeric-strip" in html
     assert "data-numeric-sparkline" in html
     assert "Numeric summary" in html

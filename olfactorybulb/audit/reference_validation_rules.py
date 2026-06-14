@@ -714,9 +714,18 @@ def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> 
     series_visuals: list[dict[str, Any]] = []
     fi_curve_rows = protocol_evidence.get("fi_curve_rows")
     if isinstance(fi_curve_rows, list) and fi_curve_rows:
+        group_field = str(getattr(context.protocol_result, "group_field", "") or "").strip()
+        group_by = [group_field, "cell_name"] if group_field else ["cell_name"]
         series_visuals.append(
             series_visual_spec(
-                keys=["fi_curve_rows"],
+                title="Model f-I curves",
+                row_sources=[
+                    {
+                        "key": "fi_curve_rows",
+                        "group_by": group_by,
+                        "role": "model",
+                    }
+                ],
                 style={
                     "line_width": 1.8,
                     "marker_size": 3.2,
@@ -1238,6 +1247,19 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
             "currents_pA": shared_currents,
             "reference_values_Hz": [reference_curve[current] for current in shared_currents],
             "model_values_Hz": [model_curve[current] for current in shared_currents],
+            "reference_fi_curve_rows": [
+                {
+                    **dict(row),
+                    "series_label": "Target",
+                }
+                for row in reference_rows
+                if isinstance(row, dict)
+            ],
+            "model_fi_curve_rows": [
+                dict(row)
+                for row in model_rows
+                if isinstance(row, dict)
+            ],
             "mean_absolute_error_Hz": mae,
             "root_mean_square_error_Hz": rmse,
             "max_absolute_error_Hz": max_abs,
@@ -1252,7 +1274,27 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
             evidence=evidence,
             series_visuals=[
                 series_visual_spec(
-                    keys=["currents_pA", "reference_values_Hz", "model_values_Hz"],
+                    title="Model vs target f-I curves",
+                    row_sources=[
+                        {
+                            "key": "reference_fi_curve_rows",
+                            "label": "Target",
+                            "role": "reference",
+                        },
+                        {
+                            "key": "model_fi_curve_rows",
+                            "group_by": [
+                                field
+                                for field in [
+                                    str(getattr(context.protocol_result, "group_field", "") or "").strip(),
+                                    "cell_name",
+                                ]
+                                if field
+                            ]
+                            or ["cell_name"],
+                            "role": "model",
+                        },
+                    ],
                     style={
                         "line_width": 1.8,
                         "marker_size": 3.2,

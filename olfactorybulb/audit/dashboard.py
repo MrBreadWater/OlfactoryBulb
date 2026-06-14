@@ -299,12 +299,12 @@ def _render_interval_value_labels(
         {
             "position": float(positions["accepted_low"]),
             "text": _format_numeric(interval["accepted_low"], unit=unit),
-            "kind": "accepted",
+            "kind": "approved",
         },
         {
             "position": float(positions["accepted_high"]),
             "text": _format_numeric(interval["accepted_high"], unit=unit),
-            "kind": "accepted",
+            "kind": "approved",
         },
         {
             "position": float(positions["observed_value"] or 0.0),
@@ -492,10 +492,194 @@ def _figure_to_inline_svg(fig: Any) -> str:
     return svg[start:] if start >= 0 else svg
 
 
+def _normalized_visual_field_list(raw_value: Any) -> list[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        values = [raw_value]
+    elif isinstance(raw_value, (list, tuple)):
+        values = list(raw_value)
+    else:
+        values = [raw_value]
+    return [str(value).strip() for value in values if str(value).strip()]
+
+
+def _series_row_source_specs(
+    evidence: dict[str, Any],
+    spec: dict[str, Any] | None,
+    *,
+    exclude_keys: set[str],
+) -> list[dict[str, Any]]:
+    if isinstance(spec, dict) and spec.get("row_sources") is not None:
+        raw_sources = spec.get("row_sources")
+        if isinstance(raw_sources, (list, tuple)):
+            sources = list(raw_sources)
+        else:
+            sources = [raw_sources]
+    else:
+        sources = ["fi_curve_rows"] if isinstance(evidence.get("fi_curve_rows"), list) else []
+    normalized: list[dict[str, Any]] = []
+    for source in sources:
+        if isinstance(source, str):
+            source_key = source.strip()
+            if not source_key or source_key in exclude_keys:
+                continue
+            normalized.append({"key": source_key})
+            continue
+        if not isinstance(source, dict):
+            continue
+        source_key = str(source.get("key") or "").strip()
+        if not source_key or source_key in exclude_keys:
+            continue
+        normalized.append(dict(source))
+    return normalized
+
+
+def _infer_row_group_fields(rows: list[dict[str, Any]]) -> list[str]:
+    candidate_fields: list[list[str]] = [
+        ["series_label"],
+        ["gc_subtype", "cell_name"],
+        ["cell_type", "cell_name"],
+        ["cell_name"],
+        ["gc_subtype"],
+        ["cell_type"],
+        ["protocol_id"],
+        ["reference_source"],
+    ]
+    for fields in candidate_fields:
+        unique_values = {
+            tuple(str(row.get(field) or "").strip() for field in fields)
+            for row in rows
+            if any(str(row.get(field) or "").strip() for field in fields)
+        }
+        if len(unique_values) > 1:
+            return fields
+    return []
+
+
+def _row_series_label(
+    first_row: dict[str, Any],
+    *,
+    source_key: str,
+    role: str,
+    group_fields: list[str],
+    label_fields: list[str],
+    fixed_label: str,
+    label_prefix: str,
+) -> str:
+    if fixed_label:
+        return fixed_label
+    series_label = str(first_row.get("series_label") or "").strip()
+    if series_label:
+        label = series_label
+    else:
+        fields = label_fields or group_fields
+        label_parts: list[str] = []
+        for field in fields:
+            value = str(first_row.get(field) or "").strip()
+            if value and value not in label_parts:
+                label_parts.append(value)
+        label = " / ".join(label_parts)
+    if not label:
+        if role == "reference":
+            label = "Target"
+        elif role == "model":
+            label = "Model"
+        else:
+            label = _evidence_label(source_key)
+    if label_prefix and label != label_prefix:
+        return f"{label_prefix}: {label}"
+    if label_prefix and not label:
+        return label_prefix
+    return label
+
+
+def _series_entries_from_row_sources(
+    evidence: dict[str, Any],
+    spec: dict[str, Any] | None,
+    *,
+    exclude_keys: set[str],
+) -> tuple[list[dict[str, Any]], set[str], str, str, str]:
+    source_specs = _series_row_source_specs(evidence, spec, exclude_keys=exclude_keys)
+    if not source_specs:
+        return [], set(), "", "", ""
+    x_axis_label = ""
+    y_axis_label = ""
+    x_key = ""
+    series_entries: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+    for source_spec in source_specs:
+        source_key = str(source_spec.get("key") or "").strip()
+        row_source = evidence.get(source_key)
+        if not isinstance(row_source, list) or not row_source:
+            continue
+        rows = [row for row in row_source if isinstance(row, dict)]
+        if not rows:
+            continue
+        row_x_key = str(source_spec.get("x_key") or "current_pA").strip()
+        row_y_key = str(source_spec.get("y_key") or "firing_rate_Hz").strip()
+        if not x_key:
+            x_key = row_x_key
+        if not x_axis_label:
+            x_axis_label = "Current (pA)" if "current" in row_x_key.lower() else _evidence_label(row_x_key)
+        if not y_axis_label:
+            y_axis_label = "Firing rate (Hz)" if ("rate" in row_y_key.lower() or row_y_key.lower().endswith("_hz")) else _evidence_label(row_y_key)
+        group_fields = _normalized_visual_field_list(source_spec.get("group_by")) or _infer_row_group_fields(rows)
+        label_fields = _normalized_visual_field_list(source_spec.get("label_fields")) or group_fields
+        fixed_label = str(source_spec.get("label") or "").strip()
+        label_prefix = str(source_spec.get("label_prefix") or "").strip()
+        role = str(source_spec.get("role") or "").strip().lower()
+        if not role:
+            lowered_source = source_key.lower()
+            if "reference" in lowered_source or "target" in lowered_source:
+                role = "reference"
+            elif "model" in lowered_source:
+                role = "model"
+        grouped_points: dict[tuple[str, ...], list[tuple[float, float, dict[str, Any]]]] = {}
+        group_order: list[tuple[str, ...]] = []
+        for row in rows:
+            x_value = _float_or_none(row.get(row_x_key))
+            y_value = _float_or_none(row.get(row_y_key))
+            if x_value is None or y_value is None:
+                continue
+            group_key = tuple(str(row.get(field) or "").strip() for field in group_fields) if group_fields else ("__all__",)
+            if group_key not in grouped_points:
+                grouped_points[group_key] = []
+                group_order.append(group_key)
+            grouped_points[group_key].append((x_value, y_value, row))
+        for group_key in group_order:
+            points_with_rows = grouped_points[group_key]
+            if not points_with_rows:
+                continue
+            points_with_rows.sort(key=lambda point: point[0])
+            first_row = points_with_rows[0][2]
+            label = _row_series_label(
+                first_row,
+                source_key=source_key,
+                role=role,
+                group_fields=group_fields,
+                label_fields=label_fields,
+                fixed_label=fixed_label,
+                label_prefix=label_prefix,
+            )
+            series_key_prefix = role or "series"
+            normalized_label = re.sub(r"\s+", "_", label.strip().lower()) or source_key
+            series_entries.append(
+                {
+                    "key": f"{series_key_prefix}::{normalized_label}",
+                    "label": label,
+                    "points": [(x_value, y_value) for x_value, y_value, _row in points_with_rows],
+                }
+            )
+        used_keys.add(source_key)
+    return series_entries, used_keys, x_key, x_axis_label, y_axis_label
+
+
 def _series_graph_payload(
     evidence: dict[str, Any],
     *,
     exclude_keys: set[str] | None = None,
+    spec: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], set[str]] | tuple[None, set[str]]:
     exclude = set(exclude_keys or set())
     if not evidence:
@@ -506,32 +690,23 @@ def _series_graph_payload(
     x_values: list[float] | None = None
     series_entries: list[dict[str, Any]] = []
     used_keys: set[str] = set()
+    x_axis_label = ""
+    y_axis_label = ""
 
-    row_source = evidence.get("fi_curve_rows")
-    if isinstance(row_source, list) and row_source:
-        row_points: list[tuple[float, float]] = []
-        for row in row_source:
-            if not isinstance(row, dict):
-                continue
-            x_value = _float_or_none(row.get("current_pA"))
-            y_value = _float_or_none(row.get("firing_rate_Hz"))
-            if x_value is None or y_value is None:
-                continue
-            row_points.append((x_value, y_value))
-        if row_points:
-            row_points.sort(key=lambda pair: pair[0])
-            x_values = [point[0] for point in row_points]
-            x_key = "current_pA"
-            series_entries.append(
-                {
-                    "key": "firing_rate_Hz",
-                    "label": _evidence_label("firing_rate_Hz"),
-                    "points": row_points,
-                }
-            )
-            used_keys.update({"fi_curve_rows", "current_pA", "firing_rate_Hz"})
-            if not series_kind:
-                series_kind = "f-i curve"
+    row_series_entries, row_used_keys, row_x_key, row_x_axis_label, row_y_axis_label = _series_entries_from_row_sources(
+        evidence,
+        spec,
+        exclude_keys=exclude,
+    )
+    if row_series_entries:
+        series_entries.extend(row_series_entries)
+        used_keys.update(row_used_keys)
+        x_key = row_x_key
+        x_values = [point[0] for series in row_series_entries for point in series["points"]]
+        x_axis_label = row_x_axis_label
+        y_axis_label = row_y_axis_label
+        if not series_kind:
+            series_kind = "f-i curve"
 
     if x_values is None:
         for candidate in _SERIES_X_KEY_CANDIDATES:
@@ -572,8 +747,10 @@ def _series_graph_payload(
     if not series_kind:
         series_kind = "f-i curve" if is_fi_curve else "series graph"
 
-    x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
-    y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
+    if not x_axis_label:
+        x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
+    if not y_axis_label:
+        y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
     return (
         {
             "series_kind": series_kind,
@@ -596,6 +773,7 @@ def _render_series_graph_matplotlib(
 ) -> tuple[str, set[str]]:
     kind = _visual_kind(spec) or "fi_curve"
     style = dict(spec.get("style") or {}) if isinstance(spec, dict) else {}
+    title_override = str((spec or {}).get("title") or style.get("title") or "").strip()
 
     if kind == "bar":
         values_key = str(spec.get("values_key") or spec.get("y_key") or "").strip()
@@ -641,21 +819,21 @@ def _render_series_graph_matplotlib(
         ax.set_xticks(positions)
         ax.set_xticklabels(labels, rotation=float(style.get("x_label_rotation") or 25.0), ha=str(style.get("x_label_ha") or "right"))
         ax.set_ylabel(str(style.get("y_label") or _evidence_label(values_key)))
-        if style.get("title"):
-            ax.set_title(str(style["title"]), fontsize=9, pad=8)
+        if title_override:
+            ax.set_title(title_override, fontsize=9, pad=8)
         fig.tight_layout()
         svg = _figure_to_inline_svg(fig)
         plt.close(fig)
         svg = svg.replace(
             "<svg ",
-            f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(str(style.get('title') or 'Bar chart'))}' ",
+            f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(title_override or 'Bar chart')}' ",
             1,
         )
         return (
             (
                 f"<div class='item-block series-graph-block' data-visual-backend='matplotlib' "
                 f"data-visual-kind='bar'>"
-                f"<h4>{_esc(str(style.get('title') or 'Bar chart'))}</h4>"
+                f"<h4>{_esc(title_override or 'Bar chart')}</h4>"
                 f"<div class='series-graph-meta'><span>{_esc(str(style.get('x_label') or 'Category'))}</span>"
                 f"<span>{_esc(str(style.get('y_label') or _evidence_label(values_key)))}</span></div>"
                 f"<div class='series-graph-shell'>{svg}</div>"
@@ -731,21 +909,21 @@ def _render_series_graph_matplotlib(
                 )
         ax.set_xlabel(str(style.get("x_label") or _evidence_label(x_key)))
         ax.set_ylabel(str(style.get("y_label") or _evidence_label(y_key)))
-        if style.get("title"):
-            ax.set_title(str(style["title"]), fontsize=9, pad=8)
+        if title_override:
+            ax.set_title(title_override, fontsize=9, pad=8)
         fig.tight_layout()
         svg = _figure_to_inline_svg(fig)
         plt.close(fig)
         svg = svg.replace(
             "<svg ",
-            f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(str(style.get('title') or ('Regression' if kind == 'regression' else 'Scatter plot')))}' ",
+            f"<svg class='series-graph-svg' data-series-graph role='img' aria-label='{_esc(title_override or ('Regression' if kind == 'regression' else 'Scatter plot'))}' ",
             1,
         )
         return (
             (
                 f"<div class='item-block series-graph-block' data-visual-backend='matplotlib' "
                 f"data-visual-kind='{_esc(kind)}'>"
-                f"<h4>{_esc(str(style.get('title') or ('Regression' if kind == 'regression' else 'Scatter plot')))}</h4>"
+                f"<h4>{_esc(title_override or ('Regression' if kind == 'regression' else 'Scatter plot'))}</h4>"
                 f"<div class='series-graph-meta'><span>{_esc(str(style.get('x_label') or _evidence_label(x_key)))}</span>"
                 f"<span>{_esc(str(style.get('y_label') or _evidence_label(y_key)))}</span></div>"
                 f"<div class='series-graph-shell'>{svg}</div>"
@@ -754,7 +932,7 @@ def _render_series_graph_matplotlib(
             {x_key, y_key},
         )
 
-    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude_keys)
+    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude_keys, spec=spec)
     if payload is None:
         return "", set()
 
@@ -866,14 +1044,14 @@ def _render_series_graph_matplotlib(
 
     ax.set_xlabel(x_axis_label)
     ax.set_ylabel(y_axis_label)
-    if style.get("title"):
-        ax.set_title(str(style["title"]), fontsize=9, pad=8)
+    if title_override:
+        ax.set_title(title_override, fontsize=9, pad=8)
     fig.tight_layout()
     svg = _figure_to_inline_svg(fig)
     plt.close(fig)
     visual_kind = "scatter" if fallback_to_scatter else kind
     title_label = str(
-        style.get("title")
+        title_override
         or ("f-I curve" if payload["series_kind"] == "f-i curve" else "Scatter plot" if fallback_to_scatter else "Series graph")
     )
     svg = svg.replace(
@@ -905,6 +1083,7 @@ def _render_series_graph(
     exclude_keys: set[str] | None = None,
     spec: dict[str, Any] | None = None,
 ) -> tuple[str, set[str]]:
+    title_override = str((spec or {}).get("title") or ((spec or {}).get("style") or {}).get("title") or "").strip()
     if _visual_backend(spec) == "matplotlib":
         block_html, used_keys = _render_series_graph_matplotlib(
             item,
@@ -914,77 +1093,13 @@ def _render_series_graph(
         )
         if block_html:
             return block_html, used_keys
-    exclude = set(exclude_keys or set())
-    if not evidence:
+    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude_keys, spec=spec)
+    if payload is None:
         return "", set()
 
-    series_kind = str(evidence.get("series_kind", "")).strip()
-    x_key = ""
-    x_values: list[float] | None = None
-    series_entries: list[dict[str, Any]] = []
-    used_keys: set[str] = set()
-
-    row_source = evidence.get("fi_curve_rows")
-    if isinstance(row_source, list) and row_source:
-        row_points: list[tuple[float, float]] = []
-        for row in row_source:
-            if not isinstance(row, dict):
-                continue
-            x_value = _float_or_none(row.get("current_pA"))
-            y_value = _float_or_none(row.get("firing_rate_Hz"))
-            if x_value is None or y_value is None:
-                continue
-            row_points.append((x_value, y_value))
-        if row_points:
-            row_points.sort(key=lambda pair: pair[0])
-            x_values = [point[0] for point in row_points]
-            x_key = "current_pA"
-            series_entries.append(
-                {
-                    "key": "firing_rate_Hz",
-                    "label": _evidence_label("firing_rate_Hz"),
-                    "points": row_points,
-                }
-            )
-            used_keys.add("fi_curve_rows")
-            used_keys.add("current_pA")
-            used_keys.add("firing_rate_Hz")
-            if not series_kind:
-                series_kind = "f-i curve"
-
-    if x_values is None:
-        for candidate in _SERIES_X_KEY_CANDIDATES:
-            if candidate in exclude or candidate == "fi_curve_rows":
-                continue
-            candidate_values = _float_list_or_none(evidence.get(candidate))
-            if candidate_values is not None and len(candidate_values) >= 2:
-                x_key = candidate
-                x_values = candidate_values
-                used_keys.add(candidate)
-                break
-
-    if x_values is None:
-        return "", set()
-
-    x_len = len(x_values)
-    for candidate in _SERIES_Y_KEY_CANDIDATES:
-        if candidate in exclude or candidate == x_key:
-            continue
-        candidate_values = _float_list_or_none(evidence.get(candidate))
-        if candidate_values is None or len(candidate_values) != x_len:
-            continue
-        ordered_pairs = sorted(zip(x_values, candidate_values), key=lambda pair: pair[0])
-        series_entries.append(
-            {
-                "key": candidate,
-                "label": _evidence_label(candidate),
-                "points": ordered_pairs,
-            }
-        )
-        used_keys.add(candidate)
-
-    if not series_entries:
-        return "", set()
+    series_kind = str(payload["series_kind"]).strip()
+    x_key = str(payload["x_key"]).strip()
+    series_entries = list(payload["series_entries"])
 
     x_domain = _series_domain([point[0] for series in series_entries for point in series["points"]])
     y_domain = _series_domain([point[1] for series in series_entries for point in series["points"]])
@@ -1016,13 +1131,8 @@ def _render_series_graph(
         commands.extend(f"L {_x_pos(x):.2f} {_y_pos(y):.2f}" for x, y in points[1:])
         return " ".join(commands)
 
-    has_rate_series = any("rate" in entry["key"].lower() or entry["key"].lower().endswith("_hz") for entry in series_entries)
-    is_fi_curve = series_kind == "f-i curve" or ("current" in x_key.lower() and has_rate_series)
-    if not series_kind:
-        series_kind = "f-i curve" if is_fi_curve else "series graph"
-
-    x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
-    y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
+    x_axis_label = str(payload["x_axis_label"])
+    y_axis_label = str(payload["y_axis_label"])
     x_ticks = _series_tick_values(x_low, x_high, target_ticks=5)
     y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
     fallback_to_scatter = _series_entries_require_scatter(series_entries)
@@ -1098,7 +1208,7 @@ def _render_series_graph(
             f"{' border-style:dashed;' if color['dash'] else ''}'></i>{_esc(series['label'])}</span>"
         )
 
-    title_label = "f-I curve" if series_kind == "f-i curve" else ("Scatter plot" if visual_kind == "scatter" else "Series graph")
+    title_label = title_override or ("f-I curve" if series_kind == "f-i curve" else ("Scatter plot" if visual_kind == "scatter" else "Series graph"))
     return (
         f"<div class='item-block series-graph-block' data-visual-backend='{_esc(visual_backend)}' "
         f"data-visual-kind='{_esc(visual_kind)}'>"
@@ -1364,6 +1474,24 @@ def _render_numeric_companions(
 def _visual_keys(spec: dict[str, Any]) -> list[str]:
     raw_keys = spec.get("keys")
     if raw_keys is None:
+        raw_row_sources = spec.get("row_sources")
+        if raw_row_sources is not None:
+            if isinstance(raw_row_sources, (list, tuple)):
+                return [
+                    str(source.get("key") or "").strip()
+                    for source in raw_row_sources
+                    if isinstance(source, dict) and str(source.get("key") or "").strip()
+                ] + [
+                    str(source).strip()
+                    for source in raw_row_sources
+                    if isinstance(source, str) and str(source).strip()
+                ]
+            if isinstance(raw_row_sources, dict):
+                source_key = str(raw_row_sources.get("key") or "").strip()
+                return [source_key] if source_key else []
+            if isinstance(raw_row_sources, str):
+                source_key = raw_row_sources.strip()
+                return [source_key] if source_key else []
         raw_x_key = spec.get("x_key")
         raw_y_keys = spec.get("y_keys")
         if raw_x_key is None or raw_y_keys is None:
@@ -1596,17 +1724,23 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
         for message in compact_messages
     )
     interval_summary_html = _render_compact_interval_summary(item, interval) if interval is not None else ""
-    series_graph_html = ""
+    series_graph_blocks: list[str] = []
     series_graph_keys: set[str] = set()
     if item.series_visuals:
-        series_spec = next((spec for spec in item.series_visuals if isinstance(spec, dict)), None)
-        if series_spec:
+        for series_spec in item.series_visuals:
+            if not isinstance(series_spec, dict):
+                continue
             series_keys = _visual_keys(series_spec)
-            if series_keys:
-                series_evidence = {key: evidence[key] for key in series_keys if key in evidence}
-                if str(series_spec.get("kind") or "").strip().lower() == "fi_curve":
-                    series_evidence["series_kind"] = "f-i curve"
-                series_graph_html, series_graph_keys = _render_series_graph(item, series_evidence, spec=series_spec)
+            if not series_keys:
+                continue
+            series_evidence = {key: evidence[key] for key in series_keys if key in evidence}
+            if str(series_spec.get("kind") or "").strip().lower() == "fi_curve":
+                series_evidence["series_kind"] = "f-i curve"
+            block_html, block_keys = _render_series_graph(item, series_evidence, spec=series_spec)
+            if block_html:
+                series_graph_blocks.append(block_html)
+                series_graph_keys.update(block_keys)
+    series_graph_html = "".join(series_graph_blocks)
     numeric_companion_html = ""
     numeric_companion_keys: set[str] = set()
     if interval is None and not series_graph_html and item.companion_visuals:

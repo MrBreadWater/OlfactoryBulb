@@ -31,7 +31,9 @@ protocol_item = next(item for item in payload["items"] if item["check_id"] == "g
 
 assert payload["audit_id"] == "gc_intrinsic_validation"
 assert any(item["check_id"] == "gc_intrinsic_protocol_executed" for item in payload["items"])
-assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
+assert protocol_item["series_visuals"][0]["title"] == "Model f-I curves"
+assert protocol_item["series_visuals"][0]["row_sources"][0]["key"] == "fi_curve_rows"
+assert protocol_item["series_visuals"][0]["row_sources"][0]["group_by"] == ["gc_subtype", "cell_name"]
 assert "fi_curve_rows" in protocol_item["evidence"]
 assert protocol_item["evidence"]["adp_enabled"] is True
 assert protocol_item["evidence"]["adp_current_duration_ms"] == 1.0
