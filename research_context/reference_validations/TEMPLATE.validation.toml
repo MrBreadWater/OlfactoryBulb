@@ -293,6 +293,9 @@ validation_design_review_status = "pending"
 # x_quantity_name = "Injected current"
 # y_quantity_name = "Firing rate"
 # alignment_policy = "exact_transformed_x"
+# For slightly unaligned extracted/model x bins:
+# alignment_policy = "nearest_within_tolerance"
+# x_match_tolerance = 0.5
 # distribution_kind = "empirical_by_x"
 # score_family = "residual_only"
 # Optional when using a Welch-based score family:

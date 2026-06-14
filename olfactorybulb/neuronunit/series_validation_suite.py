@@ -159,6 +159,7 @@ class SeriesComparisonPolicy:
     minimum_median_welch_pvalue: float | None = None
     x_precision_digits: int = 6
     alignment_policy: str = "exact_transformed_x"
+    x_match_tolerance: float | None = None
     distribution_kind: str = "empirical_by_x"
     score_family: str = "residual_only"
     pvalue_aggregation: str = "median"
@@ -238,6 +239,49 @@ class SeriesComparisonScore(sciunit.Score):
 class SeriesPredictionBundle:
     rows: list[dict[str, Any]]
     context: dict[str, Any]
+
+
+def _aligned_x_pairs(
+    reference_bins: dict[float, list[float]],
+    model_bins: dict[float, list[float]],
+    *,
+    alignment_policy: str,
+    x_match_tolerance: float | None,
+) -> list[tuple[float, float]]:
+    if alignment_policy == "exact_transformed_x":
+        return [(x_value, x_value) for x_value in sorted(set(reference_bins).intersection(model_bins))]
+
+    if alignment_policy != "nearest_within_tolerance":
+        raise ValueError(
+            f"Unsupported series alignment policy {alignment_policy!r}; "
+            "expected one of exact_transformed_x or nearest_within_tolerance"
+        )
+
+    if not _is_finite_number(x_match_tolerance) or float(x_match_tolerance) < 0.0:
+        raise ValueError(
+            "Alignment policy 'nearest_within_tolerance' requires a finite non-negative "
+            "'x_match_tolerance' value"
+        )
+
+    tolerance = float(x_match_tolerance)
+    reference_x_values = sorted(reference_bins)
+    model_x_values = sorted(model_bins)
+    pairs: list[tuple[float, float]] = []
+    reference_index = 0
+    model_index = 0
+    while reference_index < len(reference_x_values) and model_index < len(model_x_values):
+        reference_x = reference_x_values[reference_index]
+        model_x = model_x_values[model_index]
+        difference = model_x - reference_x
+        if abs(difference) <= tolerance:
+            pairs.append((reference_x, model_x))
+            reference_index += 1
+            model_index += 1
+        elif difference < -tolerance:
+            model_index += 1
+        else:
+            reference_index += 1
+    return pairs
 
 
 def _series_bins(
@@ -391,6 +435,7 @@ class SeriesComparisonTest(sciunit.Test):
             "comparison_x_unit_text": case.observation.comparison_x_unit_text,
             "comparison_y_unit_text": case.observation.comparison_y_unit_text,
             "alignment_policy": case.observation.policy.alignment_policy,
+            "x_match_tolerance": case.observation.policy.x_match_tolerance,
             "distribution_kind": case.observation.policy.distribution_kind,
             "score_family": case.observation.policy.score_family,
             "pvalue_aggregation": case.observation.policy.pvalue_aggregation,
@@ -407,6 +452,7 @@ class SeriesComparisonTest(sciunit.Test):
             "comparison_x_unit_text",
             "comparison_y_unit_text",
             "alignment_policy",
+            "x_match_tolerance",
             "distribution_kind",
             "score_family",
             "pvalue_aggregation",
@@ -428,10 +474,15 @@ class SeriesComparisonTest(sciunit.Test):
         obs = self.case.observation
         prediction_rows = list(prediction.rows)
         prediction_context = dict(prediction.context)
-        if obs.policy.alignment_policy != "exact_transformed_x":
+        if obs.policy.alignment_policy not in {"exact_transformed_x", "nearest_within_tolerance"}:
             raise ValueError(
                 f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
-                "the current bridge only supports exact shared transformed x bins"
+                "the current bridge only supports exact shared transformed x bins or nearest monotone matches within tolerance"
+            )
+        if obs.policy.alignment_policy == "exact_transformed_x" and obs.policy.x_match_tolerance is not None:
+            raise ValueError(
+                "Series alignment policy 'exact_transformed_x' should not also declare "
+                "'x_match_tolerance'; use 'nearest_within_tolerance' instead"
             )
         if obs.policy.distribution_kind != "empirical_by_x":
             raise ValueError(
@@ -484,13 +535,25 @@ class SeriesComparisonTest(sciunit.Test):
             y_transform=obs.model_y_transform,
             precision_digits=obs.policy.x_precision_digits,
         )
-        shared_x_values = sorted(set(reference_bins).intersection(model_bins))
-        reference_mean_values = [float(np.mean(reference_bins[x_value])) for x_value in shared_x_values]
-        model_mean_values = [float(np.mean(model_bins[x_value])) for x_value in shared_x_values]
-        reference_sd_values = [_sample_sd(reference_bins[x_value]) for x_value in shared_x_values]
-        model_sd_values = [_sample_sd(model_bins[x_value]) for x_value in shared_x_values]
-        reference_count_values = [len(reference_bins[x_value]) for x_value in shared_x_values]
-        model_count_values = [len(model_bins[x_value]) for x_value in shared_x_values]
+        aligned_pairs = _aligned_x_pairs(
+            reference_bins,
+            model_bins,
+            alignment_policy=obs.policy.alignment_policy,
+            x_match_tolerance=obs.policy.x_match_tolerance,
+        )
+        reference_x_values = [reference_x for reference_x, _model_x in aligned_pairs]
+        model_x_values = [model_x for _reference_x, model_x in aligned_pairs]
+        visual_x_values = list(reference_x_values)
+        matched_x_differences = [
+            abs(model_x - reference_x)
+            for reference_x, model_x in aligned_pairs
+        ]
+        reference_mean_values = [float(np.mean(reference_bins[reference_x])) for reference_x in reference_x_values]
+        model_mean_values = [float(np.mean(model_bins[model_x])) for model_x in model_x_values]
+        reference_sd_values = [_sample_sd(reference_bins[reference_x]) for reference_x in reference_x_values]
+        model_sd_values = [_sample_sd(model_bins[model_x]) for model_x in model_x_values]
+        reference_count_values = [len(reference_bins[reference_x]) for reference_x in reference_x_values]
+        model_count_values = [len(model_bins[model_x]) for model_x in model_x_values]
         absolute_differences = [
             abs(model_mean - reference_mean)
             for reference_mean, model_mean in zip(reference_mean_values, model_mean_values, strict=False)
@@ -503,13 +566,13 @@ class SeriesComparisonTest(sciunit.Test):
         )
         max_abs = float(np.max(absolute_differences)) if absolute_differences else float("nan")
         welch_pvalues = [
-            _welch_pvalue(reference_bins[x_value], model_bins[x_value])
-            for x_value in shared_x_values
+            _welch_pvalue(reference_bins[reference_x], model_bins[model_x])
+            for reference_x, model_x in aligned_pairs
         ]
         finite_welch_pvalues = [value for value in welch_pvalues if _is_finite_number(value)]
         median_welch_pvalue = float(np.median(finite_welch_pvalues)) if finite_welch_pvalues else float("nan")
         residual_gate_passed = (
-            len(shared_x_values) >= int(obs.policy.minimum_point_count)
+            len(aligned_pairs) >= int(obs.policy.minimum_point_count)
             and _is_finite_number(mae)
             and mae <= float(obs.policy.maximum_mae)
             and _is_finite_number(rmse)
@@ -523,18 +586,21 @@ class SeriesComparisonTest(sciunit.Test):
         if obs.policy.score_family == "residual_only":
             passed = residual_gate_passed
         elif obs.policy.score_family == "welch_only":
-            passed = len(shared_x_values) >= int(obs.policy.minimum_point_count) and pvalue_gate_passed
+            passed = len(aligned_pairs) >= int(obs.policy.minimum_point_count) and pvalue_gate_passed
         else:
             passed = residual_gate_passed and pvalue_gate_passed
         evidence = {
-            obs.visual_x_key: _rounded_list(shared_x_values),
+            obs.visual_x_key: _rounded_list(visual_x_values),
+            "reference_matched_x_values": _rounded_list(reference_x_values),
+            "model_matched_x_values": _rounded_list(model_x_values),
+            "matched_x_differences": _rounded_list(matched_x_differences),
             obs.visual_reference_y_key: _rounded_list(reference_mean_values),
             obs.visual_model_y_key: _rounded_list(model_mean_values),
             "reference_sd_values_Hz": _rounded_list(reference_sd_values),
             "model_sd_values_Hz": _rounded_list(model_sd_values),
             "reference_count_values": list(reference_count_values),
             "model_count_values": list(model_count_values),
-            "matched_point_count": len(shared_x_values),
+            "matched_point_count": len(aligned_pairs),
             "mean_absolute_error_Hz": rounded(mae) if _is_finite_number(mae) else mae,
             "root_mean_square_error_Hz": rounded(rmse) if _is_finite_number(rmse) else rmse,
             "max_absolute_error_Hz": rounded(max_abs) if _is_finite_number(max_abs) else max_abs,
@@ -559,6 +625,9 @@ class SeriesComparisonTest(sciunit.Test):
             "residual_gate_passed": residual_gate_passed,
             "pvalue_gate_passed": pvalue_gate_passed,
             "alignment_policy": obs.policy.alignment_policy,
+            "x_match_tolerance": rounded(float(obs.policy.x_match_tolerance))
+            if _is_finite_number(obs.policy.x_match_tolerance)
+            else obs.policy.x_match_tolerance,
             "distribution_kind": obs.policy.distribution_kind,
             "x_quantity_name": obs.x_quantity_name,
             "y_quantity_name": obs.y_quantity_name,

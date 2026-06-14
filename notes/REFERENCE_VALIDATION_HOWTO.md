@@ -403,6 +403,9 @@ Current maintained series-comparison policy choices are:
 - `alignment_policy = "exact_transformed_x"`
   - compare only shared x bins after unit conversion and any explicit
     transform
+- `alignment_policy = "nearest_within_tolerance"`
+  - compare monotone nearest transformed x bins within an explicit
+    `x_match_tolerance`
 - `distribution_kind = "empirical_by_x"`
   - treat duplicate x values as an empirical response distribution at each x
 - `score_family`
@@ -414,6 +417,8 @@ Use `minimum_median_welch_pvalue` only with a Welch-based `score_family`.
 When you use a Welch-based `score_family`, also declare
 `pvalue_aggregation = "median"` explicitly so the aggregation rule is part of
 the config rather than an implicit implementation detail.
+When you use `alignment_policy = "nearest_within_tolerance"`, declare
+`x_match_tolerance` explicitly in the comparison x-axis units.
 The current maintained EPL-FSI example-cell comparison uses
 `score_family = "residual_only"` because the model side usually exposes one
 response trace per current step, so a formal per-bin two-sample test is not

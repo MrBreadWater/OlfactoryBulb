@@ -1112,6 +1112,15 @@ def _series_comparison_case(
     reference_rows: list[dict[str, Any]],
 ) -> SeriesComparisonCase:
     score_family = _required_rule_choice(rule, "score_family")
+    alignment_policy = _required_rule_choice(rule, "alignment_policy")
+    if alignment_policy == "nearest_within_tolerance":
+        if "x_match_tolerance" not in rule or rule.get("x_match_tolerance") is None:
+            raise ValueError(
+                "reference_curve_match alignment policy 'nearest_within_tolerance' requires explicit 'x_match_tolerance'"
+            )
+        x_match_tolerance = float(rule["x_match_tolerance"])
+    else:
+        x_match_tolerance = None
     if score_family in {"welch_only", "hybrid_residual_welch"}:
         pvalue_aggregation = _required_rule_choice(rule, "pvalue_aggregation")
     else:
@@ -1151,7 +1160,8 @@ def _series_comparison_case(
                 else None
             ),
             x_precision_digits=int(rule.get("current_precision_digits", 6)),
-            alignment_policy=_required_rule_choice(rule, "alignment_policy"),
+            alignment_policy=alignment_policy,
+            x_match_tolerance=x_match_tolerance,
             distribution_kind=_required_rule_choice(rule, "distribution_kind"),
             score_family=score_family,
             pvalue_aggregation=pvalue_aggregation,

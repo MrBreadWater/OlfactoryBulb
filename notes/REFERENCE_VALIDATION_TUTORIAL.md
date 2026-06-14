@@ -1617,6 +1617,9 @@ Important details:
   mandatory; the maintained path does not silently choose them for you
 - the current implementation aligns bins using exact shared transformed x
   values after unit conversion and optional explicit affine transforms
+- alternatively, `alignment_policy = "nearest_within_tolerance"` matches
+  monotone nearest transformed x bins within an explicit
+  `x_match_tolerance`
 - the current maintained distribution policy is `empirical_by_x`, which keeps
   duplicate x values as a response distribution instead of collapsing them
   before comparison
@@ -1629,6 +1632,8 @@ Important details:
   `minimum_median_welch_pvalue`
 - Welch-based score families should also declare
   `pvalue_aggregation = "median"` explicitly
+- `alignment_policy = "nearest_within_tolerance"` should also declare
+  `x_match_tolerance` explicitly in the comparison x-axis units
 - if the model x-axis is not expressed in the same physical quantity as the
   reference, declare the mapping explicitly with `model_x_transform` instead of
   pretending the field names are already comparable

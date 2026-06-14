@@ -483,6 +483,9 @@ python tools/run_audit.py validation_design_review_status
 <li><code>alignment_policy = "exact_transformed_x"</code></li>
 <li>compare only shared x bins after unit conversion and any explicit
     transform</li>
+<li><code>alignment_policy = "nearest_within_tolerance"</code></li>
+<li>compare monotone nearest transformed x bins within an explicit
+    <code>x_match_tolerance</code></li>
 <li><code>distribution_kind = "empirical_by_x"</code></li>
 <li>treat duplicate x values as an empirical response distribution at each x</li>
 <li><code>score_family</code></li>
@@ -494,6 +497,8 @@ python tools/run_audit.py validation_design_review_status
 When you use a Welch-based <code>score_family</code>, also declare
 <code>pvalue_aggregation = "median"</code> explicitly so the aggregation rule is part of
 the config rather than an implicit implementation detail.
+When you use <code>alignment_policy = "nearest_within_tolerance"</code>, declare
+<code>x_match_tolerance</code> explicitly in the comparison x-axis units.
 The current maintained EPL-FSI example-cell comparison uses
 <code>score_family = "residual_only"</code> because the model side usually exposes one
 response trace per current step, so a formal per-bin two-sample test is not

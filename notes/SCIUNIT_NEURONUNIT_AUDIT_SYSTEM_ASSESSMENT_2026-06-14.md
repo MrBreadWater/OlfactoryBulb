@@ -1967,7 +1967,9 @@ The open design questions are no longer whether to add the abstraction, but how
 far to generalize it next. The branch now treats the maintained v1 contract as:
 
 - abstraction name: `series comparison`
-- alignment policy: exact shared transformed x bins only
+- alignment policies:
+  - exact shared transformed x bins
+  - monotone nearest transformed x bins within explicit tolerance
 - distribution policy: empirical per-x response distributions
 - score-family choices:
   - `residual_only`

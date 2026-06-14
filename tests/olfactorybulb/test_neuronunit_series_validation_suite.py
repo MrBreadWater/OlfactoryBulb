@@ -110,6 +110,41 @@ model_rows = [
     },
 ]
 
+offset_model_rows = [
+    {
+        "cell_name": "Model1",
+        "cell_type": "SyntheticFSI",
+        "current_flux": 0.1004,
+        "firing_rate_Hz": 6.0,
+        "rate_definition": "median_inverse_isi",
+        "sample_scope": "model_population",
+    },
+    {
+        "cell_name": "Model2",
+        "cell_type": "SyntheticFSI",
+        "current_flux": 0.1004,
+        "firing_rate_Hz": 8.0,
+        "rate_definition": "median_inverse_isi",
+        "sample_scope": "model_population",
+    },
+    {
+        "cell_name": "Model1",
+        "cell_type": "SyntheticFSI",
+        "current_flux": 0.2004,
+        "firing_rate_Hz": 11.0,
+        "rate_definition": "median_inverse_isi",
+        "sample_scope": "model_population",
+    },
+    {
+        "cell_name": "Model2",
+        "cell_type": "SyntheticFSI",
+        "current_flux": 0.2004,
+        "firing_rate_Hz": 13.0,
+        "rate_definition": "median_inverse_isi",
+        "sample_scope": "model_population",
+    },
+]
+
 observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=reference_rows,
@@ -267,6 +302,36 @@ assert residual_items[0].status == "PASS"
 assert residual_items[0].evidence["score_family"] == "residual_only"
 assert residual_items[0].evidence["minimum_median_welch_pvalue"] is None
 
+nearest_rule = dict(residual_only_rule)
+nearest_rule["alignment_policy"] = "nearest_within_tolerance"
+nearest_rule["x_match_tolerance"] = 0.5
+nearest_context = ValidationRuleContext(
+    metrics=[],
+    summary={},
+    args=Namespace(),
+    config={"validation_id": "synthetic_series_validation"},
+    protocol_result=SimpleNamespace(
+        protocol_evidence={
+            "fi_curve_rows": offset_model_rows,
+            "cell_models": ["SyntheticModel1", "SyntheticModel2"],
+            "step_duration_ms": 500.0,
+        }
+    ),
+)
+rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
+try:
+    nearest_items = build_rule_items([nearest_rule], nearest_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert len(nearest_items) == 1
+assert nearest_items[0].status == "PASS"
+assert nearest_items[0].evidence["alignment_policy"] == "nearest_within_tolerance"
+assert nearest_items[0].evidence["x_match_tolerance"] == 0.5
+assert nearest_items[0].evidence["reference_matched_x_values"] == [100.0, 200.0]
+assert nearest_items[0].evidence["model_matched_x_values"] == [100.4, 200.4]
+assert nearest_items[0].evidence["matched_x_differences"] == [0.4, 0.4]
+
 missing_units_rule = dict(rule)
 del missing_units_rule["reference_x_unit_text"]
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
@@ -300,6 +365,18 @@ try:
         raise AssertionError("Expected Welch-based series comparison to require explicit p-value aggregation")
     except ValueError as exc:
         assert "requires explicit 'pvalue_aggregation'" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+missing_tolerance_rule = dict(nearest_rule)
+del missing_tolerance_rule["x_match_tolerance"]
+rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
+try:
+    try:
+        build_rule_items([missing_tolerance_rule], nearest_context)
+        raise AssertionError("Expected tolerance-based alignment to require an explicit x-match tolerance")
+    except ValueError as exc:
+        assert "requires explicit 'x_match_tolerance'" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

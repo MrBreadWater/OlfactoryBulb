@@ -49,6 +49,7 @@ Remove this file when the listed items are either:
       `series comparison`.
 - [x] Decide the minimum alignment policies we support in v1:
       - exact shared transformed x only
+      - monotone nearest transformed x within explicit tolerance
       - duplicate-x aggregation into empirical per-x distributions
       - explicit transformed-axis comparison
       - interpolation/resampling deferred until a later slice

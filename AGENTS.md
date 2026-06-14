@@ -583,6 +583,8 @@ contract for future sessions.
   - `reference_curve_match` should also declare `alignment_policy`,
     `distribution_kind`, and `score_family` explicitly; do not let the
     maintained path silently fall back to hidden series-comparison semantics.
+    If the alignment policy uses tolerance-based matching, declare
+    `x_match_tolerance` explicitly too.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
 
