@@ -33,6 +33,13 @@ assert payload["audit_id"] == "gc_intrinsic_validation"
 assert any(item["check_id"] == "gc_intrinsic_protocol_executed" for item in payload["items"])
 assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
 assert "fi_curve_rows" in protocol_item["evidence"]
+assert protocol_item["evidence"]["adp_enabled"] is True
+assert protocol_item["evidence"]["adp_current_duration_ms"] == 1.0
+assert protocol_item["evidence"]["adp_current_amplitude_nA"] == 1.0
+assert protocol_item["evidence"]["adp_duration_mean_ms"] is not None
+assert "adp_metric_rows" in protocol_item["evidence"]
+assert len(protocol_item["evidence"]["adp_metric_rows"]) == 1
+assert protocol_item["evidence"]["adp_metric_rows"][0]["cell_name"] == "GC1"
 assert any(item["check_id"] == "gc_generic_fi_caveats" for item in payload["items"])
 warn_items = [item for item in payload["items"] if item["status"] == "WARN"]
 assert warn_items

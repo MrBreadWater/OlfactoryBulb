@@ -178,6 +178,13 @@ If it does not, extend the appropriate protocol runner in
 
 Protocol runners should emit measurements, not pass/fail decisions.
 
+It is acceptable for a protocol runner to emit extra metrics before the dataset
+layer catches up. For example, an auxiliary afterdepolarization pulse can be
+declared in `[protocol]` to emit `adp_duration_ms` and `adp_depth_mV`. The
+important constraint is honesty: do not add a quantitative validation rule for
+those metrics until the normalized reference dataset contains real literature
+rows for the same construct.
+
 ### Step 5: choose the right rule kind
 
 Most paper metrics map cleanly to one of the built-in rule kinds:

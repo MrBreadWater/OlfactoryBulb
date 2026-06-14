@@ -85,6 +85,10 @@ class BurtonUrbanProtocol:
     bias_settle_ms: float = 1000.0
     bias_tolerance_mV: float = 0.1
     bias_max_iterations: int = 24
+    adp_current_duration_ms: float | None = None
+    adp_current_amplitude_nA: float | None = None
+    adp_tail_ms: float = 100.0
+    adp_sampling_dt_ms: float = 0.125
 
     @property
     def current_steps_nA(self) -> np.ndarray:
@@ -92,6 +96,15 @@ class BurtonUrbanProtocol:
             self.step_start_nA,
             self.step_stop_nA + self.step_increment_nA * 0.5,
             self.step_increment_nA,
+        )
+
+    @property
+    def adp_enabled(self) -> bool:
+        return (
+            self.adp_current_duration_ms is not None
+            and self.adp_current_amplitude_nA is not None
+            and float(self.adp_current_duration_ms) > 0.0
+            and float(self.adp_current_amplitude_nA) > 0.0
         )
 
 
@@ -247,6 +260,102 @@ def _rebound_potential_presence(
         step_onset_milliseconds=step_delay_milliseconds + step_duration_milliseconds,
     )
     return 1.0 if len(spike_times) > 0 else 0.0
+
+
+def _negative_to_positive_zero_crossings(voltage_array: np.ndarray) -> np.ndarray:
+    negative = np.asarray(voltage_array, dtype=float) < 0.0
+    return np.flatnonzero(negative[:-1] & ~negative[1:])
+
+
+def _afterdepolarization_duration_milliseconds(
+    trace_result: dict[str, Any],
+    *,
+    resting_potential_millivolts: float,
+    step_delay_milliseconds: float,
+) -> float:
+    """Preserve the legacy Justas ADP duration metric.
+
+    This follows the old NeuronUnit-derived helper exactly: measure from the
+    pre-threshold zero crossing of the evoked spike to the first point where
+    the waveform falls below the "half of half amplitude" return level.
+    """
+    time_array = np.asarray(trace_result["t"], dtype=float)
+    voltage_array = np.asarray(trace_result["v_soma"], dtype=float)
+    roi_mask = time_array >= step_delay_milliseconds
+    if np.count_nonzero(roi_mask) < 3:
+        return float("nan")
+    roi_time = time_array[roi_mask]
+    roi_voltage = voltage_array[roi_mask]
+    crossings = _negative_to_positive_zero_crossings(roi_voltage)
+    if len(crossings) != 1:
+        return float("nan")
+    crossing_index = int(crossings[0])
+    crossing_time = float(roi_time[crossing_index])
+    peak_index = int(np.argmax(roi_voltage))
+    peak_voltage = float(roi_voltage[peak_index])
+    half_amplitude_voltage = (peak_voltage - resting_potential_millivolts) / 2.0 + resting_potential_millivolts
+    quarter_amplitude_voltage = (
+        resting_potential_millivolts
+        + (half_amplitude_voltage - resting_potential_millivolts) / 2.0
+    )
+    candidate_indices = np.where((roi_time > crossing_time) & (roi_voltage < quarter_amplitude_voltage))[0]
+    if len(candidate_indices) == 0:
+        return float("nan")
+    return float(roi_time[int(candidate_indices[0])] - crossing_time)
+
+
+def _afterdepolarization_depth_millivolts(
+    trace_result: dict[str, Any],
+    *,
+    resting_potential_millivolts: float,
+    step_delay_milliseconds: float,
+) -> float:
+    """Preserve the legacy Justas ADP depth metric.
+
+    The old implementation defined depth as resting_potential - minimum_voltage
+    over the post-stimulus ROI after confirming a single evoked spike. This
+    can yield negative values when the post-spike waveform never undershoots
+    the resting potential. We keep that behavior for historical parity.
+    """
+    time_array = np.asarray(trace_result["t"], dtype=float)
+    voltage_array = np.asarray(trace_result["v_soma"], dtype=float)
+    roi_mask = time_array >= step_delay_milliseconds
+    if np.count_nonzero(roi_mask) < 3:
+        return float("nan")
+    roi_voltage = voltage_array[roi_mask]
+    crossings = _negative_to_positive_zero_crossings(roi_voltage)
+    if len(crossings) != 1:
+        return float("nan")
+    minimum_voltage = float(np.min(roi_voltage))
+    return float(resting_potential_millivolts - minimum_voltage)
+
+
+def _run_afterdepolarization_trace(
+    cell_spec: Any,
+    *,
+    protocol: BurtonUrbanProtocol,
+    param_values=None,
+    use_coreneuron: bool = False,
+    use_gpu: bool = False,
+) -> dict[str, Any] | None:
+    if not protocol.adp_enabled:
+        return None
+    from single_cell_utils import run_current_clamp
+
+    return run_current_clamp(
+        cell_spec,
+        amp_nA=float(protocol.adp_current_amplitude_nA),
+        duration_ms=float(protocol.adp_current_duration_ms),
+        delay_ms=protocol.step_delay_ms,
+        tail_ms=float(protocol.adp_tail_ms),
+        dt=float(protocol.adp_sampling_dt_ms),
+        celsius=protocol.celsius,
+        param_values=param_values,
+        use_coreneuron=use_coreneuron,
+        use_gpu=use_gpu,
+        bias_current_nA=0.0,
+        v_init_mV=None,
+    )
 
 
 def _trace_near_target_mean_rate(
@@ -587,6 +696,30 @@ def _run_burton_urban_cell(
     )
 
     zero_step_rate_hz = float(firing_rates_hz[0]) if len(firing_rates_hz) else float("nan")
+    adp_trace = _run_afterdepolarization_trace(
+        cell_name,
+        protocol=protocol,
+        use_coreneuron=use_coreneuron,
+        use_gpu=use_gpu,
+    )
+    adp_duration_ms = (
+        _afterdepolarization_duration_milliseconds(
+            adp_trace,
+            resting_potential_millivolts=resting_potential_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+        )
+        if adp_trace is not None
+        else float("nan")
+    )
+    adp_depth_mV = (
+        _afterdepolarization_depth_millivolts(
+            adp_trace,
+            resting_potential_millivolts=resting_potential_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+        )
+        if adp_trace is not None
+        else float("nan")
+    )
     return {
         "cell_name": cell_name,
         "cell_type": _cell_type_from_name(cell_name),
@@ -620,6 +753,8 @@ def _run_burton_urban_cell(
         "Fall_slope_mV_per_ms": ap_props.get("ap_fall_slope_millivolts_per_millisecond", float("nan")),
         "AHP_amplitude_mV": ap_props.get("ahp_amplitude_millivolts", float("nan")),
         "T_AHP50_ms": ap_props.get("ahp_half_decay_time_milliseconds", float("nan")),
+        "adp_duration_ms": adp_duration_ms,
+        "adp_depth_mV": adp_depth_mV,
     }
 
 
@@ -871,6 +1006,30 @@ def _run_intrinsic_current_clamp_cell(
 
     zero_step_rate_hz = float(firing_rates_hz[0]) if len(firing_rates_hz) else float("nan")
     max_fi_rate_hz = float(np.max(firing_rates_hz)) if len(firing_rates_hz) else float("nan")
+    adp_trace = _run_afterdepolarization_trace(
+        cell_spec,
+        protocol=protocol,
+        use_coreneuron=use_coreneuron,
+        use_gpu=use_gpu,
+    )
+    adp_duration_ms = (
+        _afterdepolarization_duration_milliseconds(
+            adp_trace,
+            resting_potential_millivolts=resting_potential_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+        )
+        if adp_trace is not None
+        else float("nan")
+    )
+    adp_depth_mV = (
+        _afterdepolarization_depth_millivolts(
+            adp_trace,
+            resting_potential_millivolts=resting_potential_mV,
+            step_delay_milliseconds=protocol.step_delay_ms,
+        )
+        if adp_trace is not None
+        else float("nan")
+    )
     return {
         "cell_name": cell_name,
         "cell_type": cell_type,
@@ -909,6 +1068,8 @@ def _run_intrinsic_current_clamp_cell(
         "Fall_slope_mV_per_ms": ap_props.get("ap_fall_slope_millivolts_per_millisecond", float("nan")),
         "AHP_amplitude_mV": ap_props.get("ahp_amplitude_millivolts", float("nan")),
         "T_AHP50_ms": ap_props.get("ahp_half_decay_time_milliseconds", float("nan")),
+        "adp_duration_ms": adp_duration_ms,
+        "adp_depth_mV": adp_depth_mV,
         "fi_curve_rows": fi_curve_rows,
     }
 
@@ -1046,6 +1207,10 @@ def _run_registered_burton_protocol(args: argparse.Namespace, protocol_config: d
         bias_settle_ms=float(protocol_config.get("bias_settle_ms", 1000.0)),
         bias_tolerance_mV=float(protocol_config.get("bias_tolerance_mV", 0.1)),
         bias_max_iterations=int(getattr(args, "bias_max_iterations", protocol_config.get("bias_max_iterations", 24))),
+        adp_current_duration_ms=_float_or_none(protocol_config.get("adp_current_duration_ms")),
+        adp_current_amplitude_nA=_float_or_none(protocol_config.get("adp_current_amplitude_nA")),
+        adp_tail_ms=float(protocol_config.get("adp_tail_ms", 100.0)),
+        adp_sampling_dt_ms=float(protocol_config.get("adp_sampling_dt_ms", 0.125)),
     )
     cell_types = [
         cell_type.strip().upper()
@@ -1077,10 +1242,16 @@ def _run_registered_burton_protocol(args: argparse.Namespace, protocol_config: d
         "step_duration_ms": protocol.step_duration_ms,
         "step_currents_pA": [float(value * 1000.0) for value in protocol.current_steps_nA],
         "hyperpolarizing_currents_pA": [float(value) for value in hyperpolarizing_currents],
+        "adp_enabled": protocol.adp_enabled,
+        "adp_current_duration_ms": protocol.adp_current_duration_ms,
+        "adp_current_amplitude_nA": protocol.adp_current_amplitude_nA,
+        "adp_tail_ms": protocol.adp_tail_ms,
+        "adp_sampling_dt_ms": protocol.adp_sampling_dt_ms,
         "cell_count": len(metrics),
         "cell_names": [metric["cell_name"] for metric in metrics],
         "cell_types": ",".join(cell_types),
     }
+    protocol_evidence.update(_adp_metric_evidence(metrics, group_field="cell_type"))
     return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")
 
 
@@ -1117,6 +1288,41 @@ def _gc_protocol_cli_args(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _float_or_none(value: Any) -> float | None:
+    if value in {"", None}:
+        return None
+    return float(value)
+
+
+def _adp_metric_evidence(metrics: Sequence[dict[str, Any]], *, group_field: str) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    duration_values: list[float] = []
+    depth_values: list[float] = []
+    for metric in metrics:
+        duration_value = metric.get("adp_duration_ms")
+        depth_value = metric.get("adp_depth_mV")
+        duration_evidence = float(duration_value) if isinstance(duration_value, (int, float)) and np.isfinite(duration_value) else None
+        depth_evidence = float(depth_value) if isinstance(depth_value, (int, float)) and np.isfinite(depth_value) else None
+        rows.append(
+            {
+                "cell_name": metric.get("cell_name"),
+                "cell_type": metric.get("cell_type"),
+                group_field: metric.get(group_field),
+                "adp_duration_ms": duration_evidence,
+                "adp_depth_mV": depth_evidence,
+            }
+        )
+        if duration_evidence is not None:
+            duration_values.append(duration_evidence)
+        if depth_evidence is not None:
+            depth_values.append(depth_evidence)
+    return {
+        "adp_metric_rows": rows,
+        "adp_duration_mean_ms": float(np.mean(duration_values)) if duration_values else None,
+        "adp_depth_mean_mV": float(np.mean(depth_values)) if depth_values else None,
+    }
+
+
 def _build_protocol_from_config(args: argparse.Namespace, protocol_config: dict[str, Any]) -> BurtonUrbanProtocol:
     target_vm_raw = protocol_config.get("target_vm_mV", -58.0)
     target_vm = None if target_vm_raw in {"", None} else float(target_vm_raw)
@@ -1139,6 +1345,10 @@ def _build_protocol_from_config(args: argparse.Namespace, protocol_config: dict[
         bias_settle_ms=float(protocol_config.get("bias_settle_ms", 1000.0)),
         bias_tolerance_mV=float(protocol_config.get("bias_tolerance_mV", 0.1)),
         bias_max_iterations=int(getattr(args, "bias_max_iterations", protocol_config.get("bias_max_iterations", 24))),
+        adp_current_duration_ms=_float_or_none(protocol_config.get("adp_current_duration_ms")),
+        adp_current_amplitude_nA=_float_or_none(protocol_config.get("adp_current_amplitude_nA")),
+        adp_tail_ms=float(protocol_config.get("adp_tail_ms", 100.0)),
+        adp_sampling_dt_ms=float(protocol_config.get("adp_sampling_dt_ms", 0.125)),
     )
 
 
@@ -1160,10 +1370,16 @@ def _run_registered_gc_protocol(args: argparse.Namespace, protocol_config: dict[
         "target_vm_mV": protocol.target_vm_mV,
         "step_duration_ms": protocol.step_duration_ms,
         "step_currents_pA": [float(value * 1000.0) for value in protocol.current_steps_nA],
+        "adp_enabled": protocol.adp_enabled,
+        "adp_current_duration_ms": protocol.adp_current_duration_ms,
+        "adp_current_amplitude_nA": protocol.adp_current_amplitude_nA,
+        "adp_tail_ms": protocol.adp_tail_ms,
+        "adp_sampling_dt_ms": protocol.adp_sampling_dt_ms,
         "cell_models": [label for label, _cell_spec, _cell_type in cell_specs],
         "reference_gc_subtypes": group_values,
         "fi_curve_rows": fi_curve_rows,
     }
+    protocol_evidence.update(_adp_metric_evidence(metrics, group_field="gc_subtype"))
     return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="gc_subtype")
 
 
@@ -1191,9 +1407,15 @@ def _run_registered_epl_fsi_protocol(args: argparse.Namespace, protocol_config: 
         "target_vm_mV": protocol.target_vm_mV,
         "step_duration_ms": protocol.step_duration_ms,
         "step_currents_pA": [float(value * 1000.0) for value in protocol.current_steps_nA],
+        "adp_enabled": protocol.adp_enabled,
+        "adp_current_duration_ms": protocol.adp_current_duration_ms,
+        "adp_current_amplitude_nA": protocol.adp_current_amplitude_nA,
+        "adp_tail_ms": protocol.adp_tail_ms,
+        "adp_sampling_dt_ms": protocol.adp_sampling_dt_ms,
         "cell_models": [label for label, _cell_spec, _cell_type in cell_specs],
         "fi_curve_rows": fi_curve_rows,
     }
+    protocol_evidence.update(_adp_metric_evidence(metrics, group_field="cell_type"))
     return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")
 
 

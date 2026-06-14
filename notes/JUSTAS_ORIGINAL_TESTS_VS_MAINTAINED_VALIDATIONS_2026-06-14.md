@@ -256,8 +256,8 @@ The table below is the most important result of this comparison.
 
 | Legacy metric/test | Maintained status | Notes |
 | --- | --- | --- |
-| `AfterDepolarizationDepthTest` | Missing | No maintained ADP depth metric or rule surfaced |
-| `AfterDepolarizationTimeTest` | Missing | No maintained ADP time metric or rule surfaced |
+| `AfterDepolarizationDepthTest` | Partial | Maintained protocol layer now emits `adp_depth_mV`, but no normalized reference rows or validation mappings are maintained yet |
+| `AfterDepolarizationTimeTest` | Partial | Maintained protocol layer now emits `adp_duration_ms`, but no normalized reference rows or validation mappings are maintained yet |
 | explicit rheobase spike-trace helper outputs | Missing | No maintained direct equivalent of reusable spike-trace helper tests |
 | explicit target-frequency spike-train helper outputs | Missing | Current protocols use target-rate selection internally but do not expose old helper-style tests |
 
@@ -418,15 +418,17 @@ The current maintained validation IDs are only:
 
 So the maintained stack is much narrower in literature coverage.
 
-### 2. ADP metrics were dropped
+### 2. ADP metrics are only partially restored
 
 The old stack had:
 
 - `AfterDepolarizationDepthTest`
 - `AfterDepolarizationTimeTest`
 
-I did not find a maintained analogue in current validation configs or protocol
-metric maps.
+The maintained protocol layer now has `adp_depth_mV` and `adp_duration_ms`,
+but there is still no maintained normalized reference row or quantitative rule
+mapping for them. So parity exists at the measurement layer, not yet at the
+literature-judgment layer.
 
 ### 3. Absolute spike peak is no longer first-class
 
@@ -519,7 +521,7 @@ is:
 
 The main unresolved gaps are:
 
-1. missing ADP metrics
+1. missing ADP reference mappings and judgment rules
 2. missing generic reusable helper tests for spike-train and fixed-current
    conditions
 3. far narrower literature coverage than the old publication mixin surface
@@ -553,4 +555,3 @@ architecture, the next high-value steps are:
 4. keep treating the current `tests/reference` and `tests/audit` modules as
    harness/contract tests, not as proof that the old scientific test battery
    has been fully replaced
-

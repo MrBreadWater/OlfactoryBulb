@@ -185,6 +185,11 @@ That boundary matters.
 
 If you need a new measured quantity, add it to the protocol runner output.
 If you need a new decision rule, add a new rule kind.
+If a protocol needs an auxiliary stimulus that is not yet backed by normalized
+reference rows, such as a short afterdepolarization pulse used only to expose
+`adp_duration_ms` or `adp_depth_mV`, put that stimulus in `[protocol]` and
+keep the resulting metrics unjudged until the dataset layer has real reference
+rows for them.
 
 If a result should also render as a chart, declare that in the rule output
 instead of letting the dashboard guess from array-shaped evidence. Use the

@@ -42,6 +42,15 @@ reference_sigma_multiplier = 2.0
 # step_duration_ms = 2000.0
 # # Leave target_vm_mV blank when a paper explicitly uses zero holding current:
 # # target_vm_mV = ""
+# # Optional auxiliary afterdepolarization pulse for protocol runners that
+# # support it. These fields add model-side metrics such as adp_duration_ms and
+# # adp_depth_mV, but they should only be paired with quantitative checks once
+# # the reference dataset contains normalized literature rows for the same
+# # construct.
+# # adp_current_duration_ms = 1.0
+# # adp_current_amplitude_nA = 1.0
+# # adp_tail_ms = 100.0
+# # adp_sampling_dt_ms = 0.125
 
 # Optional skip item for --skip-neuron on the generic validation CLI.
 # [skip_item]

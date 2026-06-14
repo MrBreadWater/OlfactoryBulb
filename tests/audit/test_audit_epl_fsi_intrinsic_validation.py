@@ -31,6 +31,11 @@ assert payload["audit_id"] == "epl_fsi_intrinsic_validation"
 assert any(item["check_id"] == "epl_fsi_protocol_executed" for item in payload["items"])
 assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
 assert "fi_curve_rows" in protocol_item["evidence"]
+assert protocol_item["evidence"]["adp_enabled"] is False
+assert "adp_metric_rows" in protocol_item["evidence"]
+assert len(protocol_item["evidence"]["adp_metric_rows"]) == 1
+assert protocol_item["evidence"]["adp_metric_rows"][0]["adp_duration_ms"] is None
+assert protocol_item["evidence"]["adp_metric_rows"][0]["adp_depth_mV"] is None
 assert any(item["check_id"] == "epl_fsi_protocol_caveats" for item in payload["items"])
 assert any(item["check_id"] == "epl_fsi_reference_curve_match" for item in payload["items"])
 
