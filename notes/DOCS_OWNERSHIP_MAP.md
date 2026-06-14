@@ -119,6 +119,19 @@ multiple places and to decide where a doc change should land first.
     - long user HOWTO content already documented elsewhere
     - dynamic inventories better discovered via CLI/config
 
+- `notes/LOCAL_EXTERNAL_STATE.md`
+  - Purpose: registry of non-obvious local paths outside the repo root that
+    affect maintained workflow or cleanup.
+  - Owns:
+    - sibling worktrees and alternate checkout paths
+    - temporary external workspaces tied to repo work
+    - removal criteria and cleanup commands for those temporary external
+      artifacts
+  - Should not own:
+    - repo-internal generated output directories already covered by cleanup
+      rules
+    - generic host-admin state unrelated to this repo's workflow
+
 ### Reference-data and validation ownership
 
 - `notes/REFERENCE_DATASET_HOWTO.md`

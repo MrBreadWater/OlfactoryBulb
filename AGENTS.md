@@ -44,6 +44,14 @@ contract for future sessions.
 - When a change alters the day-to-day workflow that future agents will touch
   again, update the relevant HOWTO/docs in the same task and add a short
   contract note here if the rule needs to persist across chats.
+- Keep non-obvious external operational state discoverable.
+  - If a task creates or depends on a directory, worktree, alternate checkout,
+    or other easy-to-forget local artifact outside the repo root, record it in
+    `notes/LOCAL_EXTERNAL_STATE.md` or a linked purpose-specific note in the
+    same task.
+  - For temporary external artifacts, record the purpose, current status,
+    removal trigger, and cleanup commands, then retire the note entry when the
+    artifact is removed.
 
 - Keep detailed documentation ownership in `notes/DOCS_OWNERSHIP_MAP.md`.
   Keep `AGENTS.md` focused on contract-level rules and anti-rot expectations.
