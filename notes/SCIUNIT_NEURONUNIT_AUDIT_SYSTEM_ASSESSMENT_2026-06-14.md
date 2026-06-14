@@ -604,6 +604,319 @@ If we ever want to run the old tests again, the clean architecture is:
 
 Do not reverse that layering.
 
+## The Actual Rebase Question
+
+The better question is not:
+
+- "Should we replace everything with SciUnit?"
+
+The better question is:
+
+- "Which layer of the current system would benefit from being rebased onto
+  SciUnit-style abstractions, and which layer should stay ours?"
+
+That distinction matters because the current repo has at least two different
+concerns:
+
+1. a **scientific validation core**
+2. a **user-facing audit/report/dashboard shell**
+
+SciUnit is strongest at the first concern.
+The current repo is already strong at the second.
+
+### Where a rebase would genuinely help
+
+It would help most in the scientific-validation core:
+
+- typed observations and predictions
+- unit-aware values
+- explicit score objects
+- explicit capability contracts
+- suite-level aggregation
+
+This is exactly where the current maintained system is most bespoke.
+
+### Where a rebase would mostly be churn
+
+It would help much less in the reporting shell:
+
+- audit grouping
+- warning and caveat surfacing
+- human validation-design review metadata
+- literature provenance presentation
+- maintained dashboard rendering
+- docs and CLI discovery
+
+SciUnit does not replace those repo-specific workflow requirements.
+
+## Would It Fix The "Unit Discrepancy" Class Of Problem?
+
+Yes, or at least it would make that class of bug much harder to write.
+
+That is one of the strongest arguments for adopting more SciUnit-like semantics.
+
+The old NeuronUnit layer is explicitly unit-aware. For example:
+
+- [`olfactorybulb/neuronunit/tests/tests.py`](../olfactorybulb/neuronunit/tests/tests.py)
+  defines tests with declared units such as `pq.mV`, `pq.MOhm`, and `pq.ms`
+  and returns `quantities` values rather than naked floats
+- [`olfactorybulb/neuronunit/models/neuron_cell.py`](../olfactorybulb/neuronunit/models/neuron_cell.py)
+  accepts and rescales quantities such as `tstop.rescale(pq.ms)`
+
+By contrast, the current maintained audit layer centers on:
+
+- metric-key naming conventions
+- plain floats inside evidence dicts
+- optional textual unit labels
+
+[`olfactorybulb/audit/core.py`](../olfactorybulb/audit/core.py) does not have a
+typed unit-bearing scalar or score field in `AuditItem`; it is a report object,
+not a unit-safe scientific value object.
+
+So on this point your professor is probably right:
+
+- NeuronUnit or a similar quantity-aware test core would catch some classes of
+  unit mismatch earlier and more automatically than the current float-heavy
+  maintained path
+
+That does **not** imply that the whole current audit/dashboard architecture
+should be replaced.
+
+It implies that the scientific-value layer should become more unit-aware.
+
+## What A Full Rebase Would Actually Mean
+
+If "rebase onto SciUnit / NeuronUnit" is taken literally, it would mean
+rewriting or adapting all of the following:
+
+### 1. Protocol runners become test classes
+
+Current maintained protocol execution lives in:
+
+- [`olfactorybulb/audit/reference_validation_protocols.py`](../olfactorybulb/audit/reference_validation_protocols.py)
+
+Under a SciUnit-first design, much of this would move into:
+
+- `Test.generate_prediction(...)`
+- possibly model backends and capability objects
+
+### 2. Rule handlers become score logic
+
+Current judgment logic lives in:
+
+- [`olfactorybulb/audit/reference_validation_rules.py`](../olfactorybulb/audit/reference_validation_rules.py)
+
+Under a SciUnit-first design, a lot of this would move into:
+
+- `compute_score(...)`
+- score types
+- converters
+- suite aggregators
+
+But note:
+
+- our explicit per-property band-mode rules
+- our human-review metadata
+- our caveat semantics
+
+would still remain repo-specific extensions.
+
+SciUnit would not remove the need for them.
+
+### 3. Validation configs would change shape
+
+Current validations are declarative TOML configs that name:
+
+- protocol runners
+- rule kinds
+- per-property band modes
+- validation-design review metadata
+
+A serious SciUnit rebase would likely push those configs toward:
+
+- test class registries
+- suite construction
+- observation payload definitions
+- score policies
+
+That would be a significant migration, not a search-and-replace.
+
+### 4. Dashboard result models would need an adapter layer
+
+Current dashboard rendering expects `AuditReport` / `AuditItem` data:
+
+- [`olfactorybulb/audit/core.py`](../olfactorybulb/audit/core.py)
+- [`olfactorybulb/audit/dashboard.py`](../olfactorybulb/audit/dashboard.py)
+
+A rebase does not eliminate this. It means either:
+
+- the dashboard is rewritten around SciUnit result objects
+  or
+- SciUnit results are adapted back into `AuditReport`
+
+The second option is much safer.
+
+### 5. Environment support would have to become maintained
+
+Today, the maintained OBGPU import verifier explicitly excludes the old
+neuronunit stack:
+
+- [`tools/setup/verify_obgpu_python_imports.py`](../tools/setup/verify_obgpu_python_imports.py)
+
+And in the current `OBGPU` environment, `import sciunit` and `import neuronunit`
+both fail.
+
+So a real rebase means:
+
+- adding those dependencies back to the supported environment
+- verifying them in maintained setup audits
+- owning compatibility issues going forward
+
+That is a support commitment, not just a design preference.
+
+## Difficulty And Blast Radius
+
+There are really three different projects hiding under the word "rebase."
+
+### Option A: Unit-safe retrofit inside the current system
+
+What it means:
+
+- keep current protocol runners, rule engine, audit reports, dashboard, and
+  TOML configs
+- add typed unit-bearing values to protocol outputs and rule computations
+- normalize arithmetic through `quantities` or a similar unit library
+- add unit-aware helper builders for comparisons and evidence rendering
+
+What it would change:
+
+- mostly the scientific data path
+- minimal dashboard change
+- minimal user workflow change
+
+Rough difficulty:
+
+- moderate
+- roughly a few focused days to about one week, depending on how broadly the
+  unit semantics are pushed
+
+Why this is attractive:
+
+- it addresses the exact class of problem your professor flagged
+- it preserves the current maintained workflow
+- it avoids a dependency rebase of the whole audit platform
+
+### Option B: Rebase the scientific test core onto SciUnit-style abstractions, but keep the current audit shell
+
+What it means:
+
+- keep `AuditReport` / dashboard / CLI / review metadata / caveat handling
+- introduce a local or direct-SciUnit scientific core with:
+  - model wrappers
+  - capability contracts
+  - test objects
+  - score objects
+  - suite matrices
+- adapt the resulting scores back into the current audit/report layer
+
+What it would change:
+
+- major internal changes to validation execution
+- moderate changes to docs, tests, and configs
+- limited change to the end-user dashboard workflow if the adapter is done well
+
+Rough difficulty:
+
+- substantial but realistic
+- roughly one to three weeks for a careful first slice, likely longer if the
+  migration includes multiple maintained validations and dashboard suite views
+
+Why this is the best "serious standards" path:
+
+- it gets the credibility and semantics benefits of a recognized testing model
+- it keeps the repo-specific workflow features that SciUnit does not provide
+- it avoids rebuilding the UI around a new result schema all at once
+
+### Option C: Full NeuronUnit-first rebase of the maintained validation stack
+
+What it means:
+
+- make NeuronUnit or a close derivative the main scientific-validation root
+- rebuild validations and possibly configs around its classes
+- make the maintained environment support that stack directly
+- either rewrite the dashboard or maintain a large adapter bridge
+
+What it would change:
+
+- protocol execution
+- scoring
+- config shape
+- tests
+- docs
+- setup/audit contracts
+- possibly notebook workflows
+
+Rough difficulty:
+
+- high
+- likely multiple weeks of churn, plus compatibility risk
+
+Why I do **not** recommend it:
+
+- NeuronUnit is the more fragile dependency choice here
+- the repo's maintained workflow now extends beyond classic NeuronUnit-style
+  single-cell ephys tests
+- much of the dashboard, provenance, caveat, and review machinery would still
+  need to remain custom anyway
+
+## My Actual Recommendation
+
+If the goal is standards, robustness, and fewer scientific footguns, then:
+
+- **yes**, I think rebasing the **scientific core semantics** toward
+  SciUnit-style testing would be a good move
+- **no**, I do not think rebasing the entire maintained audit system onto
+  NeuronUnit would be the best move
+
+More concretely:
+
+### Best near-term move
+
+Do Option A first:
+
+- make the current maintained validation path unit-aware
+- add explicit typed observation / prediction helpers
+- make rule math operate on quantity-bearing values before display
+
+This gives you the biggest quality gain per unit of churn.
+
+### Best medium-term move
+
+Then do Option B in a limited slice:
+
+- pick one maintained validation family, probably
+  `burton_urban_fi` or `gc_intrinsic_validation`
+- define a SciUnit-style or directly SciUnit-backed model/test/score layer for
+  that family
+- adapt its result into `AuditReport`
+- add a score-matrix view to the dashboard
+
+That would tell us quickly whether the standards benefit is worth a broader
+migration.
+
+### What I would avoid
+
+I would avoid a repo-wide "switch everything to NeuronUnit now" plan.
+
+That is the highest-churn and least certain path, and it still would not remove
+our need for:
+
+- dataset ingestion configs
+- band-mode policy
+- validation-design review metadata
+- caveat presentation
+- maintained dashboard UX
+
 ## What This Means for the Dashboard
 
 If the dashboard is going to become more useful for SciUnit-like workflows, the
