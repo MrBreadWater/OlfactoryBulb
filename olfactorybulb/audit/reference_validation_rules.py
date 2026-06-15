@@ -572,7 +572,6 @@ def _build_series_rule_items(
     if not rules:
         return []
     evidence_bundle = protocol_evidence_bundle_from_resultish(context.protocol_result)
-    protocol_evidence = evidence_bundle.to_dict()
     evidence_series_specs = evidence_bundle.series_spec_map()
     cases = []
     for record in rules:
@@ -589,7 +588,7 @@ def _build_series_rule_items(
                 protocol_series_spec=protocol_series_spec,
             ).to_case(reference_rows=reference_rows)
         )
-    raw_candidate_ids = protocol_evidence.get("cell_models", [])
+    raw_candidate_ids = evidence_bundle.values.get("cell_models", [])
     if not isinstance(raw_candidate_ids, list):
         raw_candidate_ids = []
     descriptor = _grouped_suite_descriptor(
@@ -602,7 +601,7 @@ def _build_series_rule_items(
         cases=cases,
         summary=context.summary,
         metrics=context.metrics,
-        protocol_evidence=protocol_evidence,
+        protocol_evidence=evidence_bundle,
         suite_name=descriptor.suite_id,
     )
     return audit_items_from_series_comparison_suite(compiled, descriptor=descriptor)

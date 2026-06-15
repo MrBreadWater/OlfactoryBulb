@@ -1050,12 +1050,12 @@ assert fallback_rule_spec.y_quantity_name == "Firing rate"
 context = _rule_context(
     args=Namespace(),
     protocol_result=SimpleNamespace(
-        protocol_evidence={
+        protocol_evidence=ProtocolEvidenceBundle(values={
             "fi_curve_rows": model_rows,
             "cell_models": ["SyntheticModel1", "SyntheticModel2"],
             "step_duration_ms": 500.0,
             "target_vm_mV": -60.0,
-        },
+        }),
         evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     ),
 )
@@ -1129,7 +1129,7 @@ del equivalence_rule["model_x_transform"]
 equivalence_context = _rule_context(
     args=Namespace(),
     protocol_result=SimpleNamespace(
-        protocol_evidence={"fi_curve_rows": equivalence_model_rows},
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": equivalence_model_rows}),
         evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     ),
 )
@@ -1191,7 +1191,9 @@ piecewise_rule["model_x_transform"] = {
 }
 piecewise_context = _rule_context(
     args=Namespace(),
-    protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": piecewise_model_rows}),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": piecewise_model_rows})
+    ),
 )
 rules_module._load_rows = (
     lambda loader_spec: piecewise_reference_rows
@@ -1221,10 +1223,10 @@ lookup_rule["model_x_transform"] = {
 lookup_context = _rule_context(
     args=Namespace(),
     protocol_result=SimpleNamespace(
-        protocol_evidence={
+        protocol_evidence=ProtocolEvidenceBundle(values={
             "fi_curve_rows": lookup_model_rows,
             "unit_conversions": {"flux_to_pA_scale": 1000.0},
-        }
+        })
     ),
 )
 rules_module._load_rows = (
@@ -1254,7 +1256,9 @@ cluster_rule["maximum_rmse"] = 0.2
 del cluster_rule["model_x_transform"]
 cluster_context = _rule_context(
     args=Namespace(),
-    protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": cluster_model_rows}),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": cluster_model_rows})
+    ),
 )
 rules_module._load_rows = (
     lambda loader_spec: cluster_reference_rows
@@ -1277,11 +1281,11 @@ nearest_rule["x_match_tolerance"] = 0.5
 nearest_context = _rule_context(
     args=Namespace(),
     protocol_result=SimpleNamespace(
-        protocol_evidence={
+        protocol_evidence=ProtocolEvidenceBundle(values={
             "fi_curve_rows": offset_model_rows,
             "cell_models": ["SyntheticModel1", "SyntheticModel2"],
             "step_duration_ms": 500.0,
-        }
+        })
     ),
 )
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
@@ -1312,7 +1316,7 @@ resampled_rule["resampling_grid_values"] = [150.0, 250.0]
 resampled_context = _rule_context(
     args=Namespace(),
     protocol_result=SimpleNamespace(
-        protocol_evidence={"fi_curve_rows": resampled_model_rows},
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
         evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     ),
 )
@@ -1342,7 +1346,7 @@ step_hold_rule["minimum_point_count"] = 1
 step_hold_context = _rule_context(
     args=Namespace(),
     protocol_result=SimpleNamespace(
-        protocol_evidence={"fi_curve_rows": resampled_model_rows},
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
         evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     ),
 )
