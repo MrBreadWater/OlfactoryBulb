@@ -210,12 +210,19 @@ class SuiteStatisticalSummary:
     score_text: str
     score_interpretation: str
     available_case_fraction: float | None = None
+    available_case_weight: float | None = None
+    total_case_weight: float | None = None
+    available_case_weight_fraction: float | None = None
+    weight_label: str = ""
     threshold: float | None = None
     threshold_key: str = ""
     threshold_direction: str = ""
     minimum_available_case_count: int | None = None
     minimum_available_case_fraction: float | None = None
+    minimum_available_case_weight: float | None = None
+    minimum_available_case_weight_fraction: float | None = None
     support_gate_passed: bool | None = None
+    weight_support_gate_passed: bool | None = None
     threshold_gate_passed: bool | None = None
     gate_passed: bool | None = None
     case_pvalues: tuple[float, ...] = ()
@@ -230,6 +237,14 @@ class SuiteStatisticalSummary:
         object.__setattr__(self, "available_case_count", int(self.available_case_count))
         object.__setattr__(self, "total_case_count", int(self.total_case_count))
         object.__setattr__(self, "available_case_fraction", _normalized_score_value(self.available_case_fraction))
+        object.__setattr__(self, "available_case_weight", _normalized_case_weight(self.available_case_weight))
+        object.__setattr__(self, "total_case_weight", _normalized_case_weight(self.total_case_weight))
+        object.__setattr__(
+            self,
+            "available_case_weight_fraction",
+            _normalized_score_value(self.available_case_weight_fraction),
+        )
+        object.__setattr__(self, "weight_label", str(self.weight_label).strip())
         object.__setattr__(self, "score_text", str(self.score_text).strip())
         object.__setattr__(self, "score_interpretation", str(self.score_interpretation).strip())
         object.__setattr__(self, "threshold", _normalized_score_value(self.threshold))
@@ -245,6 +260,14 @@ class SuiteStatisticalSummary:
         if minimum_available_case_fraction is not None and not (0.0 <= float(minimum_available_case_fraction) <= 1.0):
             raise ValueError("minimum_available_case_fraction must be in [0, 1] when provided")
         object.__setattr__(self, "minimum_available_case_fraction", minimum_available_case_fraction)
+        minimum_available_case_weight = _normalized_case_weight(self.minimum_available_case_weight)
+        object.__setattr__(self, "minimum_available_case_weight", minimum_available_case_weight)
+        minimum_available_case_weight_fraction = _normalized_score_value(self.minimum_available_case_weight_fraction)
+        if minimum_available_case_weight_fraction is not None and not (
+            0.0 <= float(minimum_available_case_weight_fraction) <= 1.0
+        ):
+            raise ValueError("minimum_available_case_weight_fraction must be in [0, 1] when provided")
+        object.__setattr__(self, "minimum_available_case_weight_fraction", minimum_available_case_weight_fraction)
         object.__setattr__(
             self,
             "case_pvalues",
@@ -275,6 +298,14 @@ class SuiteStatisticalSummary:
             "case_pvalues": [float(value) for value in self.case_pvalues],
             "case_check_ids": list(self.case_check_ids),
         }
+        if self.available_case_weight is not None:
+            payload["available_case_weight"] = float(self.available_case_weight)
+        if self.total_case_weight is not None:
+            payload["total_case_weight"] = float(self.total_case_weight)
+        if self.available_case_weight_fraction is not None:
+            payload["available_case_weight_fraction"] = float(self.available_case_weight_fraction)
+        if self.weight_label:
+            payload["weight_label"] = self.weight_label
         if self.threshold is not None:
             payload["threshold"] = float(self.threshold)
         if self.threshold_key:
@@ -285,8 +316,14 @@ class SuiteStatisticalSummary:
             payload["minimum_available_case_count"] = int(self.minimum_available_case_count)
         if self.minimum_available_case_fraction is not None:
             payload["minimum_available_case_fraction"] = float(self.minimum_available_case_fraction)
+        if self.minimum_available_case_weight is not None:
+            payload["minimum_available_case_weight"] = float(self.minimum_available_case_weight)
+        if self.minimum_available_case_weight_fraction is not None:
+            payload["minimum_available_case_weight_fraction"] = float(self.minimum_available_case_weight_fraction)
         if self.support_gate_passed is not None:
             payload["support_gate_passed"] = bool(self.support_gate_passed)
+        if self.weight_support_gate_passed is not None:
+            payload["weight_support_gate_passed"] = bool(self.weight_support_gate_passed)
         if self.threshold_gate_passed is not None:
             payload["threshold_gate_passed"] = bool(self.threshold_gate_passed)
         if self.gate_passed is not None:
@@ -299,6 +336,8 @@ class SuiteStatisticalPolicy:
     rollup_method: str = "auto"
     minimum_available_case_count: int | None = None
     minimum_available_case_fraction: float | None = None
+    minimum_available_case_weight: float | None = None
+    minimum_available_case_weight_fraction: float | None = None
 
     def __post_init__(self) -> None:
         rollup_method = str(self.rollup_method or "").strip().lower() or "auto"
@@ -318,6 +357,14 @@ class SuiteStatisticalPolicy:
         if minimum_available_case_fraction is not None and not (0.0 <= float(minimum_available_case_fraction) <= 1.0):
             raise ValueError("minimum_available_case_fraction must be in [0, 1] when provided")
         object.__setattr__(self, "minimum_available_case_fraction", minimum_available_case_fraction)
+        minimum_available_case_weight = _normalized_case_weight(self.minimum_available_case_weight)
+        object.__setattr__(self, "minimum_available_case_weight", minimum_available_case_weight)
+        minimum_available_case_weight_fraction = _normalized_score_value(self.minimum_available_case_weight_fraction)
+        if minimum_available_case_weight_fraction is not None and not (
+            0.0 <= float(minimum_available_case_weight_fraction) <= 1.0
+        ):
+            raise ValueError("minimum_available_case_weight_fraction must be in [0, 1] when provided")
+        object.__setattr__(self, "minimum_available_case_weight_fraction", minimum_available_case_weight_fraction)
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -327,6 +374,10 @@ class SuiteStatisticalPolicy:
             payload["minimum_available_case_count"] = int(self.minimum_available_case_count)
         if self.minimum_available_case_fraction is not None:
             payload["minimum_available_case_fraction"] = float(self.minimum_available_case_fraction)
+        if self.minimum_available_case_weight is not None:
+            payload["minimum_available_case_weight"] = float(self.minimum_available_case_weight)
+        if self.minimum_available_case_weight_fraction is not None:
+            payload["minimum_available_case_weight_fraction"] = float(self.minimum_available_case_weight_fraction)
         return payload
 
 
@@ -554,6 +605,26 @@ def _suite_statistical_summary(
         if total_case_count > 0
         else None
     )
+    all_cases_weighted = bool(case_summaries) and all(case.case_weight is not None for case in case_summaries)
+    available_case_weight = None
+    total_case_weight = None
+    available_case_weight_fraction = None
+    weight_label = ""
+    if all_cases_weighted:
+        total_case_weight = rounded(sum(float(case.case_weight or 0.0) for case in case_summaries), digits=3)
+        available_case_weight = rounded(
+            sum(float(case.case_weight or 0.0) for case in case_summaries if _suite_statistical_case_entry(case) is not None),
+            digits=3,
+        )
+        if total_case_weight > 0.0:
+            available_case_weight_fraction = rounded(float(available_case_weight) / float(total_case_weight), digits=3)
+        explicit_weight_labels = {
+            case.case_weight_label
+            for case in case_summaries
+            if case.case_weight is not None and case.case_weight_label
+        }
+        if explicit_weight_labels:
+            weight_label = next(iter(explicit_weight_labels)) if len(explicit_weight_labels) == 1 else "mixed"
     support_gate_passed = True
     support_requirement_phrases: list[str] = []
     if policy.minimum_available_case_count is not None:
@@ -568,6 +639,36 @@ def _suite_statistical_summary(
         support_requirement_phrases.append(
             f"supported-case fraction >= {rounded(float(policy.minimum_available_case_fraction), digits=3):g}"
         )
+    weight_gates_declared = (
+        policy.minimum_available_case_weight is not None
+        or policy.minimum_available_case_weight_fraction is not None
+    )
+    weight_support_gate_passed: bool | None = None
+    if weight_gates_declared:
+        weight_support_gate_passed = True
+        if not all_cases_weighted or available_case_weight is None or total_case_weight is None:
+            weight_support_gate_passed = False
+            support_requirement_phrases.append("all suite cases need per-case weights")
+        if policy.minimum_available_case_weight is not None:
+            weight_support_gate_passed = (
+                weight_support_gate_passed
+                and available_case_weight is not None
+                and float(available_case_weight) >= float(policy.minimum_available_case_weight)
+            )
+            support_requirement_phrases.append(
+                f"supported-case weight >= {rounded(float(policy.minimum_available_case_weight), digits=3):g}"
+            )
+        if policy.minimum_available_case_weight_fraction is not None:
+            weight_support_gate_passed = (
+                weight_support_gate_passed
+                and available_case_weight_fraction is not None
+                and float(available_case_weight_fraction) >= float(policy.minimum_available_case_weight_fraction)
+            )
+            support_requirement_phrases.append(
+                f"supported-case weight fraction >= "
+                f"{rounded(float(policy.minimum_available_case_weight_fraction), digits=3):g}"
+            )
+        support_gate_passed = support_gate_passed and weight_support_gate_passed
     pvalues = [float(entry["pvalue"]) for entry in entries]
     if rollup_method == "max":
         rollup_pvalue = max(pvalues)
@@ -602,6 +703,10 @@ def _suite_statistical_summary(
         available_case_count=available_case_count,
         total_case_count=total_case_count,
         available_case_fraction=available_case_fraction,
+        available_case_weight=available_case_weight,
+        total_case_weight=total_case_weight,
+        available_case_weight_fraction=available_case_weight_fraction,
+        weight_label=weight_label,
         score_text=f"{rollup_method} {label} {rounded_rollup_pvalue:g}",
         score_interpretation=(
             "Diagnostic suite-level statistical summary derived from the case-level "
@@ -612,7 +717,10 @@ def _suite_statistical_summary(
         threshold_direction=threshold_direction,
         minimum_available_case_count=policy.minimum_available_case_count,
         minimum_available_case_fraction=policy.minimum_available_case_fraction,
+        minimum_available_case_weight=policy.minimum_available_case_weight,
+        minimum_available_case_weight_fraction=policy.minimum_available_case_weight_fraction,
         support_gate_passed=support_gate_passed,
+        weight_support_gate_passed=weight_support_gate_passed,
         threshold_gate_passed=threshold_gate_passed,
         gate_passed=gate_passed,
         case_pvalues=tuple(pvalues),

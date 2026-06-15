@@ -200,6 +200,8 @@ validation_design_review_status = "pending"
 #   rollup_method = "median",
 #   minimum_available_case_count = 3,
 #   minimum_available_case_fraction = 0.75,
+#   minimum_available_case_weight = 12,
+#   minimum_available_case_weight_fraction = 0.8,
 # }
 # `weighted_mean` is also supported, but use it only for suite families that
 # emit a principled per-case weight through the maintained suite-case contract.
@@ -356,6 +358,8 @@ validation_design_review_status = "pending"
 #   rollup_method = "median",
 #   minimum_available_case_count = 1,
 #   minimum_available_case_fraction = 1.0,
+#   minimum_available_case_weight = 8,
+#   minimum_available_case_weight_fraction = 0.75,
 # }
 # The maintained series-comparison suite also supports:
 # suite_aggregate_policy = { norm_rollup = "weighted_mean" }

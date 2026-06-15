@@ -397,4 +397,130 @@ assert partial_support_summary == {
     "case_check_ids": ["supported_case"],
 }
 
+weighted_support_score = build_suite_aggregate_score(
+    suite_id="synthetic.weighted_support_suite",
+    case_summaries=[
+        SuiteCaseSummary(
+            check_id="weighted_supported",
+            title="Weighted supported case",
+            status="PASS",
+            norm_score=1.0,
+            case_weight=4.0,
+            case_weight_label="matched points",
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.02,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
+            ),
+        ),
+        SuiteCaseSummary(
+            check_id="weighted_unsupported",
+            title="Weighted unsupported case",
+            status="FAIL",
+            norm_score=0.0,
+            case_weight=8.0,
+            case_weight_label="matched points",
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+            ),
+        ),
+    ],
+    statistical_policy=SuiteStatisticalPolicy(
+        minimum_available_case_weight=6.0,
+        minimum_available_case_weight_fraction=0.5,
+    ),
+)
+
+weighted_support_policy = weighted_support_score.to_evidence()["suite_statistical_policy"]
+assert weighted_support_policy == {
+    "rollup_method": "auto",
+    "minimum_available_case_weight": 6.0,
+    "minimum_available_case_weight_fraction": 0.5,
+}
+
+weighted_support_summary = weighted_support_score.to_evidence()["suite_statistical_summary"]
+assert weighted_support_summary == {
+    "score_family_category": "equivalence",
+    "statistical_test_family": "equivalence_tost",
+    "rollup_method": "max",
+    "rollup_source": "auto_default",
+    "rollup_pvalue": 0.02,
+    "available_case_count": 1,
+    "total_case_count": 2,
+    "available_case_fraction": 0.5,
+    "available_case_weight": 4.0,
+    "total_case_weight": 12.0,
+    "available_case_weight_fraction": 0.333,
+    "weight_label": "matched points",
+    "score_text": "max TOST p 0.02",
+    "score_interpretation": (
+        "Diagnostic suite-level statistical summary derived from the case-level "
+        "TOST p values. It does not replace the detailed per-case gates. "
+        "(threshold 0.05) Statistical support requirements: supported-case weight >= 6; "
+        "supported-case weight fraction >= 0.5."
+    ),
+    "threshold": 0.05,
+    "threshold_key": "equivalence_alpha",
+    "threshold_direction": "le",
+    "minimum_available_case_weight": 6.0,
+    "minimum_available_case_weight_fraction": 0.5,
+    "support_gate_passed": False,
+    "weight_support_gate_passed": False,
+    "threshold_gate_passed": True,
+    "gate_passed": False,
+    "case_pvalues": [0.02],
+    "case_check_ids": ["weighted_supported"],
+}
+
+missing_weight_support_score = build_suite_aggregate_score(
+    suite_id="synthetic.missing_weight_support_suite",
+    case_summaries=[
+        SuiteCaseSummary(
+            check_id="weighted_supported",
+            title="Weighted supported case",
+            status="PASS",
+            norm_score=1.0,
+            case_weight=3.0,
+            case_weight_label="matched points",
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.02,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
+            ),
+        ),
+        SuiteCaseSummary(
+            check_id="unweighted_unsupported",
+            title="Unweighted unsupported case",
+            status="FAIL",
+            norm_score=0.0,
+            case_score=SuiteCaseScorePayload(score_kind="equivalence_only"),
+        ),
+    ],
+    statistical_policy=SuiteStatisticalPolicy(minimum_available_case_weight=2.0),
+)
+
+missing_weight_summary = missing_weight_support_score.to_evidence()["suite_statistical_summary"]
+assert missing_weight_summary["support_gate_passed"] is False
+assert missing_weight_summary["weight_support_gate_passed"] is False
+assert missing_weight_summary["minimum_available_case_weight"] == 2.0
+assert "all suite cases need per-case weights" in missing_weight_summary["score_interpretation"]
+assert "available_case_weight" not in missing_weight_summary
+assert "total_case_weight" not in missing_weight_summary
+
 print("neuronunit_suite_scores: OK")

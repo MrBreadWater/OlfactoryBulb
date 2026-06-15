@@ -224,6 +224,8 @@ def suite_statistical_policy_from_rule(rule: Mapping[str, object]) -> SuiteStati
     rollup_method = str(raw_policy.get("rollup_method", DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method)).strip()
     minimum_available_case_count = raw_policy.get("minimum_available_case_count")
     minimum_available_case_fraction = raw_policy.get("minimum_available_case_fraction")
+    minimum_available_case_weight = raw_policy.get("minimum_available_case_weight")
+    minimum_available_case_weight_fraction = raw_policy.get("minimum_available_case_weight_fraction")
     return SuiteStatisticalPolicy(
         rollup_method=rollup_method or DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method,
         minimum_available_case_count=(
@@ -235,6 +237,16 @@ def suite_statistical_policy_from_rule(rule: Mapping[str, object]) -> SuiteStati
             float(minimum_available_case_fraction)
             if minimum_available_case_fraction not in (None, "")
             else DEFAULT_SUITE_STATISTICAL_POLICY.minimum_available_case_fraction
+        ),
+        minimum_available_case_weight=(
+            float(minimum_available_case_weight)
+            if minimum_available_case_weight not in (None, "")
+            else DEFAULT_SUITE_STATISTICAL_POLICY.minimum_available_case_weight
+        ),
+        minimum_available_case_weight_fraction=(
+            float(minimum_available_case_weight_fraction)
+            if minimum_available_case_weight_fraction not in (None, "")
+            else DEFAULT_SUITE_STATISTICAL_POLICY.minimum_available_case_weight_fraction
         ),
     )
 

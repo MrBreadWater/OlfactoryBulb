@@ -2338,6 +2338,13 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite
     currently does this via matched-point count
+  - the same suite-level statistical contract now also supports weighted
+    support gates: grouped validations may declare
+    `minimum_available_case_weight` and/or
+    `minimum_available_case_weight_fraction`, and the emitted
+    `suite_statistical_summary` now records weighted support counts,
+    fractions, labels, and gate results when the suite family exposes a real
+    per-case weight
   - the suite-level statistical-support contract is now visible in the
     migrated presentation layer too: when a suite matrix has only partial
     statistical support or fails its declared support gate, the dashboard
@@ -2352,7 +2359,7 @@ The remaining open questions are now narrower:
 - whether the new typed `suite_statistical_summary` plus declarative
   `SuiteStatisticalPolicy` support is enough, or whether future work should
   promote additional suite-level statistical contracts beyond rollup choice
-  plus the current supported-case count/fraction gates
+  plus the current supported-case count/fraction/weight gates
 - whether transform generalization should stop at explicit piecewise-linear
   mappings plus the current context-dependent affine lookup path, or later
   grow into richer metadata-driven transforms

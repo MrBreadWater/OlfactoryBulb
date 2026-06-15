@@ -546,6 +546,8 @@ summary should count as supported:
 
 - `minimum_available_case_count = 3`
 - `minimum_available_case_fraction = 0.75`
+- `minimum_available_case_weight = 12`
+- `minimum_available_case_weight_fraction = 0.8`
 
 These are diagnostic support contracts, not replacements for the detailed
 case-level PASS/WARN/FAIL decisions. The emitted `suite_statistical_summary`
@@ -554,13 +556,21 @@ records:
 - `available_case_count`
 - `total_case_count`
 - `available_case_fraction`
+- `available_case_weight`
+- `total_case_weight`
+- `available_case_weight_fraction`
+- `weight_label`
 - `support_gate_passed`
+- `weight_support_gate_passed`
 - `threshold_gate_passed`
 - combined `gate_passed`
 
 Use these fields when a suite mixes statistically supported and unsupported
 cases and you want that limitation surfaced explicitly instead of hidden behind
-the rolled-up p-value alone.
+the rolled-up p-value alone. Use the weight-based forms only when the suite
+family emits a principled per-case weight through the maintained suite-case
+contract. In the current branch that means the series-comparison suite family,
+which uses matched-point count as its case weight.
 
 For `reference_curve_match`, treat axis metadata as part of the rule contract:
 

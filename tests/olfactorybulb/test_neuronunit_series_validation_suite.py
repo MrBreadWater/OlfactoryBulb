@@ -1416,6 +1416,34 @@ assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["r
 assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["rollup_source"] == "explicit"
 assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["support_gate_passed"] is True
 
+explicit_weighted_support_rule = dict(equivalence_rule)
+explicit_weighted_support_rule["suite_statistical_policy"] = {
+    "minimum_available_case_weight": 2.0,
+    "minimum_available_case_weight_fraction": 1.0,
+}
+rules_module._load_rows = (
+    lambda loader_spec: equivalence_reference_rows
+    if loader_spec == "csv:/tmp/equivalence.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    equivalence_rule_items_weighted_support = build_rule_items(
+        compile_rule_dispatches([explicit_weighted_support_rule]),
+        equivalence_context,
+    )
+finally:
+    rules_module._load_rows = original_load_rows
+assert equivalence_rule_items_weighted_support[0].evidence["suite_statistical_policy"] == {
+    "rollup_method": "auto",
+    "minimum_available_case_weight": 2.0,
+    "minimum_available_case_weight_fraction": 1.0,
+}
+assert equivalence_rule_items_weighted_support[0].evidence["suite_statistical_summary"]["available_case_weight"] == 2.0
+assert equivalence_rule_items_weighted_support[0].evidence["suite_statistical_summary"]["total_case_weight"] == 2.0
+assert equivalence_rule_items_weighted_support[0].evidence["suite_statistical_summary"]["available_case_weight_fraction"] == 1.0
+assert equivalence_rule_items_weighted_support[0].evidence["suite_statistical_summary"]["weight_label"] == "matched points"
+assert equivalence_rule_items_weighted_support[0].evidence["suite_statistical_summary"]["weight_support_gate_passed"] is True
+
 piecewise_rule = dict(residual_only_rule)
 piecewise_rule["loader"] = "csv:/tmp/piecewise.csv"
 piecewise_rule["reference_current_key"] = "current_pA"

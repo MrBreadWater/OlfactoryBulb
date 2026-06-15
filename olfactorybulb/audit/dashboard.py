@@ -1476,7 +1476,11 @@ def _render_companion_visuals(
                 statistical_parts.append(statistical_text)
             available_case_count = _float_or_none(suite_statistical_summary.get("available_case_count"))
             total_case_count = _float_or_none(suite_statistical_summary.get("total_case_count"))
+            available_case_weight = _float_or_none(suite_statistical_summary.get("available_case_weight"))
+            total_case_weight = _float_or_none(suite_statistical_summary.get("total_case_weight"))
+            weight_label = str(suite_statistical_summary.get("weight_label") or "weight").strip() or "weight"
             support_gate_passed = suite_statistical_summary.get("support_gate_passed")
+            weight_support_gate_passed = suite_statistical_summary.get("weight_support_gate_passed")
             threshold_gate_passed = suite_statistical_summary.get("threshold_gate_passed")
             if (
                 available_case_count is not None
@@ -1496,6 +1500,24 @@ def _render_companion_visuals(
                 statistical_parts.append(support_text)
             elif support_gate_passed is False:
                 statistical_parts.append("support gate fail")
+            if (
+                available_case_weight is not None
+                and total_case_weight is not None
+                and total_case_weight > 0.0
+                and (
+                    bool(weight_support_gate_passed) is False
+                    or not math.isclose(available_case_weight, total_case_weight)
+                )
+            ):
+                weight_support_text = (
+                    f"support {_format_numeric(available_case_weight)}/"
+                    f"{_format_numeric(total_case_weight)} {weight_label}"
+                )
+                if weight_support_gate_passed is False:
+                    weight_support_text += " (gate fail)"
+                statistical_parts.append(weight_support_text)
+            elif weight_support_gate_passed is False:
+                statistical_parts.append("weight support gate fail")
             if threshold_gate_passed is False:
                 statistical_parts.append("threshold fail")
             if statistical_parts:

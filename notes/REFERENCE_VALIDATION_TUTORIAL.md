@@ -1798,9 +1798,14 @@ Important details:
   emits case-level statistical diagnostics and you want a non-default
   suite-level p-value summary
 - `suite_statistical_policy` may also declare
-  `minimum_available_case_count` and/or `minimum_available_case_fraction`
+  `minimum_available_case_count`, `minimum_available_case_fraction`,
+  `minimum_available_case_weight`, and/or
+  `minimum_available_case_weight_fraction`
   when the suite-level statistical summary should only count as supported if
   enough cases contributed real statistical evidence
+- the weight-based support fields are only principled when the suite family
+  emits a real per-case weight; in the maintained branch that currently means
+  the series-comparison suite family, which uses matched-point count
 - single-rule SciUnit-backed families such as `reference_band_rows` use the
   same field directly on that rule
 - reference/model provenance summaries for series comparisons now come from a

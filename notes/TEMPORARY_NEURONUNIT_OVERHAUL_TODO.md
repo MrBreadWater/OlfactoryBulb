@@ -659,3 +659,15 @@ Remove this file when the listed items are either:
       - added canonical generated outputs for ephys/protocol/manual/readme
       - the Burton validation path now loads those canonical dataset outputs
         instead of normalizing the source CSVs inline at runtime
+- [x] Extend suite-level statistical support gates beyond case counts so
+      weighted suite families can declare support on the same principled
+      per-case weights they already use for aggregate scoring.
+      - `SuiteStatisticalPolicy` now also supports
+        `minimum_available_case_weight` and
+        `minimum_available_case_weight_fraction`
+      - `suite_statistical_summary` now records weighted support totals,
+        fractions, labels, and weight-gate results when the full suite carries
+        a real per-case weight
+      - the declarative parser, dashboard status-matrix header, HOWTO/tutorial,
+        and template contract all now expose the weighted-support form instead
+        of leaving it as code-only behavior

@@ -821,7 +821,12 @@ contract for future sessions.
     expose real statistical diagnostics such as equivalence or Welch p-values,
     preserve them at the suite-overview layer through the typed
     `suite_statistical_summary` payload instead of flattening the overview to
-    norm scores only.
+    norm scores only. If a suite-level statistical support rule needs weighted
+    coverage, declare it through `suite_statistical_policy` with
+    `minimum_available_case_weight` and/or
+    `minimum_available_case_weight_fraction`, and only do that for suite
+    families whose case weights are scientifically meaningful rather than
+    incidental presentation values.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed
