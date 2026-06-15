@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import argparse
-import copy
 from dataclasses import dataclass
 import hashlib
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, coerce_protocol_evidence_bundle
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload, coerce_mapping_payload
 from olfactorybulb.neuronunit.metric_tables import MetricTable, coerce_metric_table
+
+
+class ProtocolExecutionArgMap(FrozenMappingPayload):
+    """Typed frozen wrapper for protocol-cache argument values."""
+
+
+class ProtocolExecutionConfigMap(FrozenMappingPayload):
+    """Typed frozen wrapper for protocol-cache protocol-config values."""
 
 
 def _normalize_cache_value(value: Any) -> Any:
@@ -51,8 +59,22 @@ class ProtocolExecutionCacheInfo:
     scope: str
     protocol_id: str
     cache_key: str
-    arg_values: dict[str, Any]
-    protocol_config: dict[str, Any]
+    arg_values: ProtocolExecutionArgMap | Mapping[str, object]
+    protocol_config: ProtocolExecutionConfigMap | Mapping[str, object]
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "arg_values",
+            coerce_mapping_payload(self.arg_values, payload_type=ProtocolExecutionArgMap)
+            or ProtocolExecutionArgMap(entries=()),
+        )
+        object.__setattr__(
+            self,
+            "protocol_config",
+            coerce_mapping_payload(self.protocol_config, payload_type=ProtocolExecutionConfigMap)
+            or ProtocolExecutionConfigMap(entries=()),
+        )
 
     def to_evidence(self) -> dict[str, Any]:
         return {
@@ -60,8 +82,8 @@ class ProtocolExecutionCacheInfo:
             "scope": self.scope,
             "protocol_id": self.protocol_id,
             "cache_key": self.cache_key,
-            "arg_values": copy.deepcopy(self.arg_values),
-            "protocol_config": copy.deepcopy(self.protocol_config),
+            "arg_values": self.arg_values.to_dict(),
+            "protocol_config": self.protocol_config.to_dict(),
         }
 
 
@@ -221,7 +243,9 @@ def execute_validation_protocol(
 
 
 __all__ = [
+    "ProtocolExecutionArgMap",
     "ProtocolExecutionCacheInfo",
+    "ProtocolExecutionConfigMap",
     "ProtocolExecutionCacheKey",
     "ProtocolRunResult",
     "ValidationProtocolSpec",

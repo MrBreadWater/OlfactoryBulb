@@ -473,6 +473,14 @@ Remove this file when the listed items are either:
       - plain mappings still coerce at the boundary, and direct protocol
         builders/tests remain concise while the public protocol-evidence seam
         stops carrying mutable raw maps internally
+- [x] Keep the remaining top-level validation config/cache tables on the same
+      typed wrapper pattern once they have crossed the load/cache boundary.
+      - `ReferenceValidationDocument.defaults`,
+        `ReferenceValidationDocument.protocol_defaults`, skip-item evidence,
+        and `ReferenceValidationPlan` now carry typed frozen payload maps
+      - `ProtocolExecutionCacheInfo.arg_values` and `protocol_config` now do
+        the same, so emitted protocol-cache evidence still stays inspectable
+        without the stored runtime/cache contract falling back to loose dicts
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

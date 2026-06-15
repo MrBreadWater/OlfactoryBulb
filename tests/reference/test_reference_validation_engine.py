@@ -17,12 +17,21 @@ from olfactorybulb.audit.reference_validation_config import (
     load_validation_extensions,
 )
 from olfactorybulb.audit.reference_validation_document import load_reference_validation_document
+from olfactorybulb.audit.reference_validation_document import (
+    ReferenceValidationDefaultsMap,
+    ReferenceValidationProtocolDefaultsMap,
+    ReferenceValidationSkipEvidenceMap,
+)
 from olfactorybulb.audit.reference_validation_engine import run_reference_validation
 from olfactorybulb.audit.reference_validation_plan import load_reference_validation_plan
 from olfactorybulb.audit.reference_validation_protocols import (
     clear_protocol_execution_cache,
     get_validation_protocol_spec,
     protocol_execution_cache_size,
+)
+from olfactorybulb.audit.reference_validation_protocol_core import (
+    ProtocolExecutionArgMap,
+    ProtocolExecutionConfigMap,
 )
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, intrinsic_fi_curve_series_spec
 from olfactorybulb.audit.reference_validation_specs import (
@@ -49,8 +58,11 @@ assert burton_document.validation_id == "burton_urban_fi"
 assert burton_document.title == "Burton & Urban f-I validation audit"
 assert burton_document.protocol_runner_id == "burton_urban_mctc_current_clamp"
 assert burton_document.design_review_defaults.status == "pending"
+assert isinstance(burton_document.defaults, ReferenceValidationDefaultsMap)
+assert isinstance(burton_document.protocol_defaults, ReferenceValidationProtocolDefaultsMap)
 assert burton_document.skip_item is not None
 assert burton_document.skip_item.check_id == "burton_urban_fi_skipped"
+assert isinstance(burton_document.skip_item.evidence, ReferenceValidationSkipEvidenceMap)
 assert burton_document.rule_records[0].kind == "note_presence"
 assert burton_document.extension_specs == ()
 assert get_validation_protocol_spec("burton_urban_mctc_current_clamp").title.startswith("Burton and Urban 2014")
@@ -61,6 +73,8 @@ assert burton_plan.protocol_runner_id == "burton_urban_mctc_current_clamp"
 assert burton_plan.protocol_spec.title.startswith("Burton and Urban 2014")
 assert burton_plan.skip_neuron_mode == "short_circuit"
 assert burton_plan.design_review_defaults.status == "pending"
+assert isinstance(burton_plan.defaults, ReferenceValidationDefaultsMap)
+assert isinstance(burton_plan.protocol_defaults, ReferenceValidationProtocolDefaultsMap)
 assert burton_plan.skip_item is not None
 assert burton_plan.skip_item.check_id == "burton_urban_fi_skipped"
 assert isinstance(burton_plan.rule_dispatches[0], NotePresenceRuleDispatch)
@@ -290,11 +304,16 @@ with tempfile.TemporaryDirectory() as tmpdir:
         temp_plan = load_reference_validation_plan(path=config_path)
         assert temp_document.title == "Temporary validation"
         assert temp_document.protocol_runner_id == "temp_custom_protocol"
+        assert isinstance(temp_document.defaults, ReferenceValidationDefaultsMap)
+        assert isinstance(temp_document.protocol_defaults, ReferenceValidationProtocolDefaultsMap)
         assert temp_document.skip_item is not None
         assert temp_document.skip_item.check_id == "temp_validation_skipped"
+        assert isinstance(temp_document.skip_item.evidence, ReferenceValidationSkipEvidenceMap)
         assert temp_document.extension_specs == ("temp_validation_extension:register",)
         assert temp_plan.title == "Temporary validation"
         assert temp_plan.protocol_spec.title == "Temporary custom protocol"
+        assert isinstance(temp_plan.defaults, ReferenceValidationDefaultsMap)
+        assert isinstance(temp_plan.protocol_defaults, ReferenceValidationProtocolDefaultsMap)
         assert isinstance(temp_plan.rule_dispatches[0], ProtocolExecutedRuleDispatch)
         assert isinstance(temp_plan.rule_dispatches[1], CustomSingleRuleDispatch)
         assert temp_plan.skip_item is not None
@@ -302,6 +321,9 @@ with tempfile.TemporaryDirectory() as tmpdir:
         assert isinstance(first_protocol_result.protocol_evidence, ProtocolEvidenceBundle)
         assert first_protocol_result.protocol_evidence.to_dict()["protocol_label"] == "temporary protocol"
         assert first_protocol_result.protocol_evidence.series_specs[0].evidence_key == "fi_curve_rows"
+        assert first_protocol_result.cache_info is not None
+        assert isinstance(first_protocol_result.cache_info.arg_values, ProtocolExecutionArgMap)
+        assert isinstance(first_protocol_result.cache_info.protocol_config, ProtocolExecutionConfigMap)
         clear_protocol_execution_cache()
         temp_module.RUN_COUNT = 0
         skip_item = temp_plan.build_skip_item(args=argparse.Namespace(custom_score=4.5, reference_sigma_multiplier=2.0))

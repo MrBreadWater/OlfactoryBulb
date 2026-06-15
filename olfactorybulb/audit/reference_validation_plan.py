@@ -11,6 +11,8 @@ from olfactorybulb.audit import AuditItem
 from olfactorybulb.audit.reference_validation_config import load_validation_extensions
 from olfactorybulb.audit.reference_validation_document import (
     ReferenceValidationDocument,
+    ReferenceValidationDefaultsMap,
+    ReferenceValidationProtocolDefaultsMap,
     ReferenceValidationSkipItemSpec,
     ValidationDesignReviewDefaultsSpec,
     load_reference_validation_document,
@@ -37,7 +39,7 @@ def _skip_item_to_audit_item(
     args: argparse.Namespace,
     review_defaults: ValidationDesignReviewDefaultsSpec,
 ) -> AuditItem:
-    evidence = dict(skip_item.evidence)
+    evidence = skip_item.evidence.to_dict()
     for key in skip_item.evidence_arg_keys:
         evidence[key] = getattr(args, key, None)
     return AuditItem(
@@ -73,8 +75,8 @@ class ReferenceValidationPlan:
     default_group: str
     notes_path: str
     skip_neuron_mode: str
-    defaults: dict[str, Any]
-    protocol_defaults: dict[str, Any]
+    defaults: ReferenceValidationDefaultsMap
+    protocol_defaults: ReferenceValidationProtocolDefaultsMap
     rule_dispatches: tuple[ValidationRuleDispatch, ...]
     protocol_runner_id: str
     protocol_spec: ValidationProtocolSpec
@@ -93,8 +95,8 @@ class ReferenceValidationPlan:
             default_group=document.default_group,
             notes_path=document.notes_path,
             skip_neuron_mode=document.skip_neuron_mode,
-            defaults=dict(document.defaults),
-            protocol_defaults=dict(document.protocol_defaults),
+            defaults=document.defaults,
+            protocol_defaults=document.protocol_defaults,
             rule_dispatches=compile_rule_dispatches(document.rule_records),
             protocol_runner_id=document.protocol_runner_id,
             protocol_spec=get_validation_protocol_spec(document.protocol_runner_id),
@@ -126,7 +128,7 @@ class ReferenceValidationPlan:
         return execute_validation_protocol(
             self.protocol_spec,
             args=args,
-            protocol_config=dict(self.protocol_defaults),
+            protocol_config=self.protocol_defaults.to_dict(),
         )
 
     def build_rule_items(

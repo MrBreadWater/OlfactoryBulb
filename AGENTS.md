@@ -983,6 +983,11 @@ contract for future sessions.
       `ProtocolEvidenceBundle.values` and `ProtocolEvidenceSeriesSpec.style`
       on shared frozen mapping wrappers, but keep plain mapping coercion at
       the boundary so maintained protocol builders and tests can stay concise
+    - keep the top-level validation config/cache tables on the same typed
+      wrapper pattern too: `ReferenceValidationDocument.defaults`,
+      `ReferenceValidationDocument.protocol_defaults`, skip-item evidence, and
+      `ProtocolExecutionCacheInfo` payload maps should not drift back to loose
+      mutable dicts once they have crossed the load/cache boundary
     - if a migrated SciUnit suite needs the full protocol-evidence payload,
       expose that through an explicit capability such as
       `ProvidesProtocolEvidenceBundle` and consume the bundle directly rather

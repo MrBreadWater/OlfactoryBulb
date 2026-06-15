@@ -2228,6 +2228,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     and `ProtocolEvidenceSeriesSpec.style` stop carrying mutable raw maps
     internally even though maintained protocol builders and tests can still
     pass plain mappings at the boundary
+  - the same wrapper pattern now also covers the remaining top-level
+    validation config/cache tables after load: document defaults,
+    protocol defaults, skip-item evidence, and protocol-cache arg/config
+    payloads no longer fall back to loose mutable dicts once they have
+    crossed the load/cache boundary
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +

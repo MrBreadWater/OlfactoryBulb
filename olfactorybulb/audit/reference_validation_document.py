@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,19 @@ from olfactorybulb.audit.reference_validation_rule_records import (
     ValidationRuleRecord,
     coerce_validation_rule_records,
 )
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload, coerce_mapping_payload
+
+
+class ReferenceValidationDefaultsMap(FrozenMappingPayload):
+    """Typed frozen wrapper for top-level validation CLI defaults."""
+
+
+class ReferenceValidationProtocolDefaultsMap(FrozenMappingPayload):
+    """Typed frozen wrapper for top-level protocol config defaults."""
+
+
+class ReferenceValidationSkipEvidenceMap(FrozenMappingPayload):
+    """Typed frozen wrapper for declarative skip-item evidence payloads."""
 
 
 def _optional_table(config: dict[str, Any], key: str) -> dict[str, Any]:
@@ -90,7 +104,7 @@ class ReferenceValidationSkipItemSpec:
     description: str = ""
     acceptable: str = ""
     acceptable_basis: str = ""
-    evidence: dict[str, Any] = field(default_factory=dict)
+    evidence: ReferenceValidationSkipEvidenceMap | Mapping[str, object] = field(default_factory=dict)
     evidence_arg_keys: tuple[str, ...] = ()
     note: str = ""
     validation_design_review_status: str = ""
@@ -98,6 +112,14 @@ class ReferenceValidationSkipItemSpec:
     validation_design_review_reviewer: str = ""
     validation_design_review_required_expertise: str = ""
     validation_design_review_focus: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "evidence",
+            coerce_mapping_payload(self.evidence, payload_type=ReferenceValidationSkipEvidenceMap)
+            or ReferenceValidationSkipEvidenceMap(entries=()),
+        )
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "ReferenceValidationSkipItemSpec | None":
@@ -143,11 +165,25 @@ class ReferenceValidationDocument:
     default_group: str
     notes_path: str
     skip_neuron_mode: str
-    defaults: dict[str, Any]
-    protocol_defaults: dict[str, Any]
+    defaults: ReferenceValidationDefaultsMap | Mapping[str, object]
+    protocol_defaults: ReferenceValidationProtocolDefaultsMap | Mapping[str, object]
     rule_records: tuple[ValidationRuleRecord, ...]
     design_review_defaults: ValidationDesignReviewDefaultsSpec
     skip_item: ReferenceValidationSkipItemSpec | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "defaults",
+            coerce_mapping_payload(self.defaults, payload_type=ReferenceValidationDefaultsMap)
+            or ReferenceValidationDefaultsMap(entries=()),
+        )
+        object.__setattr__(
+            self,
+            "protocol_defaults",
+            coerce_mapping_payload(self.protocol_defaults, payload_type=ReferenceValidationProtocolDefaultsMap)
+            or ReferenceValidationProtocolDefaultsMap(entries=()),
+        )
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "ReferenceValidationDocument":
@@ -181,7 +217,10 @@ def load_reference_validation_document(
 
 __all__ = [
     "ReferenceValidationDocument",
+    "ReferenceValidationDefaultsMap",
+    "ReferenceValidationProtocolDefaultsMap",
     "ReferenceValidationSkipItemSpec",
+    "ReferenceValidationSkipEvidenceMap",
     "ValidationRuleRecord",
     "ValidationDesignReviewDefaultsSpec",
     "load_reference_validation_document",
