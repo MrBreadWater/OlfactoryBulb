@@ -5,7 +5,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 import re
-from typing import Any, Callable, Iterable, TypeVar
+from typing import Any, Callable, Iterable, Protocol, TypeVar, runtime_checkable
 
 from olfactorybulb.audit import AuditItem, companion_visual_spec
 from olfactorybulb.audit.reference_validation_contracts import ValidationReviewLike
@@ -19,6 +19,20 @@ from olfactorybulb.neuronunit.suite_scores import (
 
 _CaseT = TypeVar("_CaseT")
 _ScoreT = TypeVar("_ScoreT")
+
+
+@runtime_checkable
+class AuditItemCaseLike(Protocol):
+    check_id: str
+    title: str
+    criterion: str
+    criterion_latex: str
+    criterion_formulae: tuple[str, ...] | list[str]
+    criterion_definitions: tuple[dict[str, Any], ...] | list[dict[str, Any]]
+    description: str
+    acceptable: str
+    acceptable_basis: str
+    note: str
 
 
 def _normalized_visual_payload(values: Iterable[dict[str, Any]] | None) -> tuple[dict[str, Any], ...]:
@@ -121,7 +135,7 @@ class AuditItemAdapterSpec:
 
 
 def audit_item_adapter_spec_from_case(
-    case: Any,
+    case: AuditItemCaseLike,
     *,
     validation_review: ValidationReviewLike | None = None,
     series_visuals: Iterable[dict[str, Any]] | None = None,

@@ -954,6 +954,9 @@ contract for future sessions.
   - Keep the protocol-result boundary typed too: the plan, engine, and rule
     context should trade `ProtocolRunResult`, not `Any`, once protocol
     execution has crossed the registry/cache layer.
+    Apply the same rule to adapter helpers: use small structural protocols for
+    protocol-evidence carriers and suite-case adapters instead of leaving
+    those seams typed as raw `Any`.
   - Inside `olfactorybulb.audit.reference_validation_rules`, built-in
     maintained rule kinds should compile into typed dispatch records/specs
     before runtime execution instead of carrying loose raw rule dicts all the

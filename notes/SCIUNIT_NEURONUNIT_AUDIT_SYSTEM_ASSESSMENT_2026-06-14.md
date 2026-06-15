@@ -2141,6 +2141,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     has crossed the coercion layer, the public runtime/model seam now stays on
     `ProtocolEvidenceBundle` rather than continuing to advertise raw dicts as
     a first-class protocol-evidence type
+  - the remaining adapter-input seams are shrinking too: suite presentation
+    now consumes a structural case protocol instead of `case: Any`, and the
+    protocol-evidence helper now consumes a structural carrier protocol
+    instead of `result: Any`
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

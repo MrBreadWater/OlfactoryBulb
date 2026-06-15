@@ -401,6 +401,12 @@ Remove this file when the listed items are either:
         that same bundle type at their public seam
       - updated the remaining maintained/synthetic bundle call sites that were
         still passing raw dicts into those public runtime objects
+- [x] Replace the last adapter-input `Any` seams with structural protocols.
+      - `protocol_evidence_bundle_from_resultish(...)` now consumes a
+        structural `SupportsProtocolEvidence` carrier instead of `result: Any`
+      - `suite_presentation.audit_item_adapter_spec_from_case(...)` now
+        consumes a structural `AuditItemCaseLike` protocol instead of
+        `case: Any`
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

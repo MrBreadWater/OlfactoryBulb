@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from olfactorybulb.audit.core import series_visual_spec
 
@@ -106,6 +106,11 @@ class ProtocolEvidenceBundle:
         return protocol_series_spec_map(self.series_specs)
 
 
+@runtime_checkable
+class SupportsProtocolEvidence(Protocol):
+    protocol_evidence: ProtocolEvidenceBundle | dict[str, Any] | None
+
+
 def protocol_series_spec_map(
     specs: list[ProtocolEvidenceSeriesSpec] | tuple[ProtocolEvidenceSeriesSpec, ...] | None,
 ) -> dict[str, ProtocolEvidenceSeriesSpec]:
@@ -131,7 +136,7 @@ def coerce_protocol_evidence_bundle(
     return ProtocolEvidenceBundle(values=dict(values or {}), series_specs=tuple(series_specs or ()))
 
 
-def protocol_evidence_bundle_from_resultish(result: Any | None) -> ProtocolEvidenceBundle:
+def protocol_evidence_bundle_from_resultish(result: SupportsProtocolEvidence | None) -> ProtocolEvidenceBundle:
     if result is None:
         return ProtocolEvidenceBundle()
     return coerce_protocol_evidence_bundle(
@@ -178,4 +183,5 @@ __all__ = [
     "intrinsic_fi_curve_series_spec",
     "protocol_evidence_bundle_from_resultish",
     "protocol_series_spec_map",
+    "SupportsProtocolEvidence",
 ]
