@@ -17,8 +17,7 @@ from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.neuronunit.capabilities import (
-    ProvidesProtocolEvidenceMap,
-    ProvidesProtocolEvidenceRows,
+    ProvidesProtocolEvidenceBundle,
 )
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, SeriesProvenanceSummary
@@ -1294,7 +1293,7 @@ def _with_legacy_hz_aliases(
 
 
 class SeriesComparisonTest(sciunit.Test):
-    required_capabilities = (ProvidesProtocolEvidenceRows, ProvidesProtocolEvidenceMap)
+    required_capabilities = (ProvidesProtocolEvidenceBundle,)
     score_type = SeriesComparisonScore
 
     def __init__(self, case: SeriesComparisonCase) -> None:
@@ -1330,7 +1329,7 @@ class SeriesComparisonTest(sciunit.Test):
     def generate_prediction(self, model: ReferenceValidationModel) -> SeriesPredictionBundle:
         return SeriesPredictionBundle(
             protocol_evidence_key=self.case.observation.protocol_evidence_key,
-            protocol_evidence=ProtocolEvidenceBundle(values=model.get_protocol_evidence_map()),
+            protocol_evidence=model.get_protocol_evidence_bundle(),
         )
 
     def compute_score(self, observation: dict[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
@@ -1910,7 +1909,7 @@ def audit_items_from_series_comparison_suite(
     descriptor: SuiteDescriptor | None = None,
 ) -> list[AuditItem]:
     judged = compiled.judge()
-    protocol_context = compiled.model.get_protocol_evidence_map()
+    protocol_context = compiled.model.get_protocol_evidence_bundle().to_dict()
     candidate_ids = protocol_context.get("cell_models", [])
     if not isinstance(candidate_ids, list):
         candidate_ids = []

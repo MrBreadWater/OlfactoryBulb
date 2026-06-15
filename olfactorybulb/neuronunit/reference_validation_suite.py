@@ -14,6 +14,7 @@ from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, coerce
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesMetricRows,
     ProvidesMetricSummary,
+    ProvidesProtocolEvidenceBundle,
     ProvidesProtocolEvidenceMap,
     ProvidesProtocolEvidenceRows,
 )
@@ -60,6 +61,7 @@ class ReferenceValidationModel(
     ProvidesMetricRows,
     ProvidesProtocolEvidenceRows,
     ProvidesProtocolEvidenceMap,
+    ProvidesProtocolEvidenceBundle,
 ):
     """SciUnit model wrapper around the maintained summary metric table."""
 
@@ -105,6 +107,9 @@ class ReferenceValidationModel(
 
     def get_protocol_evidence_map(self) -> dict[str, Any]:
         return self.protocol_evidence.to_dict()
+
+    def get_protocol_evidence_bundle(self) -> ProtocolEvidenceBundle:
+        return self.protocol_evidence
 
 
 class ReferenceBandScore(sciunit.Score):

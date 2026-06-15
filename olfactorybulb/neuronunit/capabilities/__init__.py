@@ -7,6 +7,7 @@ if getattr(getattr(pq, "mV", None).__class__, "__module__", "") == "sphinx.ext.a
 import quantities as pq
 import sciunit
 
+
 class SupportsVoltageClamp(sciunit.Capability):
     """Indicates that the model can be held at three levels of voltages using a voltage clamp"""
 
@@ -87,5 +88,15 @@ class ProvidesProtocolEvidenceMap(sciunit.Capability):
     def get_protocol_evidence_map(self):
         """
         Return the protocol-evidence mapping for the current validation run.
+        """
+        raise NotImplementedError()
+
+
+class ProvidesProtocolEvidenceBundle(sciunit.Capability):
+    """Indicates that a model can expose the typed protocol-evidence bundle."""
+
+    def get_protocol_evidence_bundle(self):
+        """
+        Return the typed protocol-evidence bundle for the current validation run.
         """
         raise NotImplementedError()

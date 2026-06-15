@@ -359,6 +359,10 @@ compiled = compile_series_comparison_suite(
     }),
     suite_name="synthetic series suite",
 )
+assert compiled.model.get_protocol_evidence_bundle().to_dict()["cell_models"] == [
+    "SyntheticModel1",
+    "SyntheticModel2",
+]
 judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS"]
 

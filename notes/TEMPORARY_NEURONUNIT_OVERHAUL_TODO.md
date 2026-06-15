@@ -434,6 +434,12 @@ Remove this file when the listed items are either:
         scorer
       - updated the direct series-suite regression fixture to use the same
         bundle-backed prediction contract
+- [x] Keep the model capability seam typed when a migrated suite needs the
+      full protocol-evidence payload.
+      - added `ProvidesProtocolEvidenceBundle`
+      - `ReferenceValidationModel` now exposes `get_protocol_evidence_bundle()`
+      - the series suite now consumes that explicit capability instead of
+        reconstructing a bundle from `get_protocol_evidence_map()`
 - [x] Keep suite-level statistical rollups on an explicit typed case payload
       instead of inferring them from raw `case_score` dict fragments.
       - added `SuiteCaseStatisticalPayload`

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import quantities as pq
 
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
@@ -105,6 +106,24 @@ unit_conversion_score = ReferenceBandTest(case).compute_score(
 )
 assert unit_conversion_score.passed is True
 assert round(numeric_value(unit_conversion_score.observed), 6) == 100.0
+
+bundle_model = compile_reference_band_suite(
+    cases=[case],
+    summary={"MC": {"input_resistance_MOhm": 102.0}},
+    suite_name="Synthetic reference-band bundle suite",
+)
+bundle_model.model.protocol_evidence = ProtocolEvidenceBundle(
+    values={"fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]}
+)
+assert bundle_model.model.get_protocol_evidence_bundle().to_dict() == {
+    "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
+}
+assert bundle_model.model.get_protocol_evidence_rows("fi_curve_rows") == [
+    {"cell_name": "SyntheticCell", "current_pA": 100.0}
+]
+assert bundle_model.model.get_protocol_evidence_map() == {
+    "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
+}
 
 adapted_items = audit_items_from_reference_band_suite(compiled)
 assert len(adapted_items) == 2

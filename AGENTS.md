@@ -979,6 +979,10 @@ contract for future sessions.
       `coerce_protocol_evidence_bundle(...)`, keep the public runtime/model
       seam on `ProtocolEvidenceBundle` instead of advertising raw dicts as a
       first-class protocol-evidence payload type
+    - if a migrated SciUnit suite needs the full protocol-evidence payload,
+      expose that through an explicit capability such as
+      `ProvidesProtocolEvidenceBundle` and consume the bundle directly rather
+      than reconstructing it from a looser map/row pair inside the suite
     - keep the series-suite prediction seam typed too: do not split typed
       protocol evidence back into ad hoc `rows + context` payloads when the
       prediction bundle can carry `ProtocolEvidenceBundle` directly

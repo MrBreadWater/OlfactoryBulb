@@ -2207,6 +2207,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     instead of immediately re-splitting it into loose `rows + context`
     payloads, so the typed protocol-evidence contract survives all the way
     into model-side series scoring
+  - the model/capability seam now exposes that same typed protocol-evidence
+    contract explicitly through `ProvidesProtocolEvidenceBundle`, so migrated
+    suites that need the full payload do not have to reconstruct bundles from
+    a looser map/row pair
   - suite-level statistical rollups now also consume an explicit typed
     `SuiteCaseStatisticalPayload` from case scores instead of inferring
     p-value meaning from generic `observation` / `prediction` dict fragments,
