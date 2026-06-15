@@ -742,7 +742,13 @@ contract for future sessions.
     `summary_metric_status_map`, route that through one typed
     `ScalarStatusMapPolicy` instead of threading parallel `pass_values` /
     `warn_values` / `fail_values` lists across the declarative parser, suite
-    case, score builder, and adapted evidence. Keep protocol metric rows and
+    case, score builder, and adapted evidence. Keep scalar/reference-band
+    detailed evidence on the shared typed payload layer in
+    `olfactorybulb.neuronunit.validation_evidence` instead of hand-assembling
+    the same `dict` shape inside each suite module. When a maintained
+    scalar/reference-band suite changes its detailed evidence keys, extend
+    that shared payload layer first and adapt it into `AuditItem` evidence
+    from there. Keep protocol metric rows and
     grouped numeric summaries on the
     shared typed metric-table layer in
     `olfactorybulb.neuronunit.metric_tables` rather than passing fresh

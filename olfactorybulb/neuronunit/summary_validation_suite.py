@@ -10,7 +10,6 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
-from olfactorybulb.neuronunit.evidence_formatting import rounded_evidence_mapping
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable
 from olfactorybulb.neuronunit.metric_quantities import (
     MetricQuantitySpec,
@@ -29,6 +28,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_items_from_judged,
 )
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
+from olfactorybulb.neuronunit.validation_evidence import ScalarRuleEvidencePayload
 
 
 @dataclass(frozen=True)
@@ -246,28 +246,23 @@ def audit_items_from_summary_rule_suite(
             suite_kind_label="Summary-rule suite",
         )
     def _result_builder(case: SummaryRuleCase, score: SummaryRuleScore):
-        observed = score.observed.numeric
-        base: dict[str, Any] = {"group": score.observed.group, "observed": observed}
-        if score.observed.unit_text:
-            base["metric_unit"] = score.observed.unit_text
-        if score.observed.quantity_name:
-            base["metric_quantity_name"] = score.observed.quantity_name
-        if case.rule_kind == "summary_metric_min":
-            base["minimum"] = case.minimum
-        elif case.rule_kind == "summary_metric_max":
-            base["maximum"] = case.maximum
-        elif case.rule_kind == "summary_metric_range":
-            base["minimum"] = case.minimum
-            base["maximum"] = case.maximum
-        elif case.rule_kind == "summary_metric_status_map":
-            base.update(case.status_map_policy.observation_payload() if case.status_map_policy else {})
-        for metric_key in case.evidence_metric_keys:
-            base[metric_key] = compiled.model.summary.get(case.group, {}).get(metric_key, float("nan"))
+        extra_metrics = {
+            metric_key: compiled.model.summary.get(case.group, {}).get(metric_key, float("nan"))
+            for metric_key in case.evidence_metric_keys
+        }
+        evidence = ScalarRuleEvidencePayload.summary_rule(
+            observed=score.observed,
+            rule_kind=case.rule_kind,
+            minimum=case.minimum,
+            maximum=case.maximum,
+            status_map_policy=case.status_map_policy,
+            extra_metrics=extra_metrics,
+        ).to_dict()
         spec = audit_item_adapter_spec_from_case(case)
         return suite_case_result_from_spec(
             spec,
             status=score.status,
-            evidence=rounded_evidence_mapping(base),
+            evidence=evidence,
             score_text=_summary_score_text(case, score),
             norm_score=score.norm_score,
             score_payload=_summary_score_payload(case, score),

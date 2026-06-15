@@ -2228,6 +2228,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     shared frozen `SuiteCaseMappingPayload`, but the builders still accept
     plain mappings and coerce them at the boundary so the scientific-core
     contract tightens without making the maintained rule adapters verbose
+  - the remaining scalar/reference-band detailed evidence seam is tighter too:
+    summary, comparison, and reference-band suites now route their emitted
+    item evidence through a shared typed
+    `olfactorybulb.neuronunit.validation_evidence` layer instead of
+    hand-assembling the same dict shapes inline in each suite adapter
   - the central protocol-evidence seam now follows the same pattern through a
     shared `FrozenMappingPayload` layer, so `ProtocolEvidenceBundle.values`
     and `ProtocolEvidenceSeriesSpec.style` stop carrying mutable raw maps

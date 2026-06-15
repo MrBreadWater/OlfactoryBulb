@@ -10,7 +10,6 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
-from olfactorybulb.neuronunit.evidence_formatting import rounded_evidence_mapping
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import numeric_value
@@ -27,6 +26,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_items_from_judged,
 )
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
+from olfactorybulb.neuronunit.validation_evidence import ScalarRuleEvidencePayload
 
 
 @dataclass(frozen=True)
@@ -84,12 +84,12 @@ class ComparisonRuleScore(sciunit.Score):
         score: float | int | pq.Quantity,
         *,
         status: str,
-        evidence: dict[str, Any],
+        evidence_payload: ScalarRuleEvidencePayload,
         case: ComparisonRuleCase,
     ) -> None:
         super().__init__(score)
         self.status = str(status)
-        self.evidence = evidence
+        self.evidence_payload = evidence_payload
         self.case = case
 
     @property
@@ -98,6 +98,10 @@ class ComparisonRuleScore(sciunit.Score):
 
     def __str__(self) -> str:
         return self.status
+
+    @property
+    def evidence(self) -> dict[str, Any]:
+        return self.evidence_payload.to_dict()
 
 
 class ComparisonRuleTest(sciunit.Test):
@@ -168,37 +172,24 @@ class ComparisonRuleTest(sciunit.Test):
         if case.rule_kind == "all_finite_metric":
             assert isinstance(prediction, ScalarMetricValueMap)
             failing = prediction.failing_nonfinite()
-            evidence = rounded_evidence_mapping(
-                {
-                    "metric_key": case.metric_key,
-                    "cell_count": prediction.entity_count,
-                    "failing_values": failing,
-                }
+            evidence_payload = ScalarRuleEvidencePayload.all_finite(
+                prediction=prediction,
+                failing_values=failing,
             )
-            if prediction.unit_text:
-                evidence["metric_unit"] = prediction.unit_text
-            if prediction.quantity_name:
-                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if not failing else case.fail_status
-            return ComparisonRuleScore(len(failing), status=status, evidence=evidence, case=case)
+            return ComparisonRuleScore(len(failing), status=status, evidence_payload=evidence_payload, case=case)
 
         if case.rule_kind == "all_exact_metric":
             assert isinstance(prediction, ScalarMetricValueMap)
             failing = prediction.failing_not_equal(expected=case.expected, tolerance=case.tolerance)
-            evidence = rounded_evidence_mapping(
-                {
-                    "metric_key": case.metric_key,
-                    "expected": case.expected,
-                    "tolerance": case.tolerance,
-                    "failing_values": failing,
-                }
+            evidence_payload = ScalarRuleEvidencePayload.all_exact(
+                prediction=prediction,
+                expected=case.expected,
+                tolerance=case.tolerance,
+                failing_values=failing,
             )
-            if prediction.unit_text:
-                evidence["metric_unit"] = prediction.unit_text
-            if prediction.quantity_name:
-                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if not failing else case.fail_status
-            return ComparisonRuleScore(len(failing), status=status, evidence=evidence, case=case)
+            return ComparisonRuleScore(len(failing), status=status, evidence_payload=evidence_payload, case=case)
 
         if case.rule_kind == "group_ordering":
             assert isinstance(prediction, ScalarGroupPair)
@@ -212,55 +203,48 @@ class ComparisonRuleTest(sciunit.Test):
                 score_value = max(0.0, right_value - left_value)
             else:
                 raise ValueError(f"Unsupported group_ordering operator {case.operator!r}")
-            evidence = rounded_evidence_mapping(
-                {
-                    f"{case.left_group}_mean": left_value,
-                    f"{case.right_group}_mean": right_value,
-                    f"{case.right_group}_minus_{case.left_group}": prediction.delta,
-                }
+            evidence_payload = ScalarRuleEvidencePayload.group_ordering(
+                prediction=prediction,
             )
-            if prediction.unit_text:
-                evidence["metric_unit"] = prediction.unit_text
-            if prediction.quantity_name:
-                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if passed else case.fail_status
-            return ComparisonRuleScore(score_value, status=status, evidence=evidence, case=case)
+            return ComparisonRuleScore(
+                score_value,
+                status=status,
+                evidence_payload=evidence_payload,
+                case=case,
+            )
 
         if case.rule_kind == "group_abs_diff_max":
             assert isinstance(prediction, ScalarGroupPair)
-            left_value = prediction.left_numeric
-            right_value = prediction.right_numeric
             difference = prediction.absolute_difference
             passed = difference <= case.max_difference
-            evidence = rounded_evidence_mapping(
-                {
-                    f"{case.left_group}_mean": left_value,
-                    f"{case.right_group}_mean": right_value,
-                    "absolute_difference": difference,
-                    "max_difference": case.max_difference,
-                }
+            evidence_payload = ScalarRuleEvidencePayload.group_abs_diff_max(
+                prediction=prediction,
+                max_difference=case.max_difference,
             )
-            if prediction.unit_text:
-                evidence["metric_unit"] = prediction.unit_text
-            if prediction.quantity_name:
-                evidence["metric_quantity_name"] = prediction.quantity_name
             score_value = max(0.0, difference - case.max_difference)
             status = case.pass_status if passed else case.fail_status
-            return ComparisonRuleScore(score_value, status=status, evidence=evidence, case=case)
+            return ComparisonRuleScore(
+                score_value,
+                status=status,
+                evidence_payload=evidence_payload,
+                case=case,
+            )
 
         if case.rule_kind == "group_positive":
             assert isinstance(prediction, ScalarGroupValueSet)
-            group_values = prediction.numeric_group_values()
             failing_groups = prediction.failing_positive_groups()
-            evidence = rounded_evidence_mapping({f"{group}_mean": value for group, value in group_values.items()})
-            if failing_groups:
-                evidence["failing_groups"] = list(failing_groups)
-            if prediction.unit_text:
-                evidence["metric_unit"] = prediction.unit_text
-            if prediction.quantity_name:
-                evidence["metric_quantity_name"] = prediction.quantity_name
+            evidence_payload = ScalarRuleEvidencePayload.group_positive(
+                prediction=prediction,
+                failing_groups=failing_groups,
+            )
             status = case.pass_status if not failing_groups else case.fail_status
-            return ComparisonRuleScore(len(failing_groups), status=status, evidence=evidence, case=case)
+            return ComparisonRuleScore(
+                len(failing_groups),
+                status=status,
+                evidence_payload=evidence_payload,
+                case=case,
+            )
 
         raise ValueError(f"Unsupported comparison rule kind {case.rule_kind!r}")
 

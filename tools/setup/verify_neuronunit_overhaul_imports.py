@@ -36,6 +36,7 @@ REPO_IMPORTS = [
     "olfactorybulb.neuronunit.metric_tables",
     "olfactorybulb.neuronunit.metric_quantities",
     "olfactorybulb.neuronunit.scalar_observations",
+    "olfactorybulb.neuronunit.validation_evidence",
     "olfactorybulb.neuronunit.tests.publications",
     "olfactorybulb.neuronunit.tests.tests",
     "olfactorybulb.neuronunit.models.neuron_cell",

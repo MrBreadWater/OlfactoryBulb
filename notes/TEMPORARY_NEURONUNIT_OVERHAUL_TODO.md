@@ -532,6 +532,15 @@ Remove this file when the listed items are either:
       - `suite_statistical_summary` now records available-case coverage plus
         separate support and threshold gates
       - docs/template/tests now expose the supported-case contract
+- [x] Keep the remaining scalar/reference-band detailed evidence seams on one
+      shared typed payload layer instead of hand-assembling the same dicts in
+      each suite adapter.
+      - added `olfactorybulb.neuronunit.validation_evidence`
+      - summary, comparison, and reference-band suites now adapt their
+        detailed evidence through that layer while keeping the maintained
+        evidence keys stable
+      - direct payload coverage plus existing suite tests guard the shared
+        contract
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

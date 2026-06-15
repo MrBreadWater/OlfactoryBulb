@@ -35,6 +35,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_items_from_judged,
 )
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
+from olfactorybulb.neuronunit.validation_evidence import ReferenceBandEvidencePayload
 
 
 @dataclass(frozen=True)
@@ -237,26 +238,22 @@ def _evidence_payload(case: ReferenceBandCase, score: ReferenceBandScore) -> dic
     obs = case.observation
     band = score.accepted_band
     evidence_key = f"{obs.group}_mean"
-    evidence: dict[str, Any] = {
-        evidence_key: rounded(numeric_value(score.observed)),
-        "reference_mean": rounded(numeric_value(score.reference_mean)),
-        "reference_unit": obs.unit_text,
-        "accepted_low": rounded(numeric_value(score.accepted_low)),
-        "accepted_high": rounded(numeric_value(score.accepted_high)),
-        "accepted_sigma_multiplier": band.sigma_multiplier,
-        "accepted_interval_mode": band.mode,
-        "accepted_interval_standard": band.standard_label,
-        "__reference_annotations__": {evidence_key: case.reference_annotation},
-    }
-    if band.lower_bound is not None:
-        evidence["accepted_lower_bound"] = rounded(float(band.lower_bound))
-    if band.upper_bound is not None:
-        evidence["accepted_upper_bound"] = rounded(float(band.upper_bound))
-    if not np.isclose(band.raw_low, band.low):
-        evidence["unbounded_low"] = rounded(float(band.raw_low))
-    if not np.isclose(band.raw_high, band.high):
-        evidence["unbounded_high"] = rounded(float(band.raw_high))
-    return evidence
+    return ReferenceBandEvidencePayload(
+        observed_key=evidence_key,
+        observed_value=numeric_value(score.observed),
+        reference_mean=numeric_value(score.reference_mean),
+        reference_unit=obs.unit_text,
+        accepted_low=numeric_value(score.accepted_low),
+        accepted_high=numeric_value(score.accepted_high),
+        accepted_sigma_multiplier=band.sigma_multiplier,
+        accepted_interval_mode=band.mode,
+        accepted_interval_standard=band.standard_label,
+        reference_annotation=case.reference_annotation,
+        accepted_lower_bound=band.lower_bound,
+        accepted_upper_bound=band.upper_bound,
+        unbounded_low=float(band.raw_low) if not np.isclose(band.raw_low, band.low) else None,
+        unbounded_high=float(band.raw_high) if not np.isclose(band.raw_high, band.high) else None,
+    ).to_dict()
 
 
 def _reference_band_score_text(case: ReferenceBandCase, score: ReferenceBandScore) -> str:
