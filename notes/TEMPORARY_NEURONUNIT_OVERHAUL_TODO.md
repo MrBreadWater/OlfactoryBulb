@@ -716,3 +716,10 @@ Remove this file when the listed items are either:
       - the maintained HOWTO/tutorial/agent contract now documents those
         threshold-distribution fields as part of the stable suite-summary
         surface
+- [x] Surface nontrivial suite statistical threshold splits in the maintained
+      status-matrix header instead of leaving them only in raw evidence.
+      - the dashboard header now shows threshold pass counts when a suite has
+        a real split or threshold-gate failure
+      - weighted suites now also show the passing-weight slice when the
+        maintained case-weight contract is available
+      - direct dashboard coverage now asserts the threshold header text

@@ -839,7 +839,10 @@ contract for future sessions.
     has a real statistical threshold, preserve the threshold-passing and
     threshold-failing distributions across the statistically supported cases,
     including case ids and any principled supported-weight split, instead of
-    forcing the reader to infer them from the rolled-up p-value alone.
+    forcing the reader to infer them from the rolled-up p-value alone. In the
+    maintained suite status-matrix header, surface nontrivial threshold splits
+    alongside support shortfalls instead of burying them only in
+    `suite_statistical_summary`.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

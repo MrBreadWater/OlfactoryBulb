@@ -588,7 +588,9 @@ family emits a principled per-case weight through the maintained suite-case
 contract. In the current branch that means the series-comparison suite family,
 which uses matched-point count as its case weight. The threshold pass/fail
 fractions are relative to the statistically supported cases, not the full suite
-including unsupported cases.
+including unsupported cases. When the overview item renders through the
+maintained status-matrix header, nontrivial support shortfalls and threshold
+splits should stay visible there instead of hiding only in raw JSON evidence.
 
 For `reference_curve_match`, treat axis metadata as part of the rule contract:
 

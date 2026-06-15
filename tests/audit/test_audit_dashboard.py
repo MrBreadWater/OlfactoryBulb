@@ -568,4 +568,116 @@ with TemporaryDirectory() as tmp:
     assert "support 1/2 cases (gate fail)" in html
     assert "support 4/12 matched points (gate fail)" in html
 
+suite_threshold_distribution_report = AuditReport(
+    audit_id="suite_threshold_distribution_demo",
+    title="Suite threshold distribution demo",
+    items=[
+        AuditItem(
+            check_id="suite_threshold_distribution_demo.synthetic_suite.overview",
+            status="FAIL",
+            title="Synthetic threshold suite overview",
+            criterion="Every compiled suite case should satisfy its declared criterion.",
+            description="Synthetic suite summary item with a threshold split.",
+            acceptable="The detailed suite cases pass.",
+            acceptable_basis="Synthetic basis.",
+            evidence={
+                "suite_name": "suite_threshold_distribution_demo.synthetic_suite",
+                "suite_kind": "Synthetic suite",
+                "suite_case_count": 2,
+                "suite_status_summary": {"PASS": 1, "WARN": 0, "FAIL": 1},
+                "suite_norm_score_summary": {
+                    "count": 2.0,
+                    "mean": 0.5,
+                    "median": 0.5,
+                    "min": 0.0,
+                    "max": 1.0,
+                    "total_weight": 12.0,
+                    "weight_label": "matched points",
+                    "weighted_mean": 0.25,
+                },
+                "suite_aggregate_score": {
+                    "status_rollup": "worst_case",
+                    "norm_rollup": "minimum",
+                    "score_kind": "worst_case_minimum_norm",
+                    "score_interpretation": "Aggregate suite score derived from the worst detailed-case status plus the minimum normalized case score.",
+                    "status": "FAIL",
+                    "score_text": "worst FAIL, min norm 0",
+                    "score_value": 0.0,
+                },
+                "suite_statistical_summary": {
+                    "score_family_category": "equivalence",
+                    "statistical_test_family": "equivalence_tost",
+                    "rollup_method": "max",
+                    "rollup_source": "auto_default",
+                    "rollup_pvalue": 0.08,
+                    "available_case_count": 2,
+                    "total_case_count": 2,
+                    "available_case_fraction": 1.0,
+                    "available_case_weight": 12.0,
+                    "total_case_weight": 12.0,
+                    "available_case_weight_fraction": 1.0,
+                    "weight_label": "matched points",
+                    "score_text": "max TOST p 0.08",
+                    "score_interpretation": "Synthetic suite statistical summary.",
+                    "threshold": 0.05,
+                    "threshold_key": "equivalence_alpha",
+                    "threshold_direction": "le",
+                    "support_gate_passed": True,
+                    "weight_support_gate_passed": True,
+                    "threshold_gate_passed": False,
+                    "gate_passed": False,
+                    "threshold_passing_case_count": 1,
+                    "threshold_failing_case_count": 1,
+                    "threshold_passing_case_fraction": 0.5,
+                    "threshold_failing_case_fraction": 0.5,
+                    "threshold_passing_case_weight": 3.0,
+                    "threshold_failing_case_weight": 9.0,
+                    "threshold_passing_case_weight_fraction": 0.25,
+                    "threshold_failing_case_weight_fraction": 0.75,
+                    "case_pvalues": [0.02, 0.08],
+                    "case_check_ids": [
+                        "suite_threshold_distribution_demo.pass_detail",
+                        "suite_threshold_distribution_demo.fail_detail",
+                    ],
+                    "threshold_passing_case_check_ids": ["suite_threshold_distribution_demo.pass_detail"],
+                    "threshold_failing_case_check_ids": ["suite_threshold_distribution_demo.fail_detail"],
+                },
+                "warning_cases": [],
+                "failed_cases": ["Threshold failing detail"],
+                "suite_cases": [
+                    {
+                        "check_id": "suite_threshold_distribution_demo.pass_detail",
+                        "title": "Threshold passing detail",
+                        "status": "PASS",
+                        "score_text": "TOST p 0.02",
+                        "norm_score": 1.0,
+                    },
+                    {
+                        "check_id": "suite_threshold_distribution_demo.fail_detail",
+                        "title": "Threshold failing detail",
+                        "status": "FAIL",
+                        "score_text": "TOST p 0.08",
+                        "norm_score": 0.0,
+                    },
+                ],
+            },
+            companion_visuals=[
+                companion_visual_spec(kind="status_matrix", key="suite_cases", title="Suite case summary")
+            ],
+            group_id="suite_threshold_distribution_demo",
+            group_title="Suite threshold distribution demo",
+            detail_level="summary",
+            summary_rollup_exempt=True,
+        ),
+    ],
+)
+
+with TemporaryDirectory() as tmp:
+    output_dir = Path(tmp)
+    export_audit_dashboard(suite_threshold_distribution_report, output_dir)
+    html = (output_dir / "index.html").read_text()
+    assert "threshold 1/2 pass (gate fail)" in html
+    assert "threshold 3/12 matched points (gate fail)" in html
+    assert "threshold fail" in html
+
 print("audit_dashboard: OK")

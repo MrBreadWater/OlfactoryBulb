@@ -1482,6 +1482,10 @@ def _render_companion_visuals(
             support_gate_passed = suite_statistical_summary.get("support_gate_passed")
             weight_support_gate_passed = suite_statistical_summary.get("weight_support_gate_passed")
             threshold_gate_passed = suite_statistical_summary.get("threshold_gate_passed")
+            threshold_passing_case_count = _float_or_none(suite_statistical_summary.get("threshold_passing_case_count"))
+            threshold_failing_case_count = _float_or_none(suite_statistical_summary.get("threshold_failing_case_count"))
+            threshold_passing_case_weight = _float_or_none(suite_statistical_summary.get("threshold_passing_case_weight"))
+            threshold_failing_case_weight = _float_or_none(suite_statistical_summary.get("threshold_failing_case_weight"))
             if (
                 available_case_count is not None
                 and total_case_count is not None
@@ -1518,6 +1522,40 @@ def _render_companion_visuals(
                 statistical_parts.append(weight_support_text)
             elif weight_support_gate_passed is False:
                 statistical_parts.append("weight support gate fail")
+            if (
+                available_case_count is not None
+                and available_case_count > 0.0
+                and threshold_passing_case_count is not None
+                and threshold_failing_case_count is not None
+                and (
+                    bool(threshold_gate_passed) is False
+                    or threshold_failing_case_count > 0.0
+                )
+            ):
+                threshold_text = (
+                    f"threshold {_format_numeric(threshold_passing_case_count)}/"
+                    f"{_format_numeric(available_case_count)} pass"
+                )
+                if threshold_gate_passed is False:
+                    threshold_text += " (gate fail)"
+                statistical_parts.append(threshold_text)
+                if (
+                    threshold_passing_case_weight is not None
+                    and threshold_failing_case_weight is not None
+                    and available_case_weight is not None
+                    and available_case_weight > 0.0
+                    and (
+                        bool(threshold_gate_passed) is False
+                        or threshold_failing_case_weight > 0.0
+                    )
+                ):
+                    threshold_weight_text = (
+                        f"threshold {_format_numeric(threshold_passing_case_weight)}/"
+                        f"{_format_numeric(available_case_weight)} {weight_label}"
+                    )
+                    if threshold_gate_passed is False:
+                        threshold_weight_text += " (gate fail)"
+                    statistical_parts.append(threshold_weight_text)
             if threshold_gate_passed is False:
                 statistical_parts.append("threshold fail")
             if statistical_parts:
