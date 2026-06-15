@@ -573,6 +573,14 @@ Remove this file when the listed items are either:
       - model-side `SeriesPredictionBundle` exposes those same typed payloads,
         and the direct series-suite coverage now asserts that provenance keeps
         the typed protocol context intact
+- [x] Start the deeper provenance-bearing series observation layer instead of
+      leaving the scorer to coordinate separate reference/model datasets by
+      hand.
+      - added `SeriesObservedDatasetPair`
+      - `SeriesDistributionObservation.bound_datasets(...)` now binds the
+        typed reference and model datasets together before scoring
+      - series provenance now travels through that pair object, giving future
+        work a single typed place to extend richer bound-series metadata
 - [x] Keep the migrated suite compiler/model seam on one shared typed runtime
       bundle instead of passing parallel summary/metrics/protocol-evidence
       arguments into each `ReferenceValidationModel`.

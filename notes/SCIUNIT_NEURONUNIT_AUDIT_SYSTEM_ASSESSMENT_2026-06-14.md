@@ -2249,6 +2249,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     interpolated paths, and provenance summaries no longer have to accept new
     mutable `list[dict]` / `dict` seams once the data has crossed into the
     NeuronUnit-side scientific core
+  - the deeper provenance-bearing series observation layer has started too:
+    a `SeriesObservedDatasetPair` now binds the typed reference and model
+    datasets together before scoring, so paired provenance moves through one
+    typed object instead of being reconstructed from separate locals late in
+    the score path
   - the migrated suite compiler/model seam is tighter too: the
     reference-band, summary, comparison, and series suite compilers now all
     construct `ReferenceValidationModel` through one shared typed

@@ -24,6 +24,7 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     SeriesComparisonPolicy,
     SeriesDataSpec,
     SeriesDistributionObservation,
+    SeriesObservedDatasetPair,
     SeriesPredictionBundle,
     SeriesVisualContract,
     _interpolated_series_value,
@@ -619,6 +620,34 @@ assert equivalence_model_dataset.provenance_summary().protocol_context.to_dict()
     "cell_models": ["EqModel1", "EqModel2"],
     "step_duration_ms": 500.0,
 }
+equivalence_bound_datasets = equivalence_observation.bound_datasets(equivalence_model_bundle)
+assert isinstance(equivalence_bound_datasets, SeriesObservedDatasetPair)
+assert equivalence_bound_datasets.reference == equivalence_reference_dataset
+assert equivalence_bound_datasets.model == equivalence_model_dataset
+assert equivalence_bound_datasets.provenance() == SeriesObservationProvenance(
+    reference=SeriesProvenanceSummary.from_rows(
+        equivalence_reference_rows,
+        series_id_key="cell_id",
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+    ),
+    model=SeriesProvenanceSummary.from_rows(
+        equivalence_model_rows,
+        series_id_key="cell_name",
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        context={
+            "fi_curve_rows": equivalence_model_rows,
+            "cell_models": ["EqModel1", "EqModel2"],
+            "step_duration_ms": 500.0,
+        },
+        exclude_context_keys={"fi_curve_rows"},
+    ),
+)
 
 equivalence_case = SeriesComparisonCase(
     check_id="synthetic_series_equivalence",

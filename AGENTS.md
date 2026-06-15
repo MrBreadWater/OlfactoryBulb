@@ -666,6 +666,11 @@ contract for future sessions.
     them on `SeriesRowTable` / `SeriesContextPayload` instead of letting
     transforms, interpolation helpers, or provenance summaries fall back to
     fresh raw `list[dict]` / `dict` seams.
+    When both sides of a maintained series comparison are available, bind them
+    into one typed pair before scoring. `SeriesDistributionObservation` should
+    expose a shared `SeriesObservedDatasetPair` so provenance, transformed
+    rows, and protocol context move together instead of being recomputed from
+    separate reference/model locals deeper in `compute_score()`.
     Likewise, keep protocol evidence bundled through the typed
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple

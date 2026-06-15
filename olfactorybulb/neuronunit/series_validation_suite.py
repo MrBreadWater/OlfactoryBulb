@@ -866,6 +866,18 @@ class SeriesObservedDataset:
 
 
 @dataclass(frozen=True)
+class SeriesObservedDatasetPair:
+    reference: SeriesObservedDataset
+    model: SeriesObservedDataset
+
+    def provenance(self) -> SeriesObservationProvenance:
+        return SeriesObservationProvenance(
+            reference=self.reference.provenance_summary(),
+            model=self.model.provenance_summary(),
+        )
+
+
+@dataclass(frozen=True)
 class SeriesDistributionObservation:
     protocol_evidence_key: str
     reference_rows: ReferenceRowTable
@@ -969,6 +981,12 @@ class SeriesDistributionObservation:
             comparison_y_unit_text=self.comparison_y_unit_text,
             context=prediction.context,
             exclude_provenance_context_keys=(self.protocol_evidence_key,),
+        )
+
+    def bound_datasets(self, prediction: "SeriesPredictionBundle") -> SeriesObservedDatasetPair:
+        return SeriesObservedDatasetPair(
+            reference=self.reference_dataset(),
+            model=self.model_dataset(prediction),
         )
 
     def observation_payload(self) -> dict[str, Any]:
@@ -1981,8 +1999,9 @@ class SeriesComparisonTest(sciunit.Test):
         del observation
         obs = self.case.observation
         visual_contract = obs.visual_contract
-        reference_dataset = obs.reference_dataset()
-        model_dataset = obs.model_dataset(prediction)
+        bound_datasets = obs.bound_datasets(prediction)
+        reference_dataset = bound_datasets.reference
+        model_dataset = bound_datasets.model
         if obs.policy.alignment_policy not in SERIES_ALIGNMENT_POLICIES:
             raise ValueError(
                 f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
@@ -2319,12 +2338,7 @@ class SeriesComparisonTest(sciunit.Test):
             statistical_norm_score=statistical_norm_score,
             fallback_status=status,
         )
-        reference_provenance_summary = reference_dataset.provenance_summary()
-        model_provenance_summary = model_dataset.provenance_summary()
-        series_provenance = SeriesObservationProvenance(
-            reference=reference_provenance_summary,
-            model=model_provenance_summary,
-        )
+        series_provenance = bound_datasets.provenance()
         evidence_payload = SeriesComparisonEvidencePayload(
             visual_x_key=visual_contract.x_key,
             visual_reference_y_key=visual_contract.reference_y_key,
@@ -2584,6 +2598,7 @@ __all__ = [
     "SeriesComparisonScore",
     "SeriesComparisonTest",
     "SeriesObservedDataset",
+    "SeriesObservedDatasetPair",
     "SeriesPredictionBundle",
     "SeriesDistributionObservation",
     "SeriesVisualContract",
