@@ -12,7 +12,7 @@ from zipfile import ZipFile
 
 import pandas as pd
 
-from .reference_data import PROPERTY_UNITS
+from .reference_data import PROPERTY_UNITS, normalize_legacy_mc_tc_ephys_row
 from .reference_dataset_config import (
     dataset_output_path,
     dataset_output_specs,
@@ -519,6 +519,47 @@ def _formatted_summary_rule_rows(
     return rows
 
 
+def _legacy_summary_csv_rows(
+    config: dict[str, Any],
+    output_specs: dict[str, dict[str, Any]],
+    rule: dict[str, Any],
+) -> list[dict[str, object]]:
+    output_key = str(rule["output"])
+    try:
+        output_spec = output_specs[output_key]
+    except KeyError as exc:
+        raise KeyError(f"Unknown output key {output_key!r} in legacy summary CSV rule") from exc
+    if output_spec["row_type"] != "ephys":
+        raise ValueError("legacy_summary_csv_rules currently support only ephys outputs")
+
+    source_id = str(rule["source_id"])
+    csv_path = local_source_path(source_id, config=config)
+    source_meta = source_entry(source_id, config=config)
+    cell_type = str(rule["cell_type"]).strip()
+    marker_profile = str(rule.get("marker_profile", "principal_cell")).strip() or "principal_cell"
+    source_location = str(rule.get("source_location", "")).strip() or _clean_label(
+        source_meta.get("label", csv_path.name)
+    )
+    extraction_method = str(rule.get("extraction_method", "legacy_csv")).strip() or "legacy_csv"
+    fi_note_ids = _join_note_ids(rule.get("fi_note_ids", ""))
+
+    rows: list[dict[str, object]] = []
+    with csv_path.open(newline="") as handle:
+        for raw_row in csv.DictReader(handle):
+            normalized = normalize_legacy_mc_tc_ephys_row(
+                cell_type,
+                csv_path,
+                raw_row,
+                marker_profile=marker_profile,
+                source_location=source_location,
+                source_url=stable_source_url(source_id, config=config),
+                extraction_method=extraction_method,
+                fi_note_ids=fi_note_ids,
+            )
+            rows.append(_build_row(output_spec["columns"], normalized))
+    return rows
+
+
 def _evaluate_condition(rule: dict[str, Any], context: dict[str, Any]) -> bool:
     condition = str(rule.get("condition", "")).strip()
     if not condition:
@@ -538,6 +579,8 @@ def _static_rows(
     row_type: str,
 ) -> dict[str, list[dict[str, object]]]:
     rows_by_output: dict[str, list[dict[str, object]]] = {key: [] for key in output_specs}
+    if not section:
+        return rows_by_output
     default_output_key = primary_output_key(config, row_type)
     for row in section:
         output_key = str(row.get("output") or default_output_key)
@@ -561,6 +604,8 @@ def _conditional_rows(
     context: dict[str, Any],
 ) -> dict[str, list[dict[str, object]]]:
     rows_by_output: dict[str, list[dict[str, object]]] = {key: [] for key in output_specs}
+    if not section:
+        return rows_by_output
     default_output_key = primary_output_key(config, row_type)
     for row in section:
         if not _evaluate_condition(row, context):
@@ -648,6 +693,9 @@ def extract_reference_dataset(*, dataset_id: str, config_path: Path | None = Non
     for rule in dataset_section(config, "formatted_summary_rules"):
         output_key = str(rule["output"])
         rows[output_key].extend(_formatted_summary_rule_rows(config, cache, output_specs, rule))
+    for rule in dataset_section(config, "legacy_summary_csv_rules"):
+        output_key = str(rule["output"])
+        rows[output_key].extend(_legacy_summary_csv_rows(config, output_specs, rule))
     for rule in dataset_section(config, "point_rules"):
         output_key = str(rule.get("output") or primary_output_key(config, "fi_curve"))
         rows[output_key].extend(_point_rule_rows(config, cache, output_specs, rule))

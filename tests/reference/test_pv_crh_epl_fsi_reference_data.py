@@ -10,9 +10,9 @@ from olfactorybulb.audit.burton_urban_fi import BurtonUrbanProtocol, build_valid
 from olfactorybulb.audit.core import AuditReport, format_report
 from olfactorybulb.audit.reference_data import (
     BMU2024_EPL_FSI_PROTOCOL_ID,
+    BURTON_MC_TC_DATASET_ID,
     BU2014_MC_TC_PROTOCOL_ID,
     FI_PROTOCOL_DIFFERENCE_NOTE_ID,
-    LEGACY_MC_TC_EPHYS_FILENAMES,
     NEEDS_MANUAL_EXTRACTION_FILENAME,
     PV_CRH_EPL_FSI_EPHYS_COLUMNS,
     PV_CRH_EPL_FSI_EPHYS_FILENAME,
@@ -26,11 +26,13 @@ from olfactorybulb.audit.reference_data import (
     REFERENCE_DATA_DIR,
     VALIDATION_NOTES_COLUMNS,
     VALIDATION_NOTES_FILENAME,
+    load_burton_mc_tc_protocol_rows,
     load_normalized_legacy_mc_tc_rows,
     load_pv_crh_epl_fsi_protocol_rows,
 )
 from olfactorybulb.audit.reference_notes import notes_for_rows, render_notes
 from olfactorybulb.audit.reference_sources import (
+    REQUIRED_BURTON2014_MC_TC_SOURCE_IDS,
     BURTON2024_S15_DATA_SOURCE_ID,
     BURTON2024_S8_DATA_SOURCE_ID,
     local_source_path,
@@ -115,8 +117,8 @@ assert all(";" not in str(source) for source in ephys_df["Source"])
 assert all(";" not in str(cell_type) for cell_type in ephys_df["cell_type"])
 
 legacy_columns = ["Property", "mean +/- sd", "n", "Source", "Notes"]
-for filename in LEGACY_MC_TC_EPHYS_FILENAMES.values():
-    legacy_df = pd.read_csv(REFERENCE_DATA_DIR / filename)
+for source_id in REQUIRED_BURTON2014_MC_TC_SOURCE_IDS:
+    legacy_df = pd.read_csv(local_source_path(source_id, dataset_id=BURTON_MC_TC_DATASET_ID))
     assert list(legacy_df.columns) == legacy_columns
 
 s8_path = local_source_path(BURTON2024_S8_DATA_SOURCE_ID)
@@ -162,6 +164,16 @@ assert (quantile_rows["q_high_label"] == "95th percentile").all()
 normalized_legacy_rows = [
     row for row in load_normalized_legacy_mc_tc_rows() if row["protocol_id"] == BU2014_MC_TC_PROTOCOL_ID
 ]
+legacy_protocol_context = [
+    {
+        "protocol_id": row["protocol_id"],
+        "note_ids": "",
+        "Property": "FI Protocol",
+        "source": row["source"],
+    }
+    for row in load_burton_mc_tc_protocol_rows()
+    if row["protocol_id"] == BU2014_MC_TC_PROTOCOL_ID
+]
 bmw_protocol_context = [
     {
         "protocol_id": row["protocol_id"],
@@ -172,7 +184,10 @@ bmw_protocol_context = [
     for row in load_pv_crh_epl_fsi_protocol_rows()
     if row["protocol_id"] == BMU2024_EPL_FSI_PROTOCOL_ID
 ]
-matched_notes = notes_for_rows(normalized_legacy_rows + bmw_protocol_context, scope="fI_validation")
+matched_notes = notes_for_rows(
+    normalized_legacy_rows + legacy_protocol_context + bmw_protocol_context,
+    scope="fI_validation",
+)
 assert FI_PROTOCOL_DIFFERENCE_NOTE_ID in {note.note_id for note in matched_notes}
 rendered_notes = render_notes(matched_notes, format="plain")
 assert "Notes / protocol caveats" in rendered_notes

@@ -77,6 +77,10 @@ but **not** as the first place to hand-edit data.
   targets are transport details, not canonical provenance.
 - If a source-only gap remains unresolved, record it in the appropriate
   `needs_manual_extraction.csv` file instead of fabricating values.
+- If a maintained reference source is already a small committed summary CSV,
+  put that file under `source_data/<dataset>/` and route it through the
+  dataset config with `legacy_summary_csv_rules` rather than keeping a
+  repo-side one-off loader.
 
 ## Useful commands
 
@@ -93,6 +97,8 @@ Verify generated outputs:
 source tools/setup/activate_obgpu.sh OBGPU
 python -m tests.reference.test_reference_data_sanity
 python tools/run_audit.py test_suite_status --suite reference_bundles
+python tools/run_audit.py reference_dataset_contracts --dataset-id burton_mc_tc_principal_cells
+python tools/run_audit.py reference_dataset_status --dataset-id burton_mc_tc_principal_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi

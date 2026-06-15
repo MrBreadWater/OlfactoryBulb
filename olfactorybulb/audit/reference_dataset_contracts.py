@@ -106,6 +106,22 @@ def _missing_rows(rows: list[dict[str, str]], fields: tuple[str, ...]) -> list[i
     return missing
 
 
+def _missing_provenance_rows(rows: list[dict[str, str]], fields: tuple[str, ...]) -> list[int]:
+    missing: list[int] = []
+    for index, row in enumerate(rows, start=2):
+        extraction_method = str(row.get("extraction_method", "")).strip()
+        row_missing = False
+        for field in fields:
+            if field == "source_url" and extraction_method == "legacy_csv":
+                continue
+            if not str(row.get(field, "")).strip():
+                row_missing = True
+                break
+        if row_missing:
+            missing.append(index)
+    return missing
+
+
 def _bad_numeric_rows(rows: list[dict[str, str]], columns: list[str]) -> dict[str, list[int]]:
     bad: dict[str, list[int]] = {}
     for column in columns:
@@ -161,7 +177,7 @@ def run(args: argparse.Namespace) -> AuditReport:
         if row_type == "manual":
             required_provenance = [field for field in required_provenance if field != "source_url"]
         if required_provenance:
-            missing = _missing_rows(rows, tuple(required_provenance))
+            missing = _missing_provenance_rows(rows, tuple(required_provenance))
             items.append(
                 _item(
                     check_id=f"{output_key}_provenance_fields_populated",
@@ -169,8 +185,8 @@ def run(args: argparse.Namespace) -> AuditReport:
                     title=f"{output_key} rows carry populated provenance fields",
                     criterion="Generated reference rows should preserve source file, stable source URL, and source location whenever those fields are part of the schema.",
                     description="This enforces row-level traceability so suspicious values can be audited back to a specific paper asset or location later.",
-                    acceptable="Every populated row has non-empty provenance fields present in its schema.",
-                    acceptable_basis="These are maintained repository rules for reproducible literature-backed validation, not optional display metadata.",
+                    acceptable="Every populated row has non-empty provenance fields present in its schema. Rows extracted from committed legacy summary CSVs may leave source_url blank when no stable row-level external URL exists yet.",
+                    acceptable_basis="These are maintained repository rules for reproducible literature-backed validation. The current contract still allows legacy_csv rows to rely on source_file plus source_location when the upstream row-level URL was never preserved in the committed legacy source bundle.",
                     evidence={
                         "dataset_id": dataset_id,
                         "output_key": output_key,

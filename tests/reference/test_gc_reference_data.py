@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 
 from olfactorybulb.audit.reference_data import (
+    BURTON_MC_TC_DATASET_ID,
     BU2014_MC_TC_PROTOCOL_ID,
     GC_EPHYS_COLUMNS,
     GC_EPHYS_FILENAME,
@@ -21,10 +22,10 @@ from olfactorybulb.audit.reference_data import (
     GC_SGC_DGC_FI_CURVE_FILENAME,
     GC_SYNAPTIC_LATENCY_FILENAME,
     GC_VALIDATION_NOTES_FILENAME,
-    LEGACY_MC_TC_EPHYS_FILENAMES,
     REFERENCE_DATA_DIR,
     VALIDATION_NOTES_COLUMNS,
     csv_rows,
+    load_burton_mc_tc_protocol_rows,
     load_gc_ephys_rows,
     load_gc_fi_curve_rows,
     load_gc_identity_rows,
@@ -37,6 +38,7 @@ from olfactorybulb.audit.reference_data import (
 )
 from olfactorybulb.audit.reference_notes import load_notes, notes_for_rows, render_notes
 from olfactorybulb.audit.reference_dataset_engine import write_reference_dataset_outputs
+from olfactorybulb.audit.reference_sources import REQUIRED_BURTON2014_MC_TC_SOURCE_IDS, local_source_path
 
 
 write_reference_dataset_outputs(dataset_id="granule_cells")
@@ -152,12 +154,17 @@ notes = load_notes(paths["notes"])
 legacy_fi_rows = [
     row for row in load_normalized_legacy_mc_tc_rows() if str(row.get("protocol_id", "")).strip() == BU2014_MC_TC_PROTOCOL_ID
 ]
+legacy_protocol_context = [
+    {"protocol_id": row["protocol_id"], "note_ids": "", "Property": "FI Protocol", "source": row["source"]}
+    for row in load_burton_mc_tc_protocol_rows()
+    if row["protocol_id"] == BU2014_MC_TC_PROTOCOL_ID
+]
 gc_protocol_context = [
     {"protocol_id": row["protocol_id"], "note_ids": "", "Property": "FI Protocol", "source": row["source"]}
     for row in load_gc_protocol_rows()
     if row["protocol_id"] in {"BU2015_GC_intrinsic_current_clamp", "GERAMITA2016_sGC_dGC_intrinsic_current_clamp"}
 ]
-combined_fi_notes = notes_for_rows(legacy_fi_rows + gc_protocol_context, scope="fI_validation", notes=notes)
+combined_fi_notes = notes_for_rows(legacy_fi_rows + legacy_protocol_context + gc_protocol_context, scope="fI_validation", notes=notes)
 combined_fi_note_ids = {note.note_id for note in combined_fi_notes}
 assert "N_GC_PROTOCOL_DIFFERENCE" in combined_fi_note_ids
 assert "Notes / protocol caveats" in render_notes(combined_fi_notes, format="plain")
@@ -188,9 +195,9 @@ if len(digitized_rows):
     assert digitized_rows["source_location"].fillna("").ne("").all()
     assert digitized_rows["note_ids"].fillna("").str.contains("N_GC_FI_DIGITIZATION").all()
 
-for filename in LEGACY_MC_TC_EPHYS_FILENAMES.values():
-    legacy_rows = csv_rows(REFERENCE_DATA_DIR / filename)
-    assert legacy_rows, filename
+for source_id in REQUIRED_BURTON2014_MC_TC_SOURCE_IDS:
+    legacy_rows = csv_rows(local_source_path(source_id, dataset_id=BURTON_MC_TC_DATASET_ID))
+    assert legacy_rows, source_id
 
 readme_text = paths["readme"].read_text()
 assert "Burton & Urban 2015 contributes" in readme_text

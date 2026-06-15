@@ -15,6 +15,8 @@ from olfactorybulb.audit.reference_validation_document import ValidationDesignRe
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
     csv_rows,
+    load_burton_mc_tc_ephys_rows,
+    load_burton_mc_tc_protocol_rows,
     load_dataset_output_rows,
     load_normalized_legacy_mc_tc_rows,
 )
@@ -105,6 +107,8 @@ SERIES_RULE_KINDS = {
 
 
 REFERENCE_ROW_LOADERS: dict[str, Callable[[], list[dict[str, Any]]]] = {
+    "burton_mc_tc_ephys": load_burton_mc_tc_ephys_rows,
+    "burton_mc_tc_protocols": load_burton_mc_tc_protocol_rows,
     "legacy_mc_tc_ephys": load_normalized_legacy_mc_tc_rows,
     "epl_fsi_ephys": lambda: load_dataset_output_rows(dataset_id="pv_crh_epl_fsi", output_key="ephys"),
     "epl_fsi_fi_curve": lambda: load_dataset_output_rows(dataset_id="pv_crh_epl_fsi", output_key="fi_curve"),

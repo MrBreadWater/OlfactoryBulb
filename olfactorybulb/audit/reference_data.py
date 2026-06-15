@@ -10,10 +10,17 @@ from typing import Any, Iterable
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REFERENCE_DATA_DIR = REPO_ROOT / "research_context"
 
-LEGACY_MC_TC_EPHYS_FILENAMES = {
+BURTON_MC_TC_DATASET_ID = "burton_mc_tc_principal_cells"
+BURTON_MC_TC_EPHYS_FILENAME = "BURTON_MC_TC_ephys.csv"
+BURTON_MC_TC_PROTOCOLS_FILENAME = "BURTON_MC_TC_protocols.csv"
+BURTON_MC_TC_NEEDS_MANUAL_EXTRACTION_FILENAME = "BURTON_MC_TC_needs_manual_extraction.csv"
+BURTON_MC_TC_EXTRACTION_README_FILENAME = "BURTON_MC_TC_extraction_README.md"
+
+BURTON_MC_TC_SOURCE_FILENAMES = {
     "MC": "MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv",
     "TC": "MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv",
 }
+LEGACY_MC_TC_EPHYS_FILENAMES = BURTON_MC_TC_SOURCE_FILENAMES
 
 PV_CRH_EPL_FSI_DATASET_ID = "pv_crh_epl_fsi"
 PV_CRH_EPL_FSI_EPHYS_FILENAME = "PV_CRH_EPL_FSI_ephys.csv"
@@ -436,7 +443,17 @@ def _bool_csv(value: bool) -> str:
     return "true" if value else "false"
 
 
-def _normalized_legacy_row(cell_type: str, csv_path: Path, row: dict[str, str]) -> dict[str, Any]:
+def normalize_legacy_mc_tc_ephys_row(
+    cell_type: str,
+    csv_path: Path,
+    row: dict[str, str],
+    *,
+    marker_profile: str = "principal_cell",
+    source_location: str = "legacy MC/TC electrophysiology reference CSV",
+    source_url: str = "",
+    extraction_method: str = "legacy_csv",
+    fi_note_ids: str = FI_PROTOCOL_DIFFERENCE_NOTE_ID,
+) -> dict[str, Any]:
     property_name = canonical_property_name(row.get("Property", ""))
     mean_value, sd_value = parse_mean_plus_minus_sd(row.get("mean +/- sd", ""))
     fi_related = is_fi_related_property(property_name)
@@ -448,7 +465,7 @@ def _normalized_legacy_row(cell_type: str, csv_path: Path, row: dict[str, str]) 
         "Source": str(row.get("Source", "") or "").strip(),
         "Notes": notes,
         "cell_type": cell_type,
-        "marker_profile": "principal_cell",
+        "marker_profile": marker_profile,
         "protocol_id": BU2014_MC_TC_PROTOCOL_ID if fi_related else "",
         "mean": mean_value if mean_value is not None else "",
         "sd": sd_value if sd_value is not None else "",
@@ -456,25 +473,28 @@ def _normalized_legacy_row(cell_type: str, csv_path: Path, row: dict[str, str]) 
         "stat_type": "mean_sd" if mean_value is not None and sd_value is not None else "",
         "unit": PROPERTY_UNITS.get(property_name, ""),
         "source_file": csv_path.name,
-        "source_location": "legacy MC/TC electrophysiology reference CSV",
-        "source_url": "",
+        "source_location": source_location,
+        "source_url": source_url,
         "data_kind": "fI_summary_metric" if fi_related else "intrinsic_property",
-        "extraction_method": "legacy_csv",
+        "extraction_method": extraction_method,
         "include_in_validation": _bool_csv(True),
         "include_in_fi_validation": _bool_csv(fi_related),
         "confidence": "high",
-        "note_ids": FI_PROTOCOL_DIFFERENCE_NOTE_ID if fi_related else "",
+        "note_ids": fi_note_ids if fi_related else "",
         "reported_value_raw": str(row.get("mean +/- sd", "") or "").strip(),
     }
 
 
+def load_burton_mc_tc_ephys_rows() -> list[dict[str, str]]:
+    return load_dataset_output_rows(dataset_id=BURTON_MC_TC_DATASET_ID, output_key="ephys")
+
+
+def load_burton_mc_tc_protocol_rows() -> list[dict[str, str]]:
+    return load_dataset_output_rows(dataset_id=BURTON_MC_TC_DATASET_ID, output_key="protocols")
+
+
 def load_normalized_legacy_mc_tc_rows() -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for cell_type, filename in LEGACY_MC_TC_EPHYS_FILENAMES.items():
-        csv_path = reference_data_path(filename)
-        for row in csv_rows(csv_path):
-            rows.append(_normalized_legacy_row(cell_type, csv_path, row))
-    return rows
+    return [dict(row) for row in load_burton_mc_tc_ephys_rows()]
 
 
 def load_pv_crh_epl_fsi_ephys_rows() -> list[dict[str, str]]:

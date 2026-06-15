@@ -46,6 +46,7 @@ SUITES: dict[str, TestSuiteSpec] = {
         description="Reference-dataset extraction, downloader, and normalization smoke tests for maintained datasets.",
         modules=(
             TestModuleSpec("tests.reference.test_reference_dataset_engine", "Declarative reference-dataset engine smoke tests"),
+            TestModuleSpec("tests.reference.test_burton_mc_tc_reference_data", "Burton MC/TC reference-data smoke tests"),
             TestModuleSpec("tests.reference.test_download_epl_fsi_reference_sources", "EPL-FSI source downloader smoke tests"),
             TestModuleSpec("tests.reference.test_pv_crh_epl_fsi_reference_data", "EPL-FSI reference-data smoke tests"),
             TestModuleSpec("tests.reference.test_download_gc_reference_sources", "Granule-cell source downloader smoke tests"),

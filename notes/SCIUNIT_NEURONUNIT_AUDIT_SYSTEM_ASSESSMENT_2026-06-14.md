@@ -1981,14 +1981,19 @@ instead of note-only planning:
     all produce a maintained report surface successfully on this branch, and
     the current full run reports `20` items with summary
     `{'FAIL': 1, 'PASS': 16, 'WARN': 3}`.
-13. The branch now also vendors the two legacy MC/TC electrophysiology CSVs
-   still consumed directly by the maintained `burton_urban_fi` path:
-   - `research_context/MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv`
-   - `research_context/MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv`
-   This is a reproducibility fix for clean worktrees, not the final design.
-   The longer-term target is to migrate that dependency behind a committed
-   dataset/observation contract instead of leaving it as an ad hoc legacy file
-   read.
+13. The Burton MC/TC legacy summary CSVs are now behind a real reference-dataset
+   contract instead of a direct special-case file read:
+   - source files now live under
+     `research_context/source_data/burton_mc_tc_principal_cells/`
+   - the maintained dataset config is
+     `research_context/reference_datasets/burton_mc_tc_principal_cells.dataset.toml`
+   - the maintained canonical outputs are now
+     `research_context/BURTON_MC_TC_ephys.csv`,
+     `research_context/BURTON_MC_TC_protocols.csv`,
+     `research_context/BURTON_MC_TC_needs_manual_extraction.csv`, and
+     `research_context/BURTON_MC_TC_extraction_README.md`
+   - the Burton validation path now loads those canonical dataset outputs
+     instead of normalizing the source CSVs inline at runtime
 14. Current verified branch state for the maintained non-skip Burton
     validation path:
     - `python tools/run_reference_validation.py --validation-id burton_urban_fi --cell-count 1 --jobs 1 --json`

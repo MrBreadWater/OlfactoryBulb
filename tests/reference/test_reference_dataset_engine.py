@@ -91,4 +91,36 @@ for output_key in (
 
 assert gc_written["rows"]["protocols"][0]["protocol_id"] == "BU2014_MC_TC_2s_0_300pA_50pA"
 
+burton_config_path = dataset_config_path("burton_mc_tc_principal_cells")
+assert burton_config_path.exists(), burton_config_path
+burton_config = load_dataset_config(dataset_id="burton_mc_tc_principal_cells")
+assert burton_config["dataset_id"] == "burton_mc_tc_principal_cells"
+assert burton_config["source_data_subdir"] == "burton_mc_tc_principal_cells"
+assert len(burton_config["sources"]) == 2
+
+burton_result = extract_reference_dataset(dataset_id="burton_mc_tc_principal_cells")
+assert burton_result["rows"]["ephys"], "expected Burton MC/TC ephys rows"
+assert burton_result["rows"]["protocols"], "expected Burton MC/TC protocol rows"
+assert burton_result["rows"]["manual"], "expected Burton MC/TC manual rows"
+
+mc_row = next(
+    row for row in burton_result["rows"]["ephys"]
+    if row["cell_type"] == "MC" and row["Property"] == "Membrane Time Constant" and row["Source"] == "Burton & Urban (2014)"
+)
+assert float(mc_row["mean"]) == 21.3
+assert mc_row["protocol_id"] == ""
+
+mc_fi_row = next(
+    row for row in burton_result["rows"]["ephys"]
+    if row["cell_type"] == "MC" and row["Property"] == "FI Curve Slope" and row["Source"] == "Burton & Urban (2014)"
+)
+assert mc_fi_row["protocol_id"] == "BU2014_MC_TC_2s_0_300pA_50pA"
+assert mc_fi_row["include_in_fi_validation"] == "true"
+
+burton_written = write_reference_dataset_outputs(dataset_id="burton_mc_tc_principal_cells")
+for output_key in ("ephys", "protocols", "manual", "readme"):
+    assert dataset_output_path(burton_config, output_key).exists(), output_key
+
+assert burton_written["rows"]["protocols"][0]["protocol_id"] == "BU2014_MC_TC_2s_0_300pA_50pA"
+
 print("reference_dataset_engine: OK")

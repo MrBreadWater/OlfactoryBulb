@@ -52,7 +52,7 @@ acceptable = "All protocol caveats relevant to the current firing-rate-versus-cu
 acceptable_basis = "The messages are loaded from validation notes by matching the set of protocol identifiers currently in scope."
 scope = "fI_validation"
 row_contexts = [
-  { loader = "legacy_mc_tc_ephys", filter_field = "protocol_id", filter_values = ["BU2014_MC_TC_2s_0_300pA_50pA"] },
+  { loader = "burton_mc_tc_protocols", filter_field = "protocol_id", filter_values = ["BU2014_MC_TC_2s_0_300pA_50pA"], as_protocol_context = true, property_name = "FI Protocol" },
   { loader = "pv_crh_epl_fsi_protocols", filter_field = "protocol_id", filter_values = ["BMU2024_EPL_FSI_500ms_50_600pA_50pA"], as_protocol_context = true, property_name = "FI Protocol" },
 ]
 
@@ -66,7 +66,7 @@ acceptable = "Any configured Burton-specific reference-band caveats are displaye
 acceptable_basis = "The messages are loaded from validation notes by matching the Burton and Urban source rows currently in scope."
 scope = "reference_validation"
 row_contexts = [
-  { loader = "legacy_mc_tc_ephys", filter_field = "Source", filter_values = ["Burton & Urban (2014)"] },
+  { loader = "burton_mc_tc_ephys", filter_field = "Source", filter_values = ["Burton & Urban (2014)"] },
 ]
 
 [[checks]]
@@ -217,7 +217,7 @@ acceptable_basis = "This is a prerequisite for interpreting the gain-versus-resi
 
 [[checks]]
 kind = "reference_band_rows"
-loader = "legacy_mc_tc_ephys"
+loader = "burton_mc_tc_ephys"
 reference_source = "Burton & Urban (2014)"
 group_field = "cell_type"
 sigma_arg_name = "reference_sigma_multiplier"

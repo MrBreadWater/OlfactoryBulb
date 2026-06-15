@@ -1,0 +1,2 @@
+source,source_url,source_file,figure_or_table,target_metric,reason,suggested_action
+Burton & Urban (2014),,MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv; MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv,principal-cell f-I point sets,Pointwise MC/TC firing-rate-versus-current rows,"The maintained Burton bundle currently normalizes only summary metrics from the committed legacy CSVs, not raw per-step firing-rate point sets.",Add a provenance-bearing point-rule source or a curated source table if exact MC/TC current-rate point comparisons become required.

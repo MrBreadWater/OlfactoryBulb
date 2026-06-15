@@ -19,7 +19,8 @@ from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, roun
 from olfactorybulb.audit.reference_data import (
     BMU2024_EPL_FSI_PROTOCOL_ID,
     BU2014_MC_TC_PROTOCOL_ID,
-    load_normalized_legacy_mc_tc_rows,
+    load_burton_mc_tc_ephys_rows,
+    load_burton_mc_tc_protocol_rows,
     load_pv_crh_epl_fsi_protocol_rows,
 )
 from olfactorybulb.audit.reference_notes import notes_for_rows
@@ -497,7 +498,7 @@ def _rounded_dict(values: dict[str, Any], digits: int = 3) -> dict[str, Any]:
 
 def _load_burton_csv_references() -> dict[str, dict[str, ReferenceStat]]:
     reference_by_cell_type: dict[str, dict[str, ReferenceStat]] = {"MC": {}, "TC": {}}
-    for row in load_normalized_legacy_mc_tc_rows():
+    for row in load_burton_mc_tc_ephys_rows():
         if str(row.get("Source", "")).strip() != BURTON_REFERENCE_SOURCE:
             continue
         cell_type = str(row.get("cell_type", "")).strip()
@@ -976,7 +977,7 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
     uploaded_property_names = sorted(
         {
             str(row.get("Property", "")).strip()
-            for row in load_normalized_legacy_mc_tc_rows()
+            for row in load_burton_mc_tc_ephys_rows()
             if str(row.get("Source", "")).strip() == BURTON_REFERENCE_SOURCE
             if BURTON_CSV_PROPERTY_MAP.get(str(row.get("Property", "")).strip(), (None, None, None))[0] in supported_metric_keys
         }
@@ -998,9 +999,9 @@ def _build_uploaded_reference_coverage_item() -> AuditItem:
 
 
 def _build_fi_protocol_caveat_item() -> AuditItem:
-    fi_rows = [
+    burton_protocol_rows = [
         row
-        for row in load_normalized_legacy_mc_tc_rows()
+        for row in load_burton_mc_tc_protocol_rows()
         if str(row.get("protocol_id", "")).strip() == BU2014_MC_TC_PROTOCOL_ID
     ]
     epl_protocol_rows = [
@@ -1013,7 +1014,7 @@ def _build_fi_protocol_caveat_item() -> AuditItem:
         for row in load_pv_crh_epl_fsi_protocol_rows()
         if str(row.get("protocol_id", "")).strip() == BMU2024_EPL_FSI_PROTOCOL_ID
     ]
-    matched_notes = notes_for_rows(fi_rows + epl_protocol_rows, scope="fI_validation")
+    matched_notes = notes_for_rows(burton_protocol_rows + epl_protocol_rows, scope="fI_validation")
     if not matched_notes:
         return AuditItem(
             check_id="fi_protocol_caveats",

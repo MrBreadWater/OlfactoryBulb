@@ -645,6 +645,10 @@ contract for future sessions.
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple
     through protocol results and rule consumers.
+    Likewise, when a maintained literature bundle still arrives as a committed
+    local summary CSV, move it under `research_context/source_data/<dataset>/`
+    and route it through a declarative reference-dataset config rather than
+    leaving a one-off repo-side loader as the long-term source of truth.
     Inside the series-comparison core itself, prefer the typed
     `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
     x-key/y-key/unit/transform parameter bundles across bins, paths,

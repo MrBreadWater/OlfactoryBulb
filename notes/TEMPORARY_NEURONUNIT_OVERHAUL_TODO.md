@@ -295,3 +295,12 @@ Remove this file when the listed items are either:
         suite-case contract
       - the maintained series-comparison suite currently uses
         `matched_point_count` as that weight source
+- [x] Move the Burton MC/TC legacy summary CSV dependency behind the same
+      declarative reference-dataset contract used by the other maintained
+      literature bundles.
+      - added `burton_mc_tc_principal_cells.dataset.toml`
+      - moved the legacy source CSVs under
+        `research_context/source_data/burton_mc_tc_principal_cells/`
+      - added canonical generated outputs for ephys/protocol/manual/readme
+      - the Burton validation path now loads those canonical dataset outputs
+        instead of normalizing the source CSVs inline at runtime

@@ -209,6 +209,19 @@ marker_profile = "Example Marker"
 # confidence = "high"
 # notes = "Pre-formatted mean ± spread rows extracted directly from the source table."
 
+# Optional legacy-summary CSV rule for already-curated summary CSVs with columns
+# like Property / mean +/- sd / n / Source / Notes. Prefer this over custom
+# repo-side loaders when a maintained source bundle is already a small
+# normalized summary table rather than a raw spreadsheet.
+# [[legacy_summary_csv_rules]]
+# output = "ephys"
+# source_id = "example_local_summary_csv"
+# cell_type = "Example Cell"
+# marker_profile = "Example Marker"
+# source_location = "Committed legacy summary CSV"
+# extraction_method = "legacy_csv"
+# fi_note_ids = ["N_EXAMPLE_PROTOCOL_CAVEAT"]
+
 # Optional point-rule example for current-rate point tables.
 # [[point_rules]]
 # source_id = "example_primary_table"

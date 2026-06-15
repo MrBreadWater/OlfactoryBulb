@@ -1,0 +1,91 @@
+dataset_id = "burton_mc_tc_principal_cells"
+dataset_name = "Burton 2014 mitral-cell and tufted-cell principal-cell references"
+source_data_subdir = "burton_mc_tc_principal_cells"
+
+[outputs]
+ephys = "BURTON_MC_TC_ephys.csv"
+protocols = "BURTON_MC_TC_protocols.csv"
+manual = "BURTON_MC_TC_needs_manual_extraction.csv"
+readme = "BURTON_MC_TC_extraction_README.md"
+
+[readme]
+title = "Burton 2014 MC/TC reference-data extraction"
+summary = "This dataset converts the committed Burton & Urban 2014 mitral-cell and tufted-cell summary CSVs into one canonical principal-cell electrophysiology bundle."
+source_summary = [
+  "The maintained inputs are the committed mitral-cell and tufted-cell legacy summary CSVs derived from Burton & Urban 2014.",
+]
+suitable_now = [
+  "Canonical MC/TC intrinsic-property and firing-rate summary rows for declarative validation.",
+  "Canonical protocol metadata for the shared two-second current-clamp family used by those summary rows.",
+]
+caveats = [
+  "These source CSVs are already curated summary tables, not raw per-cell recordings.",
+  "The maintained bundle contains summary metrics only; no machine-readable pointwise MC/TC f-I curve source is included here.",
+  "Current-clamp metrics remain tagged to BU2014_MC_TC_2s_0_300pA_50pA so downstream validations can keep protocol caveats explicit.",
+]
+
+[[sources]]
+source_id = "burton2014_mc_legacy_ephys"
+source = "Burton & Urban (2014)"
+label = "Burton 2014 legacy mitral-cell summary CSV"
+filename = "MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv"
+source_url = ""
+downloadable = false
+required = true
+expected_extension = ".csv"
+
+[[sources]]
+source_id = "burton2014_tc_legacy_ephys"
+source = "Burton & Urban (2014)"
+label = "Burton 2014 legacy tufted-cell summary CSV"
+filename = "MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv"
+source_url = ""
+downloadable = false
+required = true
+expected_extension = ".csv"
+
+[[static_protocol_rows]]
+protocol_id = "BU2014_MC_TC_2s_0_300pA_50pA"
+source = "Burton & Urban (2014)"
+cell_type = "MC;TC"
+marker_profile = "principal_cell"
+stimulus_type = "somatic depolarizing current step"
+step_duration_ms = 2000.0
+current_start_pA = 0.0
+current_stop_pA = 300.0
+current_step_pA = 50.0
+current_values_pA = "0;50;100;150;200;250;300"
+rate_definition = "Legacy MC/TC summary metrics derived from a two-second firing-rate-versus-current protocol."
+spike_detection_rule = "Not explicitly preserved in the legacy summary CSVs; see Burton & Urban 2014 methods."
+baseline_or_holding_vm_mV = -58.0
+synaptic_blockers = ""
+temperature_C = ""
+compatible_group = "MC_TC_fI"
+notes = "Retained as canonical protocol metadata so downstream validations and note renderers do not need a hardcoded Burton MC/TC special case."
+
+[[legacy_summary_csv_rules]]
+output = "ephys"
+source_id = "burton2014_mc_legacy_ephys"
+cell_type = "MC"
+marker_profile = "principal_cell"
+source_location = "Committed Burton 2014 legacy mitral-cell summary CSV"
+extraction_method = "legacy_csv"
+fi_note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[legacy_summary_csv_rules]]
+output = "ephys"
+source_id = "burton2014_tc_legacy_ephys"
+cell_type = "TC"
+marker_profile = "principal_cell"
+source_location = "Committed Burton 2014 legacy tufted-cell summary CSV"
+extraction_method = "legacy_csv"
+fi_note_ids = ["N_FI_PROTOCOL_DIFFERENCE"]
+
+[[static_manual_rows]]
+source = "Burton & Urban (2014)"
+source_url = ""
+source_file = "MC_TC_spike_frequency_references - 4_mitral_cell_ephys.csv; MC_TC_spike_frequency_references - 3_tufted_cell_ephys.csv"
+figure_or_table = "principal-cell f-I point sets"
+target_metric = "Pointwise MC/TC firing-rate-versus-current rows"
+reason = "The maintained Burton bundle currently normalizes only summary metrics from the committed legacy CSVs, not raw per-step firing-rate point sets."
+suggested_action = "Add a provenance-bearing point-rule source or a curated source table if exact MC/TC current-rate point comparisons become required."

@@ -202,6 +202,10 @@ literature-validation systems.</p>
   targets are transport details, not canonical provenance.</li>
 <li>If a source-only gap remains unresolved, record it in the appropriate
   <code>needs_manual_extraction.csv</code> file instead of fabricating values.</li>
+<li>If a maintained reference source is already a small committed summary CSV,
+  put that file under <code>source_data/&lt;dataset&gt;/</code> and route it through the
+  dataset config with <code>legacy_summary_csv_rules</code> rather than keeping a
+  repo-side one-off loader.</li>
 </ul>
 <h2 id="useful-commands">Useful commands</h2>
 <p>Rebuild a dataset:</p>
@@ -212,6 +216,8 @@ python tools/extract_reference_dataset.py --dataset-id &lt;id&gt;
 <pre><code class="language-bash">source tools/setup/activate_obgpu.sh OBGPU
 python -m tests.reference.test_reference_data_sanity
 python tools/run_audit.py test_suite_status --suite reference_bundles
+python tools/run_audit.py reference_dataset_contracts --dataset-id burton_mc_tc_principal_cells
+python tools/run_audit.py reference_dataset_status --dataset-id burton_mc_tc_principal_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_status --dataset-id granule_cells
 python tools/run_audit.py reference_dataset_contracts --dataset-id pv_crh_epl_fsi
