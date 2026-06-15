@@ -564,6 +564,14 @@ Remove this file when the listed items are either:
         `reference_curve_match` spec entrypoints now use that typed layer
       - tests still may hand raw rows to the coercion boundary, but the
       maintained rule/spec runtime no longer advertises fresh raw row lists
+- [x] Keep row-derived reference-band case state on one typed binding object
+      instead of rebuilding band math, observation/review payloads, and
+      criterion text from parallel locals inside `build_cases(...)`.
+      - added `_ReferenceBandRowBinding`
+      - `ReferenceBandRuleSpec.build_cases(...)` now binds each filtered typed
+        literature row once before adapting it into a `ReferenceBandCase`
+      - direct suite coverage now proves the maintained builder accepts typed
+        `ReferenceRowRecord` inputs at that boundary
 - [x] Keep the series row/context seam on the same typed-wrapper pattern
       instead of letting transforms, bins, interpolated paths, or provenance
       summaries rediscover mutable raw row/context payloads late in scoring.

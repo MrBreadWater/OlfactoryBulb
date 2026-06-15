@@ -2243,6 +2243,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer
     instead of teaching each rule/spec helper to expect fresh CSV-style dict
     rows directly
+  - the reference-band case seam is tighter too: once a maintained
+    `reference_band_rows` check has matched a typed literature row to a
+    declared property spec, the band math, criterion text, observation, and
+    review payload now move through one typed `_ReferenceBandRowBinding`
+    object instead of being reconstructed from a long run of parallel locals
+    inside `ReferenceBandRuleSpec.build_cases(...)`
   - the series row/context seam is tighter too: bound series datasets now keep
     their concrete rows and protocol context on shared typed
     `SeriesRowTable` / `SeriesContextPayload` payloads, so transforms,

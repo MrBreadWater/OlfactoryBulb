@@ -330,7 +330,7 @@ def _title_text_for_band(group: str, property_name: str, band: ReferenceAcceptan
     return f"{group} {property_name.lower()} stays within the uploaded reference band"
 
 
-def _reference_annotation(row: dict[str, Any]) -> str:
+def _reference_annotation(row: Mapping[str, Any]) -> str:
     mean = row.get("mean")
     sd = row.get("sd")
     units = str(row.get("unit", "")).strip()
@@ -778,12 +778,148 @@ class ReferenceBandPropertyRuleSpec:
             review_focus=review_metadata["focus"],
         )
 
-    def quantile_interval_from_row(self, row: dict[str, Any]) -> tuple[float | None, float | None, str | None, str | None]:
+    def quantile_interval_from_row(
+        self,
+        row: Mapping[str, Any],
+    ) -> tuple[float | None, float | None, str | None, str | None]:
         quantile_low = optional_float(row.get(self.quantile_low_field))
         quantile_high = optional_float(row.get(self.quantile_high_field))
         quantile_low_label = str(row.get(self.quantile_low_label_field, "")).strip() or self.quantile_low_field
         quantile_high_label = str(row.get(self.quantile_high_label_field, "")).strip() or self.quantile_high_field
         return quantile_low, quantile_high, quantile_low_label, quantile_high_label
+
+
+@dataclass(frozen=True)
+class _ReferenceBandRowBinding:
+    row: ReferenceRowRecord
+    property_spec: ReferenceBandPropertyRuleSpec
+    group: str
+    sigma_arg_name: str
+    sigma_multiplier: float
+    sigma_phrase: str
+
+    @property
+    def property_name(self) -> str:
+        return str(self.row.get("Property", "")).strip()
+
+    @property
+    def reference_mean(self) -> float:
+        return float(self.row["mean"])
+
+    @property
+    def reference_sd(self) -> float:
+        return float(self.row["sd"])
+
+    @property
+    def unit_text(self) -> str:
+        return str(self.row.get("unit", "")).strip()
+
+    @property
+    def quantile_interval(self) -> tuple[float | None, float | None, str | None, str | None]:
+        if self.property_spec.band_mode != "quantile_interval":
+            return None, None, None, None
+        return self.property_spec.quantile_interval_from_row(self.row)
+
+    @property
+    def accepted_band(self) -> ReferenceAcceptanceBand:
+        quantile_low, quantile_high, quantile_low_label, quantile_high_label = self.quantile_interval
+        return compute_reference_acceptance_band(
+            reference_mean=self.reference_mean,
+            reference_sd=self.reference_sd,
+            sigma_multiplier=self.sigma_multiplier,
+            band_mode=self.property_spec.band_mode,
+            lower_bound=self.property_spec.lower_bound,
+            upper_bound=self.property_spec.upper_bound,
+            quantile_low=quantile_low,
+            quantile_high=quantile_high,
+            quantile_low_label=quantile_low_label,
+            quantile_high_label=quantile_high_label,
+        )
+
+    @property
+    def range_text(self) -> str:
+        band = self.accepted_band
+        range_text = f"between {rounded(band.low)} and {rounded(band.high)}"
+        if self.unit_text:
+            range_text = f"{range_text} {self.unit_text}"
+        return range_text
+
+    @property
+    def criterion_math(self):
+        return criterion_math_for_reference_band(self.group, self.property_name, self.accepted_band)
+
+    @property
+    def observation(self) -> ReferenceBandObservation:
+        quantile_low, quantile_high, quantile_low_label, quantile_high_label = self.quantile_interval
+        return ReferenceBandObservation(
+            property_name=self.property_name,
+            group=self.group,
+            metric_key=self.property_spec.metric_key,
+            reference_mean=self.reference_mean,
+            reference_sd=self.reference_sd,
+            unit_text=self.unit_text,
+            policy=ReferenceBandPolicy(
+                mode=self.property_spec.band_mode,
+                sigma_multiplier=self.sigma_multiplier,
+                lower_bound=self.property_spec.lower_bound,
+                upper_bound=self.property_spec.upper_bound,
+                quantile_low=quantile_low,
+                quantile_high=quantile_high,
+                quantile_low_label=quantile_low_label,
+                quantile_high_label=quantile_high_label,
+            ),
+            provenance=ProvenanceRecord.from_row(self.row),
+            review=ValidationReview(
+                status=self.property_spec.review_status,
+                note=self.property_spec.review_note,
+                reviewer=self.property_spec.review_reviewer,
+                required_expertise=self.property_spec.review_required_expertise,
+                focus=self.property_spec.review_focus,
+            ),
+        )
+
+    @property
+    def acceptable(self) -> str:
+        return (
+            f"The observed {self.group} mean must lie {self.range_text}, using the configured "
+            f"{self.accepted_band.standard_label}."
+        )
+
+    @property
+    def acceptable_basis(self) -> str:
+        band = self.accepted_band
+        return (
+            f"Derived from the uploaded literature row for {self.property_name} using the configured "
+            f"{band.standard_label}: {band.description}. "
+            f"The sigma multiplier comes from '{self.sigma_arg_name}' when that standard needs one."
+        )
+
+    @property
+    def reference_annotation(self) -> str:
+        return _reference_annotation(self.row)
+
+    def to_case(self, *, pass_status: str, fail_status: str) -> ReferenceBandCase:
+        band = self.accepted_band
+        criterion_math = self.criterion_math
+        return ReferenceBandCase(
+            check_id=f"{self.group.lower()}_{self.property_spec.metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
+            title=_title_text_for_band(self.group, self.property_name, band),
+            criterion=_criterion_text_for_band(self.group, self.property_name, band, self.sigma_phrase),
+            criterion_latex=criterion_math.latex,
+            criterion_formulae=criterion_math.formulae,
+            criterion_definitions=criterion_math.definitions,
+            description=(
+                "This is the direct single-cell-type reference check derived from uploaded literature rows for "
+                f"{self.property_name} rather than from a cross-group ordering heuristic."
+            ),
+            acceptable=self.acceptable,
+            acceptable_basis=self.acceptable_basis,
+            note=self.property_spec.note,
+            observation=self.observation,
+            reference_annotation=self.reference_annotation,
+            pass_status=pass_status,
+            fail_status=fail_status,
+        )
 
 
 @dataclass(frozen=True)
@@ -863,82 +999,16 @@ class ReferenceBandRuleSpec:
                 continue
             if not (optional_float(row.get("mean")) is not None and optional_float(row.get("sd")) is not None):
                 continue
-            reference_mean = float(row["mean"])
-            reference_sd = float(row["sd"])
-            quantile_low = None
-            quantile_high = None
-            quantile_low_label = None
-            quantile_high_label = None
-            if property_spec.band_mode == "quantile_interval":
-                quantile_low, quantile_high, quantile_low_label, quantile_high_label = property_spec.quantile_interval_from_row(
-                    row
-                )
-            band = compute_reference_acceptance_band(
-                reference_mean=reference_mean,
-                reference_sd=reference_sd,
+            binding = _ReferenceBandRowBinding(
+                row=row,
+                property_spec=property_spec,
+                group=group,
+                sigma_arg_name=self.sigma_arg_name,
                 sigma_multiplier=self.sigma_multiplier,
-                band_mode=property_spec.band_mode,
-                lower_bound=property_spec.lower_bound,
-                upper_bound=property_spec.upper_bound,
-                quantile_low=quantile_low,
-                quantile_high=quantile_high,
-                quantile_low_label=quantile_low_label,
-                quantile_high_label=quantile_high_label,
+                sigma_phrase=self.sigma_phrase,
             )
-            unit_text = str(row.get("unit", "")).strip()
-            range_text = f"between {rounded(band.low)} and {rounded(band.high)}"
-            if unit_text:
-                range_text = f"{range_text} {unit_text}"
-            criterion_math = criterion_math_for_reference_band(group, property_name, band)
             cases.append(
-                ReferenceBandCase(
-                    check_id=f"{group.lower()}_{property_spec.metric_key.lower()}_within_uploaded_reference_band".replace(".", "_"),
-                    title=_title_text_for_band(group, property_name, band),
-                    criterion=_criterion_text_for_band(group, property_name, band, self.sigma_phrase),
-                    criterion_latex=criterion_math.latex,
-                    criterion_formulae=criterion_math.formulae,
-                    criterion_definitions=criterion_math.definitions,
-                    description=(
-                        "This is the direct single-cell-type reference check derived from uploaded literature rows for "
-                        f"{property_name} rather than from a cross-group ordering heuristic."
-                    ),
-                    acceptable=(
-                        f"The observed {group} mean must lie {range_text}, using the configured "
-                        f"{band.standard_label}."
-                    ),
-                    acceptable_basis=(
-                        f"Derived from the uploaded literature row for {property_name} using the configured "
-                        f"{band.standard_label}: {band.description}. "
-                        f"The sigma multiplier comes from '{self.sigma_arg_name}' when that standard needs one."
-                    ),
-                    note=property_spec.note,
-                    observation=ReferenceBandObservation(
-                        property_name=property_name,
-                        group=group,
-                        metric_key=property_spec.metric_key,
-                        reference_mean=reference_mean,
-                        reference_sd=reference_sd,
-                        unit_text=unit_text,
-                        policy=ReferenceBandPolicy(
-                            mode=property_spec.band_mode,
-                            sigma_multiplier=self.sigma_multiplier,
-                            lower_bound=property_spec.lower_bound,
-                            upper_bound=property_spec.upper_bound,
-                            quantile_low=quantile_low,
-                            quantile_high=quantile_high,
-                            quantile_low_label=quantile_low_label,
-                            quantile_high_label=quantile_high_label,
-                        ),
-                        provenance=ProvenanceRecord.from_row(row),
-                        review=ValidationReview(
-                            status=property_spec.review_status,
-                            note=property_spec.review_note,
-                            reviewer=property_spec.review_reviewer,
-                            required_expertise=property_spec.review_required_expertise,
-                            focus=property_spec.review_focus,
-                        ),
-                    ),
-                    reference_annotation=_reference_annotation(row),
+                binding.to_case(
                     pass_status=self.pass_status,
                     fail_status=self.fail_status,
                 )

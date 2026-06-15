@@ -10,6 +10,7 @@ import quantities as pq
 
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
+from olfactorybulb.audit.reference_rows import ReferenceRowRecord
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
     ReferenceBandRuleSpec,
@@ -220,7 +221,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert parsed_rule_spec.properties["Input Resistance"].review_status == "approved"
     built_cases = parsed_rule_spec.build_cases(
         rows=[
-            {
+            ReferenceRowRecord(
+                {
                 "Property": "Input Resistance",
                 "mean": 100.0,
                 "sd": 10.0,
@@ -234,7 +236,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
                 "extraction_method": "curated",
                 "note_ids": "N_SYNTHETIC",
                 "reported_value_raw": "100 +/- 10 MOhm",
-            }
+                }
+            )
         ]
     )
     assert len(built_cases) == 1

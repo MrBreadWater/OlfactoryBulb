@@ -597,6 +597,12 @@ contract for future sessions.
     and the `reference_band_rows` / `reference_curve_match` spec entrypoints
     should use that wrapper, while outer tests may still hand raw rows to the
     coercion boundary for convenience.
+  - keep row-derived reference-band state bound too. Once a maintained
+    reference-band check has matched a literature row to a declared property
+    spec, move the row, resolved band policy inputs, observation/review
+    payload, and emitted criterion text through one typed binding object
+    rather than rebuilding them from parallel locals inside
+    `ReferenceBandRuleSpec.build_cases(...)`.
   - `reference_curve_match` now has an explicit unit/transform contract.
     Do not infer series-comparison compatibility from field names alone.
     Maintained validations should declare reference/model axis units,
