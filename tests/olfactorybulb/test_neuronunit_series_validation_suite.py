@@ -351,6 +351,7 @@ assert series_payload.to_dict() == {
     "x_match_tolerance": None,
     "resampling_grid_source": "",
     "resampling_domain_policy": "",
+    "resampling_grid_lookup_key": "",
     "resampling_grid_values": [],
     "resampling_grid_step": None,
     "resampling_grid_min_x": None,
@@ -1457,6 +1458,71 @@ assert uniform_step_resampled_items[1].evidence["currents_pA"] == [125.0, 150.0,
 assert uniform_step_resampled_items[1].evidence["resampling_excluded_x_values"] == [100.0, 325.0]
 assert uniform_step_resampled_items[1].evidence["matched_point_count"] == 8
 
+lookup_grid_resampled_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=4,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        alignment_policy="resampled_grid",
+        resampling_grid_source="lookup_grid",
+        resampling_grid_lookup_key="comparison_grid_pA",
+        score_family="residual_only",
+    ),
+)
+
+lookup_grid_resampled_case = SeriesComparisonCase(
+    check_id="synthetic_lookup_grid_resampled_series_match",
+    title="Synthetic resampled alignment can load a comparison grid from metadata",
+    criterion="A metadata-backed grid can be used for resampled-grid comparison without copying the grid into the rule table.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic lookup-grid resampled-grid suite test.",
+    acceptable="The metadata-backed grid satisfies the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=lookup_grid_resampled_observation,
+)
+
+lookup_grid_resampled_compiled = compile_series_comparison_suite(
+    cases=[lookup_grid_resampled_case],
+    summary={},
+    metrics=[],
+    protocol_evidence=ProtocolEvidenceBundle(
+        values={
+            "fi_curve_rows": resampled_model_rows,
+            "comparison_grid_pA": [150.0, 200.0, 250.0, 300.0],
+        }
+    ),
+    suite_name="synthetic lookup-grid resampled series suite",
+)
+lookup_grid_resampled_items = audit_items_from_series_comparison_suite(lookup_grid_resampled_compiled)
+assert lookup_grid_resampled_items[1].status == "PASS"
+assert lookup_grid_resampled_items[1].evidence["resampling_grid_source"] == "lookup_grid"
+assert lookup_grid_resampled_items[1].evidence["declared_resampling_grid_lookup_key"] == "comparison_grid_pA"
+assert lookup_grid_resampled_items[1].evidence["resampling_grid_lookup_key"] == "comparison_grid_pA"
+assert lookup_grid_resampled_items[1].evidence["resampling_grid_lookup_scope"] == "context"
+assert lookup_grid_resampled_items[1].evidence["currents_pA"] == [150.0, 200.0, 250.0, 300.0]
+assert lookup_grid_resampled_items[1].evidence["matched_point_count"] == 4
+
 coverage_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=resampled_reference_rows,
@@ -2069,6 +2135,43 @@ assert uniform_step_rule_items[1].evidence["resampling_grid_max_x_origin"] == "e
 assert uniform_step_rule_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
 assert SeriesComparisonRuleSpec.from_rule(uniform_step_rule).policy.resampling_grid_step == 25.0
 
+lookup_grid_rule = dict(resampled_rule)
+lookup_grid_rule["check_id"] = "synthetic_lookup_grid_resampled_series_match"
+lookup_grid_rule["title"] = "Synthetic lookup-grid resampled series rule"
+lookup_grid_rule["criterion"] = "A declarative series rule can load its comparison grid from protocol metadata."
+lookup_grid_rule["resampling_grid_source"] = "lookup_grid"
+lookup_grid_rule["resampling_grid_lookup_key"] = "comparison_grid_pA"
+lookup_grid_rule.pop("resampling_grid_values", None)
+lookup_grid_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(
+            values={
+                "fi_curve_rows": resampled_model_rows,
+                "comparison_grid_pA": [150.0, 200.0, 250.0, 300.0],
+            }
+        ),
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    lookup_grid_rule_items = build_rule_items(compile_rule_dispatches([lookup_grid_rule]), lookup_grid_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+lookup_grid_rule_spec = SeriesComparisonRuleSpec.from_rule(lookup_grid_rule)
+assert lookup_grid_rule_spec.policy.resampling_grid_source == "lookup_grid"
+assert lookup_grid_rule_spec.policy.resampling_grid_lookup_key == "comparison_grid_pA"
+assert lookup_grid_rule_items[1].status == "PASS"
+assert lookup_grid_rule_items[1].evidence["resampling_grid_source"] == "lookup_grid"
+assert lookup_grid_rule_items[1].evidence["resampling_grid_lookup_key"] == "comparison_grid_pA"
+assert lookup_grid_rule_items[1].evidence["currents_pA"] == [150.0, 200.0, 250.0, 300.0]
+
 coverage_rule = dict(resampled_rule)
 coverage_rule["check_id"] = "synthetic_resampled_series_coverage_gate"
 coverage_rule["title"] = "Synthetic coverage-gated series rule"
@@ -2336,6 +2439,22 @@ try:
         raise AssertionError("Expected uniform-step resampling to require an explicit positive grid step")
     except ValueError as exc:
         assert "requires a positive finite 'resampling_grid_step'" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+missing_lookup_grid_key_rule = dict(lookup_grid_rule)
+del missing_lookup_grid_key_rule["resampling_grid_lookup_key"]
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items(compile_rule_dispatches([missing_lookup_grid_key_rule]), lookup_grid_context)
+        raise AssertionError("Expected lookup-grid resampling to require an explicit lookup key")
+    except ValueError as exc:
+        assert "requires explicit 'resampling_grid_lookup_key'" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

@@ -630,10 +630,14 @@ contract for future sessions.
     `interpolation_method` to `linear`, but the emitted evidence must record
     the resolved choice. Keep the resampling contract explicit and small:
     current grid sources are `reference_observed_x`, `model_observed_x`,
-    `union_observed_x`, `explicit_grid`, and `uniform_step`,
+    `union_observed_x`, `explicit_grid`, `lookup_grid`, and `uniform_step`,
     current interpolation options are `linear`, `nearest`, `pchip`, and
     `step_hold`, and current domain policies are `allow_partial_support`,
-    `intersection`, `reference`, and `model`.
+    `intersection`, `reference`, and `model`. When a resampled grid should be
+    reused from protocol/model metadata, prefer
+    `resampling_grid_source = "lookup_grid"` plus
+    `resampling_grid_lookup_key = "..."` over copying the same explicit grid
+    values into multiple validation rules.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
     When a side has explicit series ids, keep per-series provenance summaries

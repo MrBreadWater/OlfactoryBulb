@@ -731,3 +731,12 @@ Remove this file when the listed items are either:
         other for `piecewise_linear`
       - direct suite coverage and rule-level coverage now prove a maintained
         metadata-backed piecewise calibration path
+- [x] Let resampled-grid alignment reuse maintained metadata-backed comparison
+      grids instead of forcing repeated explicit TOML arrays.
+      - `resampling_grid_source = "lookup_grid"` now supports
+        `resampling_grid_lookup_key = "..."` against protocol/model context
+        metadata
+      - the declarative parser now forbids mixing `lookup_grid` with explicit
+        grid values, uniform-step settings, or explicit grid min/max bounds
+      - direct suite coverage and rule-level coverage now prove a maintained
+        metadata-backed grid path

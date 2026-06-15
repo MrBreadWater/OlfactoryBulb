@@ -1750,13 +1750,18 @@ Important details:
   `allow_partial_support`, and `interpolation_method` to `linear`; the
   emitted evidence records those resolved choices
 - supported `resampling_grid_source` values are `reference_observed_x`,
-  `model_observed_x`, `union_observed_x`, `explicit_grid`, and `uniform_step`
+  `model_observed_x`, `union_observed_x`, `explicit_grid`, `lookup_grid`, and
+  `uniform_step`
 - supported `interpolation_method` values are `linear`, `nearest`, `pchip`,
   and `step_hold`
 - supported `resampling_domain_policy` values are `allow_partial_support`,
   `intersection`, `reference`, and `model`
 - if `resampling_grid_source = "explicit_grid"`, also declare
   `resampling_grid_values = [ ... ]`
+- if `resampling_grid_source = "lookup_grid"`, also declare
+  `resampling_grid_lookup_key = "protocol_step_grid_pA"`; the lookup resolves
+  against protocol/model context metadata and should not be mixed with
+  explicit grid values, uniform-step settings, or explicit grid min/max bounds
 - if `resampling_grid_source = "uniform_step"`, declare
   `resampling_grid_step = ...`; `resampling_grid_min_x` and
   `resampling_grid_max_x` are optional and otherwise default from the observed

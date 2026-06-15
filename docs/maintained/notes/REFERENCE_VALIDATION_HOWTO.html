@@ -825,6 +825,12 @@ interpolation methods are:</p>
 <li><code>resampling_grid_source = "union_observed_x"</code></li>
 <li><code>resampling_grid_source = "explicit_grid"</code></li>
 <li>and then also declare <code>resampling_grid_values = [ ... ]</code></li>
+<li><code>resampling_grid_source = "lookup_grid"</code></li>
+<li>and then also declare <code>resampling_grid_lookup_key = "protocol_step_grid_pA"</code></li>
+<li>the lookup resolves against the available protocol/model context metadata</li>
+<li>do not also declare <code>resampling_grid_values</code>, <code>resampling_grid_step</code>, or
+    explicit <code>resampling_grid_min_x</code> / <code>resampling_grid_max_x</code> on the same
+    rule</li>
 <li><code>resampling_grid_source = "uniform_step"</code></li>
 <li>and then declare <code>resampling_grid_step = ...</code></li>
 <li>optionally declare <code>resampling_grid_min_x = ...</code> and

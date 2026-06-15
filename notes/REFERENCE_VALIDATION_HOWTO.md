@@ -773,6 +773,12 @@ If you need a different grid, declare one of:
 - `resampling_grid_source = "union_observed_x"`
 - `resampling_grid_source = "explicit_grid"`
   - and then also declare `resampling_grid_values = [ ... ]`
+- `resampling_grid_source = "lookup_grid"`
+  - and then also declare `resampling_grid_lookup_key = "protocol_step_grid_pA"`
+  - the lookup resolves against the available protocol/model context metadata
+  - do not also declare `resampling_grid_values`, `resampling_grid_step`, or
+    explicit `resampling_grid_min_x` / `resampling_grid_max_x` on the same
+    rule
 - `resampling_grid_source = "uniform_step"`
   - and then declare `resampling_grid_step = ...`
   - optionally declare `resampling_grid_min_x = ...` and

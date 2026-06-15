@@ -2381,9 +2381,9 @@ The remaining open questions are now narrower:
 - whether alignment generalization should stop at the current
   distribution-preserving resampled-grid contract with its current grid /
   interpolation / domain families (`reference_observed_x`,
-  `model_observed_x`, `union_observed_x`, `explicit_grid`, `uniform_step`;
-  `linear`, `nearest`, `pchip`, `step_hold`; `allow_partial_support`,
-  `intersection`, `reference`, `model`)
+  `model_observed_x`, `union_observed_x`, `explicit_grid`, `lookup_grid`,
+  `uniform_step`; `linear`, `nearest`, `pchip`, `step_hold`;
+  `allow_partial_support`, `intersection`, `reference`, `model`)
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current aggregate-plus-per-series source
   summaries
