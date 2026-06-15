@@ -1436,9 +1436,19 @@ def _render_companion_visuals(
         summary_counts = {"PASS": 0, "WARN": 0, "FAIL": 0}
         for entry in entries:
             summary_counts[entry["status"]] = summary_counts.get(entry["status"], 0) + 1
+
+        suite_norm_summary = evidence.get("suite_norm_score_summary")
+        default_right_meta = "suite rollup"
+        if isinstance(suite_norm_summary, dict):
+            mean_norm = _float_or_none(suite_norm_summary.get("mean"))
+            min_norm = _float_or_none(suite_norm_summary.get("min"))
+            if mean_norm is not None:
+                default_right_meta = f"mean norm {_format_numeric(mean_norm)}"
+                if min_norm is not None and not math.isclose(min_norm, mean_norm):
+                    default_right_meta += f", min {_format_numeric(min_norm)}"
         block_title = str(spec.get("title") or "Suite case summary")
         left_meta = str(spec.get("left_meta") or f"{len(entries)} cases")
-        right_meta = str(spec.get("right_meta") or "suite rollup")
+        right_meta = str(spec.get("right_meta") or default_right_meta)
         cells_html = "".join(
             (
                 "<div "

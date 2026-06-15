@@ -632,6 +632,8 @@ contract for future sessions.
     shared overview/matrix contract into that helper layer. Mark the overview item
     `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts stay tied to
     the detailed cases rather than double-counting the overview. When a suite
+    overview carries `suite_norm_score_summary`, surface that in the dashboard
+    matrix header instead of hiding it only in raw evidence.
     matrix has a compact score or norm label that helps scanning, emit it in
     the suite-case payload rather than teaching the dashboard to reverse-engineer
     it from raw detailed evidence.
