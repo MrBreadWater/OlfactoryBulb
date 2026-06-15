@@ -1337,7 +1337,11 @@ assert equivalence_rule_items[1].evidence["statistical_test_family"] == "equival
 assert equivalence_rule_items[1].evidence["statistical_gate_passed"] is True
 
 explicit_statistical_rule = dict(equivalence_rule)
-explicit_statistical_rule["suite_statistical_policy"] = {"rollup_method": "median"}
+explicit_statistical_rule["suite_statistical_policy"] = {
+    "rollup_method": "median",
+    "minimum_available_case_count": 1,
+    "minimum_available_case_fraction": 1.0,
+}
 rules_module._load_rows = (
     lambda loader_spec: equivalence_reference_rows
     if loader_spec == "csv:/tmp/equivalence.csv"
@@ -1350,9 +1354,14 @@ try:
     )
 finally:
     rules_module._load_rows = original_load_rows
-assert equivalence_rule_items_median[0].evidence["suite_statistical_policy"] == {"rollup_method": "median"}
+assert equivalence_rule_items_median[0].evidence["suite_statistical_policy"] == {
+    "rollup_method": "median",
+    "minimum_available_case_count": 1,
+    "minimum_available_case_fraction": 1.0,
+}
 assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["rollup_method"] == "median"
 assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["rollup_source"] == "explicit"
+assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["support_gate_passed"] is True
 
 piecewise_rule = dict(residual_only_rule)
 piecewise_rule["loader"] = "csv:/tmp/piecewise.csv"

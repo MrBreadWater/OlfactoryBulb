@@ -145,6 +145,7 @@ assert equivalence_summary == {
     "rollup_pvalue": 0.03,
     "available_case_count": 2,
     "total_case_count": 2,
+    "available_case_fraction": 1.0,
     "score_text": "max TOST p 0.03",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -154,6 +155,8 @@ assert equivalence_summary == {
     "threshold": 0.05,
     "threshold_key": "equivalence_alpha",
     "threshold_direction": "le",
+    "support_gate_passed": True,
+    "threshold_gate_passed": True,
     "gate_passed": True,
     "case_pvalues": [0.01, 0.03],
     "case_check_ids": ["equiv_a", "equiv_b"],
@@ -212,6 +215,7 @@ assert welch_summary == {
     "rollup_pvalue": 0.08,
     "available_case_count": 2,
     "total_case_count": 2,
+    "available_case_fraction": 1.0,
     "score_text": "min Welch p 0.08",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -221,6 +225,8 @@ assert welch_summary == {
     "threshold": 0.05,
     "threshold_key": "minimum_median_welch_pvalue",
     "threshold_direction": "ge",
+    "support_gate_passed": True,
+    "threshold_gate_passed": True,
     "gate_passed": True,
     "case_pvalues": [0.08, 0.12],
     "case_check_ids": ["welch_a", "welch_b"],
@@ -300,6 +306,7 @@ assert median_equivalence_summary == {
     "rollup_pvalue": 0.05,
     "available_case_count": 3,
     "total_case_count": 3,
+    "available_case_fraction": 1.0,
     "score_text": "median TOST p 0.05",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -309,9 +316,85 @@ assert median_equivalence_summary == {
     "threshold": 0.05,
     "threshold_key": "equivalence_alpha",
     "threshold_direction": "le",
+    "support_gate_passed": True,
+    "threshold_gate_passed": True,
     "gate_passed": True,
     "case_pvalues": [0.01, 0.05, 0.09],
     "case_check_ids": ["equiv_a", "equiv_b", "equiv_c"],
+}
+
+partial_support_score = build_suite_aggregate_score(
+    suite_id="synthetic.partial_support_suite",
+    case_summaries=[
+        SuiteCaseSummary(
+            check_id="supported_case",
+            title="Supported case",
+            status="PASS",
+            norm_score=1.0,
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.02,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
+            ),
+        ),
+        SuiteCaseSummary(
+            check_id="unsupported_case",
+            title="Unsupported case",
+            status="FAIL",
+            norm_score=0.0,
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+            ),
+        ),
+    ],
+    statistical_policy=SuiteStatisticalPolicy(
+        minimum_available_case_count=2,
+        minimum_available_case_fraction=1.0,
+    ),
+)
+
+partial_support_policy = partial_support_score.to_evidence()["suite_statistical_policy"]
+assert partial_support_policy == {
+    "rollup_method": "auto",
+    "minimum_available_case_count": 2,
+    "minimum_available_case_fraction": 1.0,
+}
+
+partial_support_summary = partial_support_score.to_evidence()["suite_statistical_summary"]
+assert partial_support_summary == {
+    "score_family_category": "equivalence",
+    "statistical_test_family": "equivalence_tost",
+    "rollup_method": "max",
+    "rollup_source": "auto_default",
+    "rollup_pvalue": 0.02,
+    "available_case_count": 1,
+    "total_case_count": 2,
+    "available_case_fraction": 0.5,
+    "score_text": "max TOST p 0.02",
+    "score_interpretation": (
+        "Diagnostic suite-level statistical summary derived from the case-level "
+        "TOST p values. It does not replace the detailed per-case gates. "
+        "(threshold 0.05) Statistical support requirements: at least 2 supported cases; "
+        "supported-case fraction >= 1."
+    ),
+    "threshold": 0.05,
+    "threshold_key": "equivalence_alpha",
+    "threshold_direction": "le",
+    "minimum_available_case_count": 2,
+    "minimum_available_case_fraction": 1.0,
+    "support_gate_passed": False,
+    "threshold_gate_passed": True,
+    "gate_passed": False,
+    "case_pvalues": [0.02],
+    "case_check_ids": ["supported_case"],
 }
 
 print("neuronunit_suite_scores: OK")

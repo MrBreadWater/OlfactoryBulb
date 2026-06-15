@@ -540,6 +540,28 @@ statistics differently. The emitted `suite_statistical_summary` evidence will
 record whether the rollup came from the category default or from an explicit
 override.
 
+The same table may also declare optional support requirements for how many
+cases must actually contribute statistical evidence before the suite-level
+summary should count as supported:
+
+- `minimum_available_case_count = 3`
+- `minimum_available_case_fraction = 0.75`
+
+These are diagnostic support contracts, not replacements for the detailed
+case-level PASS/WARN/FAIL decisions. The emitted `suite_statistical_summary`
+records:
+
+- `available_case_count`
+- `total_case_count`
+- `available_case_fraction`
+- `support_gate_passed`
+- `threshold_gate_passed`
+- combined `gate_passed`
+
+Use these fields when a suite mixes statistically supported and unsupported
+cases and you want that limitation surfaced explicitly instead of hidden behind
+the rolled-up p-value alone.
+
 For `reference_curve_match`, treat axis metadata as part of the rule contract:
 
 - declare reference/model x and y units explicitly

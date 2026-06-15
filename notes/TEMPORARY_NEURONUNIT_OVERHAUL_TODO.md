@@ -523,6 +523,15 @@ Remove this file when the listed items are either:
         points and the reference/model interpolation bounds in emitted
         evidence
       - docs/template/tests now expose the shared-domain clipping path
+- [x] Extend the suite-level statistical policy beyond bare p-value rollup
+      choice so grouped suites can declare how much statistical support they
+      require.
+      - `SuiteStatisticalPolicy` now supports
+        `minimum_available_case_count` and
+        `minimum_available_case_fraction`
+      - `suite_statistical_summary` now records available-case coverage plus
+        separate support and threshold gates
+      - docs/template/tests now expose the supported-case contract
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

@@ -705,7 +705,15 @@ contract for future sessions.
     into the dashboard or one suite adapter. The maintained default remains
     category-specific auto selection, but explicit rollups such as `median`
     should stay declarative and surface their resolved source in emitted
-    evidence. Keep the migrated NeuronUnit-to-`AuditItem` adapter
+    evidence. When a suite-level statistical summary should only count as
+    supported if enough cases contributed real statistical diagnostics, use
+    declarative `minimum_available_case_count` and/or
+    `minimum_available_case_fraction` on `suite_statistical_policy` instead
+    of inferring that support requirement from the rolled-up p-value alone.
+    Keep the resulting `available_case_count`, `available_case_fraction`,
+    `support_gate_passed`, `threshold_gate_passed`, and combined
+    `gate_passed` visible in `suite_statistical_summary`. Keep the migrated
+    NeuronUnit-to-`AuditItem` adapter
     centralized in `olfactorybulb.neuronunit.suite_presentation`; use the
     shared `AuditItemAdapterSpec` path instead of hand-constructing the same
     criterion/review/visual field bundle in every suite adapter, and add or

@@ -1797,6 +1797,10 @@ Important details:
   `suite_statistical_policy = { rollup_method = "median" }` when the suite
   emits case-level statistical diagnostics and you want a non-default
   suite-level p-value summary
+- `suite_statistical_policy` may also declare
+  `minimum_available_case_count` and/or `minimum_available_case_fraction`
+  when the suite-level statistical summary should only count as supported if
+  enough cases contributed real statistical evidence
 - single-rule SciUnit-backed families such as `reference_band_rows` use the
   same field directly on that rule
 - reference/model provenance summaries for series comparisons now come from a

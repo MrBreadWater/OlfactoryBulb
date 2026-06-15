@@ -217,8 +217,20 @@ def suite_statistical_policy_from_rule(rule: Mapping[str, object]) -> SuiteStati
     if not isinstance(raw_policy, MappingABC):
         raise ValueError("suite_statistical_policy must be a table when provided")
     rollup_method = str(raw_policy.get("rollup_method", DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method)).strip()
+    minimum_available_case_count = raw_policy.get("minimum_available_case_count")
+    minimum_available_case_fraction = raw_policy.get("minimum_available_case_fraction")
     return SuiteStatisticalPolicy(
         rollup_method=rollup_method or DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method,
+        minimum_available_case_count=(
+            int(minimum_available_case_count)
+            if minimum_available_case_count not in (None, "")
+            else DEFAULT_SUITE_STATISTICAL_POLICY.minimum_available_case_count
+        ),
+        minimum_available_case_fraction=(
+            float(minimum_available_case_fraction)
+            if minimum_available_case_fraction not in (None, "")
+            else DEFAULT_SUITE_STATISTICAL_POLICY.minimum_available_case_fraction
+        ),
     )
 
 

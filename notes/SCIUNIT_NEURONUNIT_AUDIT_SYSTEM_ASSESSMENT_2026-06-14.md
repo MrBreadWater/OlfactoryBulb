@@ -2199,6 +2199,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `SuiteStatisticalPolicy`, so grouped validations can override the default
     suite-level p-value rollup declaratively instead of baking it into one
     suite adapter or the dashboard
+  - that suite-level statistical contract now also supports explicit
+    supported-case count/fraction requirements, and the emitted summary
+    reports support coverage plus separate support and threshold gates instead
+    of letting a rolled-up p-value imply stronger statistical coverage than
+    the underlying cases actually supplied
   - the maintained SciUnit wrappers now also delegate their observation maps
     back to the existing typed case/observation objects through small
     `observation_payload()` helpers, so the suite layer no longer duplicates
@@ -2279,8 +2284,8 @@ The remaining open questions are now narrower:
 
 - whether the new typed `suite_statistical_summary` plus declarative
   `SuiteStatisticalPolicy` support is enough, or whether future work should
-  promote additional suite-level statistical contracts beyond alternative
-  p-value rollups
+  promote additional suite-level statistical contracts beyond rollup choice
+  plus the current supported-case count/fraction gates
 - whether transform generalization should stop at explicit piecewise-linear
   mappings plus the current context-dependent affine lookup path, or later
   grow into richer metadata-driven transforms

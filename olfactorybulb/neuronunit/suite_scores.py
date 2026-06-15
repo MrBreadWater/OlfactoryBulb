@@ -209,9 +209,14 @@ class SuiteStatisticalSummary:
     total_case_count: int
     score_text: str
     score_interpretation: str
+    available_case_fraction: float | None = None
     threshold: float | None = None
     threshold_key: str = ""
     threshold_direction: str = ""
+    minimum_available_case_count: int | None = None
+    minimum_available_case_fraction: float | None = None
+    support_gate_passed: bool | None = None
+    threshold_gate_passed: bool | None = None
     gate_passed: bool | None = None
     case_pvalues: tuple[float, ...] = ()
     case_check_ids: tuple[str, ...] = ()
@@ -224,11 +229,22 @@ class SuiteStatisticalSummary:
         object.__setattr__(self, "rollup_pvalue", float(self.rollup_pvalue))
         object.__setattr__(self, "available_case_count", int(self.available_case_count))
         object.__setattr__(self, "total_case_count", int(self.total_case_count))
+        object.__setattr__(self, "available_case_fraction", _normalized_score_value(self.available_case_fraction))
         object.__setattr__(self, "score_text", str(self.score_text).strip())
         object.__setattr__(self, "score_interpretation", str(self.score_interpretation).strip())
         object.__setattr__(self, "threshold", _normalized_score_value(self.threshold))
         object.__setattr__(self, "threshold_key", str(self.threshold_key).strip())
         object.__setattr__(self, "threshold_direction", str(self.threshold_direction).strip())
+        minimum_available_case_count = self.minimum_available_case_count
+        if minimum_available_case_count is not None:
+            minimum_available_case_count = int(minimum_available_case_count)
+            if minimum_available_case_count < 1:
+                raise ValueError("minimum_available_case_count must be >= 1 when provided")
+        object.__setattr__(self, "minimum_available_case_count", minimum_available_case_count)
+        minimum_available_case_fraction = _normalized_score_value(self.minimum_available_case_fraction)
+        if minimum_available_case_fraction is not None and not (0.0 <= float(minimum_available_case_fraction) <= 1.0):
+            raise ValueError("minimum_available_case_fraction must be in [0, 1] when provided")
+        object.__setattr__(self, "minimum_available_case_fraction", minimum_available_case_fraction)
         object.__setattr__(
             self,
             "case_pvalues",
@@ -253,6 +269,7 @@ class SuiteStatisticalSummary:
             "rollup_pvalue": float(self.rollup_pvalue),
             "available_case_count": self.available_case_count,
             "total_case_count": self.total_case_count,
+            "available_case_fraction": float(self.available_case_fraction) if self.available_case_fraction is not None else None,
             "score_text": self.score_text,
             "score_interpretation": self.score_interpretation,
             "case_pvalues": [float(value) for value in self.case_pvalues],
@@ -264,6 +281,14 @@ class SuiteStatisticalSummary:
             payload["threshold_key"] = self.threshold_key
         if self.threshold_direction:
             payload["threshold_direction"] = self.threshold_direction
+        if self.minimum_available_case_count is not None:
+            payload["minimum_available_case_count"] = int(self.minimum_available_case_count)
+        if self.minimum_available_case_fraction is not None:
+            payload["minimum_available_case_fraction"] = float(self.minimum_available_case_fraction)
+        if self.support_gate_passed is not None:
+            payload["support_gate_passed"] = bool(self.support_gate_passed)
+        if self.threshold_gate_passed is not None:
+            payload["threshold_gate_passed"] = bool(self.threshold_gate_passed)
         if self.gate_passed is not None:
             payload["gate_passed"] = bool(self.gate_passed)
         return payload
@@ -272,6 +297,8 @@ class SuiteStatisticalSummary:
 @dataclass(frozen=True)
 class SuiteStatisticalPolicy:
     rollup_method: str = "auto"
+    minimum_available_case_count: int | None = None
+    minimum_available_case_fraction: float | None = None
 
     def __post_init__(self) -> None:
         rollup_method = str(self.rollup_method or "").strip().lower() or "auto"
@@ -281,11 +308,26 @@ class SuiteStatisticalPolicy:
                 "the maintained bridge currently supports auto, max, min, or median"
             )
         object.__setattr__(self, "rollup_method", rollup_method)
+        minimum_available_case_count = self.minimum_available_case_count
+        if minimum_available_case_count is not None:
+            minimum_available_case_count = int(minimum_available_case_count)
+            if minimum_available_case_count < 1:
+                raise ValueError("minimum_available_case_count must be >= 1 when provided")
+        object.__setattr__(self, "minimum_available_case_count", minimum_available_case_count)
+        minimum_available_case_fraction = _normalized_score_value(self.minimum_available_case_fraction)
+        if minimum_available_case_fraction is not None and not (0.0 <= float(minimum_available_case_fraction) <= 1.0):
+            raise ValueError("minimum_available_case_fraction must be in [0, 1] when provided")
+        object.__setattr__(self, "minimum_available_case_fraction", minimum_available_case_fraction)
 
-    def to_dict(self) -> dict[str, str]:
-        return {
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "rollup_method": self.rollup_method,
         }
+        if self.minimum_available_case_count is not None:
+            payload["minimum_available_case_count"] = int(self.minimum_available_case_count)
+        if self.minimum_available_case_fraction is not None:
+            payload["minimum_available_case_fraction"] = float(self.minimum_available_case_fraction)
+        return payload
 
 
 @dataclass(frozen=True)
@@ -505,6 +547,27 @@ def _suite_statistical_summary(
         if entry.get("threshold") is not None
     }
     threshold = next(iter(thresholds)) if len(thresholds) == 1 else None
+    available_case_count = len(entries)
+    total_case_count = len(case_summaries)
+    available_case_fraction = (
+        rounded(float(available_case_count) / float(total_case_count), digits=3)
+        if total_case_count > 0
+        else None
+    )
+    support_gate_passed = True
+    support_requirement_phrases: list[str] = []
+    if policy.minimum_available_case_count is not None:
+        support_gate_passed = support_gate_passed and available_case_count >= int(policy.minimum_available_case_count)
+        support_requirement_phrases.append(f"at least {int(policy.minimum_available_case_count)} supported cases")
+    if policy.minimum_available_case_fraction is not None:
+        support_gate_passed = (
+            support_gate_passed
+            and available_case_fraction is not None
+            and float(available_case_fraction) >= float(policy.minimum_available_case_fraction)
+        )
+        support_requirement_phrases.append(
+            f"supported-case fraction >= {rounded(float(policy.minimum_available_case_fraction), digits=3):g}"
+        )
     pvalues = [float(entry["pvalue"]) for entry in entries]
     if rollup_method == "max":
         rollup_pvalue = max(pvalues)
@@ -514,31 +577,43 @@ def _suite_statistical_summary(
         rollup_pvalue = float(statistics.median(pvalues))
     rounded_rollup_pvalue = rounded(rollup_pvalue, digits=4)
     threshold_phrase = ""
-    gate_passed: bool | None = None
+    threshold_gate_passed: bool | None = None
     if threshold is not None:
         threshold_phrase = (
             f" (threshold {rounded(float(threshold), digits=4):g})"
         )
         if threshold_direction == "le":
-            gate_passed = rollup_pvalue <= float(threshold)
+            threshold_gate_passed = rollup_pvalue <= float(threshold)
         elif threshold_direction == "ge":
-            gate_passed = rollup_pvalue >= float(threshold)
+            threshold_gate_passed = rollup_pvalue >= float(threshold)
+    support_phrase = ""
+    if support_requirement_phrases:
+        support_phrase = " Statistical support requirements: " + "; ".join(support_requirement_phrases) + "."
+    if threshold_gate_passed is None:
+        gate_passed = support_gate_passed
+    else:
+        gate_passed = support_gate_passed and threshold_gate_passed
     return SuiteStatisticalSummary(
         score_family_category=category,
         statistical_test_family=statistical_test_family,
         rollup_method=rollup_method,
         rollup_source=rollup_source,
         rollup_pvalue=rollup_pvalue,
-        available_case_count=len(entries),
-        total_case_count=len(case_summaries),
+        available_case_count=available_case_count,
+        total_case_count=total_case_count,
+        available_case_fraction=available_case_fraction,
         score_text=f"{rollup_method} {label} {rounded_rollup_pvalue:g}",
         score_interpretation=(
             "Diagnostic suite-level statistical summary derived from the case-level "
-            f"{label} values. It does not replace the detailed per-case gates.{threshold_phrase}"
+            f"{label} values. It does not replace the detailed per-case gates.{threshold_phrase}{support_phrase}"
         ),
         threshold=threshold,
         threshold_key=threshold_key,
         threshold_direction=threshold_direction,
+        minimum_available_case_count=policy.minimum_available_case_count,
+        minimum_available_case_fraction=policy.minimum_available_case_fraction,
+        support_gate_passed=support_gate_passed,
+        threshold_gate_passed=threshold_gate_passed,
         gate_passed=gate_passed,
         case_pvalues=tuple(pvalues),
         case_check_ids=tuple(str(entry["check_id"]) for entry in entries),
