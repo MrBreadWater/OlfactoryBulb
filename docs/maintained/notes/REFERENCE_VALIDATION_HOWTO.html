@@ -627,9 +627,19 @@ records:</p>
 <li><code>total_case_weight</code></li>
 <li><code>available_case_weight_fraction</code></li>
 <li><code>unsupported_case_weight_fraction</code></li>
+<li><code>threshold_passing_case_count</code></li>
+<li><code>threshold_failing_case_count</code></li>
+<li><code>threshold_passing_case_fraction</code></li>
+<li><code>threshold_failing_case_fraction</code></li>
+<li><code>threshold_passing_case_weight</code></li>
+<li><code>threshold_failing_case_weight</code></li>
+<li><code>threshold_passing_case_weight_fraction</code></li>
+<li><code>threshold_failing_case_weight_fraction</code></li>
 <li><code>weight_label</code></li>
 <li><code>case_check_ids</code></li>
 <li><code>unsupported_case_check_ids</code></li>
+<li><code>threshold_passing_case_check_ids</code></li>
+<li><code>threshold_failing_case_check_ids</code></li>
 <li><code>support_gate_passed</code></li>
 <li><code>weight_support_gate_passed</code></li>
 <li><code>threshold_gate_passed</code></li>
@@ -640,7 +650,9 @@ cases and you want that limitation surfaced explicitly instead of hidden behind
 the rolled-up p-value alone. Use the weight-based forms only when the suite
 family emits a principled per-case weight through the maintained suite-case
 contract. In the current branch that means the series-comparison suite family,
-which uses matched-point count as its case weight.</p>
+which uses matched-point count as its case weight. The threshold pass/fail
+fractions are relative to the statistically supported cases, not the full suite
+including unsupported cases.</p>
 <p>For <code>reference_curve_match</code>, treat axis metadata as part of the rule contract:</p>
 <ul>
 <li>declare reference/model x and y units explicitly</li>

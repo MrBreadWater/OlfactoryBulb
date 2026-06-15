@@ -229,9 +229,19 @@ class SuiteStatisticalSummary:
     weight_support_gate_passed: bool | None = None
     threshold_gate_passed: bool | None = None
     gate_passed: bool | None = None
+    threshold_passing_case_count: int | None = None
+    threshold_failing_case_count: int | None = None
+    threshold_passing_case_fraction: float | None = None
+    threshold_failing_case_fraction: float | None = None
+    threshold_passing_case_weight: float | None = None
+    threshold_failing_case_weight: float | None = None
+    threshold_passing_case_weight_fraction: float | None = None
+    threshold_failing_case_weight_fraction: float | None = None
     case_pvalues: tuple[float, ...] = ()
     case_check_ids: tuple[str, ...] = ()
     unsupported_case_check_ids: tuple[str, ...] = ()
+    threshold_passing_case_check_ids: tuple[str, ...] = ()
+    threshold_failing_case_check_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "score_family_category", str(self.score_family_category).strip())
@@ -281,6 +291,62 @@ class SuiteStatisticalSummary:
         ):
             raise ValueError("minimum_available_case_weight_fraction must be in [0, 1] when provided")
         object.__setattr__(self, "minimum_available_case_weight_fraction", minimum_available_case_weight_fraction)
+        threshold_passing_case_count = self.threshold_passing_case_count
+        if threshold_passing_case_count is not None:
+            threshold_passing_case_count = int(threshold_passing_case_count)
+            if threshold_passing_case_count < 0:
+                raise ValueError("threshold_passing_case_count must be >= 0 when provided")
+        object.__setattr__(self, "threshold_passing_case_count", threshold_passing_case_count)
+        threshold_failing_case_count = self.threshold_failing_case_count
+        if threshold_failing_case_count is not None:
+            threshold_failing_case_count = int(threshold_failing_case_count)
+            if threshold_failing_case_count < 0:
+                raise ValueError("threshold_failing_case_count must be >= 0 when provided")
+        object.__setattr__(self, "threshold_failing_case_count", threshold_failing_case_count)
+        threshold_passing_case_fraction = _normalized_score_value(self.threshold_passing_case_fraction)
+        if threshold_passing_case_fraction is not None and not (0.0 <= float(threshold_passing_case_fraction) <= 1.0):
+            raise ValueError("threshold_passing_case_fraction must be in [0, 1] when provided")
+        object.__setattr__(self, "threshold_passing_case_fraction", threshold_passing_case_fraction)
+        threshold_failing_case_fraction = _normalized_score_value(self.threshold_failing_case_fraction)
+        if threshold_failing_case_fraction is not None and not (0.0 <= float(threshold_failing_case_fraction) <= 1.0):
+            raise ValueError("threshold_failing_case_fraction must be in [0, 1] when provided")
+        object.__setattr__(self, "threshold_failing_case_fraction", threshold_failing_case_fraction)
+        threshold_passing_case_weight = _normalized_score_value(self.threshold_passing_case_weight)
+        if threshold_passing_case_weight is not None and float(threshold_passing_case_weight) < 0.0:
+            raise ValueError("threshold_passing_case_weight must be >= 0 when provided")
+        object.__setattr__(
+            self,
+            "threshold_passing_case_weight",
+            threshold_passing_case_weight,
+        )
+        threshold_failing_case_weight = _normalized_score_value(self.threshold_failing_case_weight)
+        if threshold_failing_case_weight is not None and float(threshold_failing_case_weight) < 0.0:
+            raise ValueError("threshold_failing_case_weight must be >= 0 when provided")
+        object.__setattr__(
+            self,
+            "threshold_failing_case_weight",
+            threshold_failing_case_weight,
+        )
+        threshold_passing_case_weight_fraction = _normalized_score_value(self.threshold_passing_case_weight_fraction)
+        if threshold_passing_case_weight_fraction is not None and not (
+            0.0 <= float(threshold_passing_case_weight_fraction) <= 1.0
+        ):
+            raise ValueError("threshold_passing_case_weight_fraction must be in [0, 1] when provided")
+        object.__setattr__(
+            self,
+            "threshold_passing_case_weight_fraction",
+            threshold_passing_case_weight_fraction,
+        )
+        threshold_failing_case_weight_fraction = _normalized_score_value(self.threshold_failing_case_weight_fraction)
+        if threshold_failing_case_weight_fraction is not None and not (
+            0.0 <= float(threshold_failing_case_weight_fraction) <= 1.0
+        ):
+            raise ValueError("threshold_failing_case_weight_fraction must be in [0, 1] when provided")
+        object.__setattr__(
+            self,
+            "threshold_failing_case_weight_fraction",
+            threshold_failing_case_weight_fraction,
+        )
         object.__setattr__(
             self,
             "case_pvalues",
@@ -299,6 +365,16 @@ class SuiteStatisticalSummary:
             self,
             "unsupported_case_check_ids",
             tuple(str(check_id).strip() for check_id in self.unsupported_case_check_ids if str(check_id).strip()),
+        )
+        object.__setattr__(
+            self,
+            "threshold_passing_case_check_ids",
+            tuple(str(check_id).strip() for check_id in self.threshold_passing_case_check_ids if str(check_id).strip()),
+        )
+        object.__setattr__(
+            self,
+            "threshold_failing_case_check_ids",
+            tuple(str(check_id).strip() for check_id in self.threshold_failing_case_check_ids if str(check_id).strip()),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -355,6 +431,25 @@ class SuiteStatisticalSummary:
             payload["threshold_gate_passed"] = bool(self.threshold_gate_passed)
         if self.gate_passed is not None:
             payload["gate_passed"] = bool(self.gate_passed)
+        if self.threshold_passing_case_count is not None:
+            payload["threshold_passing_case_count"] = int(self.threshold_passing_case_count)
+        if self.threshold_failing_case_count is not None:
+            payload["threshold_failing_case_count"] = int(self.threshold_failing_case_count)
+        if self.threshold_passing_case_fraction is not None:
+            payload["threshold_passing_case_fraction"] = float(self.threshold_passing_case_fraction)
+        if self.threshold_failing_case_fraction is not None:
+            payload["threshold_failing_case_fraction"] = float(self.threshold_failing_case_fraction)
+        if self.threshold_passing_case_weight is not None:
+            payload["threshold_passing_case_weight"] = float(self.threshold_passing_case_weight)
+        if self.threshold_failing_case_weight is not None:
+            payload["threshold_failing_case_weight"] = float(self.threshold_failing_case_weight)
+        if self.threshold_passing_case_weight_fraction is not None:
+            payload["threshold_passing_case_weight_fraction"] = float(self.threshold_passing_case_weight_fraction)
+        if self.threshold_failing_case_weight_fraction is not None:
+            payload["threshold_failing_case_weight_fraction"] = float(self.threshold_failing_case_weight_fraction)
+        if self.threshold_passing_case_count is not None:
+            payload["threshold_passing_case_check_ids"] = list(self.threshold_passing_case_check_ids)
+            payload["threshold_failing_case_check_ids"] = list(self.threshold_failing_case_check_ids)
         return payload
 
 
@@ -724,14 +819,66 @@ def _suite_statistical_summary(
     rounded_rollup_pvalue = rounded(rollup_pvalue, digits=4)
     threshold_phrase = ""
     threshold_gate_passed: bool | None = None
+    threshold_passing_case_count: int | None = None
+    threshold_failing_case_count: int | None = None
+    threshold_passing_case_fraction: float | None = None
+    threshold_failing_case_fraction: float | None = None
+    threshold_passing_case_weight: float | None = None
+    threshold_failing_case_weight: float | None = None
+    threshold_passing_case_weight_fraction: float | None = None
+    threshold_failing_case_weight_fraction: float | None = None
+    threshold_passing_case_check_ids: tuple[str, ...] = ()
+    threshold_failing_case_check_ids: tuple[str, ...] = ()
     if threshold is not None:
         threshold_phrase = (
             f" (threshold {rounded(float(threshold), digits=4):g})"
         )
         if threshold_direction == "le":
             threshold_gate_passed = rollup_pvalue <= float(threshold)
+            threshold_passing_entries = [entry for entry in entries if float(entry["pvalue"]) <= float(threshold)]
+            threshold_failing_entries = [entry for entry in entries if float(entry["pvalue"]) > float(threshold)]
         elif threshold_direction == "ge":
             threshold_gate_passed = rollup_pvalue >= float(threshold)
+            threshold_passing_entries = [entry for entry in entries if float(entry["pvalue"]) >= float(threshold)]
+            threshold_failing_entries = [entry for entry in entries if float(entry["pvalue"]) < float(threshold)]
+        else:
+            threshold_passing_entries = []
+            threshold_failing_entries = []
+        if threshold_direction in {"le", "ge"}:
+            threshold_passing_case_count = len(threshold_passing_entries)
+            threshold_failing_case_count = len(threshold_failing_entries)
+            if available_case_count > 0:
+                threshold_passing_case_fraction = rounded(
+                    float(threshold_passing_case_count) / float(available_case_count),
+                    digits=3,
+                )
+                threshold_failing_case_fraction = rounded(
+                    float(threshold_failing_case_count) / float(available_case_count),
+                    digits=3,
+                )
+            threshold_passing_case_check_ids = tuple(str(entry["check_id"]) for entry in threshold_passing_entries)
+            threshold_failing_case_check_ids = tuple(str(entry["check_id"]) for entry in threshold_failing_entries)
+            if all_cases_weighted and available_case_weight is not None and available_case_weight > 0.0:
+                case_weight_by_check_id = {
+                    case.check_id: float(case.case_weight or 0.0)
+                    for case in case_summaries
+                }
+                threshold_passing_case_weight = rounded(
+                    sum(case_weight_by_check_id[check_id] for check_id in threshold_passing_case_check_ids),
+                    digits=3,
+                )
+                threshold_failing_case_weight = rounded(
+                    sum(case_weight_by_check_id[check_id] for check_id in threshold_failing_case_check_ids),
+                    digits=3,
+                )
+                threshold_passing_case_weight_fraction = rounded(
+                    float(threshold_passing_case_weight) / float(available_case_weight),
+                    digits=3,
+                )
+                threshold_failing_case_weight_fraction = rounded(
+                    float(threshold_failing_case_weight) / float(available_case_weight),
+                    digits=3,
+                )
     support_phrase = ""
     if support_requirement_phrases:
         support_phrase = " Statistical support requirements: " + "; ".join(support_requirement_phrases) + "."
@@ -772,9 +919,19 @@ def _suite_statistical_summary(
         weight_support_gate_passed=weight_support_gate_passed,
         threshold_gate_passed=threshold_gate_passed,
         gate_passed=gate_passed,
+        threshold_passing_case_count=threshold_passing_case_count,
+        threshold_failing_case_count=threshold_failing_case_count,
+        threshold_passing_case_fraction=threshold_passing_case_fraction,
+        threshold_failing_case_fraction=threshold_failing_case_fraction,
+        threshold_passing_case_weight=threshold_passing_case_weight,
+        threshold_failing_case_weight=threshold_failing_case_weight,
+        threshold_passing_case_weight_fraction=threshold_passing_case_weight_fraction,
+        threshold_failing_case_weight_fraction=threshold_failing_case_weight_fraction,
         case_pvalues=tuple(pvalues),
         case_check_ids=tuple(str(entry["check_id"]) for entry in entries),
         unsupported_case_check_ids=unsupported_case_check_ids,
+        threshold_passing_case_check_ids=threshold_passing_case_check_ids,
+        threshold_failing_case_check_ids=threshold_failing_case_check_ids,
     )
 
 

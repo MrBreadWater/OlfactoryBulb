@@ -1818,6 +1818,10 @@ Important details:
   contract explicit: supported and unsupported case counts/fractions, supported
   and unsupported case weights/fractions when the suite has principled weights,
   and the supported/unsupported `check_id` lists
+- when the suite has a declared statistical threshold, the same summary also
+  makes the passing/failing distribution explicit across the statistically
+  supported cases: counts, fractions, optional supported-weight totals, and the
+  passing/failing `check_id` lists
 - the weight-based support fields are only principled when the suite family
   emits a real per-case weight; in the maintained branch that currently means
   the series-comparison suite family, which uses matched-point count

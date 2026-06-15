@@ -706,3 +706,13 @@ Remove this file when the listed items are either:
         when the maintained case-weight contract is fully available
       - the maintained HOWTO/tutorial/agent contract now documents those
         unsupported-support fields as part of the stable suite-summary surface
+- [x] Make suite-level statistical threshold distributions explicit instead of
+      only reporting the rolled-up threshold gate outcome.
+      - thresholded suite summaries now emit passing/failing case counts,
+        fractions, and `check_id` lists across the statistically supported
+        cases
+      - weighted suites now also emit passing/failing supported-weight splits
+        when the maintained case-weight contract is fully available
+      - the maintained HOWTO/tutorial/agent contract now documents those
+        threshold-distribution fields as part of the stable suite-summary
+        surface

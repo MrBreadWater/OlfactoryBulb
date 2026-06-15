@@ -835,7 +835,11 @@ contract for future sessions.
     incidental presentation values. Preserve the unsupported side of that
     contract too: the emitted suite summary should make it obvious which cases
     did not contribute statistical evidence and, for weighted suites, how much
-    principled weight those unsupported cases represent.
+    principled weight those unsupported cases represent. When the suite also
+    has a real statistical threshold, preserve the threshold-passing and
+    threshold-failing distributions across the statistically supported cases,
+    including case ids and any principled supported-weight split, instead of
+    forcing the reader to infer them from the rolled-up p-value alone.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

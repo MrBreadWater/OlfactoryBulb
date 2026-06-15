@@ -160,9 +160,15 @@ assert equivalence_summary == {
     "support_gate_passed": True,
     "threshold_gate_passed": True,
     "gate_passed": True,
+    "threshold_passing_case_count": 2,
+    "threshold_failing_case_count": 0,
+    "threshold_passing_case_fraction": 1.0,
+    "threshold_failing_case_fraction": 0.0,
     "case_pvalues": [0.01, 0.03],
     "case_check_ids": ["equiv_a", "equiv_b"],
     "unsupported_case_check_ids": [],
+    "threshold_passing_case_check_ids": ["equiv_a", "equiv_b"],
+    "threshold_failing_case_check_ids": [],
 }
 
 welch_score = build_suite_aggregate_score(
@@ -233,9 +239,15 @@ assert welch_summary == {
     "support_gate_passed": True,
     "threshold_gate_passed": True,
     "gate_passed": True,
+    "threshold_passing_case_count": 2,
+    "threshold_failing_case_count": 0,
+    "threshold_passing_case_fraction": 1.0,
+    "threshold_failing_case_fraction": 0.0,
     "case_pvalues": [0.08, 0.12],
     "case_check_ids": ["welch_a", "welch_b"],
     "unsupported_case_check_ids": [],
+    "threshold_passing_case_check_ids": ["welch_a", "welch_b"],
+    "threshold_failing_case_check_ids": [],
 }
 
 median_equivalence_score = build_suite_aggregate_score(
@@ -327,9 +339,15 @@ assert median_equivalence_summary == {
     "support_gate_passed": True,
     "threshold_gate_passed": True,
     "gate_passed": True,
+    "threshold_passing_case_count": 2,
+    "threshold_failing_case_count": 1,
+    "threshold_passing_case_fraction": 0.667,
+    "threshold_failing_case_fraction": 0.333,
     "case_pvalues": [0.01, 0.05, 0.09],
     "case_check_ids": ["equiv_a", "equiv_b", "equiv_c"],
     "unsupported_case_check_ids": [],
+    "threshold_passing_case_check_ids": ["equiv_a", "equiv_b"],
+    "threshold_failing_case_check_ids": ["equiv_c"],
 }
 
 partial_support_score = build_suite_aggregate_score(
@@ -404,9 +422,15 @@ assert partial_support_summary == {
     "support_gate_passed": False,
     "threshold_gate_passed": True,
     "gate_passed": False,
+    "threshold_passing_case_count": 1,
+    "threshold_failing_case_count": 0,
+    "threshold_passing_case_fraction": 1.0,
+    "threshold_failing_case_fraction": 0.0,
     "case_pvalues": [0.02],
     "case_check_ids": ["supported_case"],
     "unsupported_case_check_ids": ["unsupported_case"],
+    "threshold_passing_case_check_ids": ["supported_case"],
+    "threshold_failing_case_check_ids": [],
 }
 
 weighted_support_score = build_suite_aggregate_score(
@@ -492,9 +516,19 @@ assert weighted_support_summary == {
     "weight_support_gate_passed": False,
     "threshold_gate_passed": True,
     "gate_passed": False,
+    "threshold_passing_case_count": 1,
+    "threshold_failing_case_count": 0,
+    "threshold_passing_case_fraction": 1.0,
+    "threshold_failing_case_fraction": 0.0,
+    "threshold_passing_case_weight": 4.0,
+    "threshold_failing_case_weight": 0.0,
+    "threshold_passing_case_weight_fraction": 1.0,
+    "threshold_failing_case_weight_fraction": 0.0,
     "case_pvalues": [0.02],
     "case_check_ids": ["weighted_supported"],
     "unsupported_case_check_ids": ["weighted_unsupported"],
+    "threshold_passing_case_check_ids": ["weighted_supported"],
+    "threshold_failing_case_check_ids": [],
 }
 
 missing_weight_support_score = build_suite_aggregate_score(
@@ -540,7 +574,75 @@ assert "all suite cases need per-case weights" in missing_weight_summary["score_
 assert missing_weight_summary["unsupported_case_count"] == 1
 assert missing_weight_summary["unsupported_case_fraction"] == 0.5
 assert missing_weight_summary["unsupported_case_check_ids"] == ["unweighted_unsupported"]
+assert missing_weight_summary["threshold_passing_case_count"] == 1
+assert missing_weight_summary["threshold_failing_case_count"] == 0
+assert missing_weight_summary["threshold_passing_case_fraction"] == 1.0
+assert missing_weight_summary["threshold_failing_case_fraction"] == 0.0
+assert missing_weight_summary["threshold_passing_case_check_ids"] == ["weighted_supported"]
+assert missing_weight_summary["threshold_failing_case_check_ids"] == []
 assert "available_case_weight" not in missing_weight_summary
 assert "total_case_weight" not in missing_weight_summary
+assert "threshold_passing_case_weight" not in missing_weight_summary
+assert "threshold_failing_case_weight" not in missing_weight_summary
+
+weighted_threshold_mix_score = build_suite_aggregate_score(
+    suite_id="synthetic.weighted_threshold_mix_suite",
+    case_summaries=[
+        SuiteCaseSummary(
+            check_id="weighted_pass",
+            title="Weighted threshold pass",
+            status="PASS",
+            norm_score=1.0,
+            case_weight=3.0,
+            case_weight_label="matched points",
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.02,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
+            ),
+        ),
+        SuiteCaseSummary(
+            check_id="weighted_fail",
+            title="Weighted threshold fail",
+            status="FAIL",
+            norm_score=0.0,
+            case_weight=9.0,
+            case_weight_label="matched points",
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.08,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
+            ),
+        ),
+    ],
+)
+
+weighted_threshold_mix_summary = weighted_threshold_mix_score.to_evidence()["suite_statistical_summary"]
+assert weighted_threshold_mix_summary["threshold_passing_case_count"] == 1
+assert weighted_threshold_mix_summary["threshold_failing_case_count"] == 1
+assert weighted_threshold_mix_summary["threshold_passing_case_fraction"] == 0.5
+assert weighted_threshold_mix_summary["threshold_failing_case_fraction"] == 0.5
+assert weighted_threshold_mix_summary["threshold_passing_case_weight"] == 3.0
+assert weighted_threshold_mix_summary["threshold_failing_case_weight"] == 9.0
+assert weighted_threshold_mix_summary["threshold_passing_case_weight_fraction"] == 0.25
+assert weighted_threshold_mix_summary["threshold_failing_case_weight_fraction"] == 0.75
+assert weighted_threshold_mix_summary["threshold_passing_case_check_ids"] == ["weighted_pass"]
+assert weighted_threshold_mix_summary["threshold_failing_case_check_ids"] == ["weighted_fail"]
 
 print("neuronunit_suite_scores: OK")
