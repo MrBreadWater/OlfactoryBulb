@@ -729,6 +729,61 @@ def _lookup_transform_numeric_value(
     )
 
 
+def _normalized_transform_points(
+    raw_points: object,
+    *,
+    source_label: str,
+) -> tuple[tuple[float, float], ...]:
+    if not isinstance(raw_points, (list, tuple)):
+        raise ValueError(f"{source_label} must be a sequence of control points")
+    normalized_points: list[tuple[float, float]] = []
+    for index, point in enumerate(raw_points, start=1):
+        if isinstance(point, Mapping):
+            if "input" not in point or "output" not in point:
+                raise ValueError(f"{source_label}[{index}] must provide both 'input' and 'output'")
+            raw_input = point["input"]
+            raw_output = point["output"]
+        elif isinstance(point, (list, tuple)) and len(point) == 2:
+            raw_input, raw_output = point
+        else:
+            raise ValueError(
+                f"{source_label}[{index}] must be either a dict with input/output or a two-item list"
+            )
+        try:
+            input_value = numeric_value(raw_input) if isinstance(raw_input, pq.Quantity) else float(raw_input)
+            output_value = numeric_value(raw_output) if isinstance(raw_output, pq.Quantity) else float(raw_output)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"{source_label}[{index}] did not contain finite numeric input/output values"
+            ) from None
+        if not math.isfinite(input_value) or not math.isfinite(output_value):
+            raise ValueError(f"{source_label}[{index}] did not contain finite numeric input/output values")
+        normalized_points.append((float(input_value), float(output_value)))
+    return tuple(normalized_points)
+
+
+def _lookup_transform_points(
+    lookup_key: str,
+    *,
+    row: Mapping[str, object] | None,
+    context: Mapping[str, object] | None,
+) -> tuple[tuple[float, float], ...]:
+    normalized_key = str(lookup_key or "").strip()
+    if not normalized_key:
+        raise ValueError("Transform lookup keys must be non-empty")
+    for mapping_name, mapping in (("row", row), ("context", context)):
+        candidate = _nested_mapping_value(mapping, normalized_key)
+        if candidate in (None, ""):
+            continue
+        return _normalized_transform_points(
+            candidate,
+            source_label=f"Transform lookup key {normalized_key!r} resolved from {mapping_name} metadata",
+        )
+    raise ValueError(
+        f"Transform lookup key {normalized_key!r} was not found in the available row/context metadata"
+    )
+
+
 @dataclass(frozen=True)
 class AxisTransform:
     kind: str = "identity"
@@ -737,6 +792,7 @@ class AxisTransform:
     input_unit_text: str = ""
     output_unit_text: str = ""
     points: tuple[tuple[float, float], ...] = ()
+    points_lookup_key: str = ""
     extrapolation_mode: str = "forbid"
     scale_lookup_key: str = ""
     offset_lookup_key: str = ""
@@ -851,6 +907,10 @@ class AxisTransform:
             )
 
         if kind == "piecewise_linear":
+            if str(self.points_lookup_key or "").strip() and self.points:
+                raise ValueError(
+                    "piecewise_linear transform must use either explicit points or points_lookup_key, not both"
+                )
             if input_unit_text and source_unit_text:
                 measurement = measurement_with_unit(float(raw_value), source_unit_text)
                 input_unit = quantity_unit_for_text(input_unit_text)
@@ -865,9 +925,17 @@ class AxisTransform:
                     base_numeric = float(raw_value)
             else:
                 base_numeric = float(raw_value)
+            if str(self.points_lookup_key or "").strip():
+                resolved_points = _lookup_transform_points(
+                    self.points_lookup_key,
+                    row=row,
+                    context=context,
+                )
+            else:
+                resolved_points = self.points
             transformed = _piecewise_linear_value(
                 base_numeric,
-                points=self.points,
+                points=resolved_points,
                 extrapolation_mode=self.extrapolation_mode,
             )
             measurement = measurement_with_unit(transformed, output_unit_text)
@@ -895,8 +963,13 @@ class AxisTransform:
                 f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
             )
         if kind == "piecewise_linear":
+            points_descriptor = (
+                f"points_lookup={self.points_lookup_key}"
+                if str(self.points_lookup_key or "").strip()
+                else f"points={len(self.points)}"
+            )
             return (
-                f"piecewise_linear(points={len(self.points)}, extrapolation={self.extrapolation_mode or 'forbid'}, "
+                f"piecewise_linear({points_descriptor}, extrapolation={self.extrapolation_mode or 'forbid'}, "
                 f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
             )
         if kind == "pipeline":

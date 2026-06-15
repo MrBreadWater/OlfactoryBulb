@@ -2376,7 +2376,8 @@ The remaining open questions are now narrower:
   status-matrix presentation, and support gates
 - whether transform generalization should stop at explicit piecewise-linear
   mappings plus the current context-dependent affine lookup / pipeline path,
-  or later grow into richer metadata-driven transforms
+  or later grow into richer metadata-driven transforms beyond the current
+  metadata-backed `points_lookup_key` path for monotone piecewise calibrations
 - whether alignment generalization should stop at the current
   distribution-preserving resampled-grid contract with its current grid /
   interpolation / domain families (`reference_observed_x`,

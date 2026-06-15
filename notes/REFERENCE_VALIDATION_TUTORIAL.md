@@ -1779,6 +1779,11 @@ Important details:
   declare it with explicit control points such as
   `points = [{input = 0.10, output = 100.0}, {input = 0.20, output = 210.0}]`
   and optional `extrapolation_mode = "forbid" | "constant" | "linear"`
+- that same `piecewise_linear` transform may instead load its control points
+  from maintained row/protocol metadata with `points_lookup_key`; use that
+  when the monotone calibration map is still declarative but the concrete
+  control points belong in maintained protocol evidence rather than in the
+  validation-local TOML
 - use `pipeline` when the mapping is most intelligible as a short ordered
   sequence of the maintained transform kinds, such as a metadata-driven
   `affine_lookup` followed by a `piecewise_linear` calibration map; declare

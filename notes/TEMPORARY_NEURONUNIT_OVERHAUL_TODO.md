@@ -723,3 +723,11 @@ Remove this file when the listed items are either:
       - weighted suites now also show the passing-weight slice when the
         maintained case-weight contract is available
       - direct dashboard coverage now asserts the threshold header text
+- [x] Extend the monotone transform contract so piecewise-linear calibrations
+      can come from maintained metadata instead of only static TOML tables.
+      - `piecewise_linear` now supports `points_lookup_key`
+      - the declarative parser now forbids mixing `points` and
+        `points_lookup_key` on the same transform and requires one or the
+        other for `piecewise_linear`
+      - direct suite coverage and rule-level coverage now prove a maintained
+        metadata-backed piecewise calibration path

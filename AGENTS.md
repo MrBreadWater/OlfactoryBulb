@@ -659,7 +659,11 @@ contract for future sessions.
     protocol runners or rule handlers. Use `affine_lookup` when the scale or
     offset belongs to explicit row/protocol metadata rather than to a
     validation-local constant; keep the lookup key declarative instead of
-    burying the conversion in Python.
+    burying the conversion in Python. Let `piecewise_linear` load its control
+    points from metadata with `points_lookup_key` when the monotone
+    calibration map belongs in maintained protocol evidence rather than in one
+    validation TOML, and do not mix `points` with `points_lookup_key` on the
+    same transform.
     Keep reusable provenance structure out of ad hoc evidence-dict assembly:
     when a series-comparison change affects reference/model provenance payloads
     or compact protocol-context summaries, extend the shared typed layer in

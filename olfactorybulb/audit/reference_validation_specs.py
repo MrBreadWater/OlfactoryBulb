@@ -1176,6 +1176,7 @@ class _SeriesComparisonRuleParser:
             return AxisTransform()
         if not isinstance(raw, MappingABC):
             raise ValueError(f"{key} must be a table/dict when provided")
+        kind = str(raw.get("kind", "identity")).strip()
         raw_points = raw.get("points", ())
         points: tuple[tuple[float, float], ...] = ()
         if raw_points not in (None, ""):
@@ -1197,6 +1198,13 @@ class _SeriesComparisonRuleParser:
                     f"{key}.points[{index}] must be either a dict with input/output or a two-item list"
                 )
             points = tuple(normalized_points)
+        points_lookup_key = str(raw.get("points_lookup_key", "")).strip()
+        if points_lookup_key and kind != "piecewise_linear":
+            raise ValueError(f"{key}.points_lookup_key only applies to kind='piecewise_linear'")
+        if kind == "piecewise_linear" and points and points_lookup_key:
+            raise ValueError(f"{key} piecewise_linear transform must use either points or points_lookup_key, not both")
+        if kind == "piecewise_linear" and not points and not points_lookup_key:
+            raise ValueError(f"{key} piecewise_linear transform requires either points or points_lookup_key")
         raw_steps = raw.get("steps", ())
         steps: tuple[AxisTransform, ...] = ()
         if raw_steps not in (None, ""):
@@ -1207,12 +1215,13 @@ class _SeriesComparisonRuleParser:
                 normalized_steps.append(self._axis_transform_from_mapping(step, f"{key}.steps[{index}]"))
             steps = tuple(normalized_steps)
         return AxisTransform(
-            kind=str(raw.get("kind", "identity")),
+            kind=kind,
             scale=float(raw.get("scale", 1.0)),
             offset=float(raw.get("offset", 0.0)),
             input_unit_text=str(raw.get("input_unit_text", "")).strip(),
             output_unit_text=str(raw.get("output_unit_text", "")).strip(),
             points=points,
+            points_lookup_key=points_lookup_key,
             extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
             scale_lookup_key=str(raw.get("scale_lookup_key", "")).strip(),
             offset_lookup_key=str(raw.get("offset_lookup_key", "")).strip(),

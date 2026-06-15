@@ -872,7 +872,12 @@ stay declarative without hiding the source of the factor in ad hoc Python.</p>
 <p>For <code>piecewise_linear</code>, declare at least two control points and keep the mapping
 explicit in the validation config. The current transform object accepts
 <code>points = [{input = ..., output = ...}, ...]</code> plus an optional
-<code>extrapolation_mode = "forbid" | "constant" | "linear"</code>.</p>
+<code>extrapolation_mode = "forbid" | "constant" | "linear"</code>. When the control
+points belong in explicit row/protocol metadata instead of in the validation
+TOML, declare <code>points_lookup_key</code> instead of <code>points</code>. The maintained path
+resolves that dotted metadata key against the current row first and the
+protocol-evidence context second. Do not declare both <code>points</code> and
+<code>points_lookup_key</code> on the same transform.</p>
 <p>For <code>pipeline</code>, declare <code>steps = [{...}, {...}]</code> as an ordered sequence of the
 same maintained transform tables. Use this when a model axis first needs a
 metadata-driven affine conversion and then a monotone calibration map, rather

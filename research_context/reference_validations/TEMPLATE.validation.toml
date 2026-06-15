@@ -419,6 +419,11 @@ validation_design_review_status = "pending"
 #   extrapolation_mode = "forbid",
 # }
 # model_x_transform = {
+#   kind = "piecewise_linear",
+#   output_unit_text = "pA",
+#   points_lookup_key = "unit_conversions.flux_to_pA_points",
+# }
+# model_x_transform = {
 #   kind = "pipeline",
 #   steps = [
 #     { kind = "affine_lookup", scale_lookup_key = "unit_conversions.flux_to_nA_scale", output_unit_text = "nA" },

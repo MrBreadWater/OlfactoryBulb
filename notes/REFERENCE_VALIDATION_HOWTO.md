@@ -822,7 +822,12 @@ stay declarative without hiding the source of the factor in ad hoc Python.
 For `piecewise_linear`, declare at least two control points and keep the mapping
 explicit in the validation config. The current transform object accepts
 `points = [{input = ..., output = ...}, ...]` plus an optional
-`extrapolation_mode = "forbid" | "constant" | "linear"`.
+`extrapolation_mode = "forbid" | "constant" | "linear"`. When the control
+points belong in explicit row/protocol metadata instead of in the validation
+TOML, declare `points_lookup_key` instead of `points`. The maintained path
+resolves that dotted metadata key against the current row first and the
+protocol-evidence context second. Do not declare both `points` and
+`points_lookup_key` on the same transform.
 
 For `pipeline`, declare `steps = [{...}, {...}]` as an ordered sequence of the
 same maintained transform tables. Use this when a model axis first needs a
