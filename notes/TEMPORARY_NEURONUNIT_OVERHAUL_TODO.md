@@ -671,3 +671,13 @@ Remove this file when the listed items are either:
       - the declarative parser, dashboard status-matrix header, HOWTO/tutorial,
         and template contract all now expose the weighted-support form instead
         of leaving it as code-only behavior
+- [x] Generalize the explicit series transform contract beyond one-step
+      mappings so maintained validations can compose metadata-driven and
+      monotone calibration transforms without inventing new ad hoc kinds.
+      - `AxisTransform` now supports `kind = "pipeline"` with ordered
+        maintained transform steps
+      - the declarative `reference_curve_match` parser now accepts nested
+        `steps = [{...}, {...}]` transform tables
+      - direct suite coverage and rule-level coverage now prove a maintained
+        pipeline can combine `affine_lookup` and `piecewise_linear` before the
+        series comparison runs

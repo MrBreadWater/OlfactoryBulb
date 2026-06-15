@@ -1168,6 +1168,11 @@ class _SeriesComparisonRuleParser:
         raw = self.rule.get(key, {})
         if raw in (None, "", {}):
             return AxisTransform()
+        return self._axis_transform_from_mapping(raw, key)
+
+    def _axis_transform_from_mapping(self, raw: object, key: str) -> AxisTransform:
+        if raw in (None, "", {}):
+            return AxisTransform()
         if not isinstance(raw, MappingABC):
             raise ValueError(f"{key} must be a table/dict when provided")
         raw_points = raw.get("points", ())
@@ -1191,6 +1196,15 @@ class _SeriesComparisonRuleParser:
                     f"{key}.points[{index}] must be either a dict with input/output or a two-item list"
                 )
             points = tuple(normalized_points)
+        raw_steps = raw.get("steps", ())
+        steps: tuple[AxisTransform, ...] = ()
+        if raw_steps not in (None, ""):
+            if not isinstance(raw_steps, (list, tuple)):
+                raise ValueError(f"{key}.steps must be a sequence when provided")
+            normalized_steps: list[AxisTransform] = []
+            for index, step in enumerate(raw_steps, start=1):
+                normalized_steps.append(self._axis_transform_from_mapping(step, f"{key}.steps[{index}]"))
+            steps = tuple(normalized_steps)
         return AxisTransform(
             kind=str(raw.get("kind", "identity")),
             scale=float(raw.get("scale", 1.0)),
@@ -1201,6 +1215,7 @@ class _SeriesComparisonRuleParser:
             extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
             scale_lookup_key=str(raw.get("scale_lookup_key", "")).strip(),
             offset_lookup_key=str(raw.get("offset_lookup_key", "")).strip(),
+            steps=steps,
         )
 
     def _unit_text(self, key: str, *, fallback: str = "", explicit_required: bool = True) -> str:

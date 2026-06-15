@@ -414,6 +414,18 @@ validation_design_review_status = "pending"
 #   points = [{ input = 0.10, output = 100.0 }, { input = 0.20, output = 210.0 }],
 #   extrapolation_mode = "forbid",
 # }
+# model_x_transform = {
+#   kind = "pipeline",
+#   steps = [
+#     { kind = "affine_lookup", scale_lookup_key = "unit_conversions.flux_to_nA_scale", output_unit_text = "nA" },
+#     {
+#       kind = "piecewise_linear",
+#       input_unit_text = "nA",
+#       output_unit_text = "pA",
+#       points = [{ input = 0.10, output = 100.0 }, { input = 0.20, output = 210.0 }],
+#     },
+#   ],
+# }
 # maximum_mae = 20.0
 # maximum_rmse = 30.0
 # minimum_point_count = 5

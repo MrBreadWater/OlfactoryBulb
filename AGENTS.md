@@ -1106,6 +1106,11 @@ contract for future sessions.
       `model`, and the emitted evidence should expose both the resolved policy
       and any filtered-out grid points instead of leaving domain clipping
       implicit in missing-support counts
+    - when a maintained series comparison needs more than one explicit axis
+      conversion step, use `kind = "pipeline"` with ordered maintained
+      transform steps instead of inventing another one-off transform kind; the
+      current bridge supports chaining the existing `identity`, `affine`,
+      `affine_lookup`, and `piecewise_linear` transforms explicitly in config
     - when a maintained SciUnit wrapper already has a typed case or
       observation object, make that object own the SciUnit observation payload
       via a small `observation_payload()` helper instead of rebuilding a

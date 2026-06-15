@@ -2345,6 +2345,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `suite_statistical_summary` now records weighted support counts,
     fractions, labels, and gate results when the suite family exposes a real
     per-case weight
+  - transform generalization is broader now too: the maintained
+    `AxisTransform` contract supports `kind = "pipeline"` so a validation can
+    compose the existing explicit transform kinds in order instead of
+    introducing a new ad hoc transform just to express a two-step mapping
   - the suite-level statistical-support contract is now visible in the
     migrated presentation layer too: when a suite matrix has only partial
     statistical support or fails its declared support gate, the dashboard
@@ -2361,8 +2365,8 @@ The remaining open questions are now narrower:
   promote additional suite-level statistical contracts beyond rollup choice
   plus the current supported-case count/fraction/weight gates
 - whether transform generalization should stop at explicit piecewise-linear
-  mappings plus the current context-dependent affine lookup path, or later
-  grow into richer metadata-driven transforms
+  mappings plus the current context-dependent affine lookup / pipeline path,
+  or later grow into richer metadata-driven transforms
 - whether alignment generalization should stop at the current
   distribution-preserving resampled-grid contract with its current explicit
   interpolation/domain families (`linear`, `nearest`, `pchip`, `step_hold`;

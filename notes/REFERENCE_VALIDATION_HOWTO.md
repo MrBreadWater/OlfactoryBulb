@@ -777,6 +777,9 @@ For transforms, start with:
   from a validation-local constant
 - `kind = "piecewise_linear"` when the literature/model x-axis relationship is
   monotone but not well described by one global scale/offset
+- `kind = "pipeline"` when the mapping is easier to express as an ordered
+  sequence of the existing maintained transform kinds instead of as one larger
+  one-off transform
 
 For `affine_lookup`, declare `scale_lookup_key` and/or `offset_lookup_key` as
 explicit metadata paths. The maintained path resolves dotted keys against the
@@ -787,6 +790,11 @@ For `piecewise_linear`, declare at least two control points and keep the mapping
 explicit in the validation config. The current transform object accepts
 `points = [{input = ..., output = ...}, ...]` plus an optional
 `extrapolation_mode = "forbid" | "constant" | "linear"`.
+
+For `pipeline`, declare `steps = [{...}, {...}]` as an ordered sequence of the
+same maintained transform tables. Use this when a model axis first needs a
+metadata-driven affine conversion and then a monotone calibration map, rather
+than inventing another special transform kind just to chain the two together.
 The current maintained EPL-FSI example-cell comparison uses
 `score_family = "residual_only"` because the model side usually exposes one
 response trace per current step, so a formal per-bin two-sample test is not

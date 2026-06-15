@@ -631,19 +631,31 @@ def _piecewise_linear_value(
     sorted_points = _sorted_piecewise_points(points)
     input_values = [input_value for input_value, _output_value in sorted_points]
     output_values = [output_value for _input_value, output_value in sorted_points]
-    if input_values[0] <= float(raw_input) <= input_values[-1]:
-        return float(np.interp(float(raw_input), np.asarray(input_values, dtype=float), np.asarray(output_values, dtype=float)))
+    candidate_input = float(raw_input)
+    domain_low = float(input_values[0])
+    domain_high = float(input_values[-1])
+    domain_span = max(abs(domain_high - domain_low), 1.0)
+    boundary_tolerance = 1e-9 * domain_span
+    if domain_low - boundary_tolerance <= candidate_input <= domain_high + boundary_tolerance:
+        clamped_input = min(max(candidate_input, domain_low), domain_high)
+        return float(
+            np.interp(
+                clamped_input,
+                np.asarray(input_values, dtype=float),
+                np.asarray(output_values, dtype=float),
+            )
+        )
 
     mode = str(extrapolation_mode or "forbid").strip().lower()
     if mode == "forbid":
         raise ValueError(
-            f"piecewise_linear transform cannot extrapolate input value {float(raw_input):g}; "
+            f"piecewise_linear transform cannot extrapolate input value {candidate_input:g}; "
             f"supported domain is [{input_values[0]:g}, {input_values[-1]:g}]"
         )
     if mode == "constant":
-        return float(output_values[0] if float(raw_input) < input_values[0] else output_values[-1])
+        return float(output_values[0] if candidate_input < input_values[0] else output_values[-1])
     if mode == "linear":
-        if float(raw_input) < input_values[0]:
+        if candidate_input < input_values[0]:
             left_a, left_b = sorted_points[0], sorted_points[1]
         else:
             left_a, left_b = sorted_points[-2], sorted_points[-1]
@@ -651,7 +663,7 @@ def _piecewise_linear_value(
         if input_span == 0.0:
             raise ValueError("piecewise_linear transform extrapolation requires distinct neighboring input values")
         slope = float(left_b[1] - left_a[1]) / input_span
-        return float(left_a[1]) + slope * (float(raw_input) - float(left_a[0]))
+        return float(left_a[1]) + slope * (candidate_input - float(left_a[0]))
     raise ValueError(
         f"Unsupported piecewise_linear extrapolation mode {extrapolation_mode!r}; "
         "expected one of forbid, constant, linear"
@@ -716,6 +728,11 @@ class AxisTransform:
     extrapolation_mode: str = "forbid"
     scale_lookup_key: str = ""
     offset_lookup_key: str = ""
+    steps: tuple["AxisTransform", ...] = ()
+
+    def _resolved_output_unit_text(self, source_unit_text: str) -> str:
+        input_unit_text = str(self.input_unit_text or source_unit_text or "").strip()
+        return str(self.output_unit_text or input_unit_text or source_unit_text or "").strip()
 
     def apply(
         self,
@@ -728,7 +745,30 @@ class AxisTransform:
     ) -> float | pq.Quantity:
         kind = str(self.kind or "identity").strip().lower()
         input_unit_text = str(self.input_unit_text or source_unit_text or "").strip()
-        output_unit_text = str(self.output_unit_text or input_unit_text or "").strip()
+        output_unit_text = self._resolved_output_unit_text(source_unit_text)
+
+        if kind == "pipeline":
+            if not self.steps:
+                raise ValueError("pipeline transform requires at least one step")
+            current_value = float(raw_value)
+            current_source_unit_text = str(source_unit_text or "").strip()
+            for step in self.steps:
+                current_value = float(
+                    step.apply(
+                        current_value,
+                        source_unit_text=current_source_unit_text,
+                        comparison_unit_text="",
+                        row=row,
+                        context=context,
+                    )
+                )
+                current_source_unit_text = step._resolved_output_unit_text(current_source_unit_text)
+            measurement = measurement_with_unit(current_value, current_source_unit_text)
+            return _coerce_to_comparison_unit(
+                measurement,
+                fallback_unit_text=current_source_unit_text,
+                comparison_unit_text=comparison_unit_text,
+            )
 
         if kind == "identity":
             measurement = measurement_with_unit(float(raw_value), source_unit_text)
@@ -847,6 +887,9 @@ class AxisTransform:
                 f"piecewise_linear(points={len(self.points)}, extrapolation={self.extrapolation_mode or 'forbid'}, "
                 f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
             )
+        if kind == "pipeline":
+            step_descriptions = " -> ".join(step.description() for step in self.steps)
+            return f"pipeline({step_descriptions})"
         return kind
 
 

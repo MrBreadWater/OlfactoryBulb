@@ -1763,6 +1763,7 @@ Important details:
   - `kind = "affine"`
   - `kind = "affine_lookup"`
   - `kind = "piecewise_linear"`
+  - `kind = "pipeline"`
 - use `affine_lookup` when the mapping is affine but the scale and/or offset
   should come from explicit row or protocol metadata rather than from a
   validation-local constant; declare `scale_lookup_key` and/or
@@ -1772,6 +1773,10 @@ Important details:
   declare it with explicit control points such as
   `points = [{input = 0.10, output = 100.0}, {input = 0.20, output = 210.0}]`
   and optional `extrapolation_mode = "forbid" | "constant" | "linear"`
+- use `pipeline` when the mapping is most intelligible as a short ordered
+  sequence of the maintained transform kinds, such as a metadata-driven
+  `affine_lookup` followed by a `piecewise_linear` calibration map; declare
+  it as `steps = [{...}, {...}]` and keep each step explicit
 - the emitted evidence now carries both the aligned mean-series arrays used for
   dashboard plotting and compact provenance summaries for the reference and
   model row bundles

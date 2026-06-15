@@ -829,6 +829,9 @@ coverage fraction alone.</p>
   from a validation-local constant</li>
 <li><code>kind = "piecewise_linear"</code> when the literature/model x-axis relationship is
   monotone but not well described by one global scale/offset</li>
+<li><code>kind = "pipeline"</code> when the mapping is easier to express as an ordered
+  sequence of the existing maintained transform kinds instead of as one larger
+  one-off transform</li>
 </ul>
 <p>For <code>affine_lookup</code>, declare <code>scale_lookup_key</code> and/or <code>offset_lookup_key</code> as
 explicit metadata paths. The maintained path resolves dotted keys against the
@@ -837,7 +840,11 @@ stay declarative without hiding the source of the factor in ad hoc Python.</p>
 <p>For <code>piecewise_linear</code>, declare at least two control points and keep the mapping
 explicit in the validation config. The current transform object accepts
 <code>points = [{input = ..., output = ...}, ...]</code> plus an optional
-<code>extrapolation_mode = "forbid" | "constant" | "linear"</code>.
+<code>extrapolation_mode = "forbid" | "constant" | "linear"</code>.</p>
+<p>For <code>pipeline</code>, declare <code>steps = [{...}, {...}]</code> as an ordered sequence of the
+same maintained transform tables. Use this when a model axis first needs a
+metadata-driven affine conversion and then a monotone calibration map, rather
+than inventing another special transform kind just to chain the two together.
 The current maintained EPL-FSI example-cell comparison uses
 <code>score_family = "residual_only"</code> because the model side usually exposes one
 response trace per current step, so a formal per-bin two-sample test is not

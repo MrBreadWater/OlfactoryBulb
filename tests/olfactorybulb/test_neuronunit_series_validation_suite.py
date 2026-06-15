@@ -245,6 +245,15 @@ lookup_model_rows = [
     {"cell_name": "LkModel2", "current_flux": 0.20, "firing_rate_Hz": 12.0},
 ]
 
+pipeline_model_rows = [
+    {"cell_name": "PipeModel1", "current_flux": 1.0, "firing_rate_Hz": 8.4},
+    {"cell_name": "PipeModel2", "current_flux": 1.0, "firing_rate_Hz": 8.6},
+    {"cell_name": "PipeModel1", "current_flux": 2.0, "firing_rate_Hz": 12.4},
+    {"cell_name": "PipeModel2", "current_flux": 2.0, "firing_rate_Hz": 12.6},
+    {"cell_name": "PipeModel1", "current_flux": 3.0, "firing_rate_Hz": 18.4},
+    {"cell_name": "PipeModel2", "current_flux": 3.0, "firing_rate_Hz": 18.6},
+]
+
 cluster_reference_rows = [
     {"cell_id": "ClRef1", "current_pA": 100.0, "firing_rate_Hz": 5.0},
     {"cell_id": "ClRef2", "current_pA": 100.3, "firing_rate_Hz": 5.2},
@@ -892,6 +901,78 @@ assert lookup_items[1].status == "PASS"
 assert lookup_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert lookup_items[1].evidence["model_x_transform"].startswith("affine_lookup(")
 
+pipeline_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=piecewise_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_flux",
+        y_key="firing_rate_Hz",
+        x_unit_text="",
+        y_unit_text="Hz",
+        x_transform=AxisTransform(
+            kind="pipeline",
+            steps=(
+                AxisTransform(
+                    kind="affine_lookup",
+                    scale_lookup_key="unit_conversions.flux_to_nA_scale",
+                    output_unit_text="nA",
+                ),
+                AxisTransform(
+                    kind="piecewise_linear",
+                    input_unit_text="nA",
+                    output_unit_text="pA",
+                    points=((0.10, 100.0), (0.20, 210.0), (0.30, 330.0)),
+                ),
+            ),
+        ),
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=3,
+        maximum_mae=0.2,
+        maximum_rmse=0.2,
+        score_family="residual_only",
+    ),
+)
+
+pipeline_case = SeriesComparisonCase(
+    check_id="synthetic_pipeline_series_match",
+    title="Synthetic transform pipeline composes metadata lookup and piecewise calibration",
+    criterion="The declared transform pipeline should apply each transform step in order before residual comparison.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic transform-pipeline suite test.",
+    acceptable="The pipeline-transformed model bins satisfy the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=pipeline_observation,
+)
+
+pipeline_compiled = compile_series_comparison_suite(
+    cases=[pipeline_case],
+    summary={},
+    metrics=[],
+    protocol_evidence=ProtocolEvidenceBundle(values={
+        "fi_curve_rows": pipeline_model_rows,
+        "unit_conversions": {"flux_to_nA_scale": 0.1},
+    }),
+    suite_name="synthetic pipeline series suite",
+)
+pipeline_items = audit_items_from_series_comparison_suite(pipeline_compiled)
+assert pipeline_items[1].status == "PASS"
+assert pipeline_items[1].evidence["currents_pA"] == [100.0, 210.0, 330.0]
+assert pipeline_items[1].evidence["model_x_transform"].startswith("pipeline(")
+
 cluster_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=cluster_reference_rows,
@@ -1516,6 +1597,62 @@ assert lookup_rule_spec.model_spec.x_transform.scale_lookup_key == "unit_convers
 assert lookup_rule_items[1].status == "PASS"
 assert lookup_rule_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert lookup_rule_items[1].evidence["model_x_transform"].startswith("affine_lookup(")
+
+pipeline_rule = dict(residual_only_rule)
+pipeline_rule["loader"] = "csv:/tmp/pipeline.csv"
+pipeline_rule["reference_current_key"] = "current_pA"
+pipeline_rule["model_current_key"] = "current_flux"
+pipeline_rule["model_x_unit_text"] = ""
+pipeline_rule["maximum_mae"] = 0.2
+pipeline_rule["maximum_rmse"] = 0.2
+pipeline_rule["minimum_point_count"] = 3
+pipeline_rule["model_x_transform"] = {
+    "kind": "pipeline",
+    "steps": [
+        {
+            "kind": "affine_lookup",
+            "scale_lookup_key": "unit_conversions.flux_to_nA_scale",
+            "output_unit_text": "nA",
+        },
+        {
+            "kind": "piecewise_linear",
+            "input_unit_text": "nA",
+            "output_unit_text": "pA",
+            "points": [
+                {"input": 0.10, "output": 100.0},
+                {"input": 0.20, "output": 210.0},
+                {"input": 0.30, "output": 330.0},
+            ],
+        },
+    ],
+}
+pipeline_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={
+            "fi_curve_rows": pipeline_model_rows,
+            "unit_conversions": {"flux_to_nA_scale": 0.1},
+        })
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: piecewise_reference_rows
+    if loader_spec == "csv:/tmp/pipeline.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    pipeline_rule_items = build_rule_items(compile_rule_dispatches([pipeline_rule]), pipeline_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+pipeline_rule_spec = SeriesComparisonRuleSpec.from_rule(pipeline_rule)
+assert pipeline_rule_spec.model_spec.x_transform.kind == "pipeline"
+assert len(pipeline_rule_spec.model_spec.x_transform.steps) == 2
+assert pipeline_rule_spec.model_spec.x_transform.steps[0].kind == "affine_lookup"
+assert pipeline_rule_spec.model_spec.x_transform.steps[1].kind == "piecewise_linear"
+assert pipeline_rule_items[1].status == "PASS"
+assert pipeline_rule_items[1].evidence["currents_pA"] == [100.0, 210.0, 330.0]
+assert pipeline_rule_items[1].evidence["model_x_transform"].startswith("pipeline(")
 
 cluster_rule = dict(residual_only_rule)
 cluster_rule["loader"] = "csv:/tmp/cluster.csv"
