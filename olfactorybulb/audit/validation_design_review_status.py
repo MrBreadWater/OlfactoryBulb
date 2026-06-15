@@ -8,11 +8,8 @@ from typing import Any
 from olfactorybulb.audit.core import AuditItem, AuditReport, KNOWN_VALIDATION_DESIGN_REVIEW_STATUSES
 from olfactorybulb.audit.reference_validation_config import (
     list_reference_validation_ids,
-    load_reference_validation_config,
-    validation_design_review_defaults,
-    validation_rule_specs,
-    validation_skip_item,
 )
+from olfactorybulb.audit.reference_validation_document import load_reference_validation_document
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
@@ -113,19 +110,18 @@ def run(args: argparse.Namespace) -> AuditReport:
     default_statuses: dict[str, str] = {}
 
     for validation_id in validation_ids:
-        config = load_reference_validation_config(validation_id=validation_id)
-        defaults = validation_design_review_defaults(config)
-        default_status = str(defaults.get("default_status", "")).strip()
+        document = load_reference_validation_document(validation_id=validation_id)
+        default_status = str(document.design_review_defaults.status).strip()
         default_statuses[validation_id] = default_status
         if not default_status:
             missing_statuses.append(f"{validation_id}:[validation_design_review].default_status")
         elif default_status not in KNOWN_VALIDATION_DESIGN_REVIEW_STATUSES:
             unknown_statuses.append(f"{validation_id}:[validation_design_review].default_status={default_status}")
 
-        skip_item = validation_skip_item(config)
+        skip_item = document.skip_item
         if skip_item is not None:
-            resolved = _resolved_status(skip_item.get("validation_design_review_status"), default_status)
-            label = _item_label(validation_id, check_id=str(skip_item.get("check_id", "skip_item")))
+            resolved = _resolved_status(skip_item.validation_design_review_status, default_status)
+            label = _item_label(validation_id, check_id=str(skip_item.check_id or "skip_item"))
             if not resolved:
                 missing_statuses.append(label)
             elif resolved not in KNOWN_VALIDATION_DESIGN_REVIEW_STATUSES:
@@ -135,7 +131,7 @@ def run(args: argparse.Namespace) -> AuditReport:
             elif resolved == "provisional":
                 provisional_statuses.append(label)
 
-        for rule_index, rule in enumerate(validation_rule_specs(config), start=1):
+        for rule_index, rule in enumerate(document.rules, start=1):
             missing, unknown, pending, provisional = _resolved_check_statuses(
                 rule,
                 validation_id=validation_id,

@@ -15,9 +15,8 @@ from olfactorybulb.audit import format_report  # noqa: E402
 from olfactorybulb.audit.reference_validation_config import (  # noqa: E402
     DEFAULT_REFERENCE_VALIDATION_ID,
     list_reference_validation_ids,
-    load_reference_validation_config,
-    validation_title,
 )
+from olfactorybulb.audit.reference_validation_document import load_reference_validation_document  # noqa: E402
 from olfactorybulb.audit.reference_validation_engine import (  # noqa: E402
     add_reference_validation_common_args,
     add_reference_validation_protocol_args,
@@ -42,8 +41,8 @@ def _list_validations() -> int:
     print("Available reference validations")
     print("=============================")
     for validation_id in list_reference_validation_ids():
-        config = load_reference_validation_config(validation_id=validation_id)
-        print(f"- {validation_id}: {validation_title(config)}")
+        document = load_reference_validation_document(validation_id=validation_id)
+        print(f"- {validation_id}: {document.title}")
     return 0
 
 

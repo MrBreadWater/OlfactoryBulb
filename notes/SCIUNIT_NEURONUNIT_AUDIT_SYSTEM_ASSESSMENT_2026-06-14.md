@@ -2051,6 +2051,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `olfactorybulb.audit.reference_validation_plan`, so the engine, generic
     CLI, and maintained audit wrappers no longer pass a loose validation-config
     dict plus parallel accessor calls around at runtime
+  - the raw TOML layer now also compiles through a typed
+    `ReferenceValidationDocument` in
+    `olfactorybulb.audit.reference_validation_document`, so static config
+    consumers such as validation-design-review coverage audits no longer need
+    to hand-walk loose config dicts either; the runtime plan now composes from
+    that typed document instead of bypassing it
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

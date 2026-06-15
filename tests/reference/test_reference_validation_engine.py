@@ -18,6 +18,7 @@ from olfactorybulb.audit.reference_validation_config import (
     validation_protocol_runner_id,
     validation_title,
 )
+from olfactorybulb.audit.reference_validation_document import load_reference_validation_document
 from olfactorybulb.audit.reference_validation_plan import load_reference_validation_plan
 from olfactorybulb.audit.reference_validation_specs import (
     NotePresenceRuleSpec,
@@ -37,6 +38,14 @@ load_validation_extensions(burton_config)
 assert validation_title(burton_config) == "Burton & Urban f-I validation audit"
 assert validation_protocol_runner_id(burton_config) == "burton_urban_mctc_current_clamp"
 assert get_validation_protocol_spec("burton_urban_mctc_current_clamp").title.startswith("Burton and Urban 2014")
+burton_document = load_reference_validation_document(validation_id="burton_urban_fi")
+assert burton_document.validation_id == "burton_urban_fi"
+assert burton_document.title == "Burton & Urban f-I validation audit"
+assert burton_document.protocol_runner_id == "burton_urban_mctc_current_clamp"
+assert burton_document.design_review_defaults.status == "pending"
+assert burton_document.skip_item is not None
+assert burton_document.skip_item.check_id == "burton_urban_fi_skipped"
+assert burton_document.rules[0]["kind"] == "note_presence"
 burton_plan = load_reference_validation_plan(validation_id="burton_urban_fi")
 assert burton_plan.validation_id == "burton_urban_fi"
 assert burton_plan.title == "Burton & Urban f-I validation audit"
@@ -257,6 +266,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
         temp_spec = get_validation_protocol_spec("temp_custom_protocol")
         assert temp_spec.title == "Temporary custom protocol"
         temp_plan = load_reference_validation_plan(path=config_path)
+        temp_document = load_reference_validation_document(path=config_path)
+        assert temp_document.title == "Temporary validation"
+        assert temp_document.protocol_runner_id == "temp_custom_protocol"
+        assert temp_document.skip_item is not None
+        assert temp_document.skip_item.check_id == "temp_validation_skipped"
         assert temp_plan.title == "Temporary validation"
         assert temp_plan.protocol_spec.title == "Temporary custom protocol"
         assert temp_plan.skip_item is not None

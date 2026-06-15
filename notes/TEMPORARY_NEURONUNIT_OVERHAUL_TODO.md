@@ -198,3 +198,11 @@ Remove this file when the listed items are either:
         context metadata
       - the engine, maintained wrappers, and generic CLI now consume that
         typed plan instead of passing raw config dicts around at runtime
+- [x] Add a typed raw-document layer above TOML loading so static config
+      consumers stop walking loose dicts too.
+      - added `olfactorybulb.audit.reference_validation_document`
+      - `ReferenceValidationDocument` now owns typed title/protocol/defaults/
+        skip-item/rule metadata directly above the raw TOML loader
+      - the runtime plan now compiles from that typed document
+      - `validation_design_review_status` and the generic validation listing
+        path now consume the typed document instead of raw config accessors

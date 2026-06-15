@@ -211,6 +211,8 @@ validation that uses one registered protocol runner:</p>
 <li><a href="/home/michael/OlfactoryBulb/research_context/reference_validations/epli_correctness.validation.toml">epli_correctness.validation.toml</a></li>
 <li>Validation config loader:
   <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_config.py">olfactorybulb/audit/reference_validation_config.py</a></li>
+<li>Typed raw validation document:
+  <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_document.py">olfactorybulb/audit/reference_validation_document.py</a></li>
 <li>Typed runtime validation plan:
   <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_plan.py">olfactorybulb/audit/reference_validation_plan.py</a></li>
 <li>Validation engine:
@@ -229,11 +231,15 @@ validation that uses one registered protocol runner:</p>
 <p>At runtime, keep those layers distinct:</p>
 <ul>
 <li><code>reference_validation_config.py</code> loads raw TOML plus extension declarations</li>
-<li><code>reference_validation_plan.py</code> compiles that raw config into one typed
+<li><code>reference_validation_document.py</code> compiles that raw config into one typed
+  <code>ReferenceValidationDocument</code></li>
+<li><code>reference_validation_plan.py</code> compiles that typed document into one typed
   <code>ReferenceValidationPlan</code></li>
 <li><code>reference_validation_engine.py</code> and the maintained audit/CLI entrypoints
   should consume the typed plan rather than passing loose config dicts and
   parallel accessor calls around at runtime</li>
+<li>static config-inspection paths should consume the typed document instead of
+  re-parsing raw config dict structure at each callsite</li>
 </ul>
 <h2 id="quick-start">Quick start</h2>
 <h3 id="list-available-validations">List available validations</h3>

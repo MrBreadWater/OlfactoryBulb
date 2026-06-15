@@ -851,9 +851,15 @@ contract for future sessions.
 
 - Keep the top-level runtime path on the same side of that boundary.
   - Raw TOML loading belongs in `olfactorybulb.audit.reference_validation_config`.
+  - The first structured layer above that is the typed
+    `ReferenceValidationDocument` in
+    `olfactorybulb.audit.reference_validation_document`.
   - The maintained runtime should compile that raw config into the typed
     `ReferenceValidationPlan` in `olfactorybulb.audit.reference_validation_plan`
     before the engine, CLI, or maintained audit wrappers consume it.
+  - Static config-inspection surfaces such as validation-design-review audits
+    should consume the typed document rather than hand-walking loose config
+    dicts and parallel accessor calls.
   - Do not let `reference_validation_engine.py` or the maintained wrapper
     modules drift back toward passing loose config dicts and parallel accessor
     calls around at runtime.
