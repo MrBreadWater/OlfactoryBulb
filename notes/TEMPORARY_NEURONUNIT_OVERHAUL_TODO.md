@@ -489,6 +489,14 @@ Remove this file when the listed items are either:
       - the declarative parser / grouped-rule plumbing now accepts
         mapping-like rule payloads instead of advertising mutable raw dicts
         as the maintained contract
+- [x] Keep the series-comparison score/evidence seam on one typed payload
+      object instead of rebuilding a giant ad hoc evidence dict in
+      `compute_score()`.
+      - added `SeriesComparisonEvidencePayload`
+      - it now owns score-text derivation, suite-case statistical payload
+        generation, case weighting, and evidence export
+      - the same slice also forced the rule/spec parsers to accept the
+        tuple-backed sequence values produced by the frozen rule payload layer
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

@@ -1065,11 +1065,13 @@ class _SeriesComparisonRuleParser:
             return AxisTransform()
         if not isinstance(raw, MappingABC):
             raise ValueError(f"{key} must be a table/dict when provided")
-        raw_points = raw.get("points", [])
+        raw_points = raw.get("points", ())
         points: tuple[tuple[float, float], ...] = ()
-        if raw_points not in (None, "", []):
-            if not isinstance(raw_points, list):
-                raise ValueError(f"{key}.points must be a list when provided")
+        if raw_points not in (None, ""):
+            if not isinstance(raw_points, (list, tuple)):
+                raise ValueError(f"{key}.points must be a sequence when provided")
+            if not raw_points:
+                raw_points = ()
             normalized_points: list[tuple[float, float]] = []
             for index, point in enumerate(raw_points, start=1):
                 if isinstance(point, MappingABC):
@@ -1181,12 +1183,12 @@ class _SeriesComparisonRuleParser:
         if alignment_policy == "resampled_grid":
             resampling_grid_source = str(self.rule.get("resampling_grid_source", "")).strip()
             interpolation_method = str(self.rule.get("interpolation_method", "linear")).strip() or "linear"
-            raw_resampling_grid_values = self.rule.get("resampling_grid_values", [])
+            raw_resampling_grid_values = self.rule.get("resampling_grid_values", ())
             if raw_resampling_grid_values in (None, ""):
                 resampling_grid_values = ()
             else:
-                if not isinstance(raw_resampling_grid_values, list):
-                    raise ValueError("reference_curve_match 'resampling_grid_values' must be a list when provided")
+                if not isinstance(raw_resampling_grid_values, (list, tuple)):
+                    raise ValueError("reference_curve_match 'resampling_grid_values' must be a sequence when provided")
                 resampling_grid_values = tuple(float(value) for value in raw_resampling_grid_values)
             if resampling_grid_source == "explicit_grid" and not resampling_grid_values:
                 raise ValueError(

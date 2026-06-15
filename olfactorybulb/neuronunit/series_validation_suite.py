@@ -932,6 +932,408 @@ class SeriesComparisonCase:
     fail_status: str = "FAIL"
 
 
+def _coerced_float(value: float | int | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _coerced_float_sequence(values: list[float] | tuple[float, ...]) -> tuple[float, ...]:
+    result: list[float] = []
+    for value in values:
+        candidate = _coerced_float(value)
+        if candidate is None:
+            continue
+        result.append(float(candidate))
+    return tuple(result)
+
+
+def _coerced_optional_float_sequence(
+    values: list[float | None] | tuple[float | None, ...],
+) -> tuple[float | None, ...]:
+    result: list[float | None] = []
+    for value in values:
+        candidate = _coerced_float(value)
+        result.append(candidate)
+    return tuple(result)
+
+
+def _coerced_nested_float_sequences(
+    values: list[list[float]] | tuple[tuple[float, ...], ...],
+) -> tuple[tuple[float, ...], ...]:
+    return tuple(_coerced_float_sequence(list(group)) for group in values)
+
+
+def _coerced_int_sequence(values: list[int] | tuple[int, ...]) -> tuple[int, ...]:
+    result: list[int] = []
+    for value in values:
+        try:
+            result.append(int(value))
+        except (TypeError, ValueError):
+            continue
+    return tuple(result)
+
+
+def _rounded_float_or_raw(value: float | None) -> float | None:
+    if value is None:
+        return None
+    if _is_finite_number(value):
+        return rounded(float(value))
+    return float(value)
+
+
+def _rounded_optional_float_list(values: tuple[float | None, ...]) -> list[float | None]:
+    return [_rounded_float_or_raw(value) for value in values]
+
+
+@dataclass(frozen=True)
+class SeriesComparisonEvidencePayload:
+    visual_x_key: str
+    visual_reference_y_key: str
+    visual_model_y_key: str
+    visual_x_values: tuple[float, ...]
+    reference_matched_x_values: tuple[float, ...]
+    model_matched_x_values: tuple[float, ...]
+    matched_x_differences: tuple[float, ...]
+    reference_cluster_x_groups: tuple[tuple[float, ...], ...] = ()
+    model_cluster_x_groups: tuple[tuple[float, ...], ...] = ()
+    reference_values: tuple[float, ...] = ()
+    model_values: tuple[float, ...] = ()
+    reference_sd_values: tuple[float, ...] = ()
+    model_sd_values: tuple[float, ...] = ()
+    reference_count_values: tuple[int, ...] = ()
+    model_count_values: tuple[int, ...] = ()
+    matched_point_count: int = 0
+    mean_absolute_error: float | None = None
+    root_mean_square_error: float | None = None
+    max_absolute_error: float | None = None
+    maximum_mae: float | None = None
+    maximum_rmse: float | None = None
+    error_unit_text: str = ""
+    score_family: str = "residual_only"
+    declared_pvalue_aggregation: str = "auto"
+    welch_pvalues: tuple[float | None, ...] = ()
+    median_welch_pvalue: float | None = None
+    minimum_median_welch_pvalue: float | None = None
+    finite_welch_pvalue_count: int = 0
+    equivalence_margin: float | None = None
+    declared_equivalence_margin: float | None = None
+    equivalence_margin_source: str | None = None
+    equivalence_alpha: float | None = None
+    statistical_test_family: str = "none"
+    statistical_test_kinds: tuple[str, ...] = ()
+    statistical_pvalues: tuple[float | None, ...] = ()
+    aggregate_statistical_pvalue: float | None = None
+    supported_statistical_bin_count: int = 0
+    unsupported_statistical_x_values: tuple[float, ...] = ()
+    pvalue_aggregation: str = ""
+    pvalue_aggregation_source: str = ""
+    residual_gate_passed: bool = False
+    pvalue_gate_passed: bool = False
+    statistical_gate_passed: bool = False
+    residual_norm_score: float | None = None
+    statistical_norm_score: float | None = None
+    overall_norm_score: float | None = None
+    alignment_policy: str = ""
+    x_match_tolerance: float | None = None
+    declared_resampling_grid_source: str = ""
+    resampling_grid_source: str = ""
+    resampling_grid_source_origin: str = ""
+    declared_resampling_grid_values: tuple[float, ...] = ()
+    resampling_grid_values: tuple[float, ...] = ()
+    interpolation_method: str = "linear"
+    reference_resampled_support_counts: tuple[int, ...] = ()
+    model_resampled_support_counts: tuple[int, ...] = ()
+    distribution_kind: str = "empirical_by_x"
+    x_quantity_name: str = "series x-value"
+    y_quantity_name: str = "series y-value"
+    comparison_x_unit_text: str = ""
+    comparison_y_unit_text: str = ""
+    reference_x_key: str = ""
+    reference_y_key: str = ""
+    reference_x_unit_text: str = ""
+    reference_y_unit_text: str = ""
+    reference_series_id_key: str = ""
+    model_x_key: str = ""
+    model_y_key: str = ""
+    model_x_unit_text: str = ""
+    model_y_unit_text: str = ""
+    model_series_id_key: str = ""
+    reference_x_transform: str = ""
+    model_x_transform: str = ""
+    series_provenance: SeriesObservationProvenance = field(default_factory=SeriesObservationProvenance)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "visual_x_key", str(self.visual_x_key).strip())
+        object.__setattr__(self, "visual_reference_y_key", str(self.visual_reference_y_key).strip())
+        object.__setattr__(self, "visual_model_y_key", str(self.visual_model_y_key).strip())
+        object.__setattr__(self, "visual_x_values", _coerced_float_sequence(self.visual_x_values))
+        object.__setattr__(self, "reference_matched_x_values", _coerced_float_sequence(self.reference_matched_x_values))
+        object.__setattr__(self, "model_matched_x_values", _coerced_float_sequence(self.model_matched_x_values))
+        object.__setattr__(self, "matched_x_differences", _coerced_float_sequence(self.matched_x_differences))
+        object.__setattr__(self, "reference_cluster_x_groups", _coerced_nested_float_sequences(self.reference_cluster_x_groups))
+        object.__setattr__(self, "model_cluster_x_groups", _coerced_nested_float_sequences(self.model_cluster_x_groups))
+        object.__setattr__(self, "reference_values", _coerced_float_sequence(self.reference_values))
+        object.__setattr__(self, "model_values", _coerced_float_sequence(self.model_values))
+        object.__setattr__(self, "reference_sd_values", _coerced_float_sequence(self.reference_sd_values))
+        object.__setattr__(self, "model_sd_values", _coerced_float_sequence(self.model_sd_values))
+        object.__setattr__(self, "reference_count_values", _coerced_int_sequence(self.reference_count_values))
+        object.__setattr__(self, "model_count_values", _coerced_int_sequence(self.model_count_values))
+        object.__setattr__(self, "matched_point_count", int(self.matched_point_count))
+        object.__setattr__(self, "mean_absolute_error", _coerced_float(self.mean_absolute_error))
+        object.__setattr__(self, "root_mean_square_error", _coerced_float(self.root_mean_square_error))
+        object.__setattr__(self, "max_absolute_error", _coerced_float(self.max_absolute_error))
+        object.__setattr__(self, "maximum_mae", _coerced_float(self.maximum_mae))
+        object.__setattr__(self, "maximum_rmse", _coerced_float(self.maximum_rmse))
+        object.__setattr__(self, "error_unit_text", str(self.error_unit_text).strip())
+        object.__setattr__(self, "score_family", str(self.score_family).strip())
+        object.__setattr__(self, "declared_pvalue_aggregation", str(self.declared_pvalue_aggregation).strip())
+        object.__setattr__(self, "welch_pvalues", _coerced_optional_float_sequence(self.welch_pvalues))
+        object.__setattr__(self, "median_welch_pvalue", _coerced_float(self.median_welch_pvalue))
+        object.__setattr__(self, "minimum_median_welch_pvalue", _coerced_float(self.minimum_median_welch_pvalue))
+        object.__setattr__(self, "finite_welch_pvalue_count", int(self.finite_welch_pvalue_count))
+        object.__setattr__(self, "equivalence_margin", _coerced_float(self.equivalence_margin))
+        object.__setattr__(self, "declared_equivalence_margin", _coerced_float(self.declared_equivalence_margin))
+        object.__setattr__(self, "equivalence_margin_source", str(self.equivalence_margin_source or "").strip() or None)
+        object.__setattr__(self, "equivalence_alpha", _coerced_float(self.equivalence_alpha))
+        object.__setattr__(self, "statistical_test_family", str(self.statistical_test_family).strip())
+        object.__setattr__(
+            self,
+            "statistical_test_kinds",
+            tuple(str(value).strip() for value in self.statistical_test_kinds if str(value).strip()),
+        )
+        object.__setattr__(self, "statistical_pvalues", _coerced_optional_float_sequence(self.statistical_pvalues))
+        object.__setattr__(self, "aggregate_statistical_pvalue", _coerced_float(self.aggregate_statistical_pvalue))
+        object.__setattr__(self, "supported_statistical_bin_count", int(self.supported_statistical_bin_count))
+        object.__setattr__(self, "unsupported_statistical_x_values", _coerced_float_sequence(self.unsupported_statistical_x_values))
+        object.__setattr__(self, "pvalue_aggregation", str(self.pvalue_aggregation).strip())
+        object.__setattr__(self, "pvalue_aggregation_source", str(self.pvalue_aggregation_source).strip())
+        object.__setattr__(self, "residual_gate_passed", bool(self.residual_gate_passed))
+        object.__setattr__(self, "pvalue_gate_passed", bool(self.pvalue_gate_passed))
+        object.__setattr__(self, "statistical_gate_passed", bool(self.statistical_gate_passed))
+        object.__setattr__(self, "residual_norm_score", _coerced_float(self.residual_norm_score))
+        object.__setattr__(self, "statistical_norm_score", _coerced_float(self.statistical_norm_score))
+        object.__setattr__(self, "overall_norm_score", _coerced_float(self.overall_norm_score))
+        object.__setattr__(self, "alignment_policy", str(self.alignment_policy).strip())
+        object.__setattr__(self, "x_match_tolerance", _coerced_float(self.x_match_tolerance))
+        object.__setattr__(self, "declared_resampling_grid_source", str(self.declared_resampling_grid_source).strip())
+        object.__setattr__(self, "resampling_grid_source", str(self.resampling_grid_source).strip())
+        object.__setattr__(self, "resampling_grid_source_origin", str(self.resampling_grid_source_origin).strip())
+        object.__setattr__(self, "declared_resampling_grid_values", _coerced_float_sequence(self.declared_resampling_grid_values))
+        object.__setattr__(self, "resampling_grid_values", _coerced_float_sequence(self.resampling_grid_values))
+        object.__setattr__(self, "interpolation_method", str(self.interpolation_method).strip())
+        object.__setattr__(self, "reference_resampled_support_counts", _coerced_int_sequence(self.reference_resampled_support_counts))
+        object.__setattr__(self, "model_resampled_support_counts", _coerced_int_sequence(self.model_resampled_support_counts))
+        object.__setattr__(self, "distribution_kind", str(self.distribution_kind).strip())
+        object.__setattr__(self, "x_quantity_name", str(self.x_quantity_name).strip())
+        object.__setattr__(self, "y_quantity_name", str(self.y_quantity_name).strip())
+        object.__setattr__(self, "comparison_x_unit_text", str(self.comparison_x_unit_text).strip())
+        object.__setattr__(self, "comparison_y_unit_text", str(self.comparison_y_unit_text).strip())
+        object.__setattr__(self, "reference_x_key", str(self.reference_x_key).strip())
+        object.__setattr__(self, "reference_y_key", str(self.reference_y_key).strip())
+        object.__setattr__(self, "reference_x_unit_text", str(self.reference_x_unit_text).strip())
+        object.__setattr__(self, "reference_y_unit_text", str(self.reference_y_unit_text).strip())
+        object.__setattr__(self, "reference_series_id_key", str(self.reference_series_id_key).strip())
+        object.__setattr__(self, "model_x_key", str(self.model_x_key).strip())
+        object.__setattr__(self, "model_y_key", str(self.model_y_key).strip())
+        object.__setattr__(self, "model_x_unit_text", str(self.model_x_unit_text).strip())
+        object.__setattr__(self, "model_y_unit_text", str(self.model_y_unit_text).strip())
+        object.__setattr__(self, "model_series_id_key", str(self.model_series_id_key).strip())
+        object.__setattr__(self, "reference_x_transform", str(self.reference_x_transform).strip())
+        object.__setattr__(self, "model_x_transform", str(self.model_x_transform).strip())
+
+    @property
+    def aggregate_pvalue_for_display(self) -> float | None:
+        if self.score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
+            return self.aggregate_statistical_pvalue
+        if self.score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
+            return self.median_welch_pvalue
+        return self.aggregate_statistical_pvalue
+
+    @property
+    def norm_score(self) -> float | None:
+        if _is_finite_number(self.overall_norm_score):
+            return max(0.0, min(1.0, float(self.overall_norm_score)))
+        return None
+
+    def score_text(self) -> str:
+        residual_text = ""
+        if _is_finite_number(self.mean_absolute_error):
+            residual_text = f"MAE {rounded(float(self.mean_absolute_error)):g}" + (
+                f" {self.error_unit_text}" if self.error_unit_text else ""
+            )
+        aggregate_pvalue = self.aggregate_pvalue_for_display
+        statistical_text = ""
+        if _is_finite_number(aggregate_pvalue):
+            pvalue_text = f"{rounded(float(aggregate_pvalue), digits=4):g}"
+            if self.score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
+                statistical_text = f"TOST p {pvalue_text}"
+            elif self.score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
+                statistical_text = f"Welch p {pvalue_text}"
+            else:
+                statistical_text = f"p {pvalue_text}"
+        if self.score_family == "residual_only":
+            return residual_text
+        if self.score_family == "equivalence_only":
+            return statistical_text
+        if residual_text and statistical_text:
+            return f"{residual_text} | {statistical_text}"
+        return residual_text or statistical_text
+
+    def suite_case_statistical_payload(self) -> SuiteCaseStatisticalPayload | None:
+        if self.score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES and _is_finite_number(self.aggregate_statistical_pvalue):
+            return SuiteCaseStatisticalPayload(
+                score_family_category="equivalence",
+                statistical_test_family=self.statistical_test_family or "equivalence_tost",
+                pvalue=float(self.aggregate_statistical_pvalue),
+                label="TOST p",
+                default_rollup_method="max",
+                threshold=self.equivalence_alpha,
+                threshold_key="equivalence_alpha",
+                threshold_direction="le",
+            )
+        if self.score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES and _is_finite_number(self.median_welch_pvalue):
+            return SuiteCaseStatisticalPayload(
+                score_family_category="welch_similarity",
+                statistical_test_family=self.statistical_test_family or "legacy_welch_difference",
+                pvalue=float(self.median_welch_pvalue),
+                label="Welch p",
+                default_rollup_method="min",
+                threshold=self.minimum_median_welch_pvalue,
+                threshold_key="minimum_median_welch_pvalue",
+                threshold_direction="ge",
+            )
+        return None
+
+    def case_weight(self) -> float | None:
+        if self.matched_point_count <= 0:
+            return None
+        return float(self.matched_point_count)
+
+    def to_suite_case_score_payload(self, *, score_value: float | int | None) -> SuiteCaseScorePayload:
+        score_units = ""
+        if self.score_family == "residual_only":
+            score_units = self.error_unit_text
+        if self.score_family in {"equivalence_only", "hybrid_residual_equivalence", "welch_only", "hybrid_residual_welch"}:
+            score_units = ""
+        return SuiteCaseScorePayload(
+            score_kind=self.score_family,
+            score_value=numeric_value(score_value) if score_value is not None else None,
+            score_units=score_units,
+            score_interpretation=(
+                "Unit-aware series-comparison score derived from the configured alignment, "
+                "distribution, and statistical policy."
+            ),
+            observation={
+                "matched_point_count": self.matched_point_count,
+                "mean_absolute_error": _rounded_float_or_raw(self.mean_absolute_error),
+                "root_mean_square_error": _rounded_float_or_raw(self.root_mean_square_error),
+                "aggregate_statistical_pvalue": _rounded_float_or_raw(self.aggregate_statistical_pvalue),
+                "median_welch_pvalue": _rounded_float_or_raw(self.median_welch_pvalue),
+            },
+            prediction={
+                "score_family": self.score_family,
+                "statistical_test_family": self.statistical_test_family,
+                "maximum_mae": _rounded_float_or_raw(self.maximum_mae),
+                "maximum_rmse": _rounded_float_or_raw(self.maximum_rmse),
+                "equivalence_margin": _rounded_float_or_raw(self.equivalence_margin),
+                "equivalence_alpha": _rounded_float_or_raw(self.equivalence_alpha),
+                "minimum_median_welch_pvalue": _rounded_float_or_raw(self.minimum_median_welch_pvalue),
+                "pvalue_aggregation": self.pvalue_aggregation,
+            },
+            normalization={
+                "norm_score": self.norm_score,
+                "residual_norm_score": _rounded_float_or_raw(self.residual_norm_score),
+                "statistical_norm_score": _rounded_float_or_raw(self.statistical_norm_score),
+                "overall_norm_score": _rounded_float_or_raw(self.overall_norm_score),
+            },
+            statistical_summary=self.suite_case_statistical_payload(),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        evidence = {
+            self.visual_x_key: _rounded_list(list(self.visual_x_values)),
+            "reference_matched_x_values": _rounded_list(list(self.reference_matched_x_values)),
+            "model_matched_x_values": _rounded_list(list(self.model_matched_x_values)),
+            "matched_x_differences": _rounded_list(list(self.matched_x_differences)),
+            "reference_cluster_x_groups": [_rounded_list(list(values)) for values in self.reference_cluster_x_groups],
+            "model_cluster_x_groups": [_rounded_list(list(values)) for values in self.model_cluster_x_groups],
+            self.visual_reference_y_key: _rounded_list(list(self.reference_values)),
+            self.visual_model_y_key: _rounded_list(list(self.model_values)),
+            "reference_sd_values": _rounded_list(list(self.reference_sd_values)),
+            "model_sd_values": _rounded_list(list(self.model_sd_values)),
+            "reference_count_values": list(self.reference_count_values),
+            "model_count_values": list(self.model_count_values),
+            "matched_point_count": self.matched_point_count,
+            "mean_absolute_error": _rounded_float_or_raw(self.mean_absolute_error),
+            "root_mean_square_error": _rounded_float_or_raw(self.root_mean_square_error),
+            "max_absolute_error": _rounded_float_or_raw(self.max_absolute_error),
+            "maximum_mae": _rounded_float_or_raw(self.maximum_mae),
+            "maximum_rmse": _rounded_float_or_raw(self.maximum_rmse),
+            "error_unit_text": self.error_unit_text,
+            "score_family": self.score_family,
+            "declared_pvalue_aggregation": self.declared_pvalue_aggregation,
+            "welch_pvalues": _rounded_optional_float_list(self.welch_pvalues),
+            "median_welch_pvalue": _rounded_float_or_raw(self.median_welch_pvalue),
+            "minimum_median_welch_pvalue": _rounded_float_or_raw(self.minimum_median_welch_pvalue),
+            "finite_welch_pvalue_count": self.finite_welch_pvalue_count,
+            "equivalence_margin": _rounded_float_or_raw(self.equivalence_margin),
+            "declared_equivalence_margin": _rounded_float_or_raw(self.declared_equivalence_margin),
+            "equivalence_margin_source": self.equivalence_margin_source,
+            "equivalence_alpha": _rounded_float_or_raw(self.equivalence_alpha),
+            "statistical_test_family": self.statistical_test_family,
+            "statistical_test_kinds": list(self.statistical_test_kinds),
+            "statistical_pvalues": _rounded_optional_float_list(self.statistical_pvalues),
+            "aggregate_statistical_pvalue": _rounded_float_or_raw(self.aggregate_statistical_pvalue),
+            "supported_statistical_bin_count": self.supported_statistical_bin_count,
+            "unsupported_statistical_bin_count": len(self.unsupported_statistical_x_values),
+            "unsupported_statistical_x_values": _rounded_list(list(self.unsupported_statistical_x_values)),
+            "pvalue_aggregation": self.pvalue_aggregation,
+            "pvalue_aggregation_source": self.pvalue_aggregation_source,
+            "residual_gate_passed": self.residual_gate_passed,
+            "pvalue_gate_passed": self.pvalue_gate_passed,
+            "statistical_gate_passed": self.statistical_gate_passed,
+            "residual_norm_score": _rounded_float_or_raw(self.residual_norm_score),
+            "statistical_norm_score": _rounded_float_or_raw(self.statistical_norm_score),
+            "overall_norm_score": _rounded_float_or_raw(self.overall_norm_score),
+            "alignment_policy": self.alignment_policy,
+            "x_match_tolerance": _rounded_float_or_raw(self.x_match_tolerance),
+            "declared_resampling_grid_source": self.declared_resampling_grid_source,
+            "resampling_grid_source": self.resampling_grid_source,
+            "resampling_grid_source_origin": self.resampling_grid_source_origin,
+            "declared_resampling_grid_values": _rounded_list(list(self.declared_resampling_grid_values)),
+            "resampling_grid_values": _rounded_list(list(self.resampling_grid_values)),
+            "interpolation_method": self.interpolation_method,
+            "reference_resampled_support_counts": list(self.reference_resampled_support_counts),
+            "model_resampled_support_counts": list(self.model_resampled_support_counts),
+            "distribution_kind": self.distribution_kind,
+            "x_quantity_name": self.x_quantity_name,
+            "y_quantity_name": self.y_quantity_name,
+            "comparison_x_unit_text": self.comparison_x_unit_text,
+            "comparison_y_unit_text": self.comparison_y_unit_text,
+            "reference_x_key": self.reference_x_key,
+            "reference_y_key": self.reference_y_key,
+            "reference_x_unit_text": self.reference_x_unit_text,
+            "reference_y_unit_text": self.reference_y_unit_text,
+            "reference_series_id_key": self.reference_series_id_key,
+            "model_x_key": self.model_x_key,
+            "model_y_key": self.model_y_key,
+            "model_x_unit_text": self.model_x_unit_text,
+            "model_y_unit_text": self.model_y_unit_text,
+            "model_series_id_key": self.model_series_id_key,
+            "reference_x_transform": self.reference_x_transform,
+            "model_x_transform": self.model_x_transform,
+            "series_provenance": self.series_provenance.to_dict(),
+        }
+        return _with_legacy_hz_aliases(
+            evidence,
+            comparison_y_unit_text=self.comparison_y_unit_text,
+        )
+
+
 class SeriesComparisonScore(sciunit.Score):
     _allowed_types = (float, int, pq.Quantity)
 
@@ -940,19 +1342,20 @@ class SeriesComparisonScore(sciunit.Score):
         score: float | int | pq.Quantity,
         *,
         status: str,
-        evidence: dict[str, Any],
+        evidence_payload: SeriesComparisonEvidencePayload,
         case: SeriesComparisonCase,
     ) -> None:
         super().__init__(score)
         self.status = str(status)
-        self.evidence = evidence
+        self.evidence_payload = evidence_payload
+        self.evidence = evidence_payload.to_dict()
         self.case = case
 
     @property
     def norm_score(self) -> float:
-        candidate = self.evidence.get("overall_norm_score")
-        if _is_finite_number(candidate):
-            return max(0.0, min(1.0, float(candidate)))
+        candidate = self.evidence_payload.norm_score
+        if candidate is not None:
+            return float(candidate)
         return 1.0 if self.status == "PASS" else 0.0
 
     def __str__(self) -> str:
@@ -1613,135 +2016,109 @@ class SeriesComparisonTest(sciunit.Test):
             reference=reference_provenance_summary,
             model=model_provenance_summary,
         )
-        evidence = {
-            visual_contract.x_key: _rounded_list(visual_x_values),
-            "reference_matched_x_values": _rounded_list(reference_x_values),
-            "model_matched_x_values": _rounded_list(model_x_values),
-            "matched_x_differences": _rounded_list(matched_x_differences),
-            "reference_cluster_x_groups": [
-                _rounded_list(cluster_metadata[cluster_center]["reference_x_values"])
+        evidence_payload = SeriesComparisonEvidencePayload(
+            visual_x_key=visual_contract.x_key,
+            visual_reference_y_key=visual_contract.reference_y_key,
+            visual_model_y_key=visual_contract.model_y_key,
+            visual_x_values=tuple(visual_x_values),
+            reference_matched_x_values=tuple(reference_x_values),
+            model_matched_x_values=tuple(model_x_values),
+            matched_x_differences=tuple(matched_x_differences),
+            reference_cluster_x_groups=tuple(
+                tuple(cluster_metadata[cluster_center]["reference_x_values"])
                 for cluster_center in aligned_reference_keys
-            ]
+            )
             if cluster_metadata
-            else [],
-            "model_cluster_x_groups": [
-                _rounded_list(cluster_metadata[cluster_center]["model_x_values"])
+            else (),
+            model_cluster_x_groups=tuple(
+                tuple(cluster_metadata[cluster_center]["model_x_values"])
                 for cluster_center in aligned_reference_keys
-            ]
+            )
             if cluster_metadata
-            else [],
-            visual_contract.reference_y_key: _rounded_list(reference_mean_values),
-            visual_contract.model_y_key: _rounded_list(model_mean_values),
-            "reference_sd_values": _rounded_list(reference_sd_values),
-            "model_sd_values": _rounded_list(model_sd_values),
-            "reference_count_values": list(reference_count_values),
-            "model_count_values": list(model_count_values),
-            "matched_point_count": len(aligned_pairs),
-            "mean_absolute_error": rounded(mae) if _is_finite_number(mae) else mae,
-            "root_mean_square_error": rounded(rmse) if _is_finite_number(rmse) else rmse,
-            "max_absolute_error": rounded(max_abs) if _is_finite_number(max_abs) else max_abs,
-            "maximum_mae": rounded(float(obs.policy.maximum_mae))
-            if _is_finite_number(obs.policy.maximum_mae)
-            else obs.policy.maximum_mae,
-            "maximum_rmse": rounded(float(obs.policy.maximum_rmse))
-            if _is_finite_number(obs.policy.maximum_rmse)
-            else obs.policy.maximum_rmse,
-            "error_unit_text": obs.comparison_y_unit_text,
-            "score_family": obs.policy.score_family,
-            "declared_pvalue_aggregation": str(obs.policy.pvalue_aggregation or "auto"),
-            "welch_pvalues": _rounded_list(finite_welch_pvalues)
-            if len(finite_welch_pvalues) == len(welch_pvalues)
-            else [rounded(float(value)) if _is_finite_number(value) else None for value in welch_pvalues],
-            "median_welch_pvalue": rounded(median_welch_pvalue)
-            if _is_finite_number(median_welch_pvalue)
-            else median_welch_pvalue,
-            "minimum_median_welch_pvalue": rounded(float(obs.policy.minimum_median_welch_pvalue))
-            if _is_finite_number(obs.policy.minimum_median_welch_pvalue)
-            else obs.policy.minimum_median_welch_pvalue,
-            "finite_welch_pvalue_count": len(finite_welch_pvalues),
-            "equivalence_margin": rounded(float(resolved_equivalence_margin))
-            if _is_finite_number(resolved_equivalence_margin)
-            else resolved_equivalence_margin,
-            "declared_equivalence_margin": rounded(float(obs.policy.equivalence_margin))
-            if _is_finite_number(obs.policy.equivalence_margin)
-            else obs.policy.equivalence_margin,
-            "equivalence_margin_source": equivalence_margin_source,
-            "equivalence_alpha": rounded(float(obs.policy.equivalence_alpha))
-            if _is_finite_number(obs.policy.equivalence_alpha)
-            else obs.policy.equivalence_alpha,
-            "statistical_test_family": (
+            else (),
+            reference_values=tuple(reference_mean_values),
+            model_values=tuple(model_mean_values),
+            reference_sd_values=tuple(reference_sd_values),
+            model_sd_values=tuple(model_sd_values),
+            reference_count_values=tuple(reference_count_values),
+            model_count_values=tuple(model_count_values),
+            matched_point_count=len(aligned_pairs),
+            mean_absolute_error=mae,
+            root_mean_square_error=rmse,
+            max_absolute_error=max_abs,
+            maximum_mae=obs.policy.maximum_mae,
+            maximum_rmse=obs.policy.maximum_rmse,
+            error_unit_text=obs.comparison_y_unit_text,
+            score_family=obs.policy.score_family,
+            declared_pvalue_aggregation=str(obs.policy.pvalue_aggregation or "auto"),
+            welch_pvalues=tuple(
+                finite_welch_pvalues
+                if len(finite_welch_pvalues) == len(welch_pvalues)
+                else [float(value) if _is_finite_number(value) else None for value in welch_pvalues]
+            ),
+            median_welch_pvalue=median_welch_pvalue,
+            minimum_median_welch_pvalue=obs.policy.minimum_median_welch_pvalue,
+            finite_welch_pvalue_count=len(finite_welch_pvalues),
+            equivalence_margin=resolved_equivalence_margin,
+            declared_equivalence_margin=obs.policy.equivalence_margin,
+            equivalence_margin_source=equivalence_margin_source,
+            equivalence_alpha=obs.policy.equivalence_alpha,
+            statistical_test_family=(
                 "equivalence_tost"
                 if equivalence_family
                 else ("legacy_welch_difference" if legacy_welch_family else "none")
             ),
-            "statistical_test_kinds": statistical_test_kinds,
-            "statistical_pvalues": statistical_pvalues,
-            "aggregate_statistical_pvalue": rounded(float(aggregate_statistical_pvalue))
-            if _is_finite_number(aggregate_statistical_pvalue)
-            else aggregate_statistical_pvalue,
-            "supported_statistical_bin_count": supported_statistical_bin_count,
-            "unsupported_statistical_bin_count": len(unsupported_statistical_x_values),
-            "unsupported_statistical_x_values": _rounded_list(unsupported_statistical_x_values),
-            "pvalue_aggregation": resolved_pvalue_aggregation,
-            "pvalue_aggregation_source": pvalue_aggregation_source,
-            "residual_gate_passed": residual_gate_passed,
-            "pvalue_gate_passed": pvalue_gate_passed,
-            "statistical_gate_passed": statistical_gate_passed if equivalence_family else legacy_difference_gate_passed,
-            "residual_norm_score": rounded(float(residual_norm_score))
-            if _is_finite_number(residual_norm_score)
-            else residual_norm_score,
-            "statistical_norm_score": rounded(float(statistical_norm_score))
-            if _is_finite_number(statistical_norm_score)
-            else statistical_norm_score,
-            "overall_norm_score": rounded(float(overall_norm_score))
-            if _is_finite_number(overall_norm_score)
-            else overall_norm_score,
-            "alignment_policy": obs.policy.alignment_policy,
-            "x_match_tolerance": rounded(float(obs.policy.x_match_tolerance))
-            if _is_finite_number(obs.policy.x_match_tolerance)
-            else obs.policy.x_match_tolerance,
-            "declared_resampling_grid_source": obs.policy.resampling_grid_source,
-            "resampling_grid_source": resolved_resampling_grid_source,
-            "resampling_grid_source_origin": resampling_grid_source_origin,
-            "declared_resampling_grid_values": _rounded_list(list(obs.policy.resampling_grid_values))
-            if obs.policy.resampling_grid_values
-            else [],
-            "resampling_grid_values": _rounded_list(list(resampling_metadata.get("target_grid", []))),
-            "interpolation_method": obs.policy.interpolation_method,
-            "reference_resampled_support_counts": [
+            statistical_test_kinds=tuple(statistical_test_kinds),
+            statistical_pvalues=tuple(statistical_pvalues),
+            aggregate_statistical_pvalue=aggregate_statistical_pvalue,
+            supported_statistical_bin_count=supported_statistical_bin_count,
+            unsupported_statistical_x_values=tuple(unsupported_statistical_x_values),
+            pvalue_aggregation=resolved_pvalue_aggregation,
+            pvalue_aggregation_source=pvalue_aggregation_source,
+            residual_gate_passed=residual_gate_passed,
+            pvalue_gate_passed=pvalue_gate_passed,
+            statistical_gate_passed=(statistical_gate_passed if equivalence_family else legacy_difference_gate_passed),
+            residual_norm_score=residual_norm_score,
+            statistical_norm_score=statistical_norm_score,
+            overall_norm_score=overall_norm_score,
+            alignment_policy=obs.policy.alignment_policy,
+            x_match_tolerance=obs.policy.x_match_tolerance,
+            declared_resampling_grid_source=obs.policy.resampling_grid_source,
+            resampling_grid_source=resolved_resampling_grid_source,
+            resampling_grid_source_origin=resampling_grid_source_origin,
+            declared_resampling_grid_values=tuple(obs.policy.resampling_grid_values),
+            resampling_grid_values=tuple(resampling_metadata.get("target_grid", [])),
+            interpolation_method=obs.policy.interpolation_method,
+            reference_resampled_support_counts=tuple(
                 len(resampling_metadata["reference_support_ids"].get(float(target_x), []))
                 for target_x in aligned_reference_keys
-            ]
+            )
             if resampling_metadata
-            else [],
-            "model_resampled_support_counts": [
+            else (),
+            model_resampled_support_counts=tuple(
                 len(resampling_metadata["model_support_ids"].get(float(target_x), []))
                 for target_x in aligned_reference_keys
-            ]
+            )
             if resampling_metadata
-            else [],
-            "distribution_kind": obs.policy.distribution_kind,
-            "x_quantity_name": obs.x_quantity_name,
-            "y_quantity_name": obs.y_quantity_name,
-            "comparison_x_unit_text": obs.comparison_x_unit_text,
-            "comparison_y_unit_text": obs.comparison_y_unit_text,
-            "reference_x_key": reference_dataset.x_key,
-            "reference_y_key": reference_dataset.y_key,
-            "reference_x_unit_text": reference_dataset.x_unit_text,
-            "reference_y_unit_text": reference_dataset.y_unit_text,
-            "reference_series_id_key": reference_dataset.series_id_key,
-            "model_x_key": model_dataset.x_key,
-            "model_y_key": model_dataset.y_key,
-            "model_x_unit_text": model_dataset.x_unit_text,
-            "model_y_unit_text": model_dataset.y_unit_text,
-            "model_series_id_key": model_dataset.series_id_key,
-            "reference_x_transform": reference_dataset.x_transform.description(),
-            "model_x_transform": model_dataset.x_transform.description(),
-            "series_provenance": series_provenance.to_dict(),
-        }
-        evidence = _with_legacy_hz_aliases(
-            evidence,
+            else (),
+            distribution_kind=obs.policy.distribution_kind,
+            x_quantity_name=obs.x_quantity_name,
+            y_quantity_name=obs.y_quantity_name,
+            comparison_x_unit_text=obs.comparison_x_unit_text,
             comparison_y_unit_text=obs.comparison_y_unit_text,
+            reference_x_key=reference_dataset.x_key,
+            reference_y_key=reference_dataset.y_key,
+            reference_x_unit_text=reference_dataset.x_unit_text,
+            reference_y_unit_text=reference_dataset.y_unit_text,
+            reference_series_id_key=reference_dataset.series_id_key,
+            model_x_key=model_dataset.x_key,
+            model_y_key=model_dataset.y_key,
+            model_x_unit_text=model_dataset.x_unit_text,
+            model_y_unit_text=model_dataset.y_unit_text,
+            model_series_id_key=model_dataset.series_id_key,
+            reference_x_transform=reference_dataset.x_transform.description(),
+            model_x_transform=model_dataset.x_transform.description(),
+            series_provenance=series_provenance,
         )
         if obs.policy.score_family == "equivalence_only":
             if _is_finite_number(aggregate_statistical_pvalue):
@@ -1755,7 +2132,12 @@ class SeriesComparisonTest(sciunit.Test):
                 score_value = float("inf")
         else:
             score_value = mae if _is_finite_number(mae) else float("inf")
-        return SeriesComparisonScore(score_value, status=status, evidence=evidence, case=self.case)
+        return SeriesComparisonScore(
+            score_value,
+            status=status,
+            evidence_payload=evidence_payload,
+            case=self.case,
+        )
 
 
 @dataclass(frozen=True)
@@ -1794,113 +2176,16 @@ def compile_series_comparison_suite(
 
 def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore) -> str:
     del case
-    score_family = str(score.evidence.get("score_family") or "").strip()
-    mae = score.evidence.get("mean_absolute_error")
-    error_unit_text = str(score.evidence.get("error_unit_text", "")).strip()
-    residual_text = ""
-    if _is_finite_number(mae):
-        residual_text = f"MAE {rounded(float(mae)):g}" + (f" {error_unit_text}" if error_unit_text else "")
-    if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
-        aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
-    elif score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
-        aggregate_pvalue = score.evidence.get("median_welch_pvalue")
-    else:
-        aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
-    statistical_text = ""
-    if _is_finite_number(aggregate_pvalue):
-        pvalue_text = f"{rounded(float(aggregate_pvalue), digits=4):g}"
-        if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
-            statistical_text = f"TOST p {pvalue_text}"
-        elif score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
-            statistical_text = f"Welch p {pvalue_text}"
-        else:
-            statistical_text = f"p {pvalue_text}"
-    if score_family == "residual_only":
-        return residual_text
-    if score_family == "equivalence_only":
-        return statistical_text
-    if residual_text and statistical_text:
-        return f"{residual_text} | {statistical_text}"
-    return residual_text or statistical_text
+    return score.evidence_payload.score_text()
 
 
 def _series_score_payload(case: SeriesComparisonCase, score: SeriesComparisonScore) -> SuiteCaseScorePayload:
-    evidence = score.evidence
-    score_family = str(evidence.get("score_family") or case.observation.policy.score_family)
-    score_units = ""
-    if score_family == "residual_only":
-        score_units = str(evidence.get("error_unit_text") or "")
-    score_value = numeric_value(score.score)
-    if score_family in {"equivalence_only", "hybrid_residual_equivalence"}:
-        score_units = ""
-    if score_family in {"welch_only", "hybrid_residual_welch"}:
-        score_units = ""
-    statistical_summary = None
-    if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES and _is_finite_number(evidence.get("aggregate_statistical_pvalue")):
-        statistical_summary = SuiteCaseStatisticalPayload(
-            score_family_category="equivalence",
-            statistical_test_family=str(evidence.get("statistical_test_family") or "equivalence_tost"),
-            pvalue=float(evidence.get("aggregate_statistical_pvalue")),
-            label="TOST p",
-            default_rollup_method="max",
-            threshold=evidence.get("equivalence_alpha"),
-            threshold_key="equivalence_alpha",
-            threshold_direction="le",
-        )
-    elif score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES and _is_finite_number(evidence.get("median_welch_pvalue")):
-        statistical_summary = SuiteCaseStatisticalPayload(
-            score_family_category="welch_similarity",
-            statistical_test_family=str(evidence.get("statistical_test_family") or "legacy_welch_difference"),
-            pvalue=float(evidence.get("median_welch_pvalue")),
-            label="Welch p",
-            default_rollup_method="min",
-            threshold=evidence.get("minimum_median_welch_pvalue"),
-            threshold_key="minimum_median_welch_pvalue",
-            threshold_direction="ge",
-        )
-    return SuiteCaseScorePayload(
-        score_kind=score_family,
-        score_value=score_value,
-        score_units=score_units,
-        score_interpretation=(
-            "Unit-aware series-comparison score derived from the configured alignment, "
-            "distribution, and statistical policy."
-        ),
-        observation={
-            "matched_point_count": evidence.get("matched_point_count"),
-            "mean_absolute_error": evidence.get("mean_absolute_error"),
-            "root_mean_square_error": evidence.get("root_mean_square_error"),
-            "aggregate_statistical_pvalue": evidence.get("aggregate_statistical_pvalue"),
-            "median_welch_pvalue": evidence.get("median_welch_pvalue"),
-        },
-        prediction={
-            "score_family": score_family,
-            "statistical_test_family": evidence.get("statistical_test_family"),
-            "maximum_mae": evidence.get("maximum_mae"),
-            "maximum_rmse": evidence.get("maximum_rmse"),
-            "equivalence_margin": evidence.get("equivalence_margin"),
-            "equivalence_alpha": evidence.get("equivalence_alpha"),
-            "minimum_median_welch_pvalue": evidence.get("minimum_median_welch_pvalue"),
-            "pvalue_aggregation": evidence.get("pvalue_aggregation"),
-        },
-        normalization={
-            "norm_score": score.norm_score,
-            "residual_norm_score": evidence.get("residual_norm_score"),
-            "statistical_norm_score": evidence.get("statistical_norm_score"),
-            "overall_norm_score": evidence.get("overall_norm_score"),
-        },
-        statistical_summary=statistical_summary,
-    )
+    del case
+    return score.evidence_payload.to_suite_case_score_payload(score_value=score.score)
 
 
 def _series_case_weight(score: SeriesComparisonScore) -> float | None:
-    matched_point_count = score.evidence.get("matched_point_count")
-    if not _is_finite_number(matched_point_count):
-        return None
-    candidate = float(matched_point_count)
-    if candidate <= 0.0:
-        return None
-    return candidate
+    return score.evidence_payload.case_weight()
 
 
 def audit_items_from_series_comparison_suite(
@@ -1963,6 +2248,7 @@ __all__ = [
     "SERIES_INTERPOLATION_METHODS",
     "SERIES_RESAMPLING_GRID_SOURCES",
     "SeriesComparisonCase",
+    "SeriesComparisonEvidencePayload",
     "SeriesDataSpec",
     "SeriesComparisonPolicy",
     "SeriesComparisonScore",

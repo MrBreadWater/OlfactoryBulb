@@ -2238,6 +2238,16 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `ValidationRulePayload`, and the rule/spec parsers now accept
     mapping-like payloads instead of treating mutable raw dicts as the
     primary maintained contract
+  - the migrated series-comparison score/evidence seam is tighter too:
+    computed series diagnostics now live on an explicit
+    `SeriesComparisonEvidencePayload` that owns score text, suite-case
+    statistical payload derivation, case weighting, and evidence export,
+    rather than rebuilding one large ad hoc dict directly inside
+    `compute_score()`
+  - the same slice forced the parser contract to match the frozen payload
+    reality: once nested declarative values have crossed the frozen wrapper
+    boundary, rule/spec parsers now accept tuple-backed sequence values
+    rather than assuming every config list stayed mutable
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +

@@ -993,6 +993,10 @@ contract for future sessions.
       frozen mapping payload, and the rule/spec parsing layer should accept
       mapping-like payloads instead of advertising mutable raw dicts as the
       primary maintained contract
+    - once declarative payloads are frozen, do not let parser helpers regress
+      to mutable-sequence assumptions; rule/spec parsers should accept the
+      tuple-backed sequence values produced by the frozen payload layer rather
+      than requiring raw `list` inputs
     - if a migrated SciUnit suite needs the full protocol-evidence payload,
       expose that through an explicit capability such as
       `ProvidesProtocolEvidenceBundle` and consume the bundle directly rather
@@ -1005,6 +1009,10 @@ contract for future sessions.
       scattering sibling keys like `reference_*` / `model_*` across the score
       evidence map unless a renderer or CLI surface truly needs flattened
       aliases
+    - keep the series-comparison score/evidence seam typed too: the computed
+      series diagnostics should live on one explicit payload object that owns
+      score text, suite-case statistical summaries, and evidence export,
+      instead of rebuilding a large ad hoc dict in `compute_score()`
     - when a maintained SciUnit wrapper already has a typed case or
       observation object, make that object own the SciUnit observation payload
       via a small `observation_payload()` helper instead of rebuilding a

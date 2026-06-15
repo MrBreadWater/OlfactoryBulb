@@ -18,6 +18,7 @@ from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, Ser
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SeriesComparisonCase,
+    SeriesComparisonEvidencePayload,
     SeriesComparisonPolicy,
     SeriesDataSpec,
     SeriesDistributionObservation,
@@ -365,6 +366,8 @@ assert compiled.model.get_protocol_evidence_bundle().to_dict()["cell_models"] ==
 ]
 judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS"]
+assert isinstance(judged[0][1].evidence_payload, SeriesComparisonEvidencePayload)
+assert judged[0][1].evidence == judged[0][1].evidence_payload.to_dict()
 
 adapted_items = audit_items_from_series_comparison_suite(compiled)
 assert [item.status for item in adapted_items] == ["PASS", "PASS"]
