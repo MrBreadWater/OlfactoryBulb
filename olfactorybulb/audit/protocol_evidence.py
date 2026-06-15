@@ -3,10 +3,20 @@
 from __future__ import annotations
 
 import copy
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
 from olfactorybulb.audit.core import series_visual_spec
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload, coerce_mapping_payload
+
+
+class ProtocolEvidenceStyleMap(FrozenMappingPayload):
+    """Typed frozen mapping wrapper for protocol-evidence visual style tables."""
+
+
+class ProtocolEvidenceValueMap(FrozenMappingPayload):
+    """Typed frozen mapping wrapper for protocol-evidence payload tables."""
 
 
 @dataclass(frozen=True)
@@ -22,7 +32,14 @@ class ProtocolEvidenceSeriesSpec:
     kind: str = "fi_curve"
     backend: str = "matplotlib"
     title: str = ""
-    style: dict[str, Any] = field(default_factory=dict)
+    style: ProtocolEvidenceStyleMap | Mapping[str, object] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "style",
+            coerce_mapping_payload(self.style, payload_type=ProtocolEvidenceStyleMap) or ProtocolEvidenceStyleMap(entries=()),
+        )
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -37,7 +54,7 @@ class ProtocolEvidenceSeriesSpec:
             "kind": self.kind,
             "backend": self.backend,
             "title": self.title,
-            "style": dict(self.style),
+            "style": self.style.to_dict(),
         }
 
     def axis_label(self, *, axis: str) -> str:
@@ -57,7 +74,7 @@ class ProtocolEvidenceSeriesSpec:
         return unit_text
 
     def to_visual_spec(self) -> dict[str, Any]:
-        style = dict(self.style)
+        style = self.style.to_dict()
         style.setdefault("x_label", self.axis_label(axis="x"))
         style.setdefault("y_label", self.axis_label(axis="y"))
         if self.title:
@@ -81,15 +98,19 @@ class ProtocolEvidenceSeriesSpec:
 
 @dataclass(frozen=True)
 class ProtocolEvidenceBundle:
-    values: dict[str, Any] = field(default_factory=dict)
+    values: ProtocolEvidenceValueMap | Mapping[str, object] = field(default_factory=dict)
     series_specs: tuple[ProtocolEvidenceSeriesSpec, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "values", copy.deepcopy(dict(self.values)))
+        object.__setattr__(
+            self,
+            "values",
+            coerce_mapping_payload(self.values, payload_type=ProtocolEvidenceValueMap) or ProtocolEvidenceValueMap(entries=()),
+        )
         object.__setattr__(self, "series_specs", tuple(self.series_specs))
 
     def to_dict(self) -> dict[str, Any]:
-        return copy.deepcopy(self.values)
+        return self.values.to_dict()
 
     def with_value(self, key: str, value: Any) -> "ProtocolEvidenceBundle":
         updated = self.to_dict()
@@ -98,9 +119,15 @@ class ProtocolEvidenceBundle:
 
     def rows(self, evidence_key: str) -> list[dict[str, Any]]:
         rows = self.values.get(evidence_key, [])
-        if not isinstance(rows, list):
+        if not isinstance(rows, list | tuple):
             return []
-        return [dict(row) for row in rows if isinstance(row, dict)]
+        result: list[dict[str, Any]] = []
+        for row in rows:
+            if isinstance(row, FrozenMappingPayload):
+                result.append(row.to_dict())
+            elif isinstance(row, Mapping):
+                result.append(dict(row))
+        return result
 
     def series_spec_map(self) -> dict[str, ProtocolEvidenceSeriesSpec]:
         return protocol_series_spec_map(self.series_specs)
@@ -179,6 +206,8 @@ def intrinsic_fi_curve_series_spec(
 __all__ = [
     "ProtocolEvidenceBundle",
     "ProtocolEvidenceSeriesSpec",
+    "ProtocolEvidenceStyleMap",
+    "ProtocolEvidenceValueMap",
     "coerce_protocol_evidence_bundle",
     "intrinsic_fi_curve_series_spec",
     "protocol_evidence_bundle_from_resultish",

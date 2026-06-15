@@ -2223,6 +2223,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     shared frozen `SuiteCaseMappingPayload`, but the builders still accept
     plain mappings and coerce them at the boundary so the scientific-core
     contract tightens without making the maintained rule adapters verbose
+  - the central protocol-evidence seam now follows the same pattern through a
+    shared `FrozenMappingPayload` layer, so `ProtocolEvidenceBundle.values`
+    and `ProtocolEvidenceSeriesSpec.style` stop carrying mutable raw maps
+    internally even though maintained protocol builders and tests can still
+    pass plain mappings at the boundary
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +

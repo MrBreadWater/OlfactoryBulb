@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-import copy
+from collections.abc import Mapping
 from dataclasses import dataclass
 import math
 import statistics
-from collections.abc import Mapping
 from typing import Any
 
 from olfactorybulb.audit.core import rounded
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload, coerce_mapping_payload
 
 
 _STATUS_RANK = {"FAIL": 3, "WARN": 2, "PASS": 1}
@@ -35,77 +35,14 @@ def _normalized_norm_score(value: float | None) -> float | None:
     return rounded(candidate, digits=3)
 
 
-def _freeze_mapping_payload_value(value: object) -> object:
-    if isinstance(value, SuiteCaseMappingPayload):
-        return value
-    if isinstance(value, Mapping):
-        return SuiteCaseMappingPayload.from_mapping(value)
-    if isinstance(value, list | tuple):
-        return tuple(_freeze_mapping_payload_value(item) for item in value)
-    return copy.deepcopy(value)
-
-
-def _thaw_mapping_payload_value(value: object) -> object:
-    if isinstance(value, SuiteCaseMappingPayload):
-        return value.to_dict()
-    if isinstance(value, tuple):
-        return [_thaw_mapping_payload_value(item) for item in value]
-    return copy.deepcopy(value)
-
-
-@dataclass(frozen=True)
-class SuiteCaseMappingPayload(Mapping[str, object]):
-    entries: tuple[tuple[str, object], ...]
-
-    def __post_init__(self) -> None:
-        normalized_entries: list[tuple[str, object]] = []
-        for key, value in self.entries:
-            normalized_key = str(key).strip()
-            if not normalized_key:
-                continue
-            normalized_entries.append((normalized_key, _freeze_mapping_payload_value(value)))
-        object.__setattr__(self, "entries", tuple(normalized_entries))
-
-    @classmethod
-    def from_mapping(cls, mapping: Mapping[str, object]) -> "SuiteCaseMappingPayload":
-        return cls(entries=tuple((str(key), value) for key, value in mapping.items()))
-
-    def __getitem__(self, key: str) -> object:
-        for entry_key, value in self.entries:
-            if entry_key == key:
-                return value
-        raise KeyError(key)
-
-    def __iter__(self):
-        for key, _ in self.entries:
-            yield key
-
-    def __len__(self) -> int:
-        return len(self.entries)
-
-    def get(self, key: str, default: object = None) -> object:
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def to_dict(self) -> dict[str, object]:
-        return {
-            key: _thaw_mapping_payload_value(value)
-            for key, value in self.entries
-        }
+class SuiteCaseMappingPayload(FrozenMappingPayload):
+    """Typed frozen mapping wrapper for suite-case score payload sections."""
 
 
 def _normalized_mapping_payload(
-    value: SuiteCaseMappingPayload | Mapping[str, object] | None,
+    value: SuiteCaseMappingPayload | FrozenMappingPayload | dict[str, object] | None,
 ) -> SuiteCaseMappingPayload | None:
-    if value is None:
-        return None
-    if isinstance(value, SuiteCaseMappingPayload):
-        return value
-    if isinstance(value, Mapping):
-        return SuiteCaseMappingPayload.from_mapping(value)
-    raise TypeError("Suite case payload sections must be mappings or SuiteCaseMappingPayload instances")
+    return coerce_mapping_payload(value, payload_type=SuiteCaseMappingPayload)
 
 
 def _normalized_score_value(value: float | int | None) -> float | None:

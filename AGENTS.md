@@ -979,6 +979,10 @@ contract for future sessions.
       `coerce_protocol_evidence_bundle(...)`, keep the public runtime/model
       seam on `ProtocolEvidenceBundle` instead of advertising raw dicts as a
       first-class protocol-evidence payload type
+    - keep the public protocol-evidence payload maps typed too: store
+      `ProtocolEvidenceBundle.values` and `ProtocolEvidenceSeriesSpec.style`
+      on shared frozen mapping wrappers, but keep plain mapping coercion at
+      the boundary so maintained protocol builders and tests can stay concise
     - if a migrated SciUnit suite needs the full protocol-evidence payload,
       expose that through an explicit capability such as
       `ProvidesProtocolEvidenceBundle` and consume the bundle directly rather
