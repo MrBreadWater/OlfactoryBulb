@@ -1814,6 +1814,10 @@ Important details:
   `minimum_available_case_weight_fraction`
   when the suite-level statistical summary should only count as supported if
   enough cases contributed real statistical evidence
+- the emitted `suite_statistical_summary` now makes both sides of that support
+  contract explicit: supported and unsupported case counts/fractions, supported
+  and unsupported case weights/fractions when the suite has principled weights,
+  and the supported/unsupported `check_id` lists
 - the weight-based support fields are only principled when the suite family
   emits a real per-case weight; in the maintained branch that currently means
   the series-comparison suite family, which uses matched-point count

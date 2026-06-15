@@ -766,9 +766,10 @@ contract for future sessions.
     declarative `minimum_available_case_count` and/or
     `minimum_available_case_fraction` on `suite_statistical_policy` instead
     of inferring that support requirement from the rolled-up p-value alone.
-    Keep the resulting `available_case_count`, `available_case_fraction`,
-    `support_gate_passed`, `threshold_gate_passed`, and combined
-    `gate_passed` visible in `suite_statistical_summary`. When the dashboard
+    Keep the resulting supported/unsupported case counts, fractions, case-id
+    lists, and any principled weighted coverage fields visible in
+    `suite_statistical_summary` alongside `support_gate_passed`,
+    `threshold_gate_passed`, and combined `gate_passed`. When the dashboard
     renders a suite status matrix, surface partial statistical support or a
     failed support gate in the matrix header instead of leaving that support
     shortfall buried only in raw JSON evidence. Keep the migrated
@@ -831,7 +832,10 @@ contract for future sessions.
     `minimum_available_case_weight` and/or
     `minimum_available_case_weight_fraction`, and only do that for suite
     families whose case weights are scientifically meaningful rather than
-    incidental presentation values.
+    incidental presentation values. Preserve the unsupported side of that
+    contract too: the emitted suite summary should make it obvious which cases
+    did not contribute statistical evidence and, for weighted suites, how much
+    principled weight those unsupported cases represent.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

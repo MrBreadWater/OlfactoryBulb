@@ -554,12 +554,18 @@ case-level PASS/WARN/FAIL decisions. The emitted `suite_statistical_summary`
 records:
 
 - `available_case_count`
+- `unsupported_case_count`
 - `total_case_count`
 - `available_case_fraction`
+- `unsupported_case_fraction`
 - `available_case_weight`
+- `unsupported_case_weight`
 - `total_case_weight`
 - `available_case_weight_fraction`
+- `unsupported_case_weight_fraction`
 - `weight_label`
+- `case_check_ids`
+- `unsupported_case_check_ids`
 - `support_gate_passed`
 - `weight_support_gate_passed`
 - `threshold_gate_passed`

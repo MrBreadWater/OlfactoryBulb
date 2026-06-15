@@ -2371,7 +2371,8 @@ The remaining open questions are now narrower:
 - whether the new typed `suite_statistical_summary` plus declarative
   `SuiteStatisticalPolicy` support is enough, or whether future work should
   promote additional suite-level statistical contracts beyond rollup choice
-  plus the current supported-case count/fraction/weight gates
+  plus the current supported/unsupported-case count/fraction/weight
+  diagnostics and support gates
 - whether transform generalization should stop at explicit piecewise-linear
   mappings plus the current context-dependent affine lookup / pipeline path,
   or later grow into richer metadata-driven transforms

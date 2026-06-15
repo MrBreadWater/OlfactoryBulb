@@ -698,3 +698,11 @@ Remove this file when the listed items are either:
         for both reference and model sides when series ids are available
       - HOWTO/tutorial and direct suite coverage now expose the richer
         provenance contract
+- [x] Make suite-level statistical support evidence explicit on both sides of
+      the support boundary instead of only reporting supported totals.
+      - `SuiteStatisticalSummary` now emits unsupported case counts/fractions
+        and unsupported `check_id` lists alongside the supported side
+      - weighted suites now also emit unsupported case weight totals/fractions
+        when the maintained case-weight contract is fully available
+      - the maintained HOWTO/tutorial/agent contract now documents those
+        unsupported-support fields as part of the stable suite-summary surface

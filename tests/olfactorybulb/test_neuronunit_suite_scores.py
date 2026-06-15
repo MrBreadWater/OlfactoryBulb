@@ -146,6 +146,8 @@ assert equivalence_summary == {
     "available_case_count": 2,
     "total_case_count": 2,
     "available_case_fraction": 1.0,
+    "unsupported_case_count": 0,
+    "unsupported_case_fraction": 0.0,
     "score_text": "max TOST p 0.03",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -160,6 +162,7 @@ assert equivalence_summary == {
     "gate_passed": True,
     "case_pvalues": [0.01, 0.03],
     "case_check_ids": ["equiv_a", "equiv_b"],
+    "unsupported_case_check_ids": [],
 }
 
 welch_score = build_suite_aggregate_score(
@@ -216,6 +219,8 @@ assert welch_summary == {
     "available_case_count": 2,
     "total_case_count": 2,
     "available_case_fraction": 1.0,
+    "unsupported_case_count": 0,
+    "unsupported_case_fraction": 0.0,
     "score_text": "min Welch p 0.08",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -230,6 +235,7 @@ assert welch_summary == {
     "gate_passed": True,
     "case_pvalues": [0.08, 0.12],
     "case_check_ids": ["welch_a", "welch_b"],
+    "unsupported_case_check_ids": [],
 }
 
 median_equivalence_score = build_suite_aggregate_score(
@@ -307,6 +313,8 @@ assert median_equivalence_summary == {
     "available_case_count": 3,
     "total_case_count": 3,
     "available_case_fraction": 1.0,
+    "unsupported_case_count": 0,
+    "unsupported_case_fraction": 0.0,
     "score_text": "median TOST p 0.05",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -321,6 +329,7 @@ assert median_equivalence_summary == {
     "gate_passed": True,
     "case_pvalues": [0.01, 0.05, 0.09],
     "case_check_ids": ["equiv_a", "equiv_b", "equiv_c"],
+    "unsupported_case_check_ids": [],
 }
 
 partial_support_score = build_suite_aggregate_score(
@@ -378,6 +387,8 @@ assert partial_support_summary == {
     "available_case_count": 1,
     "total_case_count": 2,
     "available_case_fraction": 0.5,
+    "unsupported_case_count": 1,
+    "unsupported_case_fraction": 0.5,
     "score_text": "max TOST p 0.02",
     "score_interpretation": (
         "Diagnostic suite-level statistical summary derived from the case-level "
@@ -395,6 +406,7 @@ assert partial_support_summary == {
     "gate_passed": False,
     "case_pvalues": [0.02],
     "case_check_ids": ["supported_case"],
+    "unsupported_case_check_ids": ["unsupported_case"],
 }
 
 weighted_support_score = build_suite_aggregate_score(
@@ -456,9 +468,13 @@ assert weighted_support_summary == {
     "available_case_count": 1,
     "total_case_count": 2,
     "available_case_fraction": 0.5,
+    "unsupported_case_count": 1,
+    "unsupported_case_fraction": 0.5,
     "available_case_weight": 4.0,
+    "unsupported_case_weight": 8.0,
     "total_case_weight": 12.0,
     "available_case_weight_fraction": 0.333,
+    "unsupported_case_weight_fraction": 0.667,
     "weight_label": "matched points",
     "score_text": "max TOST p 0.02",
     "score_interpretation": (
@@ -478,6 +494,7 @@ assert weighted_support_summary == {
     "gate_passed": False,
     "case_pvalues": [0.02],
     "case_check_ids": ["weighted_supported"],
+    "unsupported_case_check_ids": ["weighted_unsupported"],
 }
 
 missing_weight_support_score = build_suite_aggregate_score(
@@ -520,6 +537,9 @@ assert missing_weight_summary["support_gate_passed"] is False
 assert missing_weight_summary["weight_support_gate_passed"] is False
 assert missing_weight_summary["minimum_available_case_weight"] == 2.0
 assert "all suite cases need per-case weights" in missing_weight_summary["score_interpretation"]
+assert missing_weight_summary["unsupported_case_count"] == 1
+assert missing_weight_summary["unsupported_case_fraction"] == 0.5
+assert missing_weight_summary["unsupported_case_check_ids"] == ["unweighted_unsupported"]
 assert "available_case_weight" not in missing_weight_summary
 assert "total_case_weight" not in missing_weight_summary
 
