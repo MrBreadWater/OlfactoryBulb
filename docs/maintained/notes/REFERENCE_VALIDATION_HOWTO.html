@@ -331,6 +331,10 @@ declare it explicitly on every contiguous rule in the block:</p>
 </code></pre>
 <p>The maintained default is still <code>norm_rollup = "minimum"</code> with
 <code>status_rollup = "worst_case"</code>.</p>
+<p>For single-rule SciUnit-backed families such as <code>reference_band_rows</code>, the same
+field works directly on that rule without any repetition:</p>
+<pre><code class="language-toml">suite_aggregate_policy = { norm_rollup = &quot;mean&quot; }
+</code></pre>
 <p>One consequence of that split is that <strong>reference-band assumptions belong in
 config</strong>, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as
