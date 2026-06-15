@@ -348,6 +348,9 @@ assert series_payload.to_dict() == {
     "resampling_grid_source": "",
     "resampling_domain_policy": "",
     "resampling_grid_values": [],
+    "resampling_grid_step": None,
+    "resampling_grid_min_x": None,
+    "resampling_grid_max_x": None,
     "interpolation_method": "linear",
     "distribution_kind": "empirical_by_x",
     "score_family": "hybrid_residual_welch",
@@ -1225,6 +1228,74 @@ assert intersection_resampled_items[1].evidence["model_resampling_domain_max_x"]
 assert intersection_resampled_items[1].evidence["reference_coverage_fraction"] == 1.0
 assert intersection_resampled_items[1].evidence["model_coverage_fraction"] == 1.0
 
+uniform_step_resampled_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=8,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        alignment_policy="resampled_grid",
+        resampling_grid_source="uniform_step",
+        resampling_grid_step=25.0,
+        resampling_domain_policy="intersection",
+        score_family="residual_only",
+    ),
+)
+
+uniform_step_resampled_case = SeriesComparisonCase(
+    check_id="synthetic_uniform_step_resampled_series_match",
+    title="Synthetic resampled alignment can generate a regular comparison grid",
+    criterion="A regular resampling grid can be derived from the observed support and then clipped to the shared interpolation domain.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic uniform-step resampled-grid suite test.",
+    acceptable="The derived regular comparison grid satisfies the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=uniform_step_resampled_observation,
+)
+
+uniform_step_resampled_compiled = compile_series_comparison_suite(
+    cases=[uniform_step_resampled_case],
+    summary={},
+    metrics=[],
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+    suite_name="synthetic uniform-step resampled series suite",
+)
+uniform_step_resampled_items = audit_items_from_series_comparison_suite(uniform_step_resampled_compiled)
+assert uniform_step_resampled_items[1].status == "PASS"
+assert uniform_step_resampled_items[1].evidence["resampling_grid_source"] == "uniform_step"
+assert uniform_step_resampled_items[1].evidence["declared_resampling_grid_step"] == 25.0
+assert uniform_step_resampled_items[1].evidence["resampling_grid_step"] == 25.0
+assert uniform_step_resampled_items[1].evidence["resampling_grid_step_origin"] == "explicit"
+assert uniform_step_resampled_items[1].evidence["declared_resampling_grid_min_x"] is None
+assert uniform_step_resampled_items[1].evidence["resampling_grid_min_x"] == 100.0
+assert uniform_step_resampled_items[1].evidence["resampling_grid_min_x_origin"] == "default_observed_min"
+assert uniform_step_resampled_items[1].evidence["declared_resampling_grid_max_x"] is None
+assert uniform_step_resampled_items[1].evidence["resampling_grid_max_x"] == 325.0
+assert uniform_step_resampled_items[1].evidence["resampling_grid_max_x_origin"] == "default_observed_max"
+assert uniform_step_resampled_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
+assert uniform_step_resampled_items[1].evidence["resampling_excluded_x_values"] == [100.0, 325.0]
+assert uniform_step_resampled_items[1].evidence["matched_point_count"] == 8
+
 coverage_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=resampled_reference_rows,
@@ -1746,6 +1817,48 @@ assert resampled_rule_items[1].evidence["declared_resampling_grid_values"] == [1
 assert resampled_rule_items[1].evidence["currents_pA"] == [150.0, 250.0]
 assert resampled_rule_items[1].evidence["matched_point_count"] == 2
 
+uniform_step_rule = dict(resampled_rule)
+uniform_step_rule["check_id"] = "synthetic_uniform_step_resampled_series_match"
+uniform_step_rule["title"] = "Synthetic uniform-step resampled series rule"
+uniform_step_rule["criterion"] = "A declarative series rule can generate a regular comparison grid from step/bounds settings."
+uniform_step_rule["resampling_grid_source"] = "uniform_step"
+uniform_step_rule["resampling_grid_step"] = 25.0
+uniform_step_rule["resampling_grid_min_x"] = 125.0
+uniform_step_rule["resampling_grid_max_x"] = 300.0
+uniform_step_rule["minimum_point_count"] = 8
+uniform_step_rule["maximum_mae"] = 0.01
+uniform_step_rule["maximum_rmse"] = 0.01
+uniform_step_rule.pop("resampling_grid_values", None)
+uniform_step_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    uniform_step_rule_items = build_rule_items(compile_rule_dispatches([uniform_step_rule]), uniform_step_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert uniform_step_rule_items[1].status == "PASS"
+assert uniform_step_rule_items[1].evidence["resampling_grid_source"] == "uniform_step"
+assert uniform_step_rule_items[1].evidence["declared_resampling_grid_step"] == 25.0
+assert uniform_step_rule_items[1].evidence["resampling_grid_step"] == 25.0
+assert uniform_step_rule_items[1].evidence["declared_resampling_grid_min_x"] == 125.0
+assert uniform_step_rule_items[1].evidence["resampling_grid_min_x"] == 125.0
+assert uniform_step_rule_items[1].evidence["resampling_grid_min_x_origin"] == "explicit"
+assert uniform_step_rule_items[1].evidence["declared_resampling_grid_max_x"] == 300.0
+assert uniform_step_rule_items[1].evidence["resampling_grid_max_x"] == 300.0
+assert uniform_step_rule_items[1].evidence["resampling_grid_max_x_origin"] == "explicit"
+assert uniform_step_rule_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
+assert SeriesComparisonRuleSpec.from_rule(uniform_step_rule).policy.resampling_grid_step == 25.0
+
 coverage_rule = dict(resampled_rule)
 coverage_rule["check_id"] = "synthetic_resampled_series_coverage_gate"
 coverage_rule["title"] = "Synthetic coverage-gated series rule"
@@ -1997,6 +2110,22 @@ try:
         raise AssertionError("Expected unsupported resampling domain policy to fail")
     except ValueError as exc:
         assert "resampling domain policy" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+missing_uniform_step_rule = dict(uniform_step_rule)
+del missing_uniform_step_rule["resampling_grid_step"]
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items(compile_rule_dispatches([missing_uniform_step_rule]), uniform_step_context)
+        raise AssertionError("Expected uniform-step resampling to require an explicit positive grid step")
+    except ValueError as exc:
+        assert "requires a positive finite 'resampling_grid_step'" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

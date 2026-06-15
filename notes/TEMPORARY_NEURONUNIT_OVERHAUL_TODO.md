@@ -681,3 +681,12 @@ Remove this file when the listed items are either:
       - direct suite coverage and rule-level coverage now prove a maintained
         pipeline can combine `affine_lookup` and `piecewise_linear` before the
         series comparison runs
+- [x] Broaden the maintained resampled-grid alignment contract beyond observed
+      x unions and fully explicit grids so validations can declare a regular
+      comparison lattice without inventing custom rule code.
+      - `resampling_grid_source = "uniform_step"` now supports explicit
+        `resampling_grid_step`
+      - `resampling_grid_min_x` / `resampling_grid_max_x` stay optional and
+        otherwise default from the observed x-range
+      - the declarative parser, emitted evidence, HOWTO/tutorial, template,
+        and direct/rule-level coverage now all expose the uniform-step form

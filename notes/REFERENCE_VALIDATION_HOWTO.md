@@ -747,6 +747,13 @@ If you need a different grid, declare one of:
 - `resampling_grid_source = "union_observed_x"`
 - `resampling_grid_source = "explicit_grid"`
   - and then also declare `resampling_grid_values = [ ... ]`
+- `resampling_grid_source = "uniform_step"`
+  - and then declare `resampling_grid_step = ...`
+  - optionally declare `resampling_grid_min_x = ...` and
+    `resampling_grid_max_x = ...`
+  - when the min/max bounds are omitted, the maintained path derives them from
+    the overall observed x-range and records the resolved bounds in the
+    emitted evidence
 
 If you need the resampled grid clipped before interpolation support is counted,
 declare one of:

@@ -800,6 +800,13 @@ interpolation methods are:</p>
 <li><code>resampling_grid_source = "union_observed_x"</code></li>
 <li><code>resampling_grid_source = "explicit_grid"</code></li>
 <li>and then also declare <code>resampling_grid_values = [ ... ]</code></li>
+<li><code>resampling_grid_source = "uniform_step"</code></li>
+<li>and then declare <code>resampling_grid_step = ...</code></li>
+<li>optionally declare <code>resampling_grid_min_x = ...</code> and
+    <code>resampling_grid_max_x = ...</code></li>
+<li>when the min/max bounds are omitted, the maintained path derives them from
+    the overall observed x-range and records the resolved bounds in the
+    emitted evidence</li>
 </ul>
 <p>If you need the resampled grid clipped before interpolation support is counted,
 declare one of:</p>

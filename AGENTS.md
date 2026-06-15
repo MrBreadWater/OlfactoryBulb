@@ -629,6 +629,8 @@ contract for future sessions.
     `resampling_domain_policy` to `allow_partial_support`, and
     `interpolation_method` to `linear`, but the emitted evidence must record
     the resolved choice. Keep the resampling contract explicit and small:
+    current grid sources are `reference_observed_x`, `model_observed_x`,
+    `union_observed_x`, `explicit_grid`, and `uniform_step`,
     current interpolation options are `linear`, `nearest`, `pchip`, and
     `step_hold`, and current domain policies are `allow_partial_support`,
     `intersection`, `reference`, and `model`.

@@ -46,6 +46,7 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SERIES_ALIGNMENT_POLICIES,
     SERIES_RESAMPLING_DOMAIN_POLICIES,
+    SERIES_RESAMPLING_GRID_SOURCES,
     SeriesComparisonCase,
     SeriesComparisonPolicy,
     SeriesDataSpec,
@@ -1314,6 +1315,11 @@ class _SeriesComparisonRuleParser:
             x_match_tolerance = None
         if alignment_policy == "resampled_grid":
             resampling_grid_source = str(self.rule.get("resampling_grid_source", "")).strip()
+            if resampling_grid_source and resampling_grid_source not in SERIES_RESAMPLING_GRID_SOURCES:
+                raise ValueError(
+                    f"reference_curve_match resampling grid source {resampling_grid_source!r} is unsupported; "
+                    f"expected one of {', '.join(sorted(SERIES_RESAMPLING_GRID_SOURCES))}"
+                )
             resampling_domain_policy = str(self.rule.get("resampling_domain_policy", "")).strip()
             if resampling_domain_policy and resampling_domain_policy not in SERIES_RESAMPLING_DOMAIN_POLICIES:
                 raise ValueError(
@@ -1328,11 +1334,39 @@ class _SeriesComparisonRuleParser:
                 if not isinstance(raw_resampling_grid_values, (list, tuple)):
                     raise ValueError("reference_curve_match 'resampling_grid_values' must be a sequence when provided")
                 resampling_grid_values = tuple(float(value) for value in raw_resampling_grid_values)
+            if "resampling_grid_step" in self.rule and self.rule.get("resampling_grid_step") not in (None, ""):
+                resampling_grid_step = float(self.rule["resampling_grid_step"])
+            else:
+                resampling_grid_step = None
+            if "resampling_grid_min_x" in self.rule and self.rule.get("resampling_grid_min_x") not in (None, ""):
+                resampling_grid_min_x = float(self.rule["resampling_grid_min_x"])
+            else:
+                resampling_grid_min_x = None
+            if "resampling_grid_max_x" in self.rule and self.rule.get("resampling_grid_max_x") not in (None, ""):
+                resampling_grid_max_x = float(self.rule["resampling_grid_max_x"])
+            else:
+                resampling_grid_max_x = None
             if resampling_grid_source == "explicit_grid" and not resampling_grid_values:
                 raise ValueError(
                     "reference_curve_match resampled-grid alignment with "
                     "resampling_grid_source='explicit_grid' requires explicit 'resampling_grid_values'"
                 )
+            if resampling_grid_source == "uniform_step":
+                if resampling_grid_step is None or not math.isfinite(resampling_grid_step) or resampling_grid_step <= 0.0:
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment with "
+                        "resampling_grid_source='uniform_step' requires a positive finite "
+                        "'resampling_grid_step'"
+                    )
+                if (
+                    resampling_grid_min_x is not None
+                    and resampling_grid_max_x is not None
+                    and resampling_grid_min_x > resampling_grid_max_x
+                ):
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment requires "
+                        "'resampling_grid_min_x' <= 'resampling_grid_max_x'"
+                    )
         else:
             if str(self.rule.get("resampling_domain_policy", "")).strip():
                 raise ValueError(
@@ -1342,6 +1376,9 @@ class _SeriesComparisonRuleParser:
             resampling_grid_source = ""
             resampling_domain_policy = ""
             resampling_grid_values = ()
+            resampling_grid_step = None
+            resampling_grid_min_x = None
+            resampling_grid_max_x = None
             interpolation_method = "linear"
         pvalue_aggregation = str(self.rule.get("pvalue_aggregation", "auto")).strip()
         if score_family in {"welch_only", "hybrid_residual_welch"}:
@@ -1380,6 +1417,9 @@ class _SeriesComparisonRuleParser:
             resampling_grid_source=resampling_grid_source,
             resampling_domain_policy=resampling_domain_policy,
             resampling_grid_values=resampling_grid_values,
+            resampling_grid_step=resampling_grid_step,
+            resampling_grid_min_x=resampling_grid_min_x,
+            resampling_grid_max_x=resampling_grid_max_x,
             interpolation_method=interpolation_method,
             distribution_kind=self.required_choice("distribution_kind"),
             score_family=score_family,

@@ -2349,6 +2349,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `AxisTransform` contract supports `kind = "pipeline"` so a validation can
     compose the existing explicit transform kinds in order instead of
     introducing a new ad hoc transform just to express a two-step mapping
+  - alignment generalization is broader too: the maintained resampled-grid
+    path now supports `resampling_grid_source = "uniform_step"` with explicit
+    step size plus optional declared min/max bounds, while keeping the
+    resolved bounds visible in emitted evidence when defaults are used
   - the suite-level statistical-support contract is now visible in the
     migrated presentation layer too: when a suite matrix has only partial
     statistical support or fails its declared support gate, the dashboard
@@ -2368,9 +2372,11 @@ The remaining open questions are now narrower:
   mappings plus the current context-dependent affine lookup / pipeline path,
   or later grow into richer metadata-driven transforms
 - whether alignment generalization should stop at the current
-  distribution-preserving resampled-grid contract with its current explicit
-  interpolation/domain families (`linear`, `nearest`, `pchip`, `step_hold`;
-  `allow_partial_support`, `intersection`, `reference`, `model`)
+  distribution-preserving resampled-grid contract with its current grid /
+  interpolation / domain families (`reference_observed_x`,
+  `model_observed_x`, `union_observed_x`, `explicit_grid`, `uniform_step`;
+  `linear`, `nearest`, `pchip`, `step_hold`; `allow_partial_support`,
+  `intersection`, `reference`, `model`)
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path
 - how much NeuronUnit-native result presentation should grow before it starts

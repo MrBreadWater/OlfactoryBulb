@@ -117,6 +117,7 @@ SERIES_RESAMPLING_GRID_SOURCES = {
     "model_observed_x",
     "union_observed_x",
     "explicit_grid",
+    "uniform_step",
 }
 
 SERIES_RESAMPLING_DOMAIN_POLICIES = {
@@ -248,6 +249,17 @@ class SeriesResamplingMetadata:
             if np.isclose(float(entry_x), target_value):
                 return len(series_ids)
         return 0
+
+
+@dataclass(frozen=True)
+class ResolvedResamplingGrid:
+    values: tuple[float, ...]
+    resolved_step: float | None = None
+    step_origin: str = ""
+    resolved_min_x: float | None = None
+    min_x_origin: str = ""
+    resolved_max_x: float | None = None
+    max_x_origin: str = ""
 
 
 @dataclass(frozen=True)
@@ -942,6 +954,9 @@ class SeriesComparisonPolicy:
     resampling_grid_source: str = ""
     resampling_domain_policy: str = ""
     resampling_grid_values: tuple[float, ...] = ()
+    resampling_grid_step: float | None = None
+    resampling_grid_min_x: float | None = None
+    resampling_grid_max_x: float | None = None
     interpolation_method: str = "linear"
     distribution_kind: str = "empirical_by_x"
     score_family: str = "residual_only"
@@ -1255,6 +1270,9 @@ class SeriesDistributionObservation:
             "resampling_grid_source": self.policy.resampling_grid_source,
             "resampling_domain_policy": self.policy.resampling_domain_policy,
             "resampling_grid_values": self.policy.resampling_grid_values,
+            "resampling_grid_step": self.policy.resampling_grid_step,
+            "resampling_grid_min_x": self.policy.resampling_grid_min_x,
+            "resampling_grid_max_x": self.policy.resampling_grid_max_x,
             "interpolation_method": self.policy.interpolation_method,
             "distribution_kind": self.policy.distribution_kind,
             "score_family": self.policy.score_family,
@@ -1409,6 +1427,15 @@ class SeriesComparisonEvidencePayload:
     resampling_domain_policy_origin: str = ""
     declared_resampling_grid_values: tuple[float, ...] = ()
     resampling_grid_values: tuple[float, ...] = ()
+    declared_resampling_grid_step: float | None = None
+    resampling_grid_step: float | None = None
+    resampling_grid_step_origin: str = ""
+    declared_resampling_grid_min_x: float | None = None
+    resampling_grid_min_x: float | None = None
+    resampling_grid_min_x_origin: str = ""
+    declared_resampling_grid_max_x: float | None = None
+    resampling_grid_max_x: float | None = None
+    resampling_grid_max_x_origin: str = ""
     resampling_excluded_x_values: tuple[float, ...] = ()
     reference_resampling_domain_min_x: float | None = None
     reference_resampling_domain_max_x: float | None = None
@@ -1516,6 +1543,15 @@ class SeriesComparisonEvidencePayload:
         object.__setattr__(self, "resampling_domain_policy_origin", str(self.resampling_domain_policy_origin).strip())
         object.__setattr__(self, "declared_resampling_grid_values", _coerced_float_sequence(self.declared_resampling_grid_values))
         object.__setattr__(self, "resampling_grid_values", _coerced_float_sequence(self.resampling_grid_values))
+        object.__setattr__(self, "declared_resampling_grid_step", _coerced_float(self.declared_resampling_grid_step))
+        object.__setattr__(self, "resampling_grid_step", _coerced_float(self.resampling_grid_step))
+        object.__setattr__(self, "resampling_grid_step_origin", str(self.resampling_grid_step_origin).strip())
+        object.__setattr__(self, "declared_resampling_grid_min_x", _coerced_float(self.declared_resampling_grid_min_x))
+        object.__setattr__(self, "resampling_grid_min_x", _coerced_float(self.resampling_grid_min_x))
+        object.__setattr__(self, "resampling_grid_min_x_origin", str(self.resampling_grid_min_x_origin).strip())
+        object.__setattr__(self, "declared_resampling_grid_max_x", _coerced_float(self.declared_resampling_grid_max_x))
+        object.__setattr__(self, "resampling_grid_max_x", _coerced_float(self.resampling_grid_max_x))
+        object.__setattr__(self, "resampling_grid_max_x_origin", str(self.resampling_grid_max_x_origin).strip())
         object.__setattr__(self, "resampling_excluded_x_values", _coerced_float_sequence(self.resampling_excluded_x_values))
         object.__setattr__(self, "reference_resampling_domain_min_x", _coerced_float(self.reference_resampling_domain_min_x))
         object.__setattr__(self, "reference_resampling_domain_max_x", _coerced_float(self.reference_resampling_domain_max_x))
@@ -1726,6 +1762,15 @@ class SeriesComparisonEvidencePayload:
             "resampling_domain_policy_origin": self.resampling_domain_policy_origin,
             "declared_resampling_grid_values": _rounded_list(list(self.declared_resampling_grid_values)),
             "resampling_grid_values": _rounded_list(list(self.resampling_grid_values)),
+            "declared_resampling_grid_step": _rounded_float_or_raw(self.declared_resampling_grid_step),
+            "resampling_grid_step": _rounded_float_or_raw(self.resampling_grid_step),
+            "resampling_grid_step_origin": self.resampling_grid_step_origin,
+            "declared_resampling_grid_min_x": _rounded_float_or_raw(self.declared_resampling_grid_min_x),
+            "resampling_grid_min_x": _rounded_float_or_raw(self.resampling_grid_min_x),
+            "resampling_grid_min_x_origin": self.resampling_grid_min_x_origin,
+            "declared_resampling_grid_max_x": _rounded_float_or_raw(self.declared_resampling_grid_max_x),
+            "resampling_grid_max_x": _rounded_float_or_raw(self.resampling_grid_max_x),
+            "resampling_grid_max_x_origin": self.resampling_grid_max_x_origin,
             "resampling_excluded_x_values": _rounded_list(list(self.resampling_excluded_x_values)),
             "reference_resampling_domain_min_x": _rounded_float_or_raw(self.reference_resampling_domain_min_x),
             "reference_resampling_domain_max_x": _rounded_float_or_raw(self.reference_resampling_domain_max_x),
@@ -2099,15 +2144,18 @@ def _resolved_resampling_grid(
     *,
     grid_source: str,
     grid_values: tuple[float, ...],
+    grid_step: float | None,
+    grid_min_x: float | None,
+    grid_max_x: float | None,
     precision_digits: int,
-) -> list[float]:
+) -> ResolvedResamplingGrid:
     normalized_source = str(grid_source or "").strip().lower()
     if normalized_source == "reference_observed_x":
-        return sorted(reference_bins)
+        return ResolvedResamplingGrid(values=tuple(sorted(reference_bins)))
     if normalized_source == "model_observed_x":
-        return sorted(model_bins)
+        return ResolvedResamplingGrid(values=tuple(sorted(model_bins)))
     if normalized_source == "union_observed_x":
-        return sorted(set(reference_bins).union(model_bins))
+        return ResolvedResamplingGrid(values=tuple(sorted(set(reference_bins).union(model_bins))))
     if normalized_source == "explicit_grid":
         values = [
             round(float(value), int(precision_digits))
@@ -2119,7 +2167,56 @@ def _resolved_resampling_grid(
                 "Alignment policy 'resampled_grid' with resampling_grid_source='explicit_grid' "
                 "requires non-empty finite 'resampling_grid_values'"
             )
-        return sorted(set(values))
+        return ResolvedResamplingGrid(values=tuple(sorted(set(values))))
+    if normalized_source == "uniform_step":
+        if not _is_finite_number(grid_step) or float(grid_step) <= 0.0:
+            raise ValueError(
+                "Alignment policy 'resampled_grid' with resampling_grid_source='uniform_step' "
+                "requires a positive finite 'resampling_grid_step'"
+            )
+        observed_x_values = sorted(set(reference_bins).union(model_bins))
+        if not observed_x_values and (not _is_finite_number(grid_min_x) or not _is_finite_number(grid_max_x)):
+            raise ValueError(
+                "Alignment policy 'resampled_grid' with resampling_grid_source='uniform_step' "
+                "requires finite observed x-values or explicit 'resampling_grid_min_x' and "
+                "'resampling_grid_max_x'"
+            )
+        if _is_finite_number(grid_min_x):
+            resolved_min_x = float(grid_min_x)
+            min_x_origin = "explicit"
+        else:
+            resolved_min_x = float(min(observed_x_values))
+            min_x_origin = "default_observed_min"
+        if _is_finite_number(grid_max_x):
+            resolved_max_x = float(grid_max_x)
+            max_x_origin = "explicit"
+        else:
+            resolved_max_x = float(max(observed_x_values))
+            max_x_origin = "default_observed_max"
+        if resolved_min_x > resolved_max_x:
+            raise ValueError(
+                "Alignment policy 'resampled_grid' with resampling_grid_source='uniform_step' "
+                "requires 'resampling_grid_min_x' <= 'resampling_grid_max_x'"
+            )
+        step = float(grid_step)
+        tolerance = max(1e-12, step * 1e-9, 10 ** (-int(precision_digits)))
+        point_count = int(math.floor(((resolved_max_x - resolved_min_x) / step) + tolerance)) + 1
+        values = [
+            round(float(resolved_min_x + (index * step)), int(precision_digits))
+            for index in range(max(point_count, 1))
+            if (resolved_min_x + (index * step)) <= (resolved_max_x + tolerance)
+        ]
+        if not values:
+            values = [round(float(resolved_min_x), int(precision_digits))]
+        return ResolvedResamplingGrid(
+            values=tuple(sorted(set(values))),
+            resolved_step=step,
+            step_origin="explicit",
+            resolved_min_x=resolved_min_x,
+            min_x_origin=min_x_origin,
+            resolved_max_x=resolved_max_x,
+            max_x_origin=max_x_origin,
+        )
     raise ValueError(
         f"Unsupported resampling grid source {grid_source!r}; expected one of "
         f"{', '.join(sorted(SERIES_RESAMPLING_GRID_SOURCES))}"
@@ -2332,6 +2429,9 @@ class SeriesComparisonTest(sciunit.Test):
             "resampling_grid_source",
             "resampling_domain_policy",
             "resampling_grid_values",
+            "resampling_grid_step",
+            "resampling_grid_min_x",
+            "resampling_grid_max_x",
             "interpolation_method",
             "distribution_kind",
             "score_family",
@@ -2451,6 +2551,7 @@ class SeriesComparisonTest(sciunit.Test):
         model_bins = model_dataset.bins(precision_digits=obs.policy.x_precision_digits)
         cluster_metadata: dict[float, SeriesClusterMembers] = {}
         resampling_metadata = SeriesResamplingMetadata()
+        resolved_grid = ResolvedResamplingGrid(values=())
         if obs.policy.alignment_policy == "resampled_grid":
             reference_paths = reference_dataset.paths(precision_digits=obs.policy.x_precision_digits)
             model_paths = model_dataset.paths(precision_digits=obs.policy.x_precision_digits)
@@ -2464,13 +2565,17 @@ class SeriesComparisonTest(sciunit.Test):
                     "Alignment policy 'resampled_grid' requires non-empty model series ids; "
                     "the current bridge cannot interpolate a distribution from rows without per-series identity"
                 )
-            target_grid = _resolved_resampling_grid(
+            resolved_grid = _resolved_resampling_grid(
                 reference_bins,
                 model_bins,
                 grid_source=resolved_resampling_grid_source,
                 grid_values=obs.policy.resampling_grid_values,
+                grid_step=obs.policy.resampling_grid_step,
+                grid_min_x=obs.policy.resampling_grid_min_x,
+                grid_max_x=obs.policy.resampling_grid_max_x,
                 precision_digits=obs.policy.x_precision_digits,
             )
+            target_grid = list(resolved_grid.values)
             target_grid, domain_metadata = _filter_resampling_grid_by_domain_policy(
                 target_grid,
                 reference_paths=reference_paths,
@@ -2703,6 +2808,15 @@ class SeriesComparisonTest(sciunit.Test):
             resampling_domain_policy_origin=resampling_domain_policy_origin,
             declared_resampling_grid_values=tuple(obs.policy.resampling_grid_values),
             resampling_grid_values=tuple(alignment_summary.resampling_metadata.target_grid),
+            declared_resampling_grid_step=obs.policy.resampling_grid_step,
+            resampling_grid_step=resolved_grid.resolved_step,
+            resampling_grid_step_origin=resolved_grid.step_origin,
+            declared_resampling_grid_min_x=obs.policy.resampling_grid_min_x,
+            resampling_grid_min_x=resolved_grid.resolved_min_x,
+            resampling_grid_min_x_origin=resolved_grid.min_x_origin,
+            declared_resampling_grid_max_x=obs.policy.resampling_grid_max_x,
+            resampling_grid_max_x=resolved_grid.resolved_max_x,
+            resampling_grid_max_x_origin=resolved_grid.max_x_origin,
             resampling_excluded_x_values=tuple(alignment_summary.resampling_metadata.excluded_grid),
             reference_resampling_domain_min_x=alignment_summary.resampling_metadata.reference_min_x,
             reference_resampling_domain_max_x=alignment_summary.resampling_metadata.reference_max_x,
