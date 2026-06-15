@@ -7,6 +7,8 @@ from pathlib import Path
 import tempfile
 
 from olfactorybulb.audit.reference_validation_rules import (
+    ComparisonRuleSpec,
+    SummaryRuleSpec,
     ValidationRuleContext,
     build_rule_items,
     compute_reference_acceptance_band,
@@ -360,6 +362,15 @@ with tempfile.TemporaryDirectory() as tmpdir:
             "acceptable_basis": "placeholder",
         },
     ]
+    parsed_summary_spec = SummaryRuleSpec.from_rule(comparison_rules[0], comparison_context)
+    assert parsed_summary_spec.rule_kind == "summary_metric_min"
+    assert parsed_summary_spec.group == "MC"
+    assert parsed_summary_spec.minimum == -60.0
+    parsed_comparison_spec = ComparisonRuleSpec.from_rule(comparison_rules[2])
+    assert parsed_comparison_spec.rule_kind == "group_ordering"
+    assert parsed_comparison_spec.left_group == "MC"
+    assert parsed_comparison_spec.right_group == "TC"
+    assert parsed_comparison_spec.operator == "<"
     comparison_items = build_rule_items(comparison_rules, comparison_context)
     comparison_detail_items = _detail_items(comparison_items)
     assert comparison_detail_items[0].criterion_latex == r"\bar{x}_{\mathrm{MC}} \geq -60"

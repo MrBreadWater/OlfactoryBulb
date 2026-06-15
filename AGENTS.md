@@ -804,7 +804,15 @@ contract for future sessions.
   - Keep the declarative parsing centralized in the typed
     `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` path rather than
     scattering per-property bounds, quantile-field selection, and review-state
-    parsing across the handler body.
+    parsing across the handler body. Those typed compiler specs now live in
+    `olfactorybulb.audit.reference_validation_specs`; keep the rule handler
+    focused on orchestration and case assembly.
+
+- For the grouped summary/comparison rule families, keep the declarative
+  parsing centralized in the typed `SummaryRuleSpec` / `ComparisonRuleSpec`
+  path before the SciUnit-backed suite cases are built. Those parser objects
+  also live in `olfactorybulb.audit.reference_validation_specs`. Do not let
+  the handler body regress into a second pile of raw rule-dict lookups.
 
 - Supported band modes currently include:
   - `symmetric_sd`

@@ -2029,7 +2029,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - the declarative `reference_band_rows` path now also compiles through typed
     `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` objects instead
     of keeping bounds, quantile-field selection, and review parsing sprawled
-    across the handler body
+    across the handler body; those compiler specs now live in the dedicated
+    `olfactorybulb.audit.reference_validation_specs` module
+  - the grouped summary/comparison rule families now also compile through
+    typed `SummaryRuleSpec` / `ComparisonRuleSpec` parser objects before the
+    SciUnit-backed cases are built, from that same dedicated compiler module
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

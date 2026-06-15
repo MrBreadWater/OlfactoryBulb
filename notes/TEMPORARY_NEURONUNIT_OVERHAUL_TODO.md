@@ -130,6 +130,12 @@ Remove this file when the listed items are either:
 - [x] Collapse the declarative `reference_band_rows` parser into typed
       `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` objects instead
       of leaving per-property parsing sprawled through the handler.
+- [x] Collapse the grouped summary/comparison rule parsing into typed
+      `SummaryRuleSpec` / `ComparisonRuleSpec` paths instead of leaving those
+      handlers as raw rule-dict plumbing.
+- [x] Extract the typed declarative compiler specs into a dedicated
+      `olfactorybulb.audit.reference_validation_specs` module so the rule
+      handler file stays orchestration-focused.
 - [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

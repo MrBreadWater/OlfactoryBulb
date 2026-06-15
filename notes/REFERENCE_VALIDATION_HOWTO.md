@@ -551,7 +551,15 @@ The maintained `reference_band_rows` parser now routes this per-property
 contract through typed `ReferenceBandRuleSpec` /
 `ReferenceBandPropertyRuleSpec` objects before building the SciUnit-backed
 cases. If you change bounds, quantile-field selection, or per-property review
-metadata, keep that parser path as the single declarative source of truth.
+metadata, keep that parser path as the single declarative source of truth. The
+typed compiler specs live in `olfactorybulb.audit.reference_validation_specs`.
+
+Likewise, the grouped summary/comparison rule families now parse through typed
+`SummaryRuleSpec` / `ComparisonRuleSpec` objects before the suite cases are
+built. If you extend those rule kinds, keep the declarative parser path there
+instead of reintroducing raw rule-dict plumbing into the handler body. Those
+typed compiler specs live in the same
+`olfactorybulb.audit.reference_validation_specs` module.
 
 Use these config knobs deliberately:
 
