@@ -711,7 +711,11 @@ contract for future sessions.
     shared suite-case contract. In the maintained branch that currently means
     the series-comparison suite family, which uses matched-point count as its
     aggregate weight source. Keep the case weight visible in `suite_cases`
-    rather than hiding it only inside the aggregate rollup.
+    rather than hiding it only inside the aggregate rollup. When case scores
+    expose real statistical diagnostics such as equivalence or Welch p-values,
+    preserve them at the suite-overview layer through the typed
+    `suite_statistical_summary` payload instead of flattening the overview to
+    norm scores only.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

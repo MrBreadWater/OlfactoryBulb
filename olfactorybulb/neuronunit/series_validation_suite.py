@@ -1750,13 +1750,17 @@ def _series_score_payload(case: SeriesComparisonCase, score: SeriesComparisonSco
             "mean_absolute_error": evidence.get("mean_absolute_error"),
             "root_mean_square_error": evidence.get("root_mean_square_error"),
             "aggregate_statistical_pvalue": evidence.get("aggregate_statistical_pvalue"),
+            "median_welch_pvalue": evidence.get("median_welch_pvalue"),
         },
         prediction={
             "score_family": score_family,
+            "statistical_test_family": evidence.get("statistical_test_family"),
             "maximum_mae": evidence.get("maximum_mae"),
             "maximum_rmse": evidence.get("maximum_rmse"),
             "equivalence_margin": evidence.get("equivalence_margin"),
+            "equivalence_alpha": evidence.get("equivalence_alpha"),
             "minimum_median_welch_pvalue": evidence.get("minimum_median_welch_pvalue"),
+            "pvalue_aggregation": evidence.get("pvalue_aggregation"),
         },
         normalization={
             "norm_score": score.norm_score,

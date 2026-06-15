@@ -2142,6 +2142,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     tests no longer have to shuttle raw dict bundles for metric maps,
     left/right group pairs, or grouped scalar value sets through their score
     builders
+  - suite overviews can now also carry a typed `suite_statistical_summary`
+    when detailed cases expose compatible equivalence or Welch diagnostics, so
+    the overview layer no longer flattens that statistical evidence down to
+    norm scores only
   - the typed suite-aggregation layer now supports a richer
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite
@@ -2152,9 +2156,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
 
 The remaining open questions are now narrower:
 
-- whether the next statistical layer should stay with the current per-bin
-  equivalence gates plus the new default suite-aggregate rollup or grow into
-  richer alternative suite-level scoring policies
+- whether the next statistical layer should stop at the new typed
+  `suite_statistical_summary` diagnostics or later grow into configurable
+  alternative suite-level statistical rollups
 - whether transform generalization should stop at explicit piecewise-linear
   mappings or later grow into context-dependent transforms
 - whether alignment generalization should stop at the current

@@ -458,6 +458,23 @@ suite_summary_report = AuditReport(
                     "score_text": "worst WARN, min norm 0.5",
                     "score_value": 0.5,
                 },
+                "suite_statistical_summary": {
+                    "score_family_category": "equivalence",
+                    "statistical_test_family": "equivalence_tost",
+                    "rollup_method": "max",
+                    "rollup_source": "auto_default",
+                    "rollup_pvalue": 0.03,
+                    "available_case_count": 1,
+                    "total_case_count": 2,
+                    "score_text": "max TOST p 0.03",
+                    "score_interpretation": "Synthetic suite statistical summary.",
+                    "threshold": 0.05,
+                    "threshold_key": "equivalence_alpha",
+                    "threshold_direction": "le",
+                    "gate_passed": True,
+                    "case_pvalues": [0.03],
+                    "case_check_ids": ["suite_summary_demo.warn_detail"],
+                },
                 "warning_cases": ["Suite warning detail"],
                 "failed_cases": [],
                 "suite_cases": [
@@ -539,5 +556,6 @@ with TemporaryDirectory() as tmp:
     assert html.count("suite-status-cell") >= 2
     assert "2 cases, 2 candidates" in html
     assert "worst WARN, min norm 0.5" in html
+    assert "max TOST p 0.03" in html
 
 print("audit_dashboard: OK")

@@ -304,6 +304,15 @@ Remove this file when the listed items are either:
         grouped-value predictions
       - the overhaul import gate and dedicated regression coverage now include
         that shared scalar layer
+- [x] Lift case-level statistical diagnostics into a typed suite-overview
+      summary so migrated series suites no longer flatten the p-value layer to
+      norm scores only.
+      - added `SuiteStatisticalSummary` to the shared suite-score layer
+      - series case-score payloads now carry the threshold/statistical-family
+        fields that overview summaries need
+      - suite overviews and the status-matrix header now surface a compact
+        statistical summary when the detailed cases expose compatible
+        equivalence or Welch diagnostics
 - [x] Move the Burton MC/TC legacy summary CSV dependency behind the same
       declarative reference-dataset contract used by the other maintained
       literature bundles.

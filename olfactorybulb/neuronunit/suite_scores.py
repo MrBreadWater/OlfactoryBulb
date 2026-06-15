@@ -12,6 +12,8 @@ from olfactorybulb.audit.core import rounded
 
 _STATUS_RANK = {"FAIL": 3, "WARN": 2, "PASS": 1}
 _VALID_STATUSES = frozenset(_STATUS_RANK)
+_EQUIVALENCE_CASE_SCORE_KINDS = frozenset({"equivalence_only", "hybrid_residual_equivalence"})
+_WELCH_CASE_SCORE_KINDS = frozenset({"welch_only", "hybrid_residual_welch"})
 
 
 def _normalized_status(value: str) -> str:
@@ -137,6 +139,77 @@ class SuiteCaseSummary:
             payload["case_weight"] = float(self.case_weight)
         if self.case_weight_label:
             payload["case_weight_label"] = self.case_weight_label
+        return payload
+
+
+@dataclass(frozen=True)
+class SuiteStatisticalSummary:
+    score_family_category: str
+    statistical_test_family: str
+    rollup_method: str
+    rollup_source: str
+    rollup_pvalue: float
+    available_case_count: int
+    total_case_count: int
+    score_text: str
+    score_interpretation: str
+    threshold: float | None = None
+    threshold_key: str = ""
+    threshold_direction: str = ""
+    gate_passed: bool | None = None
+    case_pvalues: tuple[float, ...] = ()
+    case_check_ids: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "score_family_category", str(self.score_family_category).strip())
+        object.__setattr__(self, "statistical_test_family", str(self.statistical_test_family).strip())
+        object.__setattr__(self, "rollup_method", str(self.rollup_method).strip())
+        object.__setattr__(self, "rollup_source", str(self.rollup_source).strip())
+        object.__setattr__(self, "rollup_pvalue", float(self.rollup_pvalue))
+        object.__setattr__(self, "available_case_count", int(self.available_case_count))
+        object.__setattr__(self, "total_case_count", int(self.total_case_count))
+        object.__setattr__(self, "score_text", str(self.score_text).strip())
+        object.__setattr__(self, "score_interpretation", str(self.score_interpretation).strip())
+        object.__setattr__(self, "threshold", _normalized_score_value(self.threshold))
+        object.__setattr__(self, "threshold_key", str(self.threshold_key).strip())
+        object.__setattr__(self, "threshold_direction", str(self.threshold_direction).strip())
+        object.__setattr__(
+            self,
+            "case_pvalues",
+            tuple(
+                normalized
+                for normalized in (_normalized_score_value(value) for value in self.case_pvalues)
+                if normalized is not None
+            ),
+        )
+        object.__setattr__(
+            self,
+            "case_check_ids",
+            tuple(str(check_id).strip() for check_id in self.case_check_ids if str(check_id).strip()),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "score_family_category": self.score_family_category,
+            "statistical_test_family": self.statistical_test_family,
+            "rollup_method": self.rollup_method,
+            "rollup_source": self.rollup_source,
+            "rollup_pvalue": float(self.rollup_pvalue),
+            "available_case_count": self.available_case_count,
+            "total_case_count": self.total_case_count,
+            "score_text": self.score_text,
+            "score_interpretation": self.score_interpretation,
+            "case_pvalues": [float(value) for value in self.case_pvalues],
+            "case_check_ids": list(self.case_check_ids),
+        }
+        if self.threshold is not None:
+            payload["threshold"] = float(self.threshold)
+        if self.threshold_key:
+            payload["threshold_key"] = self.threshold_key
+        if self.threshold_direction:
+            payload["threshold_direction"] = self.threshold_direction
+        if self.gate_passed is not None:
+            payload["gate_passed"] = bool(self.gate_passed)
         return payload
 
 
@@ -296,6 +369,113 @@ def _aggregate_score_text(status: str, aggregate_norm_score: float | None, *, po
     return f"worst {status}, {norm_label} norm {aggregate_norm_score:g}"
 
 
+def _suite_statistical_case_entry(case_summary: SuiteCaseSummary) -> dict[str, Any] | None:
+    payload = case_summary.case_score
+    if payload is None or not isinstance(payload.observation, dict) or not isinstance(payload.prediction, dict):
+        return None
+
+    score_kind = str(payload.score_kind or "").strip()
+    observation = payload.observation
+    prediction = payload.prediction
+    if score_kind in _EQUIVALENCE_CASE_SCORE_KINDS:
+        pvalue = _normalized_score_value(observation.get("aggregate_statistical_pvalue"))
+        threshold = _normalized_score_value(prediction.get("equivalence_alpha"))
+        return {
+            "category": "equivalence",
+            "label": "TOST p",
+            "rollup_method": "max",
+            "rollup_source": "auto_default",
+            "threshold": threshold,
+            "threshold_key": "equivalence_alpha",
+            "threshold_direction": "le",
+            "pvalue": pvalue,
+            "check_id": case_summary.check_id,
+            "test_family": str(prediction.get("statistical_test_family") or "equivalence_tost").strip(),
+        }
+    if score_kind in _WELCH_CASE_SCORE_KINDS:
+        pvalue = _normalized_score_value(observation.get("median_welch_pvalue"))
+        threshold = _normalized_score_value(prediction.get("minimum_median_welch_pvalue"))
+        return {
+            "category": "welch_similarity",
+            "label": "Welch p",
+            "rollup_method": "min",
+            "rollup_source": "auto_default",
+            "threshold": threshold,
+            "threshold_key": "minimum_median_welch_pvalue",
+            "threshold_direction": "ge",
+            "pvalue": pvalue,
+            "check_id": case_summary.check_id,
+            "test_family": str(prediction.get("statistical_test_family") or "legacy_welch_difference").strip(),
+        }
+    return None
+
+
+def _suite_statistical_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> SuiteStatisticalSummary | None:
+    entries = [
+        entry
+        for entry in (_suite_statistical_case_entry(case_summary) for case_summary in case_summaries)
+        if entry is not None
+    ]
+    if not entries:
+        return None
+
+    categories = {str(entry["category"]) for entry in entries}
+    if len(categories) != 1:
+        return None
+    category = next(iter(categories))
+    if any(entry.get("pvalue") is None for entry in entries):
+        return None
+
+    rollup_method = str(entries[0]["rollup_method"])
+    rollup_source = str(entries[0]["rollup_source"])
+    label = str(entries[0]["label"])
+    statistical_test_family = str(entries[0]["test_family"])
+    threshold_key = str(entries[0]["threshold_key"])
+    threshold_direction = str(entries[0]["threshold_direction"])
+    thresholds = {
+        entry["threshold"]
+        for entry in entries
+        if entry.get("threshold") is not None
+    }
+    threshold = next(iter(thresholds)) if len(thresholds) == 1 else None
+    pvalues = [float(entry["pvalue"]) for entry in entries]
+    if rollup_method == "max":
+        rollup_pvalue = max(pvalues)
+    else:
+        rollup_pvalue = min(pvalues)
+    rounded_rollup_pvalue = rounded(rollup_pvalue, digits=4)
+    threshold_phrase = ""
+    gate_passed: bool | None = None
+    if threshold is not None:
+        threshold_phrase = (
+            f" (threshold {rounded(float(threshold), digits=4):g})"
+        )
+        if threshold_direction == "le":
+            gate_passed = rollup_pvalue <= float(threshold)
+        elif threshold_direction == "ge":
+            gate_passed = rollup_pvalue >= float(threshold)
+    return SuiteStatisticalSummary(
+        score_family_category=category,
+        statistical_test_family=statistical_test_family,
+        rollup_method=rollup_method,
+        rollup_source=rollup_source,
+        rollup_pvalue=rollup_pvalue,
+        available_case_count=len(entries),
+        total_case_count=len(case_summaries),
+        score_text=f"{rollup_method} {label} {rounded_rollup_pvalue:g}",
+        score_interpretation=(
+            "Diagnostic suite-level statistical summary derived from the case-level "
+            f"{label} values. It does not replace the detailed per-case gates.{threshold_phrase}"
+        ),
+        threshold=threshold,
+        threshold_key=threshold_key,
+        threshold_direction=threshold_direction,
+        gate_passed=gate_passed,
+        case_pvalues=tuple(pvalues),
+        case_check_ids=tuple(str(entry["check_id"]) for entry in entries),
+    )
+
+
 @dataclass(frozen=True)
 class SuiteAggregateScore:
     suite_id: str
@@ -352,6 +532,10 @@ class SuiteAggregateScore:
         return self.policy.interpretation
 
     @property
+    def statistical_summary(self) -> SuiteStatisticalSummary | None:
+        return _suite_statistical_summary(self.case_summaries)
+
+    @property
     def warning_case_titles(self) -> tuple[str, ...]:
         return tuple(case.title for case in self.case_summaries if case.status == "WARN")
 
@@ -382,6 +566,8 @@ class SuiteAggregateScore:
             payload["suite_candidate_ids"] = list(self.candidate_ids)
         if self.norm_summary is not None:
             payload["suite_norm_score_summary"] = self.norm_summary
+        if self.statistical_summary is not None:
+            payload["suite_statistical_summary"] = self.statistical_summary.to_dict()
         if self.score_value is not None:
             payload["suite_aggregate_score"]["score_value"] = float(self.score_value)
         return payload
@@ -409,5 +595,6 @@ __all__ = [
     "SuiteCaseScorePayload",
     "SuiteCaseSummary",
     "SuiteDescriptor",
+    "SuiteStatisticalSummary",
     "build_suite_aggregate_score",
 ]

@@ -372,6 +372,22 @@ assert adapted_items[0].evidence["suite_aggregate_score"] == {
     "score_text": "worst PASS, min norm 1",
     "score_value": 1.0,
 }
+welch_suite_summary = adapted_items[0].evidence["suite_statistical_summary"]
+assert welch_suite_summary["score_family_category"] == "welch_similarity"
+assert welch_suite_summary["statistical_test_family"] == "legacy_welch_difference"
+assert welch_suite_summary["rollup_method"] == "min"
+assert welch_suite_summary["rollup_source"] == "auto_default"
+assert welch_suite_summary["available_case_count"] == 1
+assert welch_suite_summary["total_case_count"] == 1
+assert welch_suite_summary["score_text"].startswith("min Welch p ")
+assert "Diagnostic suite-level statistical summary derived from the case-level Welch p values." in welch_suite_summary["score_interpretation"]
+assert welch_suite_summary["threshold"] == 0.01
+assert welch_suite_summary["threshold_key"] == "minimum_median_welch_pvalue"
+assert welch_suite_summary["threshold_direction"] == "ge"
+assert welch_suite_summary["gate_passed"] is True
+assert welch_suite_summary["case_check_ids"] == ["synthetic_series_match"]
+assert welch_suite_summary["case_pvalues"] == [adapted_items[1].evidence["median_welch_pvalue"]]
+assert welch_suite_summary["rollup_pvalue"] == adapted_items[1].evidence["median_welch_pvalue"]
 assert adapted_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert adapted_items[1].evidence["reference_values_Hz"] == [6.0, 11.0]
 assert adapted_items[1].evidence["model_values_Hz"] == [7.0, 12.0]
@@ -573,6 +589,10 @@ assert equivalence_items[1].evidence["aggregate_statistical_pvalue"] <= 0.05
 assert equivalence_items[1].evidence["residual_norm_score"] == 1.0
 assert equivalence_items[1].evidence["statistical_norm_score"] == 1.0
 assert equivalence_items[1].evidence["overall_norm_score"] == 1.0
+assert equivalence_items[0].evidence["suite_statistical_summary"]["score_family_category"] == "equivalence"
+assert equivalence_items[0].evidence["suite_statistical_summary"]["rollup_method"] == "max"
+assert equivalence_items[0].evidence["suite_statistical_summary"]["threshold_key"] == "equivalence_alpha"
+assert equivalence_items[0].evidence["suite_statistical_summary"]["gate_passed"] is True
 
 singleton_equivalence_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",

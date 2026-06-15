@@ -1455,6 +1455,7 @@ def _render_companion_visuals(
 
         suite_aggregate_score = evidence.get("suite_aggregate_score")
         suite_norm_summary = evidence.get("suite_norm_score_summary")
+        suite_statistical_summary = evidence.get("suite_statistical_summary")
         suite_candidate_ids = evidence.get("suite_candidate_ids")
         default_right_meta = "suite rollup"
         if isinstance(suite_aggregate_score, dict):
@@ -1468,6 +1469,14 @@ def _render_companion_visuals(
                 default_right_meta = f"mean norm {_format_numeric(mean_norm)}"
                 if min_norm is not None and not math.isclose(min_norm, mean_norm):
                     default_right_meta += f", min {_format_numeric(min_norm)}"
+        if isinstance(suite_statistical_summary, dict):
+            statistical_text = str(suite_statistical_summary.get("score_text") or "").strip()
+            if statistical_text:
+                default_right_meta = (
+                    f"{default_right_meta} | {statistical_text}"
+                    if default_right_meta and default_right_meta != "suite rollup"
+                    else statistical_text
+                )
         block_title = str(spec.get("title") or "Suite case summary")
         default_left_meta = f"{len(entries)} cases"
         if isinstance(suite_candidate_ids, list):
