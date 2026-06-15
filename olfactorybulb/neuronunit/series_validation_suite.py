@@ -230,6 +230,53 @@ def _equivalence_test_result(
     return {"supported": False, "test_kind": "unsupported", "pvalue": float("nan")}
 
 
+def _sorted_piecewise_points(points: tuple[tuple[float, float], ...]) -> list[tuple[float, float]]:
+    if len(points) < 2:
+        raise ValueError("piecewise_linear transform requires at least two control points")
+    normalized = [(float(input_value), float(output_value)) for input_value, output_value in points]
+    normalized.sort(key=lambda item: item[0])
+    input_values = [input_value for input_value, _output_value in normalized]
+    if len(set(input_values)) != len(input_values):
+        raise ValueError("piecewise_linear transform control points must have distinct input values")
+    return normalized
+
+
+def _piecewise_linear_value(
+    raw_input: float,
+    *,
+    points: tuple[tuple[float, float], ...],
+    extrapolation_mode: str,
+) -> float:
+    sorted_points = _sorted_piecewise_points(points)
+    input_values = [input_value for input_value, _output_value in sorted_points]
+    output_values = [output_value for _input_value, output_value in sorted_points]
+    if input_values[0] <= float(raw_input) <= input_values[-1]:
+        return float(np.interp(float(raw_input), np.asarray(input_values, dtype=float), np.asarray(output_values, dtype=float)))
+
+    mode = str(extrapolation_mode or "forbid").strip().lower()
+    if mode == "forbid":
+        raise ValueError(
+            f"piecewise_linear transform cannot extrapolate input value {float(raw_input):g}; "
+            f"supported domain is [{input_values[0]:g}, {input_values[-1]:g}]"
+        )
+    if mode == "constant":
+        return float(output_values[0] if float(raw_input) < input_values[0] else output_values[-1])
+    if mode == "linear":
+        if float(raw_input) < input_values[0]:
+            left_a, left_b = sorted_points[0], sorted_points[1]
+        else:
+            left_a, left_b = sorted_points[-2], sorted_points[-1]
+        input_span = float(left_b[0] - left_a[0])
+        if input_span == 0.0:
+            raise ValueError("piecewise_linear transform extrapolation requires distinct neighboring input values")
+        slope = float(left_b[1] - left_a[1]) / input_span
+        return float(left_a[1]) + slope * (float(raw_input) - float(left_a[0]))
+    raise ValueError(
+        f"Unsupported piecewise_linear extrapolation mode {extrapolation_mode!r}; "
+        "expected one of forbid, constant, linear"
+    )
+
+
 @dataclass(frozen=True)
 class AxisTransform:
     kind: str = "identity"
@@ -237,6 +284,8 @@ class AxisTransform:
     offset: float = 0.0
     input_unit_text: str = ""
     output_unit_text: str = ""
+    points: tuple[tuple[float, float], ...] = ()
+    extrapolation_mode: str = "forbid"
 
     def apply(self, raw_value: float, *, source_unit_text: str, comparison_unit_text: str) -> float | pq.Quantity:
         kind = str(self.kind or "identity").strip().lower()
@@ -274,6 +323,33 @@ class AxisTransform:
                 comparison_unit_text=comparison_unit_text,
             )
 
+        if kind == "piecewise_linear":
+            if input_unit_text and source_unit_text:
+                measurement = measurement_with_unit(float(raw_value), source_unit_text)
+                input_unit = quantity_unit_for_text(input_unit_text)
+                if isinstance(measurement, pq.Quantity) and input_unit is not None:
+                    try:
+                        base_numeric = float(measurement.rescale(input_unit).magnitude)
+                    except Exception as exc:  # pragma: no cover - defensive path
+                        raise ValueError(
+                            f"Cannot rescale source unit {source_unit_text!r} into piecewise-linear input unit {input_unit_text!r}"
+                        ) from exc
+                else:
+                    base_numeric = float(raw_value)
+            else:
+                base_numeric = float(raw_value)
+            transformed = _piecewise_linear_value(
+                base_numeric,
+                points=self.points,
+                extrapolation_mode=self.extrapolation_mode,
+            )
+            measurement = measurement_with_unit(transformed, output_unit_text)
+            return _coerce_to_comparison_unit(
+                measurement,
+                fallback_unit_text=output_unit_text,
+                comparison_unit_text=comparison_unit_text,
+            )
+
         raise ValueError(f"Unsupported axis transform kind {self.kind!r}")
 
     def description(self) -> str:
@@ -283,6 +359,11 @@ class AxisTransform:
         if kind == "affine":
             return (
                 f"affine(scale={float(self.scale):g}, offset={float(self.offset):g}, "
+                f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
+            )
+        if kind == "piecewise_linear":
+            return (
+                f"piecewise_linear(points={len(self.points)}, extrapolation={self.extrapolation_mode or 'forbid'}, "
                 f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
             )
         return kind
@@ -422,11 +503,13 @@ def _aligned_x_pairs(
 ) -> list[tuple[float, float]]:
     if alignment_policy == "exact_transformed_x":
         return [(x_value, x_value) for x_value in sorted(set(reference_bins).intersection(model_bins))]
+    if alignment_policy == "tolerance_clusters":
+        return [(x_value, x_value) for x_value in sorted(set(reference_bins).intersection(model_bins))]
 
     if alignment_policy != "nearest_within_tolerance":
         raise ValueError(
             f"Unsupported series alignment policy {alignment_policy!r}; "
-            "expected one of exact_transformed_x or nearest_within_tolerance"
+            "expected one of exact_transformed_x, nearest_within_tolerance, or tolerance_clusters"
         )
 
     if not _is_finite_number(x_match_tolerance) or float(x_match_tolerance) < 0.0:
@@ -454,6 +537,59 @@ def _aligned_x_pairs(
         else:
             reference_index += 1
     return pairs
+
+
+def _tolerance_cluster_bins(
+    reference_bins: dict[float, list[float]],
+    model_bins: dict[float, list[float]],
+    *,
+    x_match_tolerance: float | None,
+    precision_digits: int,
+) -> tuple[dict[float, list[float]], dict[float, list[float]], dict[float, dict[str, list[float]]]]:
+    if not _is_finite_number(x_match_tolerance) or float(x_match_tolerance) < 0.0:
+        raise ValueError(
+            "Alignment policy 'tolerance_clusters' requires a finite non-negative "
+            "'x_match_tolerance' value"
+        )
+    tolerance = float(x_match_tolerance)
+    union_x_values = sorted(set(reference_bins).union(model_bins))
+    if not union_x_values:
+        return {}, {}, {}
+
+    clusters: list[list[float]] = []
+    current_cluster = [union_x_values[0]]
+    cluster_start = union_x_values[0]
+    for x_value in union_x_values[1:]:
+        if float(x_value) - float(cluster_start) <= tolerance:
+            current_cluster.append(float(x_value))
+            continue
+        clusters.append(current_cluster)
+        current_cluster = [float(x_value)]
+        cluster_start = float(x_value)
+    clusters.append(current_cluster)
+
+    clustered_reference_bins: dict[float, list[float]] = {}
+    clustered_model_bins: dict[float, list[float]] = {}
+    cluster_metadata: dict[float, dict[str, list[float]]] = {}
+    for cluster_x_values in clusters:
+        reference_x_values = [float(x_value) for x_value in cluster_x_values if x_value in reference_bins]
+        model_x_values = [float(x_value) for x_value in cluster_x_values if x_value in model_bins]
+        if not reference_x_values or not model_x_values:
+            continue
+        cluster_center = round(float(np.mean(np.asarray(cluster_x_values, dtype=float))), int(precision_digits))
+        reference_values: list[float] = []
+        for reference_x in reference_x_values:
+            reference_values.extend(float(value) for value in reference_bins[reference_x])
+        model_values: list[float] = []
+        for model_x in model_x_values:
+            model_values.extend(float(value) for value in model_bins[model_x])
+        clustered_reference_bins[cluster_center] = reference_values
+        clustered_model_bins[cluster_center] = model_values
+        cluster_metadata[cluster_center] = {
+            "reference_x_values": reference_x_values,
+            "model_x_values": model_x_values,
+        }
+    return clustered_reference_bins, clustered_model_bins, cluster_metadata
 
 
 def _series_bins(
@@ -650,15 +786,16 @@ class SeriesComparisonTest(sciunit.Test):
         obs = self.case.observation
         prediction_rows = list(prediction.rows)
         prediction_context = dict(prediction.context)
-        if obs.policy.alignment_policy not in {"exact_transformed_x", "nearest_within_tolerance"}:
+        if obs.policy.alignment_policy not in {"exact_transformed_x", "nearest_within_tolerance", "tolerance_clusters"}:
             raise ValueError(
                 f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
-                "the current bridge only supports exact shared transformed x bins or nearest monotone matches within tolerance"
+                "the current bridge only supports exact shared transformed x bins, "
+                "nearest monotone matches within tolerance, or shared tolerance clusters"
             )
         if obs.policy.alignment_policy == "exact_transformed_x" and obs.policy.x_match_tolerance is not None:
             raise ValueError(
                 "Series alignment policy 'exact_transformed_x' should not also declare "
-                "'x_match_tolerance'; use 'nearest_within_tolerance' instead"
+                "'x_match_tolerance'; use 'nearest_within_tolerance' or 'tolerance_clusters' instead"
             )
         if obs.policy.distribution_kind != "empirical_by_x":
             raise ValueError(
@@ -734,25 +871,50 @@ class SeriesComparisonTest(sciunit.Test):
             y_transform=obs.model_y_transform,
             precision_digits=obs.policy.x_precision_digits,
         )
+        cluster_metadata: dict[float, dict[str, list[float]]] = {}
+        if obs.policy.alignment_policy == "tolerance_clusters":
+            reference_bins, model_bins, cluster_metadata = _tolerance_cluster_bins(
+                reference_bins,
+                model_bins,
+                x_match_tolerance=obs.policy.x_match_tolerance,
+                precision_digits=obs.policy.x_precision_digits,
+            )
         aligned_pairs = _aligned_x_pairs(
             reference_bins,
             model_bins,
             alignment_policy=obs.policy.alignment_policy,
             x_match_tolerance=obs.policy.x_match_tolerance,
         )
-        reference_x_values = [reference_x for reference_x, _model_x in aligned_pairs]
-        model_x_values = [model_x for _reference_x, model_x in aligned_pairs]
-        visual_x_values = list(reference_x_values)
-        matched_x_differences = [
-            abs(model_x - reference_x)
-            for reference_x, model_x in aligned_pairs
-        ]
-        reference_mean_values = [float(np.mean(reference_bins[reference_x])) for reference_x in reference_x_values]
-        model_mean_values = [float(np.mean(model_bins[model_x])) for model_x in model_x_values]
-        reference_sd_values = [_sample_sd(reference_bins[reference_x]) for reference_x in reference_x_values]
-        model_sd_values = [_sample_sd(model_bins[model_x]) for model_x in model_x_values]
-        reference_count_values = [len(reference_bins[reference_x]) for reference_x in reference_x_values]
-        model_count_values = [len(model_bins[model_x]) for model_x in model_x_values]
+        aligned_reference_keys = [reference_x for reference_x, _model_x in aligned_pairs]
+        aligned_model_keys = [model_x for _reference_x, model_x in aligned_pairs]
+        if cluster_metadata:
+            reference_x_values = [
+                float(np.mean(np.asarray(cluster_metadata[cluster_center]["reference_x_values"], dtype=float)))
+                for cluster_center in aligned_reference_keys
+            ]
+            model_x_values = [
+                float(np.mean(np.asarray(cluster_metadata[cluster_center]["model_x_values"], dtype=float)))
+                for cluster_center in aligned_reference_keys
+            ]
+            visual_x_values = [cluster_center for cluster_center in aligned_reference_keys]
+            matched_x_differences = [
+                abs(model_x - reference_x)
+                for reference_x, model_x in zip(reference_x_values, model_x_values, strict=False)
+            ]
+        else:
+            reference_x_values = list(aligned_reference_keys)
+            model_x_values = list(aligned_model_keys)
+            visual_x_values = list(reference_x_values)
+            matched_x_differences = [
+                abs(model_x - reference_x)
+                for reference_x, model_x in aligned_pairs
+            ]
+        reference_mean_values = [float(np.mean(reference_bins[reference_x])) for reference_x in aligned_reference_keys]
+        model_mean_values = [float(np.mean(model_bins[model_x])) for model_x in aligned_model_keys]
+        reference_sd_values = [_sample_sd(reference_bins[reference_x]) for reference_x in aligned_reference_keys]
+        model_sd_values = [_sample_sd(model_bins[model_x]) for model_x in aligned_model_keys]
+        reference_count_values = [len(reference_bins[reference_x]) for reference_x in aligned_reference_keys]
+        model_count_values = [len(model_bins[model_x]) for model_x in aligned_model_keys]
         absolute_differences = [
             abs(model_mean - reference_mean)
             for reference_mean, model_mean in zip(reference_mean_values, model_mean_values, strict=False)
@@ -849,6 +1011,18 @@ class SeriesComparisonTest(sciunit.Test):
             "reference_matched_x_values": _rounded_list(reference_x_values),
             "model_matched_x_values": _rounded_list(model_x_values),
             "matched_x_differences": _rounded_list(matched_x_differences),
+            "reference_cluster_x_groups": [
+                _rounded_list(cluster_metadata[cluster_center]["reference_x_values"])
+                for cluster_center in aligned_reference_keys
+            ]
+            if cluster_metadata
+            else [],
+            "model_cluster_x_groups": [
+                _rounded_list(cluster_metadata[cluster_center]["model_x_values"])
+                for cluster_center in aligned_reference_keys
+            ]
+            if cluster_metadata
+            else [],
             obs.visual_reference_y_key: _rounded_list(reference_mean_values),
             obs.visual_model_y_key: _rounded_list(model_mean_values),
             "reference_sd_values_Hz": _rounded_list(reference_sd_values),

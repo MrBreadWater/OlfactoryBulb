@@ -176,6 +176,38 @@ equivalence_singleton_model_rows = [
     {"cell_name": "EqSingle", "current_pA": 200.0, "firing_rate_Hz": 10.03},
 ]
 
+piecewise_reference_rows = [
+    {"cell_id": "PwRef1", "current_pA": 100.0, "firing_rate_Hz": 8.0},
+    {"cell_id": "PwRef2", "current_pA": 100.0, "firing_rate_Hz": 9.0},
+    {"cell_id": "PwRef1", "current_pA": 210.0, "firing_rate_Hz": 12.0},
+    {"cell_id": "PwRef2", "current_pA": 210.0, "firing_rate_Hz": 13.0},
+    {"cell_id": "PwRef1", "current_pA": 330.0, "firing_rate_Hz": 18.0},
+    {"cell_id": "PwRef2", "current_pA": 330.0, "firing_rate_Hz": 19.0},
+]
+
+piecewise_model_rows = [
+    {"cell_name": "PwModel1", "drive_flux": 0.10, "firing_rate_Hz": 8.4},
+    {"cell_name": "PwModel2", "drive_flux": 0.10, "firing_rate_Hz": 8.6},
+    {"cell_name": "PwModel1", "drive_flux": 0.20, "firing_rate_Hz": 12.4},
+    {"cell_name": "PwModel2", "drive_flux": 0.20, "firing_rate_Hz": 12.6},
+    {"cell_name": "PwModel1", "drive_flux": 0.30, "firing_rate_Hz": 18.4},
+    {"cell_name": "PwModel2", "drive_flux": 0.30, "firing_rate_Hz": 18.6},
+]
+
+cluster_reference_rows = [
+    {"cell_id": "ClRef1", "current_pA": 100.0, "firing_rate_Hz": 5.0},
+    {"cell_id": "ClRef2", "current_pA": 100.3, "firing_rate_Hz": 5.2},
+    {"cell_id": "ClRef1", "current_pA": 200.0, "firing_rate_Hz": 10.0},
+    {"cell_id": "ClRef2", "current_pA": 200.3, "firing_rate_Hz": 10.2},
+]
+
+cluster_model_rows = [
+    {"cell_name": "ClModel1", "current_pA": 100.1, "firing_rate_Hz": 5.1},
+    {"cell_name": "ClModel2", "current_pA": 100.4, "firing_rate_Hz": 5.3},
+    {"cell_name": "ClModel1", "current_pA": 200.1, "firing_rate_Hz": 10.1},
+    {"cell_name": "ClModel2", "current_pA": 200.4, "firing_rate_Hz": 10.3},
+]
+
 observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=reference_rows,
@@ -366,6 +398,111 @@ assert singleton_equivalence_items[0].evidence["statistical_test_kinds"] == [
 assert singleton_equivalence_items[0].evidence["equivalence_margin_source"] == "explicit"
 assert singleton_equivalence_items[0].evidence["statistical_gate_passed"] is True
 
+piecewise_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=piecewise_reference_rows,
+    reference_x_key="current_pA",
+    reference_y_key="firing_rate_Hz",
+    model_x_key="drive_flux",
+    model_y_key="firing_rate_Hz",
+    reference_x_unit_text="pA",
+    reference_y_unit_text="Hz",
+    model_x_unit_text="",
+    model_y_unit_text="Hz",
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    model_x_transform=AxisTransform(
+        kind="piecewise_linear",
+        output_unit_text="pA",
+        points=((0.10, 100.0), (0.20, 210.0), (0.30, 330.0)),
+    ),
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=3,
+        maximum_mae=0.2,
+        maximum_rmse=0.2,
+        score_family="residual_only",
+    ),
+)
+
+piecewise_case = SeriesComparisonCase(
+    check_id="synthetic_piecewise_series_match",
+    title="Synthetic piecewise transform matches a non-affine x-axis mapping",
+    criterion="The declared piecewise-linear transform should align the model and reference x axes before residual comparison.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic piecewise-transform suite test.",
+    acceptable="The transformed model bins satisfy the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=piecewise_observation,
+)
+
+piecewise_compiled = compile_series_comparison_suite(
+    cases=[piecewise_case],
+    summary={},
+    metrics=[],
+    protocol_evidence={"fi_curve_rows": piecewise_model_rows},
+    suite_name="synthetic piecewise series suite",
+)
+piecewise_items = audit_items_from_series_comparison_suite(piecewise_compiled)
+assert piecewise_items[0].status == "PASS"
+assert piecewise_items[0].evidence["currents_pA"] == [100.0, 210.0, 330.0]
+assert piecewise_items[0].evidence["model_x_transform"].startswith("piecewise_linear(")
+
+cluster_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=cluster_reference_rows,
+    reference_x_key="current_pA",
+    reference_y_key="firing_rate_Hz",
+    model_x_key="current_pA",
+    model_y_key="firing_rate_Hz",
+    reference_x_unit_text="pA",
+    reference_y_unit_text="Hz",
+    model_x_unit_text="pA",
+    model_y_unit_text="Hz",
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=2,
+        maximum_mae=0.2,
+        maximum_rmse=0.2,
+        alignment_policy="tolerance_clusters",
+        x_match_tolerance=0.5,
+        score_family="residual_only",
+    ),
+)
+
+cluster_case = SeriesComparisonCase(
+    check_id="synthetic_clustered_series_match",
+    title="Synthetic clustered alignment pools nearby x bins into shared comparison groups",
+    criterion="Nearby transformed x values should be pooled into shared tolerance clusters before comparison.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic tolerance-cluster suite test.",
+    acceptable="The pooled cluster means satisfy the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=cluster_observation,
+)
+
+cluster_compiled = compile_series_comparison_suite(
+    cases=[cluster_case],
+    summary={},
+    metrics=[],
+    protocol_evidence={"fi_curve_rows": cluster_model_rows},
+    suite_name="synthetic cluster series suite",
+)
+cluster_items = audit_items_from_series_comparison_suite(cluster_compiled)
+assert cluster_items[0].status == "PASS"
+assert cluster_items[0].evidence["alignment_policy"] == "tolerance_clusters"
+assert cluster_items[0].evidence["currents_pA"] == [100.2, 200.2]
+assert cluster_items[0].evidence["reference_cluster_x_groups"] == [[100.0, 100.3], [200.0, 200.3]]
+assert cluster_items[0].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [200.1, 200.4]]
+assert cluster_items[0].evidence["reference_count_values"] == [2, 2]
+assert cluster_items[0].evidence["model_count_values"] == [2, 2]
+
 rule = {
     "kind": "reference_curve_match",
     "check_id": "synthetic_series_match",
@@ -482,6 +619,74 @@ assert equivalence_rule_items[0].evidence["equivalence_margin_source"] == "maxim
 assert equivalence_rule_items[0].evidence["statistical_test_family"] == "equivalence_tost"
 assert equivalence_rule_items[0].evidence["statistical_gate_passed"] is True
 
+piecewise_rule = dict(residual_only_rule)
+piecewise_rule["loader"] = "csv:/tmp/piecewise.csv"
+piecewise_rule["reference_current_key"] = "current_pA"
+piecewise_rule["model_current_key"] = "drive_flux"
+piecewise_rule["model_x_unit_text"] = ""
+piecewise_rule["maximum_mae"] = 0.2
+piecewise_rule["maximum_rmse"] = 0.2
+piecewise_rule["minimum_point_count"] = 3
+piecewise_rule["model_x_transform"] = {
+    "kind": "piecewise_linear",
+    "output_unit_text": "pA",
+    "points": [
+        {"input": 0.10, "output": 100.0},
+        {"input": 0.20, "output": 210.0},
+        {"input": 0.30, "output": 330.0},
+    ],
+}
+piecewise_context = ValidationRuleContext(
+    metrics=[],
+    summary={},
+    args=Namespace(),
+    config={"validation_id": "synthetic_series_validation"},
+    protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": piecewise_model_rows}),
+)
+rules_module._load_rows = (
+    lambda loader_spec: piecewise_reference_rows
+    if loader_spec == "csv:/tmp/piecewise.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    piecewise_rule_items = build_rule_items([piecewise_rule], piecewise_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert piecewise_rule_items[0].status == "PASS"
+assert piecewise_rule_items[0].evidence["model_x_transform"].startswith("piecewise_linear(")
+
+cluster_rule = dict(residual_only_rule)
+cluster_rule["loader"] = "csv:/tmp/cluster.csv"
+cluster_rule["model_current_key"] = "current_pA"
+cluster_rule["model_x_unit_text"] = "pA"
+cluster_rule["alignment_policy"] = "tolerance_clusters"
+cluster_rule["x_match_tolerance"] = 0.5
+cluster_rule["maximum_mae"] = 0.2
+cluster_rule["maximum_rmse"] = 0.2
+del cluster_rule["model_x_transform"]
+cluster_context = ValidationRuleContext(
+    metrics=[],
+    summary={},
+    args=Namespace(),
+    config={"validation_id": "synthetic_series_validation"},
+    protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": cluster_model_rows}),
+)
+rules_module._load_rows = (
+    lambda loader_spec: cluster_reference_rows
+    if loader_spec == "csv:/tmp/cluster.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    cluster_rule_items = build_rule_items([cluster_rule], cluster_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert cluster_rule_items[0].status == "PASS"
+assert cluster_rule_items[0].evidence["alignment_policy"] == "tolerance_clusters"
+assert cluster_rule_items[0].evidence["reference_cluster_x_groups"] == [[100.0, 100.3], [200.0, 200.3]]
+assert cluster_rule_items[0].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [200.1, 200.4]]
+
 nearest_rule = dict(residual_only_rule)
 nearest_rule["alignment_policy"] = "nearest_within_tolerance"
 nearest_rule["x_match_tolerance"] = 0.5
@@ -543,6 +748,18 @@ try:
     try:
         build_rule_items([missing_tolerance_rule], nearest_context)
         raise AssertionError("Expected tolerance-based alignment to require an explicit x-match tolerance")
+    except ValueError as exc:
+        assert "requires explicit 'x_match_tolerance'" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+missing_cluster_tolerance_rule = dict(cluster_rule)
+del missing_cluster_tolerance_rule["x_match_tolerance"]
+rules_module._load_rows = lambda loader_spec: cluster_reference_rows if loader_spec == "csv:/tmp/cluster.csv" else original_load_rows(loader_spec)
+try:
+    try:
+        build_rule_items([missing_cluster_tolerance_rule], cluster_context)
+        raise AssertionError("Expected tolerance-cluster alignment to require an explicit x-match tolerance")
     except ValueError as exc:
         assert "requires explicit 'x_match_tolerance'" in str(exc)
 finally:

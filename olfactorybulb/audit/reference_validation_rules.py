@@ -1098,12 +1098,33 @@ def _axis_transform(rule: dict[str, Any], key: str) -> AxisTransform:
         return AxisTransform()
     if not isinstance(raw, dict):
         raise ValueError(f"{key} must be a table/dict when provided")
+    raw_points = raw.get("points", [])
+    points: tuple[tuple[float, float], ...] = ()
+    if raw_points not in (None, "", []):
+        if not isinstance(raw_points, list):
+            raise ValueError(f"{key}.points must be a list when provided")
+        normalized_points: list[tuple[float, float]] = []
+        for index, point in enumerate(raw_points, start=1):
+            if isinstance(point, dict):
+                if "input" not in point or "output" not in point:
+                    raise ValueError(f"{key}.points[{index}] must provide both 'input' and 'output'")
+                normalized_points.append((float(point["input"]), float(point["output"])))
+                continue
+            if isinstance(point, (list, tuple)) and len(point) == 2:
+                normalized_points.append((float(point[0]), float(point[1])))
+                continue
+            raise ValueError(
+                f"{key}.points[{index}] must be either a dict with input/output or a two-item list"
+            )
+        points = tuple(normalized_points)
     return AxisTransform(
         kind=str(raw.get("kind", "identity")),
         scale=float(raw.get("scale", 1.0)),
         offset=float(raw.get("offset", 0.0)),
         input_unit_text=str(raw.get("input_unit_text", "")).strip(),
         output_unit_text=str(raw.get("output_unit_text", "")).strip(),
+        points=points,
+        extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
     )
 
 
@@ -1113,10 +1134,10 @@ def _series_comparison_case(
 ) -> SeriesComparisonCase:
     score_family = _required_rule_choice(rule, "score_family")
     alignment_policy = _required_rule_choice(rule, "alignment_policy")
-    if alignment_policy == "nearest_within_tolerance":
+    if alignment_policy in {"nearest_within_tolerance", "tolerance_clusters"}:
         if "x_match_tolerance" not in rule or rule.get("x_match_tolerance") is None:
             raise ValueError(
-                "reference_curve_match alignment policy 'nearest_within_tolerance' requires explicit 'x_match_tolerance'"
+                f"reference_curve_match alignment policy {alignment_policy!r} requires explicit 'x_match_tolerance'"
             )
         x_match_tolerance = float(rule["x_match_tolerance"])
     else:

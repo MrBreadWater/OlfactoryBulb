@@ -1620,6 +1620,10 @@ Important details:
 - alternatively, `alignment_policy = "nearest_within_tolerance"` matches
   monotone nearest transformed x bins within an explicit
   `x_match_tolerance`
+- `alignment_policy = "tolerance_clusters"` pools transformed x values from
+  both sides into shared monotone clusters whose span does not exceed
+  `x_match_tolerance`, then compares the pooled empirical y distributions per
+  cluster
 - the current maintained distribution policy is `empirical_by_x`, which keeps
   duplicate x values as a response distribution instead of collapsing them
   before comparison
@@ -1643,11 +1647,20 @@ Important details:
   `minimum_median_welch_pvalue`
 - omitting `pvalue_aggregation` in a legacy Welch family resolves `auto` to
   `median`; the emitted evidence records the resolved choice
-- `alignment_policy = "nearest_within_tolerance"` should also declare
+- `alignment_policy = "nearest_within_tolerance"` and
+  `alignment_policy = "tolerance_clusters"` should also declare
   `x_match_tolerance` explicitly in the comparison x-axis units
 - if the model x-axis is not expressed in the same physical quantity as the
   reference, declare the mapping explicitly with `model_x_transform` instead of
   pretending the field names are already comparable
+- `model_x_transform` and `reference_x_transform` now support:
+  - `kind = "identity"`
+  - `kind = "affine"`
+  - `kind = "piecewise_linear"`
+- use `piecewise_linear` when the mapping is monotone but not globally affine;
+  declare it with explicit control points such as
+  `points = [{input = 0.10, output = 100.0}, {input = 0.20, output = 210.0}]`
+  and optional `extrapolation_mode = "forbid" | "constant" | "linear"`
 - the emitted evidence now carries both the aligned mean-series arrays used for
   dashboard plotting and compact provenance summaries for the reference and
   model row bundles

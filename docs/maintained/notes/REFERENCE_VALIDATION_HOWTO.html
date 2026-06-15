@@ -486,6 +486,10 @@ python tools/run_audit.py validation_design_review_status
 <li><code>alignment_policy = "nearest_within_tolerance"</code></li>
 <li>compare monotone nearest transformed x bins within an explicit
     <code>x_match_tolerance</code></li>
+<li><code>alignment_policy = "tolerance_clusters"</code></li>
+<li>pool transformed x bins from both sides into shared monotone clusters whose
+    span does not exceed <code>x_match_tolerance</code>, then compare the pooled empirical
+    y distributions per cluster</li>
 <li><code>distribution_kind = "empirical_by_x"</code></li>
 <li>treat duplicate x values as an empirical response distribution at each x</li>
 <li><code>score_family</code></li>
@@ -517,8 +521,22 @@ run per-bin TOST-style equivalence tests:</p>
 diagnostics, but a large two-sample Welch p-value is not evidence of
 equivalence. When <code>pvalue_aggregation</code> is omitted there, <code>auto</code> resolves to
 <code>median</code> and the emitted evidence records that resolved choice.</p>
-<p>When you use <code>alignment_policy = "nearest_within_tolerance"</code>, declare
-<code>x_match_tolerance</code> explicitly in the comparison x-axis units.
+<p>When you use <code>alignment_policy = "nearest_within_tolerance"</code> or
+<code>alignment_policy = "tolerance_clusters"</code>, declare <code>x_match_tolerance</code>
+explicitly in the comparison x-axis units.
+For transforms, start with:</p>
+<ul>
+<li><code>kind = "identity"</code> when the source axis is already expressed in the desired
+  comparison quantity</li>
+<li><code>kind = "affine"</code> for simple scaling/offset conversions such as current flux
+  to injected current under a fixed linear mapping</li>
+<li><code>kind = "piecewise_linear"</code> when the literature/model x-axis relationship is
+  monotone but not well described by one global scale/offset</li>
+</ul>
+<p>For <code>piecewise_linear</code>, declare at least two control points and keep the mapping
+explicit in the validation config. The current transform object accepts
+<code>points = [{input = ..., output = ...}, ...]</code> plus an optional
+<code>extrapolation_mode = "forbid" | "constant" | "linear"</code>.
 The current maintained EPL-FSI example-cell comparison uses
 <code>score_family = "residual_only"</code> because the model side usually exposes one
 response trace per current step, so a formal per-bin two-sample test is not

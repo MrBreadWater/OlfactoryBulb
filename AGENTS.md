@@ -594,12 +594,16 @@ contract for future sessions.
   - `reference_curve_match` should also declare `alignment_policy`,
     `distribution_kind`, and `score_family` explicitly; do not let the
     maintained path silently fall back to hidden series-comparison semantics.
-    If the alignment policy uses tolerance-based matching, declare
+    If the alignment policy uses tolerance-based matching or shared tolerance
+    clustering, declare
     `x_match_tolerance` explicitly too.
     Secondary statistical knobs may use documented ergonomic defaults when the
     default is stable and the emitted evidence records the resolved choice.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
+    Prefer explicit transform objects such as `affine` or `piecewise_linear`
+    over one-off hardcoded x-axis conversion logic in protocol runners or rule
+    handlers.
 
 ## 5b. Reusable infrastructure extraction rules
 

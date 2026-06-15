@@ -1970,6 +1970,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
 - alignment policies:
   - exact shared transformed x bins
   - monotone nearest transformed x bins within explicit tolerance
+  - pooled shared tolerance clusters with bounded x-span
+- transform policies:
+  - identity
+  - affine
+  - piecewise linear with explicit control points and explicit extrapolation
+    mode
 - distribution policy: empirical per-x response distributions
 - score-family choices:
   - `residual_only`
@@ -1992,9 +1998,10 @@ The remaining open questions are now narrower:
 
 - whether the next statistical layer should stay with per-bin equivalence gates
   plus residual diagnostics or grow into richer suite-level score composition
-- broader transform policies beyond exact transformed x-bin alignment
-- broader alignment policies beyond exact transformed x bins and monotone
-  nearest-within-tolerance matching
+- whether transform generalization should stop at explicit piecewise-linear
+  mappings or later grow into context-dependent transforms
+- whether alignment generalization should stop at shared tolerance clusters or
+  later grow into interpolation / resampling policies
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path
 - how much NeuronUnit-native result presentation should grow before it starts

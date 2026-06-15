@@ -296,6 +296,9 @@ validation_design_review_status = "pending"
 # For slightly unaligned extracted/model x bins:
 # alignment_policy = "nearest_within_tolerance"
 # x_match_tolerance = 0.5
+# For pooled shared x-clusters rather than one-to-one matching:
+# alignment_policy = "tolerance_clusters"
+# x_match_tolerance = 0.5
 # distribution_kind = "empirical_by_x"
 # score_family = "hybrid_residual_equivalence"
 # Optional for equivalence score families; if omitted, the maintained path falls
@@ -312,6 +315,12 @@ validation_design_review_status = "pending"
 # Optional explicit transforms when the model and reference x/y quantities are
 # not already expressed in the same unit or not the same physical quantity.
 # model_x_transform = { kind = "affine", scale = 1000.0, offset = 0.0, output_unit_text = "pA" }
+# model_x_transform = {
+#   kind = "piecewise_linear",
+#   output_unit_text = "pA",
+#   points = [{ input = 0.10, output = 100.0 }, { input = 0.20, output = 210.0 }],
+#   extrapolation_mode = "forbid",
+# }
 # maximum_mae = 20.0
 # maximum_rmse = 30.0
 # minimum_point_count = 5

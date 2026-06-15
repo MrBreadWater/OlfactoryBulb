@@ -406,6 +406,10 @@ Current maintained series-comparison policy choices are:
 - `alignment_policy = "nearest_within_tolerance"`
   - compare monotone nearest transformed x bins within an explicit
     `x_match_tolerance`
+- `alignment_policy = "tolerance_clusters"`
+  - pool transformed x bins from both sides into shared monotone clusters whose
+    span does not exceed `x_match_tolerance`, then compare the pooled empirical
+    y distributions per cluster
 - `distribution_kind = "empirical_by_x"`
   - treat duplicate x values as an empirical response distribution at each x
 - `score_family`
@@ -438,8 +442,22 @@ diagnostics, but a large two-sample Welch p-value is not evidence of
 equivalence. When `pvalue_aggregation` is omitted there, `auto` resolves to
 `median` and the emitted evidence records that resolved choice.
 
-When you use `alignment_policy = "nearest_within_tolerance"`, declare
-`x_match_tolerance` explicitly in the comparison x-axis units.
+When you use `alignment_policy = "nearest_within_tolerance"` or
+`alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
+explicitly in the comparison x-axis units.
+For transforms, start with:
+
+- `kind = "identity"` when the source axis is already expressed in the desired
+  comparison quantity
+- `kind = "affine"` for simple scaling/offset conversions such as current flux
+  to injected current under a fixed linear mapping
+- `kind = "piecewise_linear"` when the literature/model x-axis relationship is
+  monotone but not well described by one global scale/offset
+
+For `piecewise_linear`, declare at least two control points and keep the mapping
+explicit in the validation config. The current transform object accepts
+`points = [{input = ..., output = ...}, ...]` plus an optional
+`extrapolation_mode = "forbid" | "constant" | "linear"`.
 The current maintained EPL-FSI example-cell comparison uses
 `score_family = "residual_only"` because the model side usually exposes one
 response trace per current step, so a formal per-bin two-sample test is not
