@@ -10,6 +10,8 @@ import numpy as np
 import quantities as pq
 from scipy.stats import beta as beta_distribution
 
+from olfactorybulb.neuronunit.provenance import ProvenanceRecord, ValidationReview
+
 
 def sigma_phrase(sigma_multiplier: float) -> str:
     if np.isclose(float(sigma_multiplier), 2.0):
@@ -17,40 +19,6 @@ def sigma_phrase(sigma_multiplier: float) -> str:
     if np.isclose(float(sigma_multiplier), 1.0):
         return "one standard deviation"
     return f"{float(sigma_multiplier):g} standard deviations"
-
-
-@dataclass(frozen=True)
-class ProvenanceRecord:
-    source: str = ""
-    source_file: str = ""
-    source_location: str = ""
-    source_url: str = ""
-    extraction_method: str = ""
-    note_ids: tuple[str, ...] = ()
-    reported_value_raw: str = ""
-
-    @classmethod
-    def from_row(cls, row: dict[str, Any]) -> "ProvenanceRecord":
-        raw_note_ids = str(row.get("note_ids", "") or "").strip()
-        note_ids = tuple(token.strip() for token in raw_note_ids.split(";") if token.strip())
-        return cls(
-            source=str(row.get("Source", "") or row.get("source", "")).strip(),
-            source_file=str(row.get("source_file", "")).strip(),
-            source_location=str(row.get("source_location", "")).strip(),
-            source_url=str(row.get("source_url", "")).strip(),
-            extraction_method=str(row.get("extraction_method", "")).strip(),
-            note_ids=note_ids,
-            reported_value_raw=str(row.get("reported_value_raw", "")).strip(),
-        )
-
-
-@dataclass(frozen=True)
-class ValidationReview:
-    status: str = ""
-    note: str = ""
-    reviewer: str = ""
-    required_expertise: str = ""
-    focus: str = ""
 
 
 @dataclass(frozen=True)

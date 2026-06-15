@@ -490,6 +490,12 @@ When normalized case scores are available, the suite overview also emits a
 `suite_norm_score_summary` so downstream dashboards or reports can show an
 aggregate continuous score summary instead of only binary pass/fail counts.
 
+Series-comparison provenance summaries and compact protocol-context summaries
+now come from the shared typed layer in
+`olfactorybulb.neuronunit.provenance`. If you need to extend the emitted
+reference/model provenance payload, do it there first and let the suite bridge
+adapt the typed object back into audit evidence.
+
 When you use `alignment_policy = "nearest_within_tolerance"` or
 `alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
 explicitly in the comparison x-axis units.

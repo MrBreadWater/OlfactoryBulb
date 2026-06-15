@@ -2016,6 +2016,8 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - optional legacy Welch-test diagnostics
   - family-specific suite-case score labels plus aggregate suite norm-score
     summaries when normalized case scores are available
+  - shared typed provenance summaries for reference/model series payloads and
+    compact protocol-context metadata
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

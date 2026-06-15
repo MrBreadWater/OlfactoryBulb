@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
+from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SeriesComparisonCase,
@@ -329,6 +330,29 @@ assert adapted_items[1].evidence["model_provenance"]["protocol_context"]["cell_m
     "SyntheticModel2",
 ]
 assert adapted_items[1].evidence["model_provenance"]["protocol_context"]["step_duration_ms"] == 500.0
+assert adapted_items[1].evidence["reference_provenance"] == SeriesProvenanceSummary.from_rows(
+    reference_rows,
+    series_id_key=observation.reference_series_id_key,
+    x_key=observation.reference_x_key,
+    y_key=observation.reference_y_key,
+    x_unit_text=observation.reference_x_unit_text,
+    y_unit_text=observation.reference_y_unit_text,
+).to_dict()
+assert adapted_items[1].evidence["model_provenance"] == SeriesProvenanceSummary.from_rows(
+    model_rows,
+    series_id_key=observation.model_series_id_key,
+    x_key=observation.model_x_key,
+    y_key=observation.model_y_key,
+    x_unit_text=observation.model_x_unit_text,
+    y_unit_text=observation.model_y_unit_text,
+    context={
+        "fi_curve_rows": model_rows,
+        "cell_models": ["SyntheticModel1", "SyntheticModel2"],
+        "step_duration_ms": 500.0,
+        "target_vm_mV": -60.0,
+    },
+    exclude_context_keys={"fi_curve_rows"},
+).to_dict()
 report = AuditReport(audit_id="synthetic_series_suite", title="Synthetic series suite", items=adapted_items)
 assert report.summary == {"PASS": 1, "WARN": 0, "FAIL": 0}
 

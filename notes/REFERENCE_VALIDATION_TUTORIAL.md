@@ -1694,6 +1694,9 @@ Important details:
   series-comparison suite overview plus the per-check detail items
 - suite-case score labels and normalized scores now follow the declared
   `score_family` instead of always collapsing to a residual-only label
+- reference/model provenance summaries for series comparisons now come from a
+  shared typed provenance contract rather than bespoke dict assembly in the
+  rule bridge
 
 ## Warning, caveat, math, and visualization features
 

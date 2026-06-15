@@ -19,6 +19,7 @@ from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceMap,
     ProvidesProtocolEvidenceRows,
 )
+from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
@@ -866,73 +867,6 @@ def _resampled_bins_from_paths(
             support_ids[float(target_x)] = ids
     return bins, support_ids
 
-
-def _series_id_count(rows: list[dict[str, Any]], *, series_id_key: str) -> int:
-    if not series_id_key:
-        return 0
-    return len(
-        {
-            str(row.get(series_id_key, "")).strip()
-            for row in rows
-            if str(row.get(series_id_key, "")).strip()
-        }
-    )
-
-
-def _metadata_values(rows: list[dict[str, Any]], *keys: str) -> list[str]:
-    values: set[str] = set()
-    for row in rows:
-        for key in keys:
-            text = str(row.get(key, "")).strip()
-            if text:
-                values.add(text)
-    return sorted(values)
-
-
-def _note_id_values(rows: list[dict[str, Any]]) -> list[str]:
-    note_ids: set[str] = set()
-    for row in rows:
-        raw = str(row.get("note_ids", "")).strip()
-        if not raw:
-            continue
-        for token in raw.replace(",", ";").split(";"):
-            token = token.strip()
-            if token:
-                note_ids.add(token)
-    return sorted(note_ids)
-
-
-def _is_scalar_metadata(value: Any) -> bool:
-    return value is None or isinstance(value, (bool, int, float, str))
-
-
-def _compact_context_value(value: Any) -> Any:
-    if _is_scalar_metadata(value):
-        if isinstance(value, float) and math.isfinite(value):
-            return rounded(float(value))
-        return value
-    if isinstance(value, list) and all(_is_scalar_metadata(item) for item in value):
-        compact_items = []
-        for item in value:
-            if isinstance(item, float) and math.isfinite(item):
-                compact_items.append(rounded(float(item)))
-            else:
-                compact_items.append(item)
-        return compact_items
-    return None
-
-
-def _protocol_context_summary(context: dict[str, Any], *, exclude_keys: set[str]) -> dict[str, Any]:
-    summary: dict[str, Any] = {}
-    for key in sorted(context):
-        if key in exclude_keys:
-            continue
-        compact_value = _compact_context_value(context[key])
-        if compact_value is not None:
-            summary[key] = compact_value
-    return summary
-
-
 def _with_legacy_hz_aliases(
     evidence: dict[str, Any],
     *,
@@ -954,42 +888,6 @@ def _with_legacy_hz_aliases(
     for canonical_key, alias_key in alias_pairs.items():
         evidence[alias_key] = evidence.get(canonical_key)
     return evidence
-
-
-def _series_provenance_summary(
-    rows: list[dict[str, Any]],
-    *,
-    series_id_key: str,
-    x_key: str,
-    y_key: str,
-    x_unit_text: str,
-    y_unit_text: str,
-    context: dict[str, Any] | None = None,
-    exclude_context_keys: set[str] | None = None,
-) -> dict[str, Any]:
-    summary = {
-        "row_count": len(rows),
-        "series_count": _series_id_count(rows, series_id_key=series_id_key),
-        "series_ids": _metadata_values(rows, series_id_key) if series_id_key else [],
-        "x_key": x_key,
-        "y_key": y_key,
-        "x_unit_text": x_unit_text,
-        "y_unit_text": y_unit_text,
-        "sources": _metadata_values(rows, "source"),
-        "source_files": _metadata_values(rows, "source_file"),
-        "source_locations": _metadata_values(rows, "source_location"),
-        "source_urls": _metadata_values(rows, "source_url"),
-        "protocol_ids": _metadata_values(rows, "protocol_id"),
-        "extraction_methods": _metadata_values(rows, "extraction_method"),
-        "sample_scopes": _metadata_values(rows, "sample_scope"),
-        "rate_definitions": _metadata_values(rows, "rate_definition"),
-        "note_ids": _note_id_values(rows),
-    }
-    if context:
-        context_summary = _protocol_context_summary(context, exclude_keys=set(exclude_context_keys or set()))
-        if context_summary:
-            summary["protocol_context"] = context_summary
-    return summary
 
 
 class SeriesComparisonTest(sciunit.Test):
@@ -1371,6 +1269,24 @@ class SeriesComparisonTest(sciunit.Test):
             statistical_norm_score=statistical_norm_score,
             fallback_status=status,
         )
+        reference_provenance_summary = SeriesProvenanceSummary.from_rows(
+            obs.reference_rows,
+            series_id_key=obs.reference_series_id_key,
+            x_key=obs.reference_x_key,
+            y_key=obs.reference_y_key,
+            x_unit_text=obs.reference_x_unit_text,
+            y_unit_text=obs.reference_y_unit_text,
+        )
+        model_provenance_summary = SeriesProvenanceSummary.from_rows(
+            prediction_rows,
+            series_id_key=obs.model_series_id_key,
+            x_key=obs.model_x_key,
+            y_key=obs.model_y_key,
+            x_unit_text=obs.model_x_unit_text,
+            y_unit_text=obs.model_y_unit_text,
+            context=prediction_context,
+            exclude_context_keys={obs.protocol_evidence_key},
+        )
         evidence = {
             obs.visual_x_key: _rounded_list(visual_x_values),
             "reference_matched_x_values": _rounded_list(reference_x_values),
@@ -1483,28 +1399,12 @@ class SeriesComparisonTest(sciunit.Test):
             "y_quantity_name": obs.y_quantity_name,
             "comparison_x_unit_text": obs.comparison_x_unit_text,
             "comparison_y_unit_text": obs.comparison_y_unit_text,
-            "reference_series_count": _series_id_count(obs.reference_rows, series_id_key=obs.reference_series_id_key),
-            "model_series_count": _series_id_count(prediction_rows, series_id_key=obs.model_series_id_key),
+            "reference_series_count": reference_provenance_summary.series_count,
+            "model_series_count": model_provenance_summary.series_count,
             "reference_x_transform": obs.reference_x_transform.description(),
             "model_x_transform": obs.model_x_transform.description(),
-            "reference_provenance": _series_provenance_summary(
-                obs.reference_rows,
-                series_id_key=obs.reference_series_id_key,
-                x_key=obs.reference_x_key,
-                y_key=obs.reference_y_key,
-                x_unit_text=obs.reference_x_unit_text,
-                y_unit_text=obs.reference_y_unit_text,
-            ),
-            "model_provenance": _series_provenance_summary(
-                prediction_rows,
-                series_id_key=obs.model_series_id_key,
-                x_key=obs.model_x_key,
-                y_key=obs.model_y_key,
-                x_unit_text=obs.model_x_unit_text,
-                y_unit_text=obs.model_y_unit_text,
-                context=prediction_context,
-                exclude_context_keys={obs.protocol_evidence_key},
-            ),
+            "reference_provenance": reference_provenance_summary.to_dict(),
+            "model_provenance": model_provenance_summary.to_dict(),
         }
         evidence = _with_legacy_hz_aliases(
             evidence,

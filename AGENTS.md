@@ -624,6 +624,12 @@ contract for future sessions.
     Prefer explicit transform objects such as `affine` or `piecewise_linear`
     over one-off hardcoded x-axis conversion logic in protocol runners or rule
     handlers.
+    Keep reusable provenance structure out of ad hoc evidence-dict assembly:
+    when a series-comparison change affects reference/model provenance payloads
+    or compact protocol-context summaries, extend the shared typed layer in
+    `olfactorybulb.neuronunit.provenance` and then adapt it into evidence,
+    rather than growing more one-off dict-building helpers inside
+    `series_validation_suite.py`.
   - When a maintained validation rule family compiles into a SciUnit-backed
     suite and also emits per-case `AuditItem`s, add one shared suite-overview
     item through `olfactorybulb.neuronunit.suite_presentation` rather than
