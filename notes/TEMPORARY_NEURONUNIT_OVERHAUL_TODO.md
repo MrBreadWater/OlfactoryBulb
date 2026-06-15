@@ -295,6 +295,15 @@ Remove this file when the listed items are either:
         suite-case contract
       - the maintained series-comparison suite currently uses
         `matched_point_count` as that weight source
+- [x] Add explicit typed scalar observation / prediction helpers for the
+      migrated scalar scientific rules instead of passing raw dict bundles
+      between summary/comparison tests and score builders.
+      - added `olfactorybulb.neuronunit.scalar_observations`
+      - summary rules now carry typed scalar value predictions
+      - comparison rules now carry typed scalar map / group-pair /
+        grouped-value predictions
+      - the overhaul import gate and dedicated regression coverage now include
+        that shared scalar layer
 - [x] Move the Burton MC/TC legacy summary CSV dependency behind the same
       declarative reference-dataset contract used by the other maintained
       literature bundles.

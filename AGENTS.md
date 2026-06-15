@@ -701,8 +701,12 @@ contract for future sessions.
     helpers there, let common suffixes such as `_mV`, `_ms`, `_pA`, `_pF`,
     `_MOhm`, `_Hz`, and `_um` provide ergonomic defaults, and use explicit
     `metric_unit_text` / `metric_quantity_name` overrides only when the metric
-    key is ambiguous or the displayed scientific name needs refinement. When a
-    suite aggregate policy uses `norm_rollup = "weighted_mean"`, only do so
+    key is ambiguous or the displayed scientific name needs refinement. For
+    scalar summary/comparison suites, keep the internal prediction/observation
+    path on the shared typed scalar layer in
+    `olfactorybulb.neuronunit.scalar_observations` instead of rebuilding raw
+    dict bundles for metric maps, group pairs, or grouped scalar sets in each
+    rule family. When a suite aggregate policy uses `norm_rollup = "weighted_mean"`, only do so
     for a suite family that emits a principled per-case weight through the
     shared suite-case contract. In the maintained branch that currently means
     the series-comparison suite family, which uses matched-point count as its

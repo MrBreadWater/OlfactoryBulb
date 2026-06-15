@@ -2136,6 +2136,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     rules no longer have to pass raw metric keys and ad hoc unit labels
     separately through the spec, case, score, and maintained presentation
     layers
+  - the migrated scalar scientific suites now also share one typed scalar
+    observation/prediction layer in
+    `olfactorybulb.neuronunit.scalar_observations`, so summary/comparison
+    tests no longer have to shuttle raw dict bundles for metric maps,
+    left/right group pairs, or grouped scalar value sets through their score
+    builders
   - the typed suite-aggregation layer now supports a richer
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite

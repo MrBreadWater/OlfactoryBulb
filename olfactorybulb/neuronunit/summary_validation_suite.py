@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 from typing import Any
 
 import quantities as pq
@@ -17,6 +16,7 @@ from olfactorybulb.neuronunit.metric_quantities import (
 )
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.scalar_observations import ScalarMetricValue, is_finite_scalar
 from olfactorybulb.neuronunit.suite_presentation import (
     audit_item_adapter_spec_from_case,
     suite_case_result_from_spec,
@@ -25,24 +25,14 @@ from olfactorybulb.neuronunit.suite_presentation import (
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
-def _is_finite_number(value: Any) -> bool:
-    if isinstance(value, bool) or value is None:
-        return False
-    try:
-        number = numeric_value(value) if isinstance(value, pq.Quantity) else float(value)
-    except (TypeError, ValueError):
-        return False
-    return math.isfinite(number)
-
-
 def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in payload.items():
         if isinstance(value, dict):
             result[key] = _rounded_dict(value)
         elif isinstance(value, list):
-            result[key] = [rounded(numeric_value(item)) if _is_finite_number(item) else item for item in value]
-        elif _is_finite_number(value):
+            result[key] = [rounded(numeric_value(item)) if is_finite_scalar(item) else item for item in value]
+        elif is_finite_scalar(value):
             result[key] = rounded(numeric_value(value) if isinstance(value, pq.Quantity) else float(value))
         else:
             result[key] = value
@@ -90,7 +80,7 @@ class SummaryRuleScore(sciunit.Score):
         score: float | int | pq.Quantity,
         *,
         status: str,
-        observed: float | int | pq.Quantity,
+        observed: ScalarMetricValue,
         case: SummaryRuleCase,
     ) -> None:
         super().__init__(score)
@@ -141,28 +131,33 @@ class SummaryRuleTest(sciunit.Test):
                 f"SummaryRuleTest observation is missing required keys: {', '.join(missing)}"
             )
 
-    def generate_prediction(self, model: ReferenceValidationModel) -> float | pq.Quantity:
-        return model.get_metric_summary(
-            self.case.group,
-            self.case.metric_key,
-            unit_text=self.case.metric_quantity.unit_text if self.case.metric_quantity is not None else "",
+    def generate_prediction(self, model: ReferenceValidationModel) -> ScalarMetricValue:
+        metric_quantity = self.case.metric_quantity or resolve_metric_quantity(self.case.metric_key)
+        return ScalarMetricValue(
+            metric_quantity=metric_quantity,
+            group=self.case.group,
+            value=model.get_metric_summary(
+                self.case.group,
+                self.case.metric_key,
+                unit_text=metric_quantity.unit_text,
+            ),
         )
 
-    def compute_score(self, observation: dict[str, Any], prediction: float | pq.Quantity) -> SummaryRuleScore:
-        observed_numeric = numeric_value(prediction)
+    def compute_score(self, observation: dict[str, Any], prediction: ScalarMetricValue) -> SummaryRuleScore:
+        observed_numeric = prediction.numeric
         if self.case.rule_kind == "summary_metric_min":
-            passed = _is_finite_number(observed_numeric) and observed_numeric >= float(self.case.minimum)
-            distance = max(0.0, float(self.case.minimum) - observed_numeric) if _is_finite_number(observed_numeric) else float("inf")
+            passed = is_finite_scalar(observed_numeric) and observed_numeric >= float(self.case.minimum)
+            distance = max(0.0, float(self.case.minimum) - observed_numeric) if is_finite_scalar(observed_numeric) else float("inf")
             status = self.case.pass_status if passed else self.case.fail_status
             return SummaryRuleScore(distance, status=status, observed=prediction, case=self.case)
         if self.case.rule_kind == "summary_metric_max":
-            passed = _is_finite_number(observed_numeric) and observed_numeric <= float(self.case.maximum)
-            distance = max(0.0, observed_numeric - float(self.case.maximum)) if _is_finite_number(observed_numeric) else float("inf")
+            passed = is_finite_scalar(observed_numeric) and observed_numeric <= float(self.case.maximum)
+            distance = max(0.0, observed_numeric - float(self.case.maximum)) if is_finite_scalar(observed_numeric) else float("inf")
             status = self.case.pass_status if passed else self.case.fail_status
             return SummaryRuleScore(distance, status=status, observed=prediction, case=self.case)
         if self.case.rule_kind == "summary_metric_range":
-            passed = _is_finite_number(observed_numeric) and float(self.case.minimum) <= observed_numeric <= float(self.case.maximum)
-            if not _is_finite_number(observed_numeric):
+            passed = is_finite_scalar(observed_numeric) and float(self.case.minimum) <= observed_numeric <= float(self.case.maximum)
+            if not is_finite_scalar(observed_numeric):
                 distance = float("inf")
             elif observed_numeric < float(self.case.minimum):
                 distance = float(self.case.minimum) - observed_numeric
@@ -173,7 +168,7 @@ class SummaryRuleTest(sciunit.Test):
             status = self.case.pass_status if passed else self.case.fail_status
             return SummaryRuleScore(distance, status=status, observed=prediction, case=self.case)
         if self.case.rule_kind == "summary_metric_status_map":
-            if not _is_finite_number(observed_numeric):
+            if not is_finite_scalar(observed_numeric):
                 status = "FAIL"
             elif observed_numeric in self.case.pass_values:
                 status = "PASS"
@@ -215,17 +210,16 @@ def compile_summary_rule_suite(
 
 
 def _summary_score_text(case: SummaryRuleCase, score: SummaryRuleScore) -> str:
-    observed = numeric_value(score.observed)
-    if not _is_finite_number(observed):
+    observed = score.observed.numeric
+    if not is_finite_scalar(observed):
         return ""
-    unit_text = case.metric_quantity.unit_text if case.metric_quantity is not None else ""
+    unit_text = score.observed.unit_text
     unit_suffix = f" {unit_text}" if unit_text else ""
     return f"observed {rounded(float(observed)):g}{unit_suffix}"
 
 
 def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> SuiteCaseScorePayload:
-    observed = numeric_value(score.observed)
-    unit_text = case.metric_quantity.unit_text if case.metric_quantity is not None else ""
+    unit_text = score.observed.unit_text
     prediction: dict[str, Any] = {}
     if case.rule_kind == "summary_metric_min":
         prediction["minimum"] = case.minimum
@@ -250,13 +244,7 @@ def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> Su
             "Status-bearing summary-rule score derived from the observed group summary "
             "value against the configured summary-rule contract."
         ),
-        observation={
-            "group": case.group,
-            "metric_key": case.metric_key,
-            "metric_quantity_name": case.metric_quantity.resolved_quantity_name if case.metric_quantity is not None else "",
-            "metric_unit_text": unit_text,
-            "observed": rounded(observed),
-        },
+        observation=score.observed.observation_payload(),
         prediction=prediction or None,
         normalization={
             "norm_score": score.norm_score,
@@ -277,13 +265,12 @@ def audit_items_from_summary_rule_suite(
             suite_kind_label="Summary-rule suite",
         )
     def _result_builder(case: SummaryRuleCase, score: SummaryRuleScore):
-        observed = numeric_value(score.observed)
-        base: dict[str, Any] = {"group": case.group, "observed": observed}
-        if case.metric_quantity is not None:
-            if case.metric_quantity.unit_text:
-                base["metric_unit"] = case.metric_quantity.unit_text
-            if case.metric_quantity.resolved_quantity_name:
-                base["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
+        observed = score.observed.numeric
+        base: dict[str, Any] = {"group": score.observed.group, "observed": observed}
+        if score.observed.unit_text:
+            base["metric_unit"] = score.observed.unit_text
+        if score.observed.quantity_name:
+            base["metric_quantity_name"] = score.observed.quantity_name
         if case.rule_kind == "summary_metric_min":
             base["minimum"] = case.minimum
         elif case.rule_kind == "summary_metric_max":

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 from typing import Any
 
 import quantities as pq
@@ -14,6 +13,12 @@ from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMe
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.scalar_observations import (
+    ScalarGroupPair,
+    ScalarGroupValueSet,
+    ScalarMetricValueMap,
+    is_finite_scalar,
+)
 from olfactorybulb.neuronunit.suite_presentation import (
     audit_item_adapter_spec_from_case,
     suite_case_result_from_spec,
@@ -22,24 +27,14 @@ from olfactorybulb.neuronunit.suite_presentation import (
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
-def _is_finite_number(value: Any) -> bool:
-    if isinstance(value, bool) or value is None:
-        return False
-    try:
-        number = numeric_value(value) if isinstance(value, pq.Quantity) else float(value)
-    except (TypeError, ValueError):
-        return False
-    return math.isfinite(number)
-
-
 def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in payload.items():
         if isinstance(value, dict):
             result[key] = _rounded_dict(value)
         elif isinstance(value, list):
-            result[key] = [rounded(numeric_value(item)) if _is_finite_number(item) else item for item in value]
-        elif _is_finite_number(value):
+            result[key] = [rounded(numeric_value(item)) if is_finite_scalar(item) else item for item in value]
+        elif is_finite_scalar(value):
             result[key] = rounded(numeric_value(value) if isinstance(value, pq.Quantity) else float(value))
         else:
             result[key] = value
@@ -131,73 +126,75 @@ class ComparisonRuleTest(sciunit.Test):
                 f"ComparisonRuleTest observation is missing required keys: {', '.join(missing)}"
             )
 
-    def generate_prediction(self, model: ReferenceValidationModel) -> dict[str, Any]:
+    def generate_prediction(self, model: ReferenceValidationModel) -> ScalarMetricValueMap | ScalarGroupPair | ScalarGroupValueSet:
         case = self.case
+        metric_quantity = case.metric_quantity or resolve_metric_quantity(case.metric_key)
         if case.rule_kind in {"all_finite_metric", "all_exact_metric"}:
-            return {
-                "metric_value_map": model.get_metric_value_map(
+            return ScalarMetricValueMap(
+                metric_quantity=metric_quantity,
+                entity_key=case.entity_key,
+                values=model.get_metric_value_map(
                     case.metric_key,
                     entity_key=case.entity_key,
-                    unit_text=case.metric_quantity.unit_text if case.metric_quantity is not None else "",
+                    unit_text=metric_quantity.unit_text,
                 ),
-            }
+            )
         if case.rule_kind in {"group_ordering", "group_abs_diff_max"}:
-            return {
-                "left_value": model.get_metric_summary(
+            return ScalarGroupPair(
+                metric_quantity=metric_quantity,
+                left_group=case.left_group,
+                right_group=case.right_group,
+                left_value=model.get_metric_summary(
                     case.left_group,
                     case.metric_key,
-                    unit_text=case.metric_quantity.unit_text if case.metric_quantity is not None else "",
+                    unit_text=metric_quantity.unit_text,
                 ),
-                "right_value": model.get_metric_summary(
+                right_value=model.get_metric_summary(
                     case.right_group,
                     case.metric_key,
-                    unit_text=case.metric_quantity.unit_text if case.metric_quantity is not None else "",
+                    unit_text=metric_quantity.unit_text,
                 ),
-            }
+            )
         if case.rule_kind == "group_positive":
-            return {
-                "group_values": {
+            return ScalarGroupValueSet(
+                metric_quantity=metric_quantity,
+                values_by_group={
                     group: model.get_metric_summary(
                         group,
                         case.metric_key,
-                        unit_text=case.metric_quantity.unit_text if case.metric_quantity is not None else "",
+                        unit_text=metric_quantity.unit_text,
                     )
                     for group in case.groups
-                }
-            }
+                },
+            )
         raise ValueError(f"Unsupported comparison rule kind {case.rule_kind!r}")
 
-    def compute_score(self, observation: dict[str, Any], prediction: dict[str, Any]) -> ComparisonRuleScore:
+    def compute_score(
+        self,
+        observation: dict[str, Any],
+        prediction: ScalarMetricValueMap | ScalarGroupPair | ScalarGroupValueSet,
+    ) -> ComparisonRuleScore:
         case = self.case
         if case.rule_kind == "all_finite_metric":
-            metric_value_map = dict(prediction["metric_value_map"])
-            failing = {
-                entity: value
-                for entity, value in metric_value_map.items()
-                if not _is_finite_number(value)
-            }
+            assert isinstance(prediction, ScalarMetricValueMap)
+            failing = prediction.failing_nonfinite()
             evidence = _rounded_dict(
                 {
                     "metric_key": case.metric_key,
-                    "cell_count": len(metric_value_map),
+                    "cell_count": prediction.entity_count,
                     "failing_values": failing,
                 }
             )
-            if case.metric_quantity is not None:
-                if case.metric_quantity.unit_text:
-                    evidence["metric_unit"] = case.metric_quantity.unit_text
-                if case.metric_quantity.resolved_quantity_name:
-                    evidence["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
+            if prediction.unit_text:
+                evidence["metric_unit"] = prediction.unit_text
+            if prediction.quantity_name:
+                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if not failing else case.fail_status
             return ComparisonRuleScore(len(failing), status=status, evidence=evidence, case=case)
 
         if case.rule_kind == "all_exact_metric":
-            metric_value_map = dict(prediction["metric_value_map"])
-            failing = {
-                entity: value
-                for entity, value in metric_value_map.items()
-                if not (_is_finite_number(value) and abs(float(value) - case.expected) <= case.tolerance)
-            }
+            assert isinstance(prediction, ScalarMetricValueMap)
+            failing = prediction.failing_not_equal(expected=case.expected, tolerance=case.tolerance)
             evidence = _rounded_dict(
                 {
                     "metric_key": case.metric_key,
@@ -206,17 +203,17 @@ class ComparisonRuleTest(sciunit.Test):
                     "failing_values": failing,
                 }
             )
-            if case.metric_quantity is not None:
-                if case.metric_quantity.unit_text:
-                    evidence["metric_unit"] = case.metric_quantity.unit_text
-                if case.metric_quantity.resolved_quantity_name:
-                    evidence["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
+            if prediction.unit_text:
+                evidence["metric_unit"] = prediction.unit_text
+            if prediction.quantity_name:
+                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if not failing else case.fail_status
             return ComparisonRuleScore(len(failing), status=status, evidence=evidence, case=case)
 
         if case.rule_kind == "group_ordering":
-            left_value = numeric_value(prediction["left_value"])
-            right_value = numeric_value(prediction["right_value"])
+            assert isinstance(prediction, ScalarGroupPair)
+            left_value = prediction.left_numeric
+            right_value = prediction.right_numeric
             if case.operator == ">":
                 passed = right_value > left_value
                 score_value = max(0.0, left_value - right_value)
@@ -229,21 +226,21 @@ class ComparisonRuleTest(sciunit.Test):
                 {
                     f"{case.left_group}_mean": left_value,
                     f"{case.right_group}_mean": right_value,
-                    f"{case.right_group}_minus_{case.left_group}": right_value - left_value,
+                    f"{case.right_group}_minus_{case.left_group}": prediction.delta,
                 }
             )
-            if case.metric_quantity is not None:
-                if case.metric_quantity.unit_text:
-                    evidence["metric_unit"] = case.metric_quantity.unit_text
-                if case.metric_quantity.resolved_quantity_name:
-                    evidence["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
+            if prediction.unit_text:
+                evidence["metric_unit"] = prediction.unit_text
+            if prediction.quantity_name:
+                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if passed else case.fail_status
             return ComparisonRuleScore(score_value, status=status, evidence=evidence, case=case)
 
         if case.rule_kind == "group_abs_diff_max":
-            left_value = numeric_value(prediction["left_value"])
-            right_value = numeric_value(prediction["right_value"])
-            difference = abs(right_value - left_value)
+            assert isinstance(prediction, ScalarGroupPair)
+            left_value = prediction.left_numeric
+            right_value = prediction.right_numeric
+            difference = prediction.absolute_difference
             passed = difference <= case.max_difference
             evidence = _rounded_dict(
                 {
@@ -253,33 +250,25 @@ class ComparisonRuleTest(sciunit.Test):
                     "max_difference": case.max_difference,
                 }
             )
-            if case.metric_quantity is not None:
-                if case.metric_quantity.unit_text:
-                    evidence["metric_unit"] = case.metric_quantity.unit_text
-                if case.metric_quantity.resolved_quantity_name:
-                    evidence["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
+            if prediction.unit_text:
+                evidence["metric_unit"] = prediction.unit_text
+            if prediction.quantity_name:
+                evidence["metric_quantity_name"] = prediction.quantity_name
             score_value = max(0.0, difference - case.max_difference)
             status = case.pass_status if passed else case.fail_status
             return ComparisonRuleScore(score_value, status=status, evidence=evidence, case=case)
 
         if case.rule_kind == "group_positive":
-            group_values = {
-                group: numeric_value(value)
-                for group, value in dict(prediction["group_values"]).items()
-            }
-            failing_groups = [
-                group
-                for group, value in group_values.items()
-                if not (_is_finite_number(value) and float(value) > 0.0)
-            ]
+            assert isinstance(prediction, ScalarGroupValueSet)
+            group_values = prediction.numeric_group_values()
+            failing_groups = prediction.failing_positive_groups()
             evidence = _rounded_dict({f"{group}_mean": value for group, value in group_values.items()})
             if failing_groups:
                 evidence["failing_groups"] = list(failing_groups)
-            if case.metric_quantity is not None:
-                if case.metric_quantity.unit_text:
-                    evidence["metric_unit"] = case.metric_quantity.unit_text
-                if case.metric_quantity.resolved_quantity_name:
-                    evidence["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
+            if prediction.unit_text:
+                evidence["metric_unit"] = prediction.unit_text
+            if prediction.quantity_name:
+                evidence["metric_quantity_name"] = prediction.quantity_name
             status = case.pass_status if not failing_groups else case.fail_status
             return ComparisonRuleScore(len(failing_groups), status=status, evidence=evidence, case=case)
 
@@ -321,13 +310,13 @@ def _comparison_score_text(case: ComparisonRuleCase, score: ComparisonRuleScore)
         return "all exact" if int(score.score) == 0 else f"failing {int(score.score)}"
     if case.rule_kind == "group_ordering":
         delta = score.evidence.get(f"{case.right_group}_minus_{case.left_group}")
-        if _is_finite_number(delta):
+        if is_finite_scalar(delta):
             unit_text = case.metric_quantity.unit_text if case.metric_quantity is not None else ""
             unit_suffix = f" {unit_text}" if unit_text else ""
             return f"Δ {rounded(float(delta)):g}{unit_suffix}"
     if case.rule_kind == "group_abs_diff_max":
         difference = score.evidence.get("absolute_difference")
-        if _is_finite_number(difference):
+        if is_finite_scalar(difference):
             unit_text = case.metric_quantity.unit_text if case.metric_quantity is not None else ""
             unit_suffix = f" {unit_text}" if unit_text else ""
             return f"|Δ| {rounded(float(difference)):g}{unit_suffix}"
