@@ -36,6 +36,21 @@ _TOKEN_ALIASES: dict[str, str] = {
     "TCS": "TCs",
 }
 
+_OBSERVED_SYMBOLS_BY_METRIC_KEY: dict[str, str] = {
+    "resting_potential_mV": r"\bar{V}_{\mathrm{rest}}",
+    "membrane_time_constant_ms": r"\bar{\tau}_m",
+    "input_resistance_MOhm": r"\bar{R}_{\mathrm{in}}",
+    "soma_diameter_um": r"\bar{d}_{\mathrm{soma}}",
+    "primary_process_count": r"\bar{n}_{\mathrm{primary}}",
+    "planar_span_um": r"\bar{s}_{\mathrm{planar}}",
+    "max_branch_origin_um": r"\bar{r}_{\mathrm{branch}}",
+    "has_axon_sections": r"\bar{n}_{\mathrm{axon}}",
+    "AP_onset_mV": r"\bar{V}_{\mathrm{th}}",
+    "FWHM_ms": r"\overline{\mathrm{FWHM}}",
+    "rheobase_pA": r"\bar{I}_{\mathrm{rh}}",
+    "zero_step_rate_Hz": r"\bar{f}_{0}",
+}
+
 
 def infer_metric_unit_text(metric_key: str) -> str:
     key = str(metric_key or "").strip()
@@ -72,16 +87,22 @@ def infer_metric_quantity_name(metric_key: str) -> str:
     return " ".join(part for part in parts if part)
 
 
+def infer_metric_observed_symbol(metric_key: str) -> str:
+    return _OBSERVED_SYMBOLS_BY_METRIC_KEY.get(str(metric_key or "").strip(), r"\bar{x}")
+
+
 @dataclass(frozen=True)
 class MetricQuantitySpec:
     metric_key: str
     unit_text: str = ""
     quantity_name: str = ""
+    observed_symbol: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "metric_key", str(self.metric_key).strip())
         object.__setattr__(self, "unit_text", str(self.unit_text or "").strip())
         object.__setattr__(self, "quantity_name", str(self.quantity_name or "").strip())
+        object.__setattr__(self, "observed_symbol", str(self.observed_symbol or "").strip())
 
     @property
     def resolved_quantity_name(self) -> str:
@@ -94,12 +115,17 @@ class MetricQuantitySpec:
             return f"{label} ({self.unit_text})"
         return label
 
+    @property
+    def resolved_observed_symbol(self) -> str:
+        return self.observed_symbol or infer_metric_observed_symbol(self.metric_key)
+
 
 def resolve_metric_quantity(
     metric_key: str,
     *,
     unit_text: str = "",
     quantity_name: str = "",
+    observed_symbol: str = "",
 ) -> MetricQuantitySpec:
     key = str(metric_key or "").strip()
     resolved_unit = str(unit_text or "").strip() or infer_metric_unit_text(key)
@@ -108,6 +134,7 @@ def resolve_metric_quantity(
         metric_key=key,
         unit_text=resolved_unit,
         quantity_name=resolved_name,
+        observed_symbol=str(observed_symbol or "").strip() or infer_metric_observed_symbol(key),
     )
 
 
@@ -131,6 +158,7 @@ def metric_definition_text(
 
 __all__ = [
     "MetricQuantitySpec",
+    "infer_metric_observed_symbol",
     "infer_metric_quantity_name",
     "infer_metric_unit_text",
     "metric_definition_text",

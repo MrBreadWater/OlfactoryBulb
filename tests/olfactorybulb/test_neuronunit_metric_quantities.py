@@ -20,6 +20,7 @@ assert infer_metric_quantity_name("GCs__MCs_entry_count") == "GCs MCs Entry Coun
 ap_threshold = resolve_metric_quantity("AP_onset_mV")
 assert ap_threshold.unit_text == "mV"
 assert ap_threshold.resolved_quantity_name == "AP Onset"
+assert ap_threshold.resolved_observed_symbol == r"\bar{V}_{\mathrm{th}}"
 assert ap_threshold.definition_label == "AP Onset (mV)"
 assert metric_definition_text(ap_threshold, group="MC") == "MC mean AP Onset (mV)"
 
@@ -27,9 +28,11 @@ explicit = resolve_metric_quantity(
     "fi_gain_Hz_per_50pA",
     unit_text="Hz/50pA",
     quantity_name="FI gain",
+    observed_symbol=r"\bar{g}_{\mathrm{FI}}",
 )
 assert explicit.unit_text == "Hz/50pA"
 assert explicit.resolved_quantity_name == "FI gain"
+assert explicit.resolved_observed_symbol == r"\bar{g}_{\mathrm{FI}}"
 assert explicit.definition_label == "FI gain (Hz/50pA)"
 assert metric_definition_text(explicit, group="TC") == "TC mean FI gain (Hz/50pA)"
 

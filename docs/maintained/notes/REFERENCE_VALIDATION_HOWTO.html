@@ -552,10 +552,15 @@ quantity per rule:</p>
 <li>if <code>metric_key</code> ends with a maintained unit suffix such as <code>_mV</code>, <code>_ms</code>,
   <code>_pA</code>, <code>_pF</code>, <code>_MOhm</code>, <code>_Hz</code>, or <code>_um</code>, the rule will infer a unit label
   and a human-facing quantity name automatically</li>
+<li>for common intrinsic electrophysiology and morphology metrics, the same
+  typed quantity layer also infers a maintained observed symbol such as
+  <code>\bar{V}_{\mathrm{th}}</code>, <code>\bar{\tau}_m</code>, or <code>\bar{I}_{\mathrm{rh}}</code></li>
 <li>use <code>metric_unit_text</code> when the metric key does not already encode the right
   display unit clearly</li>
 <li>use <code>metric_quantity_name</code> when the metric key is technically correct but
   the displayed scientific name should be more legible</li>
+<li>use <code>metric_observed_symbol</code> only when the default observed symbol is not
+  the notation you want on the rendered criterion</li>
 </ul>
 <p>Those resolved choices now flow through the NeuronUnit-backed scalar cases,
 their typed <code>case_score</code> payloads, and the maintained dashboard/CLI evidence.</p>

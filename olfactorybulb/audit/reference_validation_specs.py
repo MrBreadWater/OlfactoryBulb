@@ -330,6 +330,7 @@ class SummaryRuleSpec:
                 str(rule["metric_key"]),
                 unit_text=str(rule.get("metric_unit_text", "")).strip(),
                 quantity_name=str(rule.get("metric_quantity_name", "")).strip(),
+                observed_symbol=str(rule.get("metric_observed_symbol", "")).strip(),
             ),
             group=summary_group(rule, context),
             evidence_metric_keys=[str(metric).strip() for metric in rule.get("evidence_metric_keys", []) if str(metric).strip()],
@@ -352,7 +353,9 @@ class SummaryRuleSpec:
         )
 
     def to_case(self) -> SummaryRuleCase:
-        observed_symbol = group_mean_symbol(self.group)
+        observed_symbol = self.metric_quantity.resolved_observed_symbol
+        if observed_symbol == r"\bar{x}":
+            observed_symbol = group_mean_symbol(self.group)
         base_kwargs = {
             "rule_kind": self.rule_kind,
             "check_id": self.check_id,
@@ -543,6 +546,7 @@ class ComparisonRuleSpec:
                 str(rule["metric_key"]),
                 unit_text=str(rule.get("metric_unit_text", "")).strip(),
                 quantity_name=str(rule.get("metric_quantity_name", "")).strip(),
+                observed_symbol=str(rule.get("metric_observed_symbol", "")).strip(),
             ),
             entity_key=str(rule.get("entity_key", "cell_name")),
             pass_status=str(rule.get("pass_status", "PASS")),
@@ -598,8 +602,8 @@ class ComparisonRuleSpec:
             case_kwargs["tolerance"] = float(self.tolerance)
             return ComparisonRuleCase(**case_kwargs)
         if self.rule_kind == "group_ordering":
-            left_symbol = group_mean_symbol(self.left_group)
-            right_symbol = group_mean_symbol(self.right_group)
+            left_symbol = group_mean_symbol(self.left_group, self.metric_quantity.resolved_observed_symbol)
+            right_symbol = group_mean_symbol(self.right_group, self.metric_quantity.resolved_observed_symbol)
             criterion_math = criterion_math_for_ordering(right_symbol, self.operator, left_symbol)
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = criterion_math.latex
@@ -612,8 +616,8 @@ class ComparisonRuleSpec:
             case_kwargs["operator"] = self.operator
             return ComparisonRuleCase(**case_kwargs)
         if self.rule_kind == "group_abs_diff_max":
-            left_symbol = group_mean_symbol(self.left_group)
-            right_symbol = group_mean_symbol(self.right_group)
+            left_symbol = group_mean_symbol(self.left_group, self.metric_quantity.resolved_observed_symbol)
+            right_symbol = group_mean_symbol(self.right_group, self.metric_quantity.resolved_observed_symbol)
             criterion_math = criterion_math_for_absolute_difference(
                 left_symbol,
                 right_symbol,
@@ -633,7 +637,10 @@ class ComparisonRuleSpec:
         if self.rule_kind == "group_positive":
             if not self.groups:
                 raise ValueError("group_positive rule requires non-empty 'groups'")
-            group_symbols = [group_mean_symbol(group) for group in self.groups]
+            group_symbols = [
+                group_mean_symbol(group, self.metric_quantity.resolved_observed_symbol)
+                for group in self.groups
+            ]
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = " \\wedge ".join(rf"{symbol} > 0" for symbol in group_symbols)
             case_kwargs["criterion_definitions"] = [

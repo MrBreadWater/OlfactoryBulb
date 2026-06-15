@@ -47,6 +47,10 @@ class ScalarMetricValue:
         return self.metric_quantity.resolved_quantity_name
 
     @property
+    def observed_symbol(self) -> str:
+        return self.metric_quantity.resolved_observed_symbol
+
+    @property
     def numeric(self) -> float:
         return numeric_value(self.value)
 
@@ -59,6 +63,7 @@ class ScalarMetricValue:
             "metric_key": self.metric_key,
             "metric_quantity_name": self.quantity_name,
             "metric_unit_text": self.unit_text,
+            "metric_observed_symbol": self.observed_symbol,
         }
         if self.group:
             payload["group"] = self.group
@@ -96,6 +101,10 @@ class ScalarMetricValueMap:
         return self.metric_quantity.resolved_quantity_name
 
     @property
+    def observed_symbol(self) -> str:
+        return self.metric_quantity.resolved_observed_symbol
+
+    @property
     def entity_count(self) -> int:
         return len(self.values)
 
@@ -118,6 +127,7 @@ class ScalarMetricValueMap:
             "metric_key": self.metric_key,
             "metric_quantity_name": self.quantity_name,
             "metric_unit_text": self.unit_text,
+            "metric_observed_symbol": self.observed_symbol,
             "entity_key": self.entity_key,
             "entity_count": self.entity_count,
         }
@@ -150,6 +160,10 @@ class ScalarGroupPair:
         return self.metric_quantity.resolved_quantity_name
 
     @property
+    def observed_symbol(self) -> str:
+        return self.metric_quantity.resolved_observed_symbol
+
+    @property
     def left_numeric(self) -> float:
         return numeric_value(self.left_value)
 
@@ -170,6 +184,7 @@ class ScalarGroupPair:
             "metric_key": self.metric_key,
             "metric_quantity_name": self.quantity_name,
             "metric_unit_text": self.unit_text,
+            "metric_observed_symbol": self.observed_symbol,
             "left_group": self.left_group,
             "right_group": self.right_group,
         }
@@ -201,6 +216,10 @@ class ScalarGroupValueSet:
     def quantity_name(self) -> str:
         return self.metric_quantity.resolved_quantity_name
 
+    @property
+    def observed_symbol(self) -> str:
+        return self.metric_quantity.resolved_observed_symbol
+
     def numeric_group_values(self) -> dict[str, float]:
         return {
             group: numeric_value(value)
@@ -219,6 +238,7 @@ class ScalarGroupValueSet:
             "metric_key": self.metric_key,
             "metric_quantity_name": self.quantity_name,
             "metric_unit_text": self.unit_text,
+            "metric_observed_symbol": self.observed_symbol,
         }
         if self.reducer:
             payload["reducer"] = self.reducer
@@ -231,11 +251,17 @@ def scalar_metric_value(
     *,
     unit_text: str = "",
     quantity_name: str = "",
+    observed_symbol: str = "",
     group: str = "",
     reducer: str = "mean",
 ) -> ScalarMetricValue:
     return ScalarMetricValue(
-        metric_quantity=resolve_metric_quantity(metric_key, unit_text=unit_text, quantity_name=quantity_name),
+        metric_quantity=resolve_metric_quantity(
+            metric_key,
+            unit_text=unit_text,
+            quantity_name=quantity_name,
+            observed_symbol=observed_symbol,
+        ),
         group=group,
         value=value,
         reducer=reducer,
@@ -248,10 +274,16 @@ def scalar_metric_map(
     *,
     unit_text: str = "",
     quantity_name: str = "",
+    observed_symbol: str = "",
     entity_key: str = "cell_name",
 ) -> ScalarMetricValueMap:
     return ScalarMetricValueMap(
-        metric_quantity=resolve_metric_quantity(metric_key, unit_text=unit_text, quantity_name=quantity_name),
+        metric_quantity=resolve_metric_quantity(
+            metric_key,
+            unit_text=unit_text,
+            quantity_name=quantity_name,
+            observed_symbol=observed_symbol,
+        ),
         values=values,
         entity_key=entity_key,
     )

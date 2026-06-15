@@ -285,9 +285,13 @@ Remove this file when the listed items are either:
       - added `olfactorybulb.neuronunit.metric_quantities`
       - summary/comparison rule specs now resolve `metric_key` through one
         typed metric quantity with ergonomic suffix-based defaults plus
-        explicit `metric_unit_text` / `metric_quantity_name` overrides
+        explicit `metric_unit_text` / `metric_quantity_name` /
+        `metric_observed_symbol` overrides
       - the summary/comparison suite cases, score payloads, and maintained
-        evidence now carry those resolved units and quantity names directly
+        evidence now carry those resolved units, quantity names, and observed
+        symbols directly
+      - the shared typed scalar-observation metadata now carries the same
+        observed symbol so downstream adapters do not have to recompute it
 - [x] Grow the suite aggregate layer beyond equal-case mean/min/median when a
       migrated family has a principled case weight.
       - added `weighted_mean` to `SuiteAggregatePolicy`

@@ -366,11 +366,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert parsed_comparison_spec.operator == "<"
     comparison_items = build_rule_items(compile_rule_dispatches(comparison_rules), comparison_context)
     comparison_detail_items = _detail_items(comparison_items)
-    assert comparison_detail_items[0].criterion_latex == r"\bar{x}_{\mathrm{MC}} \geq -60"
-    assert comparison_detail_items[1].criterion_latex == r"\left|\bar{x}_{\mathrm{MC}} - 1.5\right| \leq 0.5"
-    assert comparison_detail_items[2].criterion_latex == r"\bar{x}_{\mathrm{TC}} < \bar{x}_{\mathrm{MC}}"
-    assert comparison_detail_items[3].criterion_latex == r"\left|\bar{x}_{\mathrm{TC}} - \bar{x}_{\mathrm{MC}}\right| \leq 5"
-    assert comparison_detail_items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
+    assert comparison_detail_items[0].criterion_latex == r"\bar{V}_{\mathrm{rest}} \geq -60"
+    assert comparison_detail_items[1].criterion_latex == r"\left|\overline{\mathrm{FWHM}} - 1.5\right| \leq 0.5"
+    assert comparison_detail_items[2].criterion_latex == r"\overline{\mathrm{FWHM}}_{\mathrm{TC}} < \overline{\mathrm{FWHM}}_{\mathrm{MC}}"
+    assert comparison_detail_items[3].criterion_latex == r"\left|\bar{V}_{\mathrm{th},\mathrm{TC}} - \bar{V}_{\mathrm{th},\mathrm{MC}}\right| \leq 5"
+    assert comparison_detail_items[4].criterion_latex == r"\bar{I}_{\mathrm{rh},\mathrm{MC}} > 0 \wedge \bar{I}_{\mathrm{rh},\mathrm{TC}} > 0"
     assert comparison_detail_items[5].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
 
     missing_mode_rule = {

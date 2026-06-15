@@ -703,9 +703,13 @@ contract for future sessions.
     one-off unit labels through the spec, case, score, and presentation
     layers. Use the shared `olfactorybulb.neuronunit.metric_quantities`
     helpers there, let common suffixes such as `_mV`, `_ms`, `_pA`, `_pF`,
-    `_MOhm`, `_Hz`, and `_um` provide ergonomic defaults, and use explicit
-    `metric_unit_text` / `metric_quantity_name` overrides only when the metric
-    key is ambiguous or the displayed scientific name needs refinement. For
+    `_MOhm`, `_Hz`, and `_um` provide ergonomic defaults, let the shared
+    observed-symbol map provide common scientific notation such as
+    `\bar{V}_{\mathrm{th}}`, `\bar{\tau}_m`, or `\bar{I}_{\mathrm{rh}}`
+    automatically, and use explicit `metric_unit_text`,
+    `metric_quantity_name`, or `metric_observed_symbol` overrides only when
+    the metric key is ambiguous or the displayed scientific presentation needs
+    refinement. For
     scalar summary/comparison suites, keep the internal prediction/observation
     path on the shared typed scalar layer in
     `olfactorybulb.neuronunit.scalar_observations` instead of rebuilding raw

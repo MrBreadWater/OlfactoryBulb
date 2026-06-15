@@ -2133,15 +2133,16 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     surface
   - the scalar summary/comparison suite families now resolve one typed metric
     quantity from `metric_key` plus optional overrides, so unit-bearing scalar
-    rules no longer have to pass raw metric keys and ad hoc unit labels
-    separately through the spec, case, score, and maintained presentation
-    layers
+    rules no longer have to pass raw metric keys, ad hoc unit labels, or
+    hand-chosen observed symbols separately through the spec, case, score, and
+    maintained presentation layers
   - the migrated scalar scientific suites now also share one typed scalar
     observation/prediction layer in
     `olfactorybulb.neuronunit.scalar_observations`, so summary/comparison
     tests no longer have to shuttle raw dict bundles for metric maps,
     left/right group pairs, or grouped scalar value sets through their score
-    builders
+    builders, and that shared scalar metadata now carries the resolved
+    observed symbol as well as the unit/name contract
   - protocol metric rows and grouped numeric summaries now also share one
     typed contract in `olfactorybulb.neuronunit.metric_tables`, so the
     protocol result, validation context, runtime plan, and migrated

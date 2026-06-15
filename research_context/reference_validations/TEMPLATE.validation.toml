@@ -88,8 +88,10 @@ validation_design_review_status = "pending"
 # Scalar SciUnit-backed rule families (`all_*`, `group_*`, `summary_metric_*`)
 # infer a typed metric quantity from `metric_key` when the suffix is
 # informative, for example `_mV`, `_ms`, `_pA`, `_pF`, `_MOhm`, `_Hz`, or
-# `_um`. Use `metric_unit_text` / `metric_quantity_name` only when the metric
-# key is ambiguous or the displayed scientific name should be refined.
+# `_um`. The same typed quantity layer also supplies maintained observed-symbol
+# defaults for common metrics. Use `metric_unit_text`, `metric_quantity_name`,
+# or `metric_observed_symbol` only when the metric key is ambiguous or the
+# displayed scientific presentation should be refined.
 
 # Optional finite-value check.
 # [[checks]]
@@ -100,6 +102,7 @@ validation_design_review_status = "pending"
 # human-facing quantity name:
 # metric_unit_text = "MOhm"
 # metric_quantity_name = "Input resistance"
+# metric_observed_symbol = r"\bar{R}_{\mathrm{in}}"
 # entity_key = "cell_name"
 # title = "Input resistance was measured for every audited cell"
 # criterion = "Every audited cell should report a finite input-resistance estimate."

@@ -26,8 +26,17 @@ def latex_token(value: str, *, fallback: str = "x") -> str:
     return token or fallback
 
 
-def group_mean_symbol(group: str) -> str:
-    return rf"\bar{{x}}_{{\mathrm{{{latex_token(group, fallback='g')}}}}}"
+def group_mean_symbol(group: str, base_symbol: str = r"\bar{x}") -> str:
+    group_token = latex_token(group, fallback="g")
+    base = str(base_symbol or r"\bar{x}").strip() or r"\bar{x}"
+    if base == r"\bar{x}":
+        return rf"\bar{{x}}_{{\mathrm{{{group_token}}}}}"
+    match = re.match(r"^(?P<head>.+)_\{(?P<sub>.+)\}$", base)
+    if match:
+        head = match.group("head")
+        sub = match.group("sub")
+        return rf"{head}_{{{sub},\mathrm{{{group_token}}}}}"
+    return rf"{base}_{{\mathrm{{{group_token}}}}}"
 
 
 _PROPERTY_OBSERVED_SYMBOLS: dict[str, str] = {

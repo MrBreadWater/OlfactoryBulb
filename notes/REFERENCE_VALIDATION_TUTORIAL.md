@@ -232,8 +232,12 @@ quantity per rule:
   `_um` infer the display unit automatically
 - the same path infers a human-facing quantity name for suite evidence and the
   typed `case_score` payload
-- use `metric_unit_text` or `metric_quantity_name` only when the metric key is
-  ambiguous or the displayed scientific name needs refinement
+- the same path also infers maintained observed symbols for common metrics,
+  such as `\bar{V}_{\mathrm{th}}`, `\bar{\tau}_m`, or
+  `\bar{I}_{\mathrm{rh}}`
+- use `metric_unit_text`, `metric_quantity_name`, or `metric_observed_symbol`
+  only when the metric key is ambiguous or the displayed scientific
+  presentation needs refinement
 
 Grouped SciUnit-backed suite families may also override
 `suite_aggregate_policy.norm_rollup` with `weighted_mean`, but only when the
@@ -1281,9 +1285,10 @@ Optional scalar-metric quantity fields:
 
 - `metric_unit_text`
 - `metric_quantity_name`
+- `metric_observed_symbol`
 
 If those are omitted, the maintained path infers them from `metric_key` when
-the suffix is informative.
+the suffix or maintained symbol map is informative.
 
 Example:
 
@@ -1294,6 +1299,7 @@ check_id = "resting_potential_recorded"
 metric_key = "resting_potential_mV"
 # metric_unit_text = "mV"
 # metric_quantity_name = "Resting potential"
+# metric_observed_symbol = r"\bar{V}_{\mathrm{rest}}"
 entity_key = "cell_name"
 title = "Resting potential was recorded"
 criterion = "Every audited model should produce a finite resting membrane potential."

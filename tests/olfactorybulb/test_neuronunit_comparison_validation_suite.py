@@ -280,7 +280,7 @@ assert [item.status for item in items] == ["PASS", "PASS", "PASS", "PASS", "PASS
 assert items[1].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
 assert items[2].evidence["absolute_difference"] == 0.5
 assert items[3].evidence["TC_minus_MC"] == -0.2
-assert items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
+assert items[4].criterion_latex == r"\bar{I}_{\mathrm{rh},\mathrm{MC}} > 0 \wedge \bar{I}_{\mathrm{rh},\mathrm{TC}} > 0"
 assert items[5].evidence["cell_count"] == 2
 
 
