@@ -1607,6 +1607,11 @@ def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore)
 
 def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonSuite) -> list[AuditItem]:
     judged = compiled.judge()
+    protocol_context = compiled.model.get_protocol_evidence_map()
+    candidate_ids = protocol_context.get("cell_models", [])
+    if not isinstance(candidate_ids, list):
+        candidate_ids = []
+
     def _result_builder(case: SeriesComparisonCase, score: SeriesComparisonScore):
         obs = case.observation
         visual_contract = obs.visual_contract
@@ -1646,6 +1651,7 @@ def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonS
         suite_kind_label="Series-comparison suite",
         judged=judged,
         result_builder=_result_builder,
+        candidate_ids=[str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()],
     )
 
 

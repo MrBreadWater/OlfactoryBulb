@@ -89,6 +89,8 @@ assert [item.status for item in adapted_items] == ["WARN", "PASS", "WARN", "PASS
 assert adapted_items[0].detail_level == "summary"
 assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 2, "WARN": 1, "FAIL": 0}
+assert adapted_items[0].evidence["suite_aggregate_score"]["status"] == "WARN"
+assert adapted_items[0].evidence["suite_aggregate_score"]["score_text"] == "worst WARN, min norm 0.5"
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "observed 4"
 assert adapted_items[0].evidence["suite_cases"][1]["norm_score"] == 0.5
 assert adapted_items[1].evidence["baseline_MCs_count"] == 12.0

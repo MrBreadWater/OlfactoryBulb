@@ -81,8 +81,18 @@ assert adapted_items[0].detail_level == "summary"
 assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].companion_visuals[0]["kind"] == "status_matrix"
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 0, "FAIL": 0}
+assert adapted_items[0].evidence["suite_case_check_ids"] == ["input_resistance_within_band"]
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "observed 102 MOhm"
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
+assert adapted_items[0].evidence["suite_aggregate_score"] == {
+    "status_rollup": "worst_case",
+    "norm_rollup": "minimum",
+    "score_kind": "worst_case_minimum_norm",
+    "score_interpretation": "Aggregate suite score derived from the worst detailed-case status plus the minimum normalized case score.",
+    "status": "PASS",
+    "score_text": "worst PASS, min norm 1",
+    "score_value": 1.0,
+}
 report = AuditReport(audit_id="synthetic_reference_band", title="Synthetic reference band", items=adapted_items)
 assert report.summary == {"PASS": 1, "WARN": 0, "FAIL": 0}
 adapted_item = adapted_items[1]

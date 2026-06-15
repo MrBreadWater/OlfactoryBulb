@@ -1442,9 +1442,15 @@ def _render_companion_visuals(
         for entry in entries:
             summary_counts[entry["status"]] = summary_counts.get(entry["status"], 0) + 1
 
+        suite_aggregate_score = evidence.get("suite_aggregate_score")
         suite_norm_summary = evidence.get("suite_norm_score_summary")
+        suite_candidate_ids = evidence.get("suite_candidate_ids")
         default_right_meta = "suite rollup"
-        if isinstance(suite_norm_summary, dict):
+        if isinstance(suite_aggregate_score, dict):
+            aggregate_text = str(suite_aggregate_score.get("score_text") or "").strip()
+            if aggregate_text:
+                default_right_meta = aggregate_text
+        elif isinstance(suite_norm_summary, dict):
             mean_norm = _float_or_none(suite_norm_summary.get("mean"))
             min_norm = _float_or_none(suite_norm_summary.get("min"))
             if mean_norm is not None:
@@ -1452,7 +1458,12 @@ def _render_companion_visuals(
                 if min_norm is not None and not math.isclose(min_norm, mean_norm):
                     default_right_meta += f", min {_format_numeric(min_norm)}"
         block_title = str(spec.get("title") or "Suite case summary")
-        left_meta = str(spec.get("left_meta") or f"{len(entries)} cases")
+        default_left_meta = f"{len(entries)} cases"
+        if isinstance(suite_candidate_ids, list):
+            candidate_count = len([candidate for candidate in suite_candidate_ids if str(candidate).strip()])
+            if candidate_count:
+                default_left_meta += f", {candidate_count} candidates"
+        left_meta = str(spec.get("left_meta") or default_left_meta)
         right_meta = str(spec.get("right_meta") or default_right_meta)
         cells_html = "".join(
             (

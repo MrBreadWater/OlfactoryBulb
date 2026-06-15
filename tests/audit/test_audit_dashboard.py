@@ -447,7 +447,17 @@ suite_summary_report = AuditReport(
                 "suite_kind": "Synthetic suite",
                 "suite_case_count": 2,
                 "suite_status_summary": {"PASS": 1, "WARN": 1, "FAIL": 0},
+                "suite_candidate_ids": ["SyntheticA", "SyntheticB"],
                 "suite_norm_score_summary": {"count": 2.0, "mean": 0.75, "median": 0.75, "min": 0.5, "max": 1.0},
+                "suite_aggregate_score": {
+                    "status_rollup": "worst_case",
+                    "norm_rollup": "minimum",
+                    "score_kind": "worst_case_minimum_norm",
+                    "score_interpretation": "Aggregate suite score derived from the worst detailed-case status plus the minimum normalized case score.",
+                    "status": "WARN",
+                    "score_text": "worst WARN, min norm 0.5",
+                    "score_value": 0.5,
+                },
                 "warning_cases": ["Suite warning detail"],
                 "failed_cases": [],
                 "suite_cases": [
@@ -522,7 +532,7 @@ with TemporaryDirectory() as tmp:
     assert "norm 1" in html
     assert "norm 0.5" in html
     assert html.count("suite-status-cell") >= 2
-    assert "2 cases" in html
-    assert "mean norm 0.75, min 0.5" in html
+    assert "2 cases, 2 candidates" in html
+    assert "worst WARN, min norm 0.5" in html
 
 print("audit_dashboard: OK")

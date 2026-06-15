@@ -217,9 +217,11 @@ top-level PASS/WARN/FAIL counts still reflect the detailed validation cases
 rather than double-counting the overview card.
 
 The shared suite overview / matrix contract lives in
-`olfactorybulb.neuronunit.suite_presentation`. If you add another SciUnit-
-backed suite family, reuse that helper layer rather than hand-building a new
-overview card or dashboard payload shape inside the specific adapter.
+`olfactorybulb.neuronunit.suite_presentation`, and the typed aggregate-score
+semantics live in `olfactorybulb.neuronunit.suite_scores`. If you add another
+SciUnit-backed suite family, reuse those layers rather than hand-building a
+new overview card, aggregate rollup, or dashboard payload shape inside the
+specific adapter.
 
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting
@@ -508,8 +510,9 @@ The emitted suite-case score labels follow the declared `score_family`:
 - hybrid families: both residual and statistical text
 
 When normalized case scores are available, the suite overview also emits a
-`suite_norm_score_summary` so downstream dashboards or reports can show an
-aggregate continuous score summary instead of only binary pass/fail counts.
+`suite_norm_score_summary` and a typed `suite_aggregate_score` payload, so
+downstream dashboards or reports can show both the continuous score summary
+and the configured aggregate rollup instead of only binary pass/fail counts.
 
 Series-comparison provenance summaries and compact protocol-context summaries
 now come from the shared typed layer in

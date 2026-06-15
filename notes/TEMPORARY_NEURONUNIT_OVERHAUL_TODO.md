@@ -160,3 +160,11 @@ Remove this file when the listed items are either:
       - explicit-grid mode remains available through
         `resampling_grid_source = "explicit_grid"` plus
         `resampling_grid_values = [ ... ]`
+- [x] Separate suite aggregation semantics from suite presentation so the
+      overview cards stop computing aggregate status/norm rollups as loose dict
+      math.
+      - added the typed `olfactorybulb.neuronunit.suite_scores` layer
+      - suite overviews now emit `suite_aggregate_score` in addition to
+        `suite_norm_score_summary`
+      - the dashboard matrix header now prefers that typed aggregate rollup
+        instead of reconstructing one from summary dicts

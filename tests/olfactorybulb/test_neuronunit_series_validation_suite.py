@@ -312,6 +312,7 @@ assert [item.status for item in adapted_items] == ["PASS", "PASS"]
 assert adapted_items[0].detail_level == "summary"
 assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 0, "FAIL": 0}
+assert adapted_items[0].evidence["suite_candidate_ids"] == ["SyntheticModel1", "SyntheticModel2"]
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"].startswith("MAE 1 Hz | Welch p ")
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
 assert adapted_items[0].evidence["suite_norm_score_summary"] == {
@@ -320,6 +321,15 @@ assert adapted_items[0].evidence["suite_norm_score_summary"] == {
     "mean": 1.0,
     "median": 1.0,
     "min": 1.0,
+}
+assert adapted_items[0].evidence["suite_aggregate_score"] == {
+    "status_rollup": "worst_case",
+    "norm_rollup": "minimum",
+    "score_kind": "worst_case_minimum_norm",
+    "score_interpretation": "Aggregate suite score derived from the worst detailed-case status plus the minimum normalized case score.",
+    "status": "PASS",
+    "score_text": "worst PASS, min norm 1",
+    "score_value": 1.0,
 }
 assert adapted_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert adapted_items[1].evidence["reference_values_Hz"] == [6.0, 11.0]

@@ -2044,11 +2044,15 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     protocol-evidence bundle
   - one shared series-suite overview when multiple contiguous
     `reference_curve_match` checks are compiled together
+  - a typed suite-aggregation layer in `olfactorybulb.neuronunit.suite_scores`
+    so suite-level status/norm rollups are computed once and then adapted into
+    `suite_aggregate_score` evidence for the maintained audit shell
 
 The remaining open questions are now narrower:
 
-- whether the next statistical layer should stay with per-bin equivalence gates
-  plus residual diagnostics or grow into richer suite-level score composition
+- whether the next statistical layer should stay with the current per-bin
+  equivalence gates plus the new default suite-aggregate rollup or grow into
+  richer alternative suite-level scoring policies
 - whether transform generalization should stop at explicit piecewise-linear
   mappings or later grow into context-dependent transforms
 - whether alignment generalization should stop at the current

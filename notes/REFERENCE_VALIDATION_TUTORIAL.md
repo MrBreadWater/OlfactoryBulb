@@ -1701,6 +1701,10 @@ Important details:
   series-comparison suite overview plus the per-check detail items
 - suite-case score labels and normalized scores now follow the declared
   `score_family` instead of always collapsing to a residual-only label
+- the shared suite overview now carries a typed `suite_aggregate_score`
+  payload in addition to `suite_norm_score_summary`, so the dashboard can show
+  the configured aggregate rollup instead of reconstructing it from raw
+  detailed evidence
 - reference/model provenance summaries for series comparisons now come from a
   shared typed provenance contract rather than bespoke dict assembly in the
   rule bridge

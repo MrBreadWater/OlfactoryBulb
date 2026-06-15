@@ -657,14 +657,18 @@ contract for future sessions.
     item through `olfactorybulb.neuronunit.suite_presentation` rather than
     hand-building one-off rollup cards in each adapter. Keep the per-suite
     adapter focused on case-specific evidence/item construction and push the
-    shared overview/matrix contract into that helper layer. Mark the overview item
-    `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts stay tied to
-    the detailed cases rather than double-counting the overview. When a suite
-    overview carries `suite_norm_score_summary`, surface that in the dashboard
-    matrix header instead of hiding it only in raw evidence.
-    matrix has a compact score or norm label that helps scanning, emit it in
-    the suite-case payload rather than teaching the dashboard to reverse-engineer
-    it from raw detailed evidence.
+    shared overview/matrix contract into that helper layer. Keep suite
+    aggregation semantics in the typed `olfactorybulb.neuronunit.suite_scores`
+    layer so the aggregate status/norm policy is not reimplemented as loose
+    dict math inside each adapter or in the dashboard renderer. Mark the
+    overview item `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts
+    stay tied to the detailed cases rather than double-counting the overview.
+    When a suite overview carries `suite_aggregate_score` or
+    `suite_norm_score_summary`, surface that in the dashboard matrix header
+    instead of hiding it only in raw evidence. If the matrix has a compact
+    score or norm label that helps scanning, emit it in the suite-case payload
+    rather than teaching the dashboard to reverse-engineer it from raw
+    detailed evidence.
 
 ## 5b. Reusable infrastructure extraction rules
 

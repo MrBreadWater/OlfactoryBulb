@@ -318,9 +318,11 @@ the maintained path now emits:</p>
 top-level PASS/WARN/FAIL counts still reflect the detailed validation cases
 rather than double-counting the overview card.</p>
 <p>The shared suite overview / matrix contract lives in
-<code>olfactorybulb.neuronunit.suite_presentation</code>. If you add another SciUnit-
-backed suite family, reuse that helper layer rather than hand-building a new
-overview card or dashboard payload shape inside the specific adapter.</p>
+<code>olfactorybulb.neuronunit.suite_presentation</code>, and the typed aggregate-score
+semantics live in <code>olfactorybulb.neuronunit.suite_scores</code>. If you add another
+SciUnit-backed suite family, reuse those layers rather than hand-building a
+new overview card, aggregate rollup, or dashboard payload shape inside the
+specific adapter.</p>
 <p>One consequence of that split is that <strong>reference-band assumptions belong in
 config</strong>, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as
@@ -582,8 +584,9 @@ emitting one one-case suite overview per rule.</p>
 - <code>equivalence_only</code>: equivalence diagnostic text such as <code>TOST p 0.013</code>
 - hybrid families: both residual and statistical text</p>
 <p>When normalized case scores are available, the suite overview also emits a
-<code>suite_norm_score_summary</code> so downstream dashboards or reports can show an
-aggregate continuous score summary instead of only binary pass/fail counts.</p>
+<code>suite_norm_score_summary</code> and a typed <code>suite_aggregate_score</code> payload, so
+downstream dashboards or reports can show both the continuous score summary
+and the configured aggregate rollup instead of only binary pass/fail counts.</p>
 <p>Series-comparison provenance summaries and compact protocol-context summaries
 now come from the shared typed layer in
 <code>olfactorybulb.neuronunit.provenance</code>. If you need to extend the emitted
