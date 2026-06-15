@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from olfactorybulb.audit.protocol_evidence import (
     ProtocolEvidenceBundle,
+    ProtocolEvidenceRowPayload,
+    ProtocolEvidenceRowTable,
     ProtocolEvidenceSeriesSpec,
     ProtocolEvidenceStyleMap,
     ProtocolEvidenceValueMap,
@@ -54,6 +56,13 @@ rows_source.append({"cell_name": "CellC", "current_pA": 150.0, "nested": {"rate"
 
 assert isinstance(bundle.values, ProtocolEvidenceValueMap)
 assert isinstance(bundle.values["fi_curve_rows"][0], FrozenMappingPayload)
+row_table = bundle.row_table("fi_curve_rows")
+assert isinstance(row_table, ProtocolEvidenceRowTable)
+assert isinstance(row_table[0], ProtocolEvidenceRowPayload)
+assert row_table.to_rows() == [
+    {"cell_name": "CellA", "current_pA": 50.0, "nested": {"rate": 3.0}},
+    {"cell_name": "CellB", "current_pA": 100.0, "nested": {"rate": 5.0}},
+]
 assert bundle.rows("fi_curve_rows") == [
     {"cell_name": "CellA", "current_pA": 50.0, "nested": {"rate": 3.0}},
     {"cell_name": "CellB", "current_pA": 100.0, "nested": {"rate": 5.0}},

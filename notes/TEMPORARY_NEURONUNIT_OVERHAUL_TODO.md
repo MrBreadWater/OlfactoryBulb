@@ -564,6 +564,15 @@ Remove this file when the listed items are either:
         `reference_curve_match` spec entrypoints now use that typed layer
       - tests still may hand raw rows to the coercion boundary, but the
       maintained rule/spec runtime no longer advertises fresh raw row lists
+- [x] Keep protocol-evidence row collections on the same typed-wrapper pattern
+      instead of rediscovering fresh row dict lists at the bundle/model
+      boundary.
+      - added `ProtocolEvidenceRowPayload` / `ProtocolEvidenceRowTable`
+      - `ProtocolEvidenceBundle` now exposes `row_table(...)`, and the shared
+        reference-validation model returns that typed collection for
+        `get_protocol_evidence_rows(...)`
+      - the series-comparison path now consumes the typed row-table accessor
+        before coercing onto its series-core row contract
 - [x] Keep row-derived reference-band case state on one typed binding object
       instead of rebuilding band math, observation/review payloads, and
       criterion text from parallel locals inside `build_cases(...)`.

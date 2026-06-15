@@ -685,6 +685,11 @@ contract for future sessions.
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple
     through protocol results and rule consumers.
+    Keep protocol-evidence row collections typed too. Once a maintained
+    protocol bundle exposes row-shaped evidence such as `fi_curve_rows`, move
+    that payload through a shared `ProtocolEvidenceRowTable` /
+    `ProtocolEvidenceRowPayload` wrapper instead of teaching each consumer to
+    rediscover a fresh `list[dict]` view at the bundle/model boundary.
     Likewise, keep the migrated suite compiler/model seam on the shared
     `ReferenceValidationRuntimeData` bundle instead of teaching each suite
     compiler to pass parallel `summary`, `metrics`, and `protocol_evidence`

@@ -1746,7 +1746,7 @@ class SeriesPredictionBundle:
 
     @property
     def rows(self) -> SeriesRowTable:
-        return coerce_series_row_table(self.protocol_evidence.rows(self.protocol_evidence_key))
+        return coerce_series_row_table(self.protocol_evidence.row_table(self.protocol_evidence_key))
 
     @property
     def context(self) -> SeriesContextPayload:

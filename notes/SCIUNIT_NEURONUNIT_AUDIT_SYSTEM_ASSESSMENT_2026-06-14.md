@@ -2243,6 +2243,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer
     instead of teaching each rule/spec helper to expect fresh CSV-style dict
     rows directly
+  - the protocol-evidence row seam is tighter too: once a maintained protocol
+    bundle exposes row-shaped evidence such as `fi_curve_rows`, that payload
+    now moves through a shared typed `ProtocolEvidenceRowTable` wrapper at the
+    bundle/model boundary instead of being rediscovered as one more
+    `list[dict]` view in each consumer
   - the reference-band case seam is tighter too: once a maintained
     `reference_band_rows` check has matched a typed literature row to a
     declared property spec, the band math, criterion text, observation, and

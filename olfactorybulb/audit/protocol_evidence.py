@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import copy
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
@@ -17,6 +17,36 @@ class ProtocolEvidenceStyleMap(FrozenMappingPayload):
 
 class ProtocolEvidenceValueMap(FrozenMappingPayload):
     """Typed frozen mapping wrapper for protocol-evidence payload tables."""
+
+
+class ProtocolEvidenceRowPayload(FrozenMappingPayload):
+    """Frozen row payload used by typed protocol-evidence row tables."""
+
+
+@dataclass(frozen=True)
+class ProtocolEvidenceRowTable(Sequence[ProtocolEvidenceRowPayload]):
+    """Typed protocol-evidence row collection with sequence compatibility."""
+
+    rows: Sequence[ProtocolEvidenceRowPayload | Mapping[str, object]]
+
+    def __post_init__(self) -> None:
+        normalized = tuple(
+            coerce_mapping_payload(row, payload_type=ProtocolEvidenceRowPayload)
+            for row in tuple(self.rows)
+        )
+        object.__setattr__(self, "rows", normalized)
+
+    def __getitem__(self, index: int) -> ProtocolEvidenceRowPayload:
+        return self.rows[index]
+
+    def __len__(self) -> int:
+        return len(self.rows)
+
+    def __iter__(self) -> Iterator[ProtocolEvidenceRowPayload]:
+        return iter(self.rows)
+
+    def to_rows(self) -> list[dict[str, object]]:
+        return [row.to_dict() for row in self.rows]
 
 
 @dataclass(frozen=True)
@@ -117,17 +147,18 @@ class ProtocolEvidenceBundle:
         updated[str(key)] = copy.deepcopy(value)
         return ProtocolEvidenceBundle(values=updated, series_specs=self.series_specs)
 
-    def rows(self, evidence_key: str) -> list[dict[str, Any]]:
+    def row_table(self, evidence_key: str) -> ProtocolEvidenceRowTable:
         rows = self.values.get(evidence_key, [])
         if not isinstance(rows, list | tuple):
-            return []
-        result: list[dict[str, Any]] = []
-        for row in rows:
-            if isinstance(row, FrozenMappingPayload):
-                result.append(row.to_dict())
-            elif isinstance(row, Mapping):
-                result.append(dict(row))
-        return result
+            return ProtocolEvidenceRowTable(())
+        return ProtocolEvidenceRowTable(
+            row
+            for row in rows
+            if isinstance(row, FrozenMappingPayload | Mapping)
+        )
+
+    def rows(self, evidence_key: str) -> list[dict[str, Any]]:
+        return self.row_table(evidence_key).to_rows()
 
     def series_spec_map(self) -> dict[str, ProtocolEvidenceSeriesSpec]:
         return protocol_series_spec_map(self.series_specs)
@@ -145,6 +176,14 @@ def protocol_series_spec_map(
     for spec in specs or ():
         result[str(spec.evidence_key).strip()] = spec
     return result
+
+
+def coerce_protocol_evidence_row_table(
+    rows: ProtocolEvidenceRowTable | Sequence[ProtocolEvidenceRowPayload | Mapping[str, object]],
+) -> ProtocolEvidenceRowTable:
+    if isinstance(rows, ProtocolEvidenceRowTable):
+        return rows
+    return ProtocolEvidenceRowTable(rows)
 
 
 def coerce_protocol_evidence_bundle(
@@ -205,10 +244,13 @@ def intrinsic_fi_curve_series_spec(
 
 __all__ = [
     "ProtocolEvidenceBundle",
+    "ProtocolEvidenceRowPayload",
+    "ProtocolEvidenceRowTable",
     "ProtocolEvidenceSeriesSpec",
     "ProtocolEvidenceStyleMap",
     "ProtocolEvidenceValueMap",
     "coerce_protocol_evidence_bundle",
+    "coerce_protocol_evidence_row_table",
     "intrinsic_fi_curve_series_spec",
     "protocol_evidence_bundle_from_resultish",
     "protocol_series_spec_map",

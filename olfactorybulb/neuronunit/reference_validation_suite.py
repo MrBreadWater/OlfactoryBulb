@@ -10,7 +10,11 @@ import quantities as pq
 import sciunit
 
 from olfactorybulb.audit.core import rounded
-from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, coerce_protocol_evidence_bundle
+from olfactorybulb.audit.protocol_evidence import (
+    ProtocolEvidenceBundle,
+    ProtocolEvidenceRowTable,
+    coerce_protocol_evidence_bundle,
+)
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesMetricRows,
     ProvidesMetricSummary,
@@ -127,8 +131,8 @@ class ReferenceValidationModel(
             values[entity] = measurement_with_unit(numeric, unit_text)
         return values
 
-    def get_protocol_evidence_rows(self, evidence_key: str) -> list[dict[str, Any]]:
-        return self.protocol_evidence.rows(evidence_key)
+    def get_protocol_evidence_rows(self, evidence_key: str) -> ProtocolEvidenceRowTable:
+        return self.protocol_evidence.row_table(evidence_key)
 
     def get_protocol_evidence_map(self) -> dict[str, Any]:
         return self.protocol_evidence.to_dict()

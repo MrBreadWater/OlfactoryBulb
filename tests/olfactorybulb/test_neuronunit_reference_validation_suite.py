@@ -8,7 +8,11 @@ from types import SimpleNamespace
 
 import quantities as pq
 
-from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
+from olfactorybulb.audit.protocol_evidence import (
+    ProtocolEvidenceBundle,
+    ProtocolEvidenceRowPayload,
+    ProtocolEvidenceRowTable,
+)
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.reference_rows import ReferenceRowRecord
 from olfactorybulb.audit.core import AuditReport
@@ -124,9 +128,10 @@ assert bundle_model.model.runtime_data.protocol_evidence.to_dict() == {
 assert bundle_model.model.get_protocol_evidence_bundle().to_dict() == {
     "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
 }
-assert bundle_model.model.get_protocol_evidence_rows("fi_curve_rows") == [
-    {"cell_name": "SyntheticCell", "current_pA": 100.0}
-]
+protocol_rows = bundle_model.model.get_protocol_evidence_rows("fi_curve_rows")
+assert isinstance(protocol_rows, ProtocolEvidenceRowTable)
+assert isinstance(protocol_rows[0], ProtocolEvidenceRowPayload)
+assert protocol_rows.to_rows() == [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
 assert bundle_model.model.get_protocol_evidence_map() == {
     "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
 }
