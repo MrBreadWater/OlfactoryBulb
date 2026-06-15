@@ -104,6 +104,9 @@ At runtime, keep those layers distinct:
   `ReferenceValidationDocument`
 - `reference_validation_protocol_core.py` owns the typed protocol spec,
   registry lookup, protocol execution cache, and cache-key normalization
+- `protocol_evidence.py` owns the typed protocol-evidence bundle and any
+  graphable protocol-evidence row-series specs, so protocol runners do not have
+  to thread `protocol_evidence` and `evidence_series_specs` as parallel values
 - `reference_validation_plan.py` compiles that typed document into one typed
   `ReferenceValidationPlan`
 - the plan also precompiles the grouped/single rule-dispatch sequence, so the
@@ -840,6 +843,7 @@ from __future__ import annotations
 
 import argparse
 
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_validation_protocols import (
     ProtocolRunResult,
     ValidationProtocolSpec,
@@ -861,12 +865,14 @@ def _run_protocol(args: argparse.Namespace, protocol_config: dict[str, object]) 
             "fi_gain_Hz_per_50pA": 9.8,
         }
     ]
-    protocol_evidence = {
-        "step_duration_ms": protocol_config.get("step_duration_ms", 1000.0),
-        "current_start_pA": protocol_config.get("current_start_pA", 0.0),
-        "current_stop_pA": protocol_config.get("current_stop_pA", 400.0),
-        "current_step_pA": protocol_config.get("current_step_pA", 50.0),
-    }
+    protocol_evidence = ProtocolEvidenceBundle(
+        values={
+            "step_duration_ms": protocol_config.get("step_duration_ms", 1000.0),
+            "current_start_pA": protocol_config.get("current_start_pA", 0.0),
+            "current_stop_pA": protocol_config.get("current_stop_pA", 400.0),
+            "current_step_pA": protocol_config.get("current_step_pA", 50.0),
+        }
+    )
     return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")
 
 

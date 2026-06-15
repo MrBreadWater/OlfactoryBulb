@@ -169,6 +169,13 @@ Remove this file when the listed items are either:
         protocol-evidence context second
       - this keeps conversions like point current versus current flux explicit
         in config instead of burying them in runner code
+- [x] Stop threading protocol evidence as two parallel values and move the
+      runtime onto one typed evidence bundle.
+      - added `ProtocolEvidenceBundle`
+      - `ProtocolRunResult` now carries one bundled evidence object
+      - cache annotation, protocol-executed rendering, and series-rule
+        fallback resolution now consume that same bundle instead of a raw
+        dict plus separate `evidence_series_specs`
 - [x] Separate suite aggregation semantics from suite presentation so the
       overview cards stop computing aggregate status/norm rollups as loose dict
       math.

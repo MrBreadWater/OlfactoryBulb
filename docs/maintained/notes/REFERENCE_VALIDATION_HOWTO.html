@@ -238,6 +238,9 @@ validation that uses one registered protocol runner:</p>
   <code>ReferenceValidationDocument</code></li>
 <li><code>reference_validation_protocol_core.py</code> owns the typed protocol spec,
   registry lookup, protocol execution cache, and cache-key normalization</li>
+<li><code>protocol_evidence.py</code> owns the typed protocol-evidence bundle and any
+  graphable protocol-evidence row-series specs, so protocol runners do not have
+  to thread <code>protocol_evidence</code> and <code>evidence_series_specs</code> as parallel values</li>
 <li><code>reference_validation_plan.py</code> compiles that typed document into one typed
   <code>ReferenceValidationPlan</code></li>
 <li>the plan also precompiles the grouped/single rule-dispatch sequence, so the
@@ -886,6 +889,7 @@ metric_group_field = &quot;cell_type&quot;
 
 import argparse
 
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_validation_protocols import (
     ProtocolRunResult,
     ValidationProtocolSpec,
@@ -907,12 +911,14 @@ def _run_protocol(args: argparse.Namespace, protocol_config: dict[str, object]) 
             &quot;fi_gain_Hz_per_50pA&quot;: 9.8,
         }
     ]
-    protocol_evidence = {
-        &quot;step_duration_ms&quot;: protocol_config.get(&quot;step_duration_ms&quot;, 1000.0),
-        &quot;current_start_pA&quot;: protocol_config.get(&quot;current_start_pA&quot;, 0.0),
-        &quot;current_stop_pA&quot;: protocol_config.get(&quot;current_stop_pA&quot;, 400.0),
-        &quot;current_step_pA&quot;: protocol_config.get(&quot;current_step_pA&quot;, 50.0),
-    }
+    protocol_evidence = ProtocolEvidenceBundle(
+        values={
+            &quot;step_duration_ms&quot;: protocol_config.get(&quot;step_duration_ms&quot;, 1000.0),
+            &quot;current_start_pA&quot;: protocol_config.get(&quot;current_start_pA&quot;, 0.0),
+            &quot;current_stop_pA&quot;: protocol_config.get(&quot;current_stop_pA&quot;, 400.0),
+            &quot;current_step_pA&quot;: protocol_config.get(&quot;current_step_pA&quot;, 50.0),
+        }
+    )
     return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field=&quot;cell_type&quot;)
 
 

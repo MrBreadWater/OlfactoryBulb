@@ -15,6 +15,7 @@ import numpy as np
 
 from fi_curve_utils import find_spike_times_milliseconds
 from olfactorybulb.audit.protocol_evidence import (
+    ProtocolEvidenceBundle,
     intrinsic_fi_curve_series_spec,
 )
 from olfactorybulb.audit.reference_validation_protocol_core import (
@@ -1059,7 +1060,11 @@ def _run_registered_burton_protocol(args: argparse.Namespace, protocol_config: d
         "cell_names": [metric["cell_name"] for metric in metrics],
         "cell_types": ",".join(cell_types),
     }
-    return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")
+    return ProtocolRunResult(
+        metrics=metrics,
+        protocol_evidence=ProtocolEvidenceBundle(values=protocol_evidence),
+        group_field="cell_type",
+    )
 
 
 register_validation_protocol(
@@ -1146,9 +1151,11 @@ def _run_registered_gc_protocol(args: argparse.Namespace, protocol_config: dict[
     }
     return ProtocolRunResult(
         metrics=metrics,
-        protocol_evidence=protocol_evidence,
+        protocol_evidence=ProtocolEvidenceBundle(
+            values=protocol_evidence,
+            series_specs=(intrinsic_fi_curve_series_spec(),),
+        ),
         group_field="gc_subtype",
-        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     )
 
 
@@ -1181,9 +1188,11 @@ def _run_registered_epl_fsi_protocol(args: argparse.Namespace, protocol_config: 
     }
     return ProtocolRunResult(
         metrics=metrics,
-        protocol_evidence=protocol_evidence,
+        protocol_evidence=ProtocolEvidenceBundle(
+            values=protocol_evidence,
+            series_specs=(intrinsic_fi_curve_series_spec(),),
+        ),
         group_field="cell_type",
-        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     )
 
 
@@ -1329,7 +1338,11 @@ def _run_registered_epli_correctness_protocol(args: argparse.Namespace, protocol
             metric["candidate_EPLIs__MCs_code"] = 0.0
             metric["candidate_EPLIs__TCs_code"] = 0.0
 
-    return ProtocolRunResult(metrics=[metric], protocol_evidence={"candidate_slice": candidate_slice or ""}, group_field="validation_group")
+    return ProtocolRunResult(
+        metrics=[metric],
+        protocol_evidence=ProtocolEvidenceBundle(values={"candidate_slice": candidate_slice or ""}),
+        group_field="validation_group",
+    )
 
 
 register_validation_protocol(

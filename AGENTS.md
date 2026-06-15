@@ -641,6 +641,10 @@ contract for future sessions.
     `olfactorybulb.neuronunit.provenance` and then adapt it into evidence,
     rather than growing more one-off dict-building helpers inside
     `series_validation_suite.py`.
+    Likewise, keep protocol evidence bundled through the typed
+    `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
+    `protocol_evidence` dict plus a separate `evidence_series_specs` tuple
+    through protocol results and rule consumers.
     Inside the series-comparison core itself, prefer the typed
     `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
     x-key/y-key/unit/transform parameter bundles across bins, paths,

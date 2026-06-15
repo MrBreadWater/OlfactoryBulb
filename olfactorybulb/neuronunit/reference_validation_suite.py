@@ -10,6 +10,7 @@ import quantities as pq
 import sciunit
 
 from olfactorybulb.audit.core import rounded
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, coerce_protocol_evidence_bundle
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesMetricRows,
     ProvidesMetricSummary,
@@ -61,13 +62,13 @@ class ReferenceValidationModel(
         *,
         summary: dict[str, dict[str, float]],
         metrics: list[dict[str, Any]] | None = None,
-        protocol_evidence: dict[str, Any] | None = None,
+        protocol_evidence: ProtocolEvidenceBundle | dict[str, Any] | None = None,
         name: str = "reference-validation-summary-model",
     ) -> None:
         super().__init__(name=name)
         self.summary = summary
         self.metrics = list(metrics or [])
-        self.protocol_evidence = dict(protocol_evidence or {})
+        self.protocol_evidence = coerce_protocol_evidence_bundle(protocol_evidence)
 
     def get_metric_summary(self, group: str, metric_key: str, *, unit_text: str = "") -> float | pq.Quantity:
         value = float(self.summary.get(group, {}).get(metric_key, float("nan")))
@@ -96,21 +97,10 @@ class ReferenceValidationModel(
         return values
 
     def get_protocol_evidence_rows(self, evidence_key: str) -> list[dict[str, Any]]:
-        rows = self.protocol_evidence.get(evidence_key, [])
-        if not isinstance(rows, list):
-            return []
-        return [dict(row) for row in rows]
+        return self.protocol_evidence.rows(evidence_key)
 
     def get_protocol_evidence_map(self) -> dict[str, Any]:
-        payload: dict[str, Any] = {}
-        for key, value in self.protocol_evidence.items():
-            if isinstance(value, list) and value and all(isinstance(row, dict) for row in value):
-                payload[key] = [dict(row) for row in value]
-            elif isinstance(value, dict):
-                payload[key] = dict(value)
-            else:
-                payload[key] = value
-        return payload
+        return self.protocol_evidence.to_dict()
 
 
 class ReferenceBandScore(sciunit.Score):

@@ -1,7 +1,8 @@
-"""Typed contracts for graphable protocol-evidence payloads."""
+"""Typed contracts for protocol-evidence payloads."""
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -78,6 +79,33 @@ class ProtocolEvidenceSeriesSpec:
         )
 
 
+@dataclass(frozen=True)
+class ProtocolEvidenceBundle:
+    values: dict[str, Any] = field(default_factory=dict)
+    series_specs: tuple[ProtocolEvidenceSeriesSpec, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "values", copy.deepcopy(dict(self.values)))
+        object.__setattr__(self, "series_specs", tuple(self.series_specs))
+
+    def to_dict(self) -> dict[str, Any]:
+        return copy.deepcopy(self.values)
+
+    def with_value(self, key: str, value: Any) -> "ProtocolEvidenceBundle":
+        updated = self.to_dict()
+        updated[str(key)] = copy.deepcopy(value)
+        return ProtocolEvidenceBundle(values=updated, series_specs=self.series_specs)
+
+    def rows(self, evidence_key: str) -> list[dict[str, Any]]:
+        rows = self.values.get(evidence_key, [])
+        if not isinstance(rows, list):
+            return []
+        return [dict(row) for row in rows if isinstance(row, dict)]
+
+    def series_spec_map(self) -> dict[str, ProtocolEvidenceSeriesSpec]:
+        return protocol_series_spec_map(self.series_specs)
+
+
 def protocol_series_spec_map(
     specs: list[ProtocolEvidenceSeriesSpec] | tuple[ProtocolEvidenceSeriesSpec, ...] | None,
 ) -> dict[str, ProtocolEvidenceSeriesSpec]:
@@ -85,6 +113,31 @@ def protocol_series_spec_map(
     for spec in specs or ():
         result[str(spec.evidence_key).strip()] = spec
     return result
+
+
+def coerce_protocol_evidence_bundle(
+    values: "ProtocolEvidenceBundle | dict[str, Any] | None" = None,
+    *,
+    series_specs: list[ProtocolEvidenceSeriesSpec] | tuple[ProtocolEvidenceSeriesSpec, ...] | None = None,
+) -> ProtocolEvidenceBundle:
+    if isinstance(values, ProtocolEvidenceBundle):
+        if series_specs:
+            merged_specs = tuple(values.series_specs) + tuple(series_specs)
+            deduped: dict[str, ProtocolEvidenceSeriesSpec] = {}
+            for spec in merged_specs:
+                deduped[str(spec.evidence_key).strip()] = spec
+            return ProtocolEvidenceBundle(values=values.values, series_specs=tuple(deduped.values()))
+        return values
+    return ProtocolEvidenceBundle(values=dict(values or {}), series_specs=tuple(series_specs or ()))
+
+
+def protocol_evidence_bundle_from_resultish(result: Any | None) -> ProtocolEvidenceBundle:
+    if result is None:
+        return ProtocolEvidenceBundle()
+    return coerce_protocol_evidence_bundle(
+        getattr(result, "protocol_evidence", None),
+        series_specs=getattr(result, "evidence_series_specs", ()) or (),
+    )
 
 
 def intrinsic_fi_curve_series_spec(
@@ -119,7 +172,10 @@ def intrinsic_fi_curve_series_spec(
 
 
 __all__ = [
+    "ProtocolEvidenceBundle",
     "ProtocolEvidenceSeriesSpec",
+    "coerce_protocol_evidence_bundle",
     "intrinsic_fi_curve_series_spec",
+    "protocol_evidence_bundle_from_resultish",
     "protocol_series_spec_map",
 ]

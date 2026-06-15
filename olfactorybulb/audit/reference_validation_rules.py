@@ -10,7 +10,7 @@ import math
 import numpy as np
 
 from olfactorybulb.audit import AuditItem, series_visual_spec
-from olfactorybulb.audit.protocol_evidence import protocol_series_spec_map
+from olfactorybulb.audit.protocol_evidence import protocol_evidence_bundle_from_resultish
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
@@ -519,10 +519,9 @@ def _build_series_rule_items(
 ) -> list[AuditItem]:
     if not rules:
         return []
-    protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
-    evidence_series_specs = protocol_series_spec_map(
-        getattr(context.protocol_result, "evidence_series_specs", ()) or ()
-    )
+    evidence_bundle = protocol_evidence_bundle_from_resultish(context.protocol_result)
+    protocol_evidence = evidence_bundle.to_dict()
+    evidence_series_specs = evidence_bundle.series_spec_map()
     cases = []
     for rule in rules:
         loader = str(rule["loader"])
@@ -597,10 +596,10 @@ def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | 
 @register_validation_rule("protocol_executed")
 def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     parsed_spec = ProtocolExecutedRuleSpec.from_rule(rule)
-    protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
+    evidence_bundle = protocol_evidence_bundle_from_resultish(context.protocol_result)
+    protocol_evidence = evidence_bundle.to_dict()
     series_visuals: list[dict[str, Any]] = []
-    evidence_series_specs = tuple(getattr(context.protocol_result, "evidence_series_specs", ()) or ())
-    for evidence_spec in evidence_series_specs:
+    for evidence_spec in evidence_bundle.series_specs:
         series_visuals.append(evidence_spec.to_visual_spec())
     if not series_visuals:
         fallback_rows = protocol_evidence.get(parsed_spec.fallback_series_key)

@@ -9,7 +9,7 @@ import hashlib
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
-from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceSeriesSpec
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, coerce_protocol_evidence_bundle
 
 
 def _normalize_cache_value(value: Any) -> Any:
@@ -67,10 +67,13 @@ class ProtocolExecutionCacheInfo:
 @dataclass(frozen=True)
 class ProtocolRunResult:
     metrics: list[dict[str, Any]]
-    protocol_evidence: dict[str, Any]
+    protocol_evidence: ProtocolEvidenceBundle | dict[str, Any]
     group_field: str = "cell_type"
-    evidence_series_specs: tuple[ProtocolEvidenceSeriesSpec, ...] = ()
     cache_info: ProtocolExecutionCacheInfo | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "metrics", copy.deepcopy(list(self.metrics)))
+        object.__setattr__(self, "protocol_evidence", coerce_protocol_evidence_bundle(self.protocol_evidence))
 
 
 @dataclass(frozen=True)
@@ -180,13 +183,10 @@ def _annotate_result_with_cache_info(
     result: ProtocolRunResult,
     cache_info: ProtocolExecutionCacheInfo,
 ) -> ProtocolRunResult:
-    protocol_evidence = copy.deepcopy(result.protocol_evidence)
-    protocol_evidence["protocol_cache"] = cache_info.to_evidence()
     return ProtocolRunResult(
-        metrics=copy.deepcopy(result.metrics),
-        protocol_evidence=protocol_evidence,
+        metrics=result.metrics,
+        protocol_evidence=result.protocol_evidence.with_value("protocol_cache", cache_info.to_evidence()),
         group_field=result.group_field,
-        evidence_series_specs=result.evidence_series_specs,
         cache_info=cache_info,
     )
 
@@ -208,10 +208,9 @@ def execute_validation_protocol(
         )
     fresh = spec.run(args, dict(protocol_config))
     _PROTOCOL_RESULT_CACHE[key] = ProtocolRunResult(
-        metrics=copy.deepcopy(fresh.metrics),
-        protocol_evidence=copy.deepcopy(fresh.protocol_evidence),
+        metrics=fresh.metrics,
+        protocol_evidence=fresh.protocol_evidence,
         group_field=fresh.group_field,
-        evidence_series_specs=fresh.evidence_series_specs,
         cache_info=None,
     )
     return _annotate_result_with_cache_info(

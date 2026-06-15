@@ -24,6 +24,7 @@ from olfactorybulb.audit.reference_validation_protocols import (
     get_validation_protocol_spec,
     protocol_execution_cache_size,
 )
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, intrinsic_fi_curve_series_spec
 from olfactorybulb.audit.reference_validation_specs import (
     NotePresenceRuleSpec,
     ProtocolExecutedRuleSpec,
@@ -146,6 +147,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
             import argparse
 
             from olfactorybulb.audit import AuditItem
+            from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, intrinsic_fi_curve_series_spec
             from olfactorybulb.audit.reference_validation_protocols import (
                 ProtocolRunResult,
                 ValidationProtocolSpec,
@@ -171,14 +173,17 @@ with tempfile.TemporaryDirectory() as tmpdir:
                             "custom_score": float(args.custom_score),
                         }
                     ],
-                    protocol_evidence={
-                        "step_duration_ms": protocol_config.get("step_duration_ms", 1000.0),
-                        "protocol_label": protocol_config.get("protocol_label", "temporary protocol"),
-                        "fi_curve_rows": [
-                            {"current_pA": 0.0, "firing_rate_Hz": 0.0},
-                            {"current_pA": 50.0, "firing_rate_Hz": 3.0},
-                        ],
-                    },
+                    protocol_evidence=ProtocolEvidenceBundle(
+                        values={
+                            "step_duration_ms": protocol_config.get("step_duration_ms", 1000.0),
+                            "protocol_label": protocol_config.get("protocol_label", "temporary protocol"),
+                            "fi_curve_rows": [
+                                {"current_pA": 0.0, "firing_rate_Hz": 0.0},
+                                {"current_pA": 50.0, "firing_rate_Hz": 3.0},
+                            ],
+                        },
+                        series_specs=(intrinsic_fi_curve_series_spec(),),
+                    ),
                     group_field="cell_type",
                 )
 
@@ -288,6 +293,12 @@ with tempfile.TemporaryDirectory() as tmpdir:
         assert isinstance(temp_plan.rule_dispatches[0], SingleRuleDispatch)
         assert isinstance(temp_plan.rule_dispatches[1], SingleRuleDispatch)
         assert temp_plan.skip_item is not None
+        first_protocol_result = temp_plan.run_protocol(argparse.Namespace(custom_score=4.5))
+        assert isinstance(first_protocol_result.protocol_evidence, ProtocolEvidenceBundle)
+        assert first_protocol_result.protocol_evidence.to_dict()["protocol_label"] == "temporary protocol"
+        assert first_protocol_result.protocol_evidence.series_specs[0].evidence_key == "fi_curve_rows"
+        clear_protocol_execution_cache()
+        temp_module.RUN_COUNT = 0
         skip_item = temp_plan.build_skip_item(args=argparse.Namespace(custom_score=4.5, reference_sigma_multiplier=2.0))
         assert skip_item is not None
         assert skip_item.check_id == "temp_validation_skipped"

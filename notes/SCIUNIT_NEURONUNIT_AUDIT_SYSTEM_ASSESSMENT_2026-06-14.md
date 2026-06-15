@@ -2068,6 +2068,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     dashboard, and `reference_curve_match` no longer need to special-case
     `fi_curve_rows`; the model-side defaults can come from the protocol
     contract while reference-side and comparison-space units stay explicit
+  - protocol results now carry one typed protocol-evidence bundle instead of a
+    raw `protocol_evidence` dict plus a parallel `evidence_series_specs`
+    channel, so cache annotation, row lookup, protocol-executed rendering, and
+    series-rule fallback resolution all consume the same evidence object
   - the declarative `reference_band_rows` path now also compiles through typed
     `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` objects instead
     of keeping bounds, quantile-field selection, and review parsing sprawled
