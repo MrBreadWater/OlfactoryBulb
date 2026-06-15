@@ -233,6 +233,11 @@ That boundary matters.
 
 If you need a new measured quantity, add it to the protocol runner output.
 If you need a new decision rule, add a new rule kind.
+If a protocol needs an auxiliary stimulus that is not yet backed by normalized
+reference rows, such as a short afterdepolarization pulse used only to expose
+`adp_duration_ms` or `adp_depth_mV`, put that stimulus in `[protocol]` and
+keep the resulting metrics unjudged until the dataset layer has real reference
+rows for them.
 
 If a result should also render as a chart, declare that in the rule output
 instead of letting the dashboard guess from array-shaped evidence. Use the
@@ -252,6 +257,21 @@ series_visuals = [
 
 Use `backend="matplotlib"` for the standard plots and reserve `backend="svg"`
 for compact bespoke renderers that really need hand-tuned HTML/SVG behavior.
+If the evidence is row-based rather than pre-assembled arrays, use
+`row_sources` so the dashboard can plot every model curve separately and
+overlay target curves when reference point rows exist:
+
+```python
+series_visual_spec(
+    title="Model vs target f-I curves",
+    row_sources=[
+        {"key": "reference_fi_curve_rows", "label": "Target", "role": "reference"},
+        {"key": "model_fi_curve_rows", "group_by": ["cell_name"], "role": "model"},
+    ],
+    backend="matplotlib",
+    style={"line_width": 1.8, "marker_size": 3.2},
+)
+```
 
 For the SciUnit-backed suite rule families (`reference_band_rows`,
 `summary_metric_*`, the grouped comparison rules, and `reference_curve_match`),

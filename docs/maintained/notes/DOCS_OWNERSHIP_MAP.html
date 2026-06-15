@@ -303,9 +303,29 @@ multiple places and to decide where a doc change should land first.</p>
 <li>source-of-truth pointers</li>
 </ul>
 </li>
-<li>Should not own:<ul>
+<li>
+<p>Should not own:</p>
+<ul>
 <li>long user HOWTO content already documented elsewhere</li>
 <li>dynamic inventories better discovered via CLI/config</li>
+</ul>
+</li>
+<li>
+<p><code>notes/LOCAL_EXTERNAL_STATE.md</code></p>
+</li>
+<li>Purpose: registry of non-obvious local paths outside the repo root that
+    affect maintained workflow or cleanup.</li>
+<li>Owns:<ul>
+<li>sibling worktrees and alternate checkout paths</li>
+<li>temporary external workspaces tied to repo work</li>
+<li>removal criteria and cleanup commands for those temporary external
+  artifacts</li>
+</ul>
+</li>
+<li>Should not own:<ul>
+<li>repo-internal generated output directories already covered by cleanup
+  rules</li>
+<li>generic host-admin state unrelated to this repo's workflow</li>
 </ul>
 </li>
 </ul>

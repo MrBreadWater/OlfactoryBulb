@@ -31,6 +31,10 @@ cv_isi_target_rate_hz = 20.0
 bias_settle_ms = 1000.0
 bias_tolerance_mV = 0.1
 bias_max_iterations = 24
+adp_current_duration_ms = 1.0
+adp_current_amplitude_nA = 1.0
+adp_tail_ms = 100.0
+adp_sampling_dt_ms = 0.125
 
 [skip_item]
 check_id = "gc_intrinsic_validation_skipped"

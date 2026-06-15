@@ -46,6 +46,7 @@ fixture_metrics = [
         "cv_isi_step_pA": 150.0,
         "cv_isi_mean_rate_Hz": 20.0,
         "input_resistance_MOhm": 100.0,
+        "firing_rates_by_step_Hz": [0.0, 2.0, 5.0, 9.0, 14.0, 18.0, 21.0],
         "AP_onset_mV": -42.0,
         "Amplitude_mV": 76.0,
         "FWHM_ms": 1.1,
@@ -74,6 +75,7 @@ fixture_metrics = [
         "cv_isi_step_pA": 100.0,
         "cv_isi_mean_rate_Hz": 20.0,
         "input_resistance_MOhm": 110.0,
+        "firing_rates_by_step_Hz": [0.0, 4.0, 8.0, 15.0, 24.0, 32.0, 39.0],
         "AP_onset_mV": -42.5,
         "Amplitude_mV": 72.0,
         "FWHM_ms": 0.9,
@@ -121,6 +123,9 @@ def _burton_note_fixture():
 with _burton_note_fixture():
     items = build_validation_items(fixture_metrics, BurtonUrbanProtocol())
     item_by_id = {item.check_id: item for item in items}
+    assert item_by_id["burton_urban_protocol_executed"].series_visuals[0]["title"] == "Model f-I curves"
+    assert item_by_id["burton_urban_protocol_executed"].series_visuals[0]["row_sources"][0]["group_by"] == ["cell_type", "cell_name"]
+    assert len(item_by_id["burton_urban_protocol_executed"].evidence["fi_curve_rows"]) == 14
     assert item_by_id["uploaded_burton_reference_coverage"].status == "PASS"
     assert item_by_id["fi_protocol_caveats"].status == "WARN"
     assert item_by_id["burton_reference_band_caveats"].status == "WARN"

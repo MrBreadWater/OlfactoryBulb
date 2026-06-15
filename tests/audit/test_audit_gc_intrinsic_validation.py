@@ -31,12 +31,17 @@ protocol_item = next(item for item in payload["items"] if item["check_id"] == "g
 
 assert payload["audit_id"] == "gc_intrinsic_validation"
 assert any(item["check_id"] == "gc_intrinsic_protocol_executed" for item in payload["items"])
-assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
-assert protocol_item["series_visuals"][0]["row_source_key"] == "fi_curve_rows"
-assert protocol_item["series_visuals"][0]["x_key"] == "current_pA"
-assert protocol_item["series_visuals"][0]["y_keys"] == ["firing_rate_Hz"]
-assert protocol_item["series_visuals"][0]["series_id_key"] == "cell_name"
+assert protocol_item["series_visuals"][0]["title"] == "Model f-I curves"
+assert protocol_item["series_visuals"][0]["row_sources"][0]["key"] == "fi_curve_rows"
+assert protocol_item["series_visuals"][0]["row_sources"][0]["group_by"] == ["gc_subtype", "cell_name"]
 assert "fi_curve_rows" in protocol_item["evidence"]
+assert protocol_item["evidence"]["adp_enabled"] is True
+assert protocol_item["evidence"]["adp_current_duration_ms"] == 1.0
+assert protocol_item["evidence"]["adp_current_amplitude_nA"] == 1.0
+assert protocol_item["evidence"]["adp_duration_mean_ms"] is not None
+assert "adp_metric_rows" in protocol_item["evidence"]
+assert len(protocol_item["evidence"]["adp_metric_rows"]) == 1
+assert protocol_item["evidence"]["adp_metric_rows"][0]["cell_name"] == "GC1"
 assert any(item["check_id"] == "gc_generic_fi_caveats" for item in payload["items"])
 warn_items = [item for item in payload["items"] if item["status"] == "WARN"]
 assert warn_items

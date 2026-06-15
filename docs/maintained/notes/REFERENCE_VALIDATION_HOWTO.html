@@ -339,7 +339,12 @@ python -m olfactorybulb.audit.dashboard new_sweep --output-dir /tmp/full_audit -
 The rules are responsible for <strong>judgment</strong>.</p>
 <p>That boundary matters.</p>
 <p>If you need a new measured quantity, add it to the protocol runner output.
-If you need a new decision rule, add a new rule kind.</p>
+If you need a new decision rule, add a new rule kind.
+If a protocol needs an auxiliary stimulus that is not yet backed by normalized
+reference rows, such as a short afterdepolarization pulse used only to expose
+<code>adp_duration_ms</code> or <code>adp_depth_mV</code>, put that stimulus in <code>[protocol]</code> and
+keep the resulting metrics unjudged until the dataset layer has real reference
+rows for them.</p>
 <p>If a result should also render as a chart, declare that in the rule output
 instead of letting the dashboard guess from array-shaped evidence. Use the
 helper builders in <code>olfactorybulb.audit</code> so the visual contract stays explicit:</p>
@@ -354,7 +359,20 @@ series_visuals = [
 ]
 </code></pre>
 <p>Use <code>backend="matplotlib"</code> for the standard plots and reserve <code>backend="svg"</code>
-for compact bespoke renderers that really need hand-tuned HTML/SVG behavior.</p>
+for compact bespoke renderers that really need hand-tuned HTML/SVG behavior.
+If the evidence is row-based rather than pre-assembled arrays, use
+<code>row_sources</code> so the dashboard can plot every model curve separately and
+overlay target curves when reference point rows exist:</p>
+<pre><code class="language-python">series_visual_spec(
+    title=&quot;Model vs target f-I curves&quot;,
+    row_sources=[
+        {&quot;key&quot;: &quot;reference_fi_curve_rows&quot;, &quot;label&quot;: &quot;Target&quot;, &quot;role&quot;: &quot;reference&quot;},
+        {&quot;key&quot;: &quot;model_fi_curve_rows&quot;, &quot;group_by&quot;: [&quot;cell_name&quot;], &quot;role&quot;: &quot;model&quot;},
+    ],
+    backend=&quot;matplotlib&quot;,
+    style={&quot;line_width&quot;: 1.8, &quot;marker_size&quot;: 3.2},
+)
+</code></pre>
 <p>For the SciUnit-backed suite rule families (<code>reference_band_rows</code>,
 <code>summary_metric_*</code>, the grouped comparison rules, and <code>reference_curve_match</code>),
 the maintained path now emits:</p>

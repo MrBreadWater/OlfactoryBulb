@@ -664,7 +664,28 @@ def _build_protocol_executed_items(
     evidence_bundle = protocol_evidence_bundle_from_resultish(context.protocol_result)
     protocol_evidence = evidence_bundle.to_dict()
     series_visuals: list[dict[str, Any]] = []
+    group_field = str(getattr(context.protocol_result, "group_field", "") or "").strip()
     for evidence_spec in evidence_bundle.series_specs:
+        if str(evidence_spec.kind).strip().lower() == "fi_curve":
+            group_by = [field for field in [group_field, evidence_spec.series_id_key] if str(field).strip()]
+            if not group_by and evidence_spec.series_id_key:
+                group_by = [evidence_spec.series_id_key]
+            series_visuals.append(
+                series_visual_spec(
+                    title=evidence_spec.title or "Model f-I curves",
+                    row_sources=[
+                        {
+                            "key": evidence_spec.evidence_key,
+                            "group_by": group_by or None,
+                            "role": "model",
+                        }
+                    ],
+                    style=evidence_spec.style.to_dict(),
+                    x_key=evidence_spec.x_key,
+                    y_key=evidence_spec.y_keys[0] if evidence_spec.y_keys else "",
+                )
+            )
+            continue
         series_visuals.append(evidence_spec.to_visual_spec())
     if not series_visuals:
         fallback_rows = protocol_evidence.get(spec.fallback_series_key)

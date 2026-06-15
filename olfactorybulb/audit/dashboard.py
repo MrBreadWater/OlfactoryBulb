@@ -524,6 +524,187 @@ def _figure_to_inline_svg(fig: Any) -> str:
     return svg[start:] if start >= 0 else svg
 
 
+def _normalized_visual_field_list(raw_value: Any) -> list[str]:
+    if raw_value is None:
+        return []
+    if isinstance(raw_value, str):
+        values = [raw_value]
+    elif isinstance(raw_value, (list, tuple)):
+        values = list(raw_value)
+    else:
+        values = [raw_value]
+    return [str(value).strip() for value in values if str(value).strip()]
+
+
+def _series_row_source_specs(
+    evidence: dict[str, Any],
+    spec: dict[str, Any] | None,
+    *,
+    exclude_keys: set[str],
+) -> list[dict[str, Any]]:
+    if isinstance(spec, dict) and spec.get("row_sources") is not None:
+        raw_sources = spec.get("row_sources")
+        if isinstance(raw_sources, (list, tuple)):
+            sources = list(raw_sources)
+        else:
+            sources = [raw_sources]
+    else:
+        sources = ["fi_curve_rows"] if isinstance(evidence.get("fi_curve_rows"), list) else []
+    normalized: list[dict[str, Any]] = []
+    for source in sources:
+        if isinstance(source, str):
+            source_key = source.strip()
+            if source_key and source_key not in exclude_keys:
+                normalized.append({"key": source_key})
+            continue
+        if not isinstance(source, dict):
+            continue
+        source_key = str(source.get("key") or "").strip()
+        if source_key and source_key not in exclude_keys:
+            normalized.append(dict(source))
+    return normalized
+
+
+def _infer_row_group_fields(rows: list[dict[str, Any]]) -> list[str]:
+    candidate_fields: list[list[str]] = [
+        ["series_label"],
+        ["gc_subtype", "cell_name"],
+        ["cell_type", "cell_name"],
+        ["cell_name"],
+        ["gc_subtype"],
+        ["cell_type"],
+        ["protocol_id"],
+        ["reference_source"],
+    ]
+    for fields in candidate_fields:
+        unique_values = {
+            tuple(str(row.get(field) or "").strip() for field in fields)
+            for row in rows
+            if any(str(row.get(field) or "").strip() for field in fields)
+        }
+        if len(unique_values) > 1:
+            return fields
+    return []
+
+
+def _row_series_label(
+    first_row: dict[str, Any],
+    *,
+    source_key: str,
+    role: str,
+    group_fields: list[str],
+    label_fields: list[str],
+    fixed_label: str,
+    label_prefix: str,
+) -> str:
+    if fixed_label:
+        return fixed_label
+    series_label = str(first_row.get("series_label") or "").strip()
+    if series_label:
+        label = series_label
+    else:
+        fields = label_fields or group_fields
+        label_parts: list[str] = []
+        for field in fields:
+            value = str(first_row.get(field) or "").strip()
+            if value and value not in label_parts:
+                label_parts.append(value)
+        label = " / ".join(label_parts)
+    if not label:
+        if role == "reference":
+            label = "Target"
+        elif role == "model":
+            label = "Model"
+        else:
+            label = _evidence_label(source_key)
+    if label_prefix and label != label_prefix:
+        return f"{label_prefix}: {label}"
+    if label_prefix and not label:
+        return label_prefix
+    return label
+
+
+def _series_entries_from_row_sources(
+    evidence: dict[str, Any],
+    spec: dict[str, Any] | None,
+    *,
+    exclude_keys: set[str],
+) -> tuple[list[dict[str, Any]], set[str], str, str, str]:
+    source_specs = _series_row_source_specs(evidence, spec, exclude_keys=exclude_keys)
+    if not source_specs:
+        return [], set(), "", "", ""
+    x_axis_label = ""
+    y_axis_label = ""
+    x_key = ""
+    series_entries: list[dict[str, Any]] = []
+    used_keys: set[str] = set()
+    for source_spec in source_specs:
+        source_key = str(source_spec.get("key") or "").strip()
+        row_source = evidence.get(source_key)
+        if not isinstance(row_source, list) or not row_source:
+            continue
+        rows = [row for row in row_source if isinstance(row, dict)]
+        if not rows:
+            continue
+        row_x_key = str(source_spec.get("x_key") or "current_pA").strip()
+        row_y_key = str(source_spec.get("y_key") or "firing_rate_Hz").strip()
+        if not x_key:
+            x_key = row_x_key
+        if not x_axis_label:
+            x_axis_label = "Current (pA)" if "current" in row_x_key.lower() else _evidence_label(row_x_key)
+        if not y_axis_label:
+            y_axis_label = "Firing rate (Hz)" if ("rate" in row_y_key.lower() or row_y_key.lower().endswith("_hz")) else _evidence_label(row_y_key)
+        group_fields = _normalized_visual_field_list(source_spec.get("group_by")) or _infer_row_group_fields(rows)
+        label_fields = _normalized_visual_field_list(source_spec.get("label_fields")) or group_fields
+        fixed_label = str(source_spec.get("label") or "").strip()
+        label_prefix = str(source_spec.get("label_prefix") or "").strip()
+        role = str(source_spec.get("role") or "").strip().lower()
+        if not role:
+            lowered_source = source_key.lower()
+            if "reference" in lowered_source or "target" in lowered_source:
+                role = "reference"
+            elif "model" in lowered_source:
+                role = "model"
+        grouped_points: dict[tuple[str, ...], list[tuple[float, float, dict[str, Any]]]] = {}
+        group_order: list[tuple[str, ...]] = []
+        for row in rows:
+            x_value = _float_or_none(row.get(row_x_key))
+            y_value = _float_or_none(row.get(row_y_key))
+            if x_value is None or y_value is None:
+                continue
+            group_key = tuple(str(row.get(field) or "").strip() for field in group_fields) if group_fields else ("__all__",)
+            if group_key not in grouped_points:
+                grouped_points[group_key] = []
+                group_order.append(group_key)
+            grouped_points[group_key].append((x_value, y_value, row))
+        for group_key in group_order:
+            points_with_rows = grouped_points[group_key]
+            if not points_with_rows:
+                continue
+            points_with_rows.sort(key=lambda point: point[0])
+            first_row = points_with_rows[0][2]
+            label = _row_series_label(
+                first_row,
+                source_key=source_key,
+                role=role,
+                group_fields=group_fields,
+                label_fields=label_fields,
+                fixed_label=fixed_label,
+                label_prefix=label_prefix,
+            )
+            series_key_prefix = role or "series"
+            normalized_label = re.sub(r"\s+", "_", label.strip().lower()) or source_key
+            series_entries.append(
+                {
+                    "key": f"{series_key_prefix}::{normalized_label}",
+                    "label": label,
+                    "points": [(x_value, y_value) for x_value, y_value, _row in points_with_rows],
+                }
+            )
+        used_keys.add(source_key)
+    return series_entries, used_keys, x_key, x_axis_label, y_axis_label
+
+
 def _series_graph_payload(
     evidence: dict[str, Any],
     *,
@@ -539,6 +720,23 @@ def _series_graph_payload(
     x_values: list[float] | None = None
     series_entries: list[dict[str, Any]] = []
     used_keys: set[str] = set()
+    x_axis_label = ""
+    y_axis_label = ""
+
+    row_series_entries, row_used_keys, row_x_key, row_x_axis_label, row_y_axis_label = _series_entries_from_row_sources(
+        evidence,
+        spec,
+        exclude_keys=exclude,
+    )
+    if row_series_entries:
+        series_entries.extend(row_series_entries)
+        used_keys.update(row_used_keys)
+        x_key = row_x_key
+        x_values = [point[0] for series in row_series_entries for point in series["points"]]
+        x_axis_label = row_x_axis_label
+        y_axis_label = row_y_axis_label
+        if not series_kind:
+            series_kind = "f-i curve"
 
     explicit_row_source_key = str(spec.get("row_source_key") or "").strip() if isinstance(spec, dict) else ""
     explicit_x_key = str(spec.get("x_key") or "").strip() if isinstance(spec, dict) else ""
@@ -553,7 +751,7 @@ def _series_graph_payload(
         elif str(spec.get("y_key") or "").strip():
             explicit_y_keys = [str(spec.get("y_key")).strip()]
 
-    if explicit_row_source_key and explicit_x_key and explicit_y_keys:
+    if not series_entries and explicit_row_source_key and explicit_x_key and explicit_y_keys:
         explicit_rows = evidence.get(explicit_row_source_key)
         if isinstance(explicit_rows, list) and explicit_rows:
             grouped_points: dict[tuple[str, str], dict[str, Any]] = {}
@@ -661,16 +859,18 @@ def _series_graph_payload(
     if not series_kind:
         series_kind = "f-i curve" if is_fi_curve else "series graph"
 
-    x_axis_label = _axis_label_from_metadata(
-        evidence,
-        axis="x",
-        fallback="Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key),
-    )
-    y_axis_label = _axis_label_from_metadata(
-        evidence,
-        axis="y",
-        fallback="Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value",
-    )
+    if not x_axis_label:
+        x_axis_label = _axis_label_from_metadata(
+            evidence,
+            axis="x",
+            fallback="Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key),
+        )
+    if not y_axis_label:
+        y_axis_label = _axis_label_from_metadata(
+            evidence,
+            axis="y",
+            fallback="Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value",
+        )
     return (
         {
             "series_kind": series_kind,
@@ -693,6 +893,10 @@ def _render_series_graph_matplotlib(
 ) -> tuple[str, set[str]]:
     kind = _visual_kind(spec) or "fi_curve"
     style = dict(spec.get("style") or {}) if isinstance(spec, dict) else {}
+    if isinstance(spec, dict):
+        spec_title = str(spec.get("title") or "").strip()
+        if spec_title:
+            style.setdefault("title", spec_title)
 
     if kind == "bar":
         values_key = str(spec.get("values_key") or spec.get("y_key") or "").strip()
@@ -1151,7 +1355,8 @@ def _render_series_graph(
             f"{' border-style:dashed;' if color['dash'] else ''}'></i>{_esc(series['label'])}</span>"
         )
 
-    title_label = "f-I curve" if series_kind == "f-i curve" else ("Scatter plot" if visual_kind == "scatter" else "Series graph")
+    spec_title = str(spec.get("title") or "").strip() if isinstance(spec, dict) else ""
+    title_label = spec_title or ("f-I curve" if series_kind == "f-i curve" else ("Scatter plot" if visual_kind == "scatter" else "Series graph"))
     return (
         f"<div class='item-block series-graph-block' data-visual-backend='{_esc(visual_backend)}' "
         f"data-visual-kind='{_esc(visual_kind)}'>"
@@ -1629,6 +1834,28 @@ def _render_companion_visuals(
 def _visual_keys(spec: dict[str, Any]) -> list[str]:
     raw_keys = spec.get("keys")
     if raw_keys is None:
+        row_sources = spec.get("row_sources")
+        if row_sources is not None:
+            if isinstance(row_sources, (list, tuple)):
+                normalized: list[str] = []
+                for source in row_sources:
+                    if isinstance(source, str):
+                        key = source.strip()
+                    elif isinstance(source, dict):
+                        key = str(source.get("key") or "").strip()
+                    else:
+                        key = ""
+                    if key:
+                        normalized.append(key)
+                if normalized:
+                    return normalized
+            else:
+                key = str(row_sources).strip()
+                if key:
+                    return [key]
+        row_source_key = str(spec.get("row_source_key") or "").strip()
+        if row_source_key:
+            return [row_source_key]
         raw_x_key = spec.get("x_key")
         raw_y_keys = spec.get("y_keys")
         if raw_x_key is None or raw_y_keys is None:

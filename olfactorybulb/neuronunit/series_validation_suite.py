@@ -3675,6 +3675,39 @@ def _series_case_weight(score: SeriesComparisonScore) -> float | None:
     return score.evidence_payload.case_weight()
 
 
+def _first_series_id(summary: SeriesProvenanceSummary) -> str:
+    for series_id in summary.series_ids:
+        text = str(series_id).strip()
+        if text:
+            return text
+    return ""
+
+
+def _series_visual_row_evidence(score: SeriesComparisonScore) -> dict[str, Any]:
+    payload = score.evidence_payload
+    reference_rows = [
+        {
+            "series_label": "Target",
+            "current_pA": float(x_value),
+            "firing_rate_Hz": float(y_value),
+        }
+        for x_value, y_value in zip(payload.visual_x_values, payload.reference_values)
+    ]
+    model_series_id = _first_series_id(payload.series_provenance.model)
+    model_rows = [
+        {
+            "cell_name": model_series_id or "Model",
+            "current_pA": float(x_value),
+            "firing_rate_Hz": float(y_value),
+        }
+        for x_value, y_value in zip(payload.visual_x_values, payload.model_values)
+    ]
+    return {
+        "reference_fi_curve_rows": reference_rows,
+        "model_fi_curve_rows": model_rows,
+    }
+
+
 def audit_items_from_series_comparison_suite(
     compiled: CompiledSeriesComparisonSuite,
     *,
@@ -3695,13 +3728,32 @@ def audit_items_from_series_comparison_suite(
 
     def _result_builder(case: SeriesComparisonCase, score: SeriesComparisonScore):
         obs = case.observation
-        visual_contract = obs.visual_contract
+        evidence = dict(score.evidence)
+        evidence.update(_series_visual_row_evidence(score))
         spec = audit_item_adapter_spec_from_case(
             case,
             series_visuals=[
                 series_visual_spec(
-                    kind=visual_contract.kind,
-                    keys=[visual_contract.x_key, visual_contract.reference_y_key, visual_contract.model_y_key],
+                    title="Model vs target f-I curves",
+                    row_sources=[
+                        {
+                            "key": "reference_fi_curve_rows",
+                            "label": "Target",
+                            "role": "reference",
+                        },
+                        {
+                            "key": "model_fi_curve_rows",
+                            "group_by": list(
+                                dict.fromkeys(
+                                    field
+                                    for field in [score.evidence_payload.model_series_id_key, "cell_name"]
+                                    if str(field).strip()
+                                )
+                            )
+                            or ["cell_name"],
+                            "role": "model",
+                        },
+                    ],
                     style={
                         "line_width": 1.8,
                         "marker_size": 3.2,
@@ -3713,7 +3765,7 @@ def audit_items_from_series_comparison_suite(
         return suite_case_result_from_spec(
             spec,
             status=score.status,
-            evidence=score.evidence,
+            evidence=evidence,
             score_text=_series_score_text(case, score),
             norm_score=score.norm_score,
             score_payload=_series_score_payload(case, score),
