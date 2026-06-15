@@ -116,6 +116,9 @@ Remove this file when the listed items are either:
       - added `olfactorybulb.neuronunit.suite_presentation`
       - suite matrices can now carry compact per-case score labels in addition
         to status
+- [x] Carry score-family-specific suite-case labels and continuous normalized
+      score summaries through the migrated series-suite overview instead of
+      collapsing every case to a bare MAE label plus binary PASS/FAIL.
 - [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

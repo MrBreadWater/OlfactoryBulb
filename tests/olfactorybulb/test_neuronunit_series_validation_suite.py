@@ -288,8 +288,15 @@ assert [item.status for item in adapted_items] == ["PASS", "PASS"]
 assert adapted_items[0].detail_level == "summary"
 assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 0, "FAIL": 0}
-assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "MAE 1 Hz"
+assert adapted_items[0].evidence["suite_cases"][0]["score_text"].startswith("MAE 1 Hz | Welch p ")
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
+assert adapted_items[0].evidence["suite_norm_score_summary"] == {
+    "count": 1.0,
+    "max": 1.0,
+    "mean": 1.0,
+    "median": 1.0,
+    "min": 1.0,
+}
 assert adapted_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert adapted_items[1].evidence["reference_values_Hz"] == [6.0, 11.0]
 assert adapted_items[1].evidence["model_values_Hz"] == [7.0, 12.0]
@@ -311,6 +318,9 @@ assert adapted_items[1].evidence["score_family"] == "hybrid_residual_welch"
 assert adapted_items[1].evidence["pvalue_aggregation"] == "median"
 assert adapted_items[1].evidence["residual_gate_passed"] is True
 assert adapted_items[1].evidence["pvalue_gate_passed"] is True
+assert adapted_items[1].evidence["residual_norm_score"] == 1.0
+assert adapted_items[1].evidence["statistical_norm_score"] == 1.0
+assert adapted_items[1].evidence["overall_norm_score"] == 1.0
 assert adapted_items[1].evidence["reference_provenance"]["source_files"] == ["synthetic_curve.csv"]
 assert adapted_items[1].evidence["reference_provenance"]["note_ids"] == ["NOTE_A", "NOTE_B"]
 assert adapted_items[1].evidence["model_provenance"]["sample_scopes"] == ["model_population"]
@@ -429,6 +439,8 @@ equivalence_compiled = compile_series_comparison_suite(
 equivalence_judged = equivalence_compiled.judge()
 assert [score.status for _case, score in equivalence_judged] == ["PASS"]
 equivalence_items = audit_items_from_series_comparison_suite(equivalence_compiled)
+assert "MAE " in equivalence_items[0].evidence["suite_cases"][0]["score_text"]
+assert "TOST p " in equivalence_items[0].evidence["suite_cases"][0]["score_text"]
 assert equivalence_items[1].evidence["score_family"] == "hybrid_residual_equivalence"
 assert equivalence_items[1].evidence["statistical_test_family"] == "equivalence_tost"
 assert equivalence_items[1].evidence["statistical_test_kinds"] == ["welch_tost", "welch_tost"]
@@ -443,6 +455,9 @@ assert equivalence_items[1].evidence["supported_statistical_bin_count"] == 2
 assert equivalence_items[1].evidence["unsupported_statistical_bin_count"] == 0
 assert equivalence_items[1].evidence["statistical_gate_passed"] is True
 assert equivalence_items[1].evidence["aggregate_statistical_pvalue"] <= 0.05
+assert equivalence_items[1].evidence["residual_norm_score"] == 1.0
+assert equivalence_items[1].evidence["statistical_norm_score"] == 1.0
+assert equivalence_items[1].evidence["overall_norm_score"] == 1.0
 
 singleton_equivalence_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -489,6 +504,7 @@ singleton_equivalence_compiled = compile_series_comparison_suite(
 )
 singleton_equivalence_items = audit_items_from_series_comparison_suite(singleton_equivalence_compiled)
 assert singleton_equivalence_items[1].status == "PASS"
+assert singleton_equivalence_items[0].evidence["suite_cases"][0]["score_text"].startswith("TOST p ")
 assert singleton_equivalence_items[1].evidence["statistical_test_kinds"] == [
     "one_sample_reference_tost",
     "one_sample_reference_tost",
@@ -735,6 +751,26 @@ assert len(residual_items) == 2
 assert residual_items[1].status == "PASS"
 assert residual_items[1].evidence["score_family"] == "residual_only"
 assert residual_items[1].evidence["minimum_median_welch_pvalue"] is None
+
+second_residual_rule = dict(residual_only_rule)
+second_residual_rule["check_id"] = "synthetic_series_match_second"
+second_residual_rule["title"] = "Synthetic second series comparison"
+second_residual_rule["criterion"] = "A second synthetic series check should share the same compiled suite."
+rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
+try:
+    grouped_series_items = build_rule_items([residual_only_rule, second_residual_rule], context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert len(grouped_series_items) == 3
+assert grouped_series_items[0].detail_level == "summary"
+assert grouped_series_items[0].summary_rollup_exempt is True
+assert grouped_series_items[0].evidence["suite_case_count"] == 2
+assert grouped_series_items[0].evidence["suite_norm_score_summary"]["mean"] == 1.0
+assert [item.check_id for item in grouped_series_items[1:]] == [
+    "synthetic_series_match",
+    "synthetic_series_match_second",
+]
 
 equivalence_rule = dict(rule)
 equivalence_rule["loader"] = "csv:/tmp/equivalence.csv"

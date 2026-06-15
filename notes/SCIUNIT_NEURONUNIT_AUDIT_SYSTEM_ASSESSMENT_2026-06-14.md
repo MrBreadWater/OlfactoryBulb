@@ -2014,9 +2014,13 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     stable default was used for ergonomics
   - equivalence-test diagnostics
   - optional legacy Welch-test diagnostics
+  - family-specific suite-case score labels plus aggregate suite norm-score
+    summaries when normalized case scores are available
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle
+  - one shared series-suite overview when multiple contiguous
+    `reference_curve_match` checks are compiled together
 
 The remaining open questions are now narrower:
 

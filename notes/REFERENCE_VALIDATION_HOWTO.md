@@ -477,6 +477,19 @@ and carries the unit separately in `error_unit_text` plus the existing
 `comparison_y_unit_text`. Legacy `_Hz` aliases remain only for backward
 compatibility with older current-rate consumers.
 
+Contiguous `reference_curve_match` checks now compile into one shared
+series-comparison suite overview plus the per-check detail items, rather than
+emitting one one-case suite overview per rule.
+
+The emitted suite-case score labels follow the declared `score_family`:
+- `residual_only`: residual diagnostic text such as `MAE 12.4 Hz`
+- `equivalence_only`: equivalence diagnostic text such as `TOST p 0.013`
+- hybrid families: both residual and statistical text
+
+When normalized case scores are available, the suite overview also emits a
+`suite_norm_score_summary` so downstream dashboards or reports can show an
+aggregate continuous score summary instead of only binary pass/fail counts.
+
 When you use `alignment_policy = "nearest_within_tolerance"` or
 `alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
 explicitly in the comparison x-axis units.

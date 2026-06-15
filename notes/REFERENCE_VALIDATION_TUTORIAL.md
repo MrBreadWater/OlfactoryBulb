@@ -1690,6 +1690,10 @@ Important details:
   and `comparison_y_unit_text`
 - legacy `_Hz` aliases remain only for backward compatibility with older
   current-rate consumers; new code should prefer the unit-neutral keys
+- contiguous `reference_curve_match` checks are now compiled into one shared
+  series-comparison suite overview plus the per-check detail items
+- suite-case score labels and normalized scores now follow the declared
+  `score_family` instead of always collapsing to a residual-only label
 
 ## Warning, caveat, math, and visualization features
 

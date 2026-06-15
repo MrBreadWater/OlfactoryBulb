@@ -611,6 +611,16 @@ contract for future sessions.
     and `equivalence_margin`, with unit metadata carried separately in
     `comparison_y_unit_text` / `error_unit_text`; do not keep teaching the
     NeuronUnit-side core that every series comparison is measured in hertz.
+    When multiple contiguous `reference_curve_match` checks appear in one
+    validation, batch them into one shared series-comparison suite overview
+    plus the per-check detail items rather than emitting one one-case overview
+    per rule.
+    The emitted suite-case `score_text` and `norm_score` should reflect the
+    declared score family rather than collapsing everything to a raw residual:
+    residual families show residual diagnostics, equivalence families show
+    equivalence p-values, hybrid families show both, and the suite overview
+    should carry an aggregate norm-score summary when case-level normalized
+    scores are available.
     Prefer explicit transform objects such as `affine` or `piecewise_linear`
     over one-off hardcoded x-axis conversion logic in protocol runners or rule
     handlers.

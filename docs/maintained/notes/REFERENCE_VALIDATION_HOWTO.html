@@ -553,6 +553,16 @@ equivalence. When <code>pvalue_aggregation</code> is omitted there, <code>auto</
 <p>and carries the unit separately in <code>error_unit_text</code> plus the existing
 <code>comparison_y_unit_text</code>. Legacy <code>_Hz</code> aliases remain only for backward
 compatibility with older current-rate consumers.</p>
+<p>Contiguous <code>reference_curve_match</code> checks now compile into one shared
+series-comparison suite overview plus the per-check detail items, rather than
+emitting one one-case suite overview per rule.</p>
+<p>The emitted suite-case score labels follow the declared <code>score_family</code>:
+- <code>residual_only</code>: residual diagnostic text such as <code>MAE 12.4 Hz</code>
+- <code>equivalence_only</code>: equivalence diagnostic text such as <code>TOST p 0.013</code>
+- hybrid families: both residual and statistical text</p>
+<p>When normalized case scores are available, the suite overview also emits a
+<code>suite_norm_score_summary</code> so downstream dashboards or reports can show an
+aggregate continuous score summary instead of only binary pass/fail counts.</p>
 <p>When you use <code>alignment_policy = "nearest_within_tolerance"</code> or
 <code>alignment_policy = "tolerance_clusters"</code>, declare <code>x_match_tolerance</code>
 explicitly in the comparison x-axis units.

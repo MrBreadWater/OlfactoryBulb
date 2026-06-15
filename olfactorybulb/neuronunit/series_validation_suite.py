@@ -256,6 +256,76 @@ def _equivalence_test_result(
     return {"supported": False, "test_kind": "unsupported", "pvalue": float("nan")}
 
 
+def _norm_ratio_at_most(observed: Any, threshold: Any) -> float | None:
+    if not (_is_finite_number(observed) and _is_finite_number(threshold)):
+        return None
+    observed_value = float(observed)
+    threshold_value = float(threshold)
+    if threshold_value <= 0.0:
+        return None
+    if observed_value <= 0.0:
+        return 1.0
+    return max(0.0, min(1.0, threshold_value / observed_value))
+
+
+def _norm_ratio_at_least(observed: Any, threshold: Any) -> float | None:
+    if not (_is_finite_number(observed) and _is_finite_number(threshold)):
+        return None
+    observed_value = float(observed)
+    threshold_value = float(threshold)
+    if threshold_value <= 0.0:
+        return None
+    return max(0.0, min(1.0, observed_value / threshold_value))
+
+
+def _residual_norm_score(*, mae: Any, maximum_mae: Any, rmse: Any, maximum_rmse: Any) -> float | None:
+    components = [
+        component
+        for component in (
+            _norm_ratio_at_most(mae, maximum_mae),
+            _norm_ratio_at_most(rmse, maximum_rmse),
+        )
+        if component is not None
+    ]
+    if not components:
+        return None
+    return min(components)
+
+
+def _series_statistical_norm_score(
+    *,
+    score_family: str,
+    aggregate_statistical_pvalue: Any,
+    equivalence_alpha: Any,
+    median_welch_pvalue: Any,
+    minimum_median_welch_pvalue: Any,
+) -> float | None:
+    if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
+        return _norm_ratio_at_most(aggregate_statistical_pvalue, equivalence_alpha)
+    if score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
+        return _norm_ratio_at_least(median_welch_pvalue, minimum_median_welch_pvalue)
+    return None
+
+
+def _series_overall_norm_score(
+    *,
+    score_family: str,
+    residual_norm_score: float | None,
+    statistical_norm_score: float | None,
+    fallback_status: str,
+) -> float:
+    if score_family == "residual_only":
+        candidate = residual_norm_score
+    elif score_family == "equivalence_only":
+        candidate = statistical_norm_score
+    else:
+        components = [component for component in (residual_norm_score, statistical_norm_score) if component is not None]
+        candidate = min(components) if components else None
+    if candidate is None or not math.isfinite(float(candidate)):
+        return 1.0 if str(fallback_status).upper() == "PASS" else 0.0
+    return max(0.0, min(1.0, float(candidate)))
+
+
 def _sorted_piecewise_points(points: tuple[tuple[float, float], ...]) -> list[tuple[float, float]]:
     if len(points) < 2:
         raise ValueError("piecewise_linear transform requires at least two control points")
@@ -511,6 +581,9 @@ class SeriesComparisonScore(sciunit.Score):
 
     @property
     def norm_score(self) -> float:
+        candidate = self.evidence.get("overall_norm_score")
+        if _is_finite_number(candidate):
+            return max(0.0, min(1.0, float(candidate)))
         return 1.0 if self.status == "PASS" else 0.0
 
     def __str__(self) -> str:
@@ -1278,6 +1351,26 @@ class SeriesComparisonTest(sciunit.Test):
             passed = len(aligned_pairs) >= int(obs.policy.minimum_point_count) and legacy_difference_gate_passed
         else:
             passed = residual_gate_passed and legacy_difference_gate_passed
+        status = self.case.pass_status if passed else self.case.fail_status
+        residual_norm_score = _residual_norm_score(
+            mae=mae,
+            maximum_mae=obs.policy.maximum_mae,
+            rmse=rmse,
+            maximum_rmse=obs.policy.maximum_rmse,
+        )
+        statistical_norm_score = _series_statistical_norm_score(
+            score_family=obs.policy.score_family,
+            aggregate_statistical_pvalue=aggregate_statistical_pvalue,
+            equivalence_alpha=obs.policy.equivalence_alpha,
+            median_welch_pvalue=median_welch_pvalue,
+            minimum_median_welch_pvalue=obs.policy.minimum_median_welch_pvalue,
+        )
+        overall_norm_score = _series_overall_norm_score(
+            score_family=obs.policy.score_family,
+            residual_norm_score=residual_norm_score,
+            statistical_norm_score=statistical_norm_score,
+            fallback_status=status,
+        )
         evidence = {
             obs.visual_x_key: _rounded_list(visual_x_values),
             "reference_matched_x_values": _rounded_list(reference_x_values),
@@ -1352,6 +1445,15 @@ class SeriesComparisonTest(sciunit.Test):
             "residual_gate_passed": residual_gate_passed,
             "pvalue_gate_passed": pvalue_gate_passed,
             "statistical_gate_passed": statistical_gate_passed if equivalence_family else legacy_difference_gate_passed,
+            "residual_norm_score": rounded(float(residual_norm_score))
+            if _is_finite_number(residual_norm_score)
+            else residual_norm_score,
+            "statistical_norm_score": rounded(float(statistical_norm_score))
+            if _is_finite_number(statistical_norm_score)
+            else statistical_norm_score,
+            "overall_norm_score": rounded(float(overall_norm_score))
+            if _is_finite_number(overall_norm_score)
+            else overall_norm_score,
             "alignment_policy": obs.policy.alignment_policy,
             "x_match_tolerance": rounded(float(obs.policy.x_match_tolerance))
             if _is_finite_number(obs.policy.x_match_tolerance)
@@ -1408,7 +1510,6 @@ class SeriesComparisonTest(sciunit.Test):
             evidence,
             comparison_y_unit_text=obs.comparison_y_unit_text,
         )
-        status = self.case.pass_status if passed else self.case.fail_status
         if obs.policy.score_family == "equivalence_only":
             if _is_finite_number(aggregate_statistical_pvalue):
                 score_value = float(aggregate_statistical_pvalue) - float(obs.policy.equivalence_alpha)
@@ -1459,14 +1560,35 @@ def compile_series_comparison_suite(
 
 
 def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore) -> str:
+    del case
+    score_family = str(score.evidence.get("score_family") or "").strip()
     mae = score.evidence.get("mean_absolute_error")
     error_unit_text = str(score.evidence.get("error_unit_text", "")).strip()
+    residual_text = ""
     if _is_finite_number(mae):
-        return f"MAE {rounded(float(mae)):g}" + (f" {error_unit_text}" if error_unit_text else "")
-    aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
+        residual_text = f"MAE {rounded(float(mae)):g}" + (f" {error_unit_text}" if error_unit_text else "")
+    if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
+        aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
+    elif score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
+        aggregate_pvalue = score.evidence.get("median_welch_pvalue")
+    else:
+        aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
+    statistical_text = ""
     if _is_finite_number(aggregate_pvalue):
-        return f"p {rounded(float(aggregate_pvalue), digits=4):g}"
-    return ""
+        pvalue_text = f"{rounded(float(aggregate_pvalue), digits=4):g}"
+        if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES:
+            statistical_text = f"TOST p {pvalue_text}"
+        elif score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES:
+            statistical_text = f"Welch p {pvalue_text}"
+        else:
+            statistical_text = f"p {pvalue_text}"
+    if score_family == "residual_only":
+        return residual_text
+    if score_family == "equivalence_only":
+        return statistical_text
+    if residual_text and statistical_text:
+        return f"{residual_text} | {statistical_text}"
+    return residual_text or statistical_text
 
 
 def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonSuite) -> list[AuditItem]:

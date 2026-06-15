@@ -89,6 +89,9 @@ COMPARISON_RULE_KINDS = {
     "group_abs_diff_max",
     "group_positive",
 }
+SERIES_RULE_KINDS = {
+    "reference_curve_match",
+}
 
 
 REFERENCE_ROW_LOADERS: dict[str, Callable[[], list[dict[str, Any]]]] = {
@@ -149,6 +152,7 @@ def build_rule_items(
     items: list[AuditItem] = []
     pending_summary_rules: list[dict[str, Any]] = []
     pending_comparison_rules: list[dict[str, Any]] = []
+    pending_series_rules: list[dict[str, Any]] = []
 
     def _append_grouped_suite_items(
         generated_items: list[AuditItem],
@@ -182,6 +186,14 @@ def build_rule_items(
         _append_grouped_suite_items(generated_items, pending_comparison_rules)
         pending_comparison_rules = []
 
+    def flush_pending_series_rules() -> None:
+        nonlocal pending_series_rules
+        if not pending_series_rules:
+            return
+        generated_items = _build_series_rule_items(pending_series_rules, context)
+        _append_grouped_suite_items(generated_items, pending_series_rules)
+        pending_series_rules = []
+
     for rule in rules:
         if not _rule_enabled(rule, context.args):
             continue
@@ -189,15 +201,23 @@ def build_rule_items(
         if not kind:
             raise ValueError("Validation rule is missing required 'kind'")
         if kind in SUMMARY_RULE_KINDS:
+            flush_pending_series_rules()
             flush_pending_comparison_rules()
             pending_summary_rules.append(rule)
             continue
         if kind in COMPARISON_RULE_KINDS:
+            flush_pending_series_rules()
             flush_pending_summary_rules()
             pending_comparison_rules.append(rule)
             continue
+        if kind in SERIES_RULE_KINDS:
+            flush_pending_summary_rules()
+            flush_pending_comparison_rules()
+            pending_series_rules.append(rule)
+            continue
         flush_pending_summary_rules()
         flush_pending_comparison_rules()
+        flush_pending_series_rules()
         try:
             handler = RULE_HANDLERS[kind]
         except KeyError as exc:
@@ -208,6 +228,7 @@ def build_rule_items(
         items.extend(rule_items)
     flush_pending_summary_rules()
     flush_pending_comparison_rules()
+    flush_pending_series_rules()
     return items
 
 
@@ -792,6 +813,32 @@ def _build_comparison_rule_items(
     return audit_items_from_comparison_rule_suite(compiled)
 
 
+def _build_series_rule_items(
+    rules: list[dict[str, Any]],
+    context: ValidationRuleContext,
+) -> list[AuditItem]:
+    if not rules:
+        return []
+    protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
+    cases = []
+    for rule in rules:
+        loader = str(rule["loader"])
+        reference_rows = _filter_rows(_load_rows(loader), rule, args=context.args)
+        cases.append(_series_comparison_case(rule, reference_rows))
+    suite_name = (
+        str(rules[0].get("suite_name", context.config.get("validation_id", "validation"))).strip()
+        or "validation"
+    )
+    compiled = compile_series_comparison_suite(
+        cases=cases,
+        summary=context.summary,
+        metrics=context.metrics,
+        protocol_evidence=protocol_evidence,
+        suite_name=suite_name,
+    )
+    return audit_items_from_series_comparison_suite(compiled)
+
+
 def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:
     path_text = str(rule.get("notes_path") or context.config.get("notes_path") or "").strip()
     if not path_text:
@@ -1072,18 +1119,7 @@ def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list
 
 @register_validation_rule("reference_curve_match")
 def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    loader = str(rule["loader"])
-    reference_rows = _filter_rows(_load_rows(loader), rule, args=context.args)
-    case = _series_comparison_case(rule, reference_rows)
-    protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
-    compiled = compile_series_comparison_suite(
-        cases=[case],
-        summary=context.summary,
-        metrics=context.metrics,
-        protocol_evidence=protocol_evidence,
-        suite_name=str(rule.get("suite_name", rule.get("title", "series-comparison-suite"))),
-    )
-    return audit_items_from_series_comparison_suite(compiled)
+    return _build_series_rule_items([rule], context)
 
 
 def _required_unit_text(rule: dict[str, Any], key: str) -> str:
