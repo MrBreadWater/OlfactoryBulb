@@ -10,6 +10,7 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
+from olfactorybulb.neuronunit.evidence_formatting import rounded_evidence_mapping
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable
 from olfactorybulb.neuronunit.metric_quantities import (
     MetricQuantitySpec,
@@ -28,20 +29,6 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_items_from_judged,
 )
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
-
-
-def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            result[key] = _rounded_dict(value)
-        elif isinstance(value, list):
-            result[key] = [rounded(numeric_value(item)) if is_finite_scalar(item) else item for item in value]
-        elif is_finite_scalar(value):
-            result[key] = rounded(numeric_value(value) if isinstance(value, pq.Quantity) else float(value))
-        else:
-            result[key] = value
-    return result
 
 
 @dataclass(frozen=True)
@@ -280,7 +267,7 @@ def audit_items_from_summary_rule_suite(
         return suite_case_result_from_spec(
             spec,
             status=score.status,
-            evidence=_rounded_dict(base),
+            evidence=rounded_evidence_mapping(base),
             score_text=_summary_score_text(case, score),
             norm_score=score.norm_score,
             score_payload=_summary_score_payload(case, score),

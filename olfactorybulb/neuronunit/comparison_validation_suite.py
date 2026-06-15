@@ -10,6 +10,7 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
+from olfactorybulb.neuronunit.evidence_formatting import rounded_evidence_mapping
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import numeric_value
@@ -26,20 +27,6 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_items_from_judged,
 )
 from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
-
-
-def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-    for key, value in payload.items():
-        if isinstance(value, dict):
-            result[key] = _rounded_dict(value)
-        elif isinstance(value, list):
-            result[key] = [rounded(numeric_value(item)) if is_finite_scalar(item) else item for item in value]
-        elif is_finite_scalar(value):
-            result[key] = rounded(numeric_value(value) if isinstance(value, pq.Quantity) else float(value))
-        else:
-            result[key] = value
-    return result
 
 
 @dataclass(frozen=True)
@@ -181,7 +168,7 @@ class ComparisonRuleTest(sciunit.Test):
         if case.rule_kind == "all_finite_metric":
             assert isinstance(prediction, ScalarMetricValueMap)
             failing = prediction.failing_nonfinite()
-            evidence = _rounded_dict(
+            evidence = rounded_evidence_mapping(
                 {
                     "metric_key": case.metric_key,
                     "cell_count": prediction.entity_count,
@@ -198,7 +185,7 @@ class ComparisonRuleTest(sciunit.Test):
         if case.rule_kind == "all_exact_metric":
             assert isinstance(prediction, ScalarMetricValueMap)
             failing = prediction.failing_not_equal(expected=case.expected, tolerance=case.tolerance)
-            evidence = _rounded_dict(
+            evidence = rounded_evidence_mapping(
                 {
                     "metric_key": case.metric_key,
                     "expected": case.expected,
@@ -225,7 +212,7 @@ class ComparisonRuleTest(sciunit.Test):
                 score_value = max(0.0, right_value - left_value)
             else:
                 raise ValueError(f"Unsupported group_ordering operator {case.operator!r}")
-            evidence = _rounded_dict(
+            evidence = rounded_evidence_mapping(
                 {
                     f"{case.left_group}_mean": left_value,
                     f"{case.right_group}_mean": right_value,
@@ -245,7 +232,7 @@ class ComparisonRuleTest(sciunit.Test):
             right_value = prediction.right_numeric
             difference = prediction.absolute_difference
             passed = difference <= case.max_difference
-            evidence = _rounded_dict(
+            evidence = rounded_evidence_mapping(
                 {
                     f"{case.left_group}_mean": left_value,
                     f"{case.right_group}_mean": right_value,
@@ -265,7 +252,7 @@ class ComparisonRuleTest(sciunit.Test):
             assert isinstance(prediction, ScalarGroupValueSet)
             group_values = prediction.numeric_group_values()
             failing_groups = prediction.failing_positive_groups()
-            evidence = _rounded_dict({f"{group}_mean": value for group, value in group_values.items()})
+            evidence = rounded_evidence_mapping({f"{group}_mean": value for group, value in group_values.items()})
             if failing_groups:
                 evidence["failing_groups"] = list(failing_groups)
             if prediction.unit_text:
