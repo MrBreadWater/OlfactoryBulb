@@ -23,6 +23,7 @@ from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
+from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -1647,11 +1648,13 @@ def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonS
         )
 
     return suite_items_from_judged(
-        suite_name=str(compiled.suite.name or "series-comparison-suite"),
-        suite_kind_label="Series-comparison suite",
+        descriptor=SuiteDescriptor(
+            suite_id=str(compiled.suite.name or "series-comparison-suite"),
+            suite_kind_label="Series-comparison suite",
+            candidate_ids=tuple(str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()),
+        ),
         judged=judged,
         result_builder=_result_builder,
-        candidate_ids=[str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()],
     )
 
 

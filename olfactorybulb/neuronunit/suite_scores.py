@@ -109,6 +109,29 @@ class SuiteAggregatePolicy:
 DEFAULT_SUITE_AGGREGATE_POLICY = SuiteAggregatePolicy()
 
 
+@dataclass(frozen=True)
+class SuiteDescriptor:
+    suite_id: str
+    suite_kind_label: str
+    candidate_ids: tuple[str, ...] = ()
+    aggregate_policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY
+
+    def __post_init__(self) -> None:
+        suite_id = str(self.suite_id).strip()
+        suite_kind_label = str(self.suite_kind_label).strip()
+        if not suite_id:
+            raise ValueError("suite_id must be non-empty")
+        if not suite_kind_label:
+            raise ValueError("suite_kind_label must be non-empty")
+        object.__setattr__(self, "suite_id", suite_id)
+        object.__setattr__(self, "suite_kind_label", suite_kind_label)
+        object.__setattr__(
+            self,
+            "candidate_ids",
+            tuple(str(candidate_id).strip() for candidate_id in self.candidate_ids if str(candidate_id).strip()),
+        )
+
+
 def _status_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> dict[str, int]:
     counts = {"PASS": 0, "WARN": 0, "FAIL": 0}
     for case in case_summaries:
@@ -273,5 +296,6 @@ __all__ = [
     "SuiteAggregatePolicy",
     "SuiteAggregateScore",
     "SuiteCaseSummary",
+    "SuiteDescriptor",
     "build_suite_aggregate_score",
 ]

@@ -8,9 +8,8 @@ from typing import Any, Callable, Iterable, TypeVar
 
 from olfactorybulb.audit import AuditItem, companion_visual_spec
 from olfactorybulb.neuronunit.suite_scores import (
-    DEFAULT_SUITE_AGGREGATE_POLICY,
-    SuiteAggregatePolicy,
     SuiteCaseSummary,
+    SuiteDescriptor,
     build_suite_aggregate_score,
 )
 
@@ -55,19 +54,16 @@ def suite_case_summary(result: SuiteCaseResult) -> SuiteCaseSummary:
 
 def suite_overview_item(
     *,
-    suite_name: str,
-    suite_kind_label: str,
+    descriptor: SuiteDescriptor,
     case_summaries: list[SuiteCaseSummary],
-    aggregate_policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY,
-    candidate_ids: list[str] | tuple[str, ...] = (),
 ) -> AuditItem:
-    suite_name_text = str(suite_name).strip()
+    suite_name_text = descriptor.suite_id
     check_id_prefix = re.sub(r"[^A-Za-z0-9._-]+", "_", suite_name_text).strip("._") or "suite"
     suite_score = build_suite_aggregate_score(
         suite_id=suite_name_text,
         case_summaries=case_summaries,
-        policy=aggregate_policy,
-        candidate_ids=candidate_ids,
+        policy=descriptor.aggregate_policy,
+        candidate_ids=descriptor.candidate_ids,
     )
     summary = suite_score.status_summary
     worst_status = suite_score.status
@@ -79,14 +75,14 @@ def suite_overview_item(
 
     evidence = {
         "suite_name": suite_name_text,
-        "suite_kind": str(suite_kind_label).strip(),
+        "suite_kind": descriptor.suite_kind_label,
         **suite_score.to_evidence(),
     }
 
     return AuditItem(
         check_id=f"{check_id_prefix}.overview",
         status=worst_status,
-        title=f"{str(suite_kind_label).strip()} overview",
+        title=f"{descriptor.suite_kind_label} overview",
         criterion="Every compiled case in this SciUnit-backed suite should satisfy its declared criterion.",
         description=(
             "This overview item summarizes the migrated NeuronUnit/SciUnit suite as one maintained validation surface "
@@ -113,39 +109,27 @@ def suite_overview_item(
 
 def suite_items_from_case_results(
     *,
-    suite_name: str,
-    suite_kind_label: str,
+    descriptor: SuiteDescriptor,
     case_results: Iterable[SuiteCaseResult],
-    aggregate_policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY,
-    candidate_ids: list[str] | tuple[str, ...] = (),
 ) -> list[AuditItem]:
     normalized_results = list(case_results)
     overview_item = suite_overview_item(
-        suite_name=suite_name,
-        suite_kind_label=suite_kind_label,
+        descriptor=descriptor,
         case_summaries=[suite_case_summary(result) for result in normalized_results],
-        aggregate_policy=aggregate_policy,
-        candidate_ids=candidate_ids,
     )
     return [overview_item, *(result.item for result in normalized_results)]
 
 
 def suite_items_from_judged(
     *,
-    suite_name: str,
-    suite_kind_label: str,
+    descriptor: SuiteDescriptor,
     judged: Iterable[tuple[_CaseT, _ScoreT]],
     result_builder: Callable[[_CaseT, _ScoreT], SuiteCaseResult],
-    aggregate_policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY,
-    candidate_ids: list[str] | tuple[str, ...] = (),
 ) -> list[AuditItem]:
     case_results = [result_builder(case, score) for case, score in judged]
     return suite_items_from_case_results(
-        suite_name=suite_name,
-        suite_kind_label=suite_kind_label,
+        descriptor=descriptor,
         case_results=case_results,
-        aggregate_policy=aggregate_policy,
-        candidate_ids=candidate_ids,
     )
 
 

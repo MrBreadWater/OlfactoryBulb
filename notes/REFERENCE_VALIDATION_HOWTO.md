@@ -221,7 +221,9 @@ The shared suite overview / matrix contract lives in
 semantics live in `olfactorybulb.neuronunit.suite_scores`. If you add another
 SciUnit-backed suite family, reuse those layers rather than hand-building a
 new overview card, aggregate rollup, or dashboard payload shape inside the
-specific adapter.
+specific adapter. Use the typed `SuiteDescriptor` there to carry the suite id,
+suite kind label, candidate/model ids, and aggregate-policy choice as one
+bundle instead of threading those fields through several helper calls.
 
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting

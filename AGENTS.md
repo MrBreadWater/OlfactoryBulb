@@ -660,10 +660,13 @@ contract for future sessions.
     shared overview/matrix contract into that helper layer. Keep suite
     aggregation semantics in the typed `olfactorybulb.neuronunit.suite_scores`
     layer so the aggregate status/norm policy is not reimplemented as loose
-    dict math inside each adapter or in the dashboard renderer. Mark the
-    overview item `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts
-    stay tied to the detailed cases rather than double-counting the overview.
-    When a suite overview carries `suite_aggregate_score` or
+    dict math inside each adapter or in the dashboard renderer. Use the typed
+    `SuiteDescriptor` bundle there for suite id, suite kind label,
+    candidate/model ids, and aggregate policy instead of threading four
+    separate parameters through each adapter. Mark the overview item
+    `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts stay tied to
+    the detailed cases rather than double-counting the overview. When a suite
+    overview carries `suite_aggregate_score` or
     `suite_norm_score_summary`, surface that in the dashboard matrix header
     instead of hiding it only in raw evidence. If the matrix has a compact
     score or norm label that helps scanning, emit it in the suite-case payload

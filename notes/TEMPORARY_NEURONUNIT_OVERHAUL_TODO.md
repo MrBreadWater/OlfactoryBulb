@@ -168,3 +168,8 @@ Remove this file when the listed items are either:
         `suite_norm_score_summary`
       - the dashboard matrix header now prefers that typed aggregate rollup
         instead of reconstructing one from summary dicts
+- [x] Replace the repeated suite id / kind / candidate-id / aggregate-policy
+      argument bundle with one typed suite descriptor.
+      - added `SuiteDescriptor`
+      - migrated the SciUnit-backed suite adapters to pass that bundle through
+        `suite_presentation`

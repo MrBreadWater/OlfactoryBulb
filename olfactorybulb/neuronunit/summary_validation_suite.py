@@ -15,6 +15,7 @@ from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
+from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -243,8 +244,10 @@ def audit_items_from_summary_rule_suite(compiled: CompiledSummaryRuleSuite) -> l
         )
 
     return suite_items_from_judged(
-        suite_name=str(compiled.suite.name or "summary-rule-suite"),
-        suite_kind_label="Summary-rule suite",
+        descriptor=SuiteDescriptor(
+            suite_id=str(compiled.suite.name or "summary-rule-suite"),
+            suite_kind_label="Summary-rule suite",
+        ),
         judged=judged,
         result_builder=_result_builder,
     )

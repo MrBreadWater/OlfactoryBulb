@@ -2047,6 +2047,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - a typed suite-aggregation layer in `olfactorybulb.neuronunit.suite_scores`
     so suite-level status/norm rollups are computed once and then adapted into
     `suite_aggregate_score` evidence for the maintained audit shell
+  - a typed `SuiteDescriptor` bundle so suite id, suite-kind label,
+    candidate/model ids, and aggregate-policy choices do not have to be
+    threaded as parallel parameters through every suite adapter
 
 The remaining open questions are now narrower:
 
