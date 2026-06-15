@@ -425,6 +425,15 @@ Remove this file when the listed items are either:
         helpers instead of re-spelling the payload fields inline
       - added focused regression assertions on the emitted payloads in the
         suite-level test modules
+- [x] Keep the series prediction seam on `ProtocolEvidenceBundle` instead of
+      downgrading it back to `rows + context`.
+      - `SeriesPredictionBundle` now carries a typed
+        `ProtocolEvidenceBundle` plus its `protocol_evidence_key`
+      - `SeriesComparisonTest.generate_prediction(...)` now preserves the
+        typed bundle when passing model-side protocol evidence into the series
+        scorer
+      - updated the direct series-suite regression fixture to use the same
+        bundle-backed prediction contract
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

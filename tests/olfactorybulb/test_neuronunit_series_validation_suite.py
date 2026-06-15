@@ -578,7 +578,10 @@ assert equivalence_reference_dataset.provenance_summary() == SeriesProvenanceSum
     y_unit_text="Hz",
 )
 equivalence_model_dataset = equivalence_observation.model_dataset(
-    SeriesPredictionBundle(rows=equivalence_model_rows, context={"fi_curve_rows": equivalence_model_rows}),
+    SeriesPredictionBundle(
+        protocol_evidence_key="fi_curve_rows",
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": equivalence_model_rows}),
+    ),
 )
 assert equivalence_model_dataset.series_id_key == "cell_name"
 assert equivalence_model_dataset.exclude_provenance_context_keys == ("fi_curve_rows",)

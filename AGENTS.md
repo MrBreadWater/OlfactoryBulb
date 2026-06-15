@@ -979,6 +979,9 @@ contract for future sessions.
       `coerce_protocol_evidence_bundle(...)`, keep the public runtime/model
       seam on `ProtocolEvidenceBundle` instead of advertising raw dicts as a
       first-class protocol-evidence payload type
+    - keep the series-suite prediction seam typed too: do not split typed
+      protocol evidence back into ad hoc `rows + context` payloads when the
+      prediction bundle can carry `ProtocolEvidenceBundle` directly
     - when series-comparison evidence needs both reference and model
       provenance, keep that on one nested typed payload rather than
       scattering sibling keys like `reference_*` / `model_*` across the score

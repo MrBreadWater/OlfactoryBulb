@@ -958,8 +958,16 @@ class SeriesComparisonScore(sciunit.Score):
 
 @dataclass(frozen=True)
 class SeriesPredictionBundle:
-    rows: list[dict[str, Any]]
-    context: dict[str, Any]
+    protocol_evidence_key: str
+    protocol_evidence: ProtocolEvidenceBundle = field(default_factory=ProtocolEvidenceBundle)
+
+    @property
+    def rows(self) -> list[dict[str, Any]]:
+        return self.protocol_evidence.rows(self.protocol_evidence_key)
+
+    @property
+    def context(self) -> dict[str, Any]:
+        return self.protocol_evidence.to_dict()
 
 
 def _aligned_x_pairs(
@@ -1317,8 +1325,8 @@ class SeriesComparisonTest(sciunit.Test):
 
     def generate_prediction(self, model: ReferenceValidationModel) -> SeriesPredictionBundle:
         return SeriesPredictionBundle(
-            rows=model.get_protocol_evidence_rows(self.case.observation.protocol_evidence_key),
-            context=model.get_protocol_evidence_map(),
+            protocol_evidence_key=self.case.observation.protocol_evidence_key,
+            protocol_evidence=ProtocolEvidenceBundle(values=model.get_protocol_evidence_map()),
         )
 
     def compute_score(self, observation: dict[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
