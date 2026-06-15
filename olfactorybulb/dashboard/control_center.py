@@ -47,10 +47,18 @@ def _progress(message: str) -> None:
 
 
 def _write_text_atomic(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp")
-    tmp.write_text(text)
-    os.replace(tmp, path)
+    last_error: FileNotFoundError | None = None
+    for _attempt in range(2):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.name}.tmp")
+        try:
+            tmp.write_text(text)
+            os.replace(tmp, path)
+            return
+        except FileNotFoundError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
@@ -1915,15 +1923,18 @@ def serve_control_center(
             self.wfile.write(data)
 
         def do_GET(self) -> None:  # noqa: N802 - HTTP handler API
-            request_path = urlparse(self.path).path
-            if request_path == "/__control_center_state__":
-                self._send_json(200, _refresh_state_file())
+            try:
+                request_path = urlparse(self.path).path
+                if request_path == "/__control_center_state__":
+                    self._send_json(200, _refresh_state_file())
+                    return
+                if request_path == "/__control_center_dev_state__":
+                    self._send_json(200, {"ok": True, "revision": _maybe_refresh_dev_outputs()})
+                    return
+                _maybe_refresh_dev_outputs()
+                super().do_GET()
+            except (BrokenPipeError, ConnectionResetError):
                 return
-            if request_path == "/__control_center_dev_state__":
-                self._send_json(200, {"ok": True, "revision": _maybe_refresh_dev_outputs()})
-                return
-            _maybe_refresh_dev_outputs()
-            super().do_GET()
 
         def translate_path(self, path: str) -> str:
             parsed_path = posixpath.normpath(unquote(urlparse(path).path))
