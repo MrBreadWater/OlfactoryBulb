@@ -948,6 +948,9 @@ contract for future sessions.
     carrying explicit fields such as `validation_id`, `notes_path`,
     `default_group`, and typed review defaults; do not reintroduce a generic
     `context.config` dict just to tunnel those values through the rule engine.
+    Keep any non-cyclic interface helpers for that seam in
+    `olfactorybulb.audit.reference_validation_contracts` rather than falling
+    back to `context: Any` inside the typed spec/parser layer.
   - Keep the protocol-result boundary typed too: the plan, engine, and rule
     context should trade `ProtocolRunResult`, not `Any`, once protocol
     execution has crossed the registry/cache layer.

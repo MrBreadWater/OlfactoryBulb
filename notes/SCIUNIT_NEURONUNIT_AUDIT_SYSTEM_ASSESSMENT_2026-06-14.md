@@ -2132,6 +2132,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `ValidationRuleContext` now pass `ProtocolRunResult` explicitly instead of
     falling back to `Any` once protocol execution returns from the registry/
     cache layer
+  - the remaining rule/spec interface seams are shrinking too: a shared
+    `reference_validation_contracts` module now carries the non-cyclic typed
+    interfaces for validation-rule context and review payloads, so the typed
+    parser/presentation layer no longer has to fall back to `context: Any` or
+    `validation_review: Any`
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

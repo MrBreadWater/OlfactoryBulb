@@ -18,6 +18,7 @@ from olfactorybulb.audit.criterion_math import (
 )
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceSeriesSpec
+from olfactorybulb.audit.reference_validation_contracts import ValidationRuleContextLike
 from olfactorybulb.neuronunit.reference_bands import sigma_phrase as _sigma_phrase
 from olfactorybulb.neuronunit.reference_bands import (
     ProvenanceRecord,
@@ -81,7 +82,7 @@ def property_override(
 
 def property_review_metadata(
     rule: dict[str, Any],
-    context: Any,
+    context: ValidationRuleContextLike,
     property_name: str,
 ) -> dict[str, str]:
     defaults = {
@@ -177,7 +178,7 @@ def row_field_name(
     return str(rule.get(default_field_key, default) or default).strip()
 
 
-def summary_group(rule: dict[str, Any], context: Any) -> str:
+def summary_group(rule: dict[str, Any], context: ValidationRuleContextLike) -> str:
     explicit = str(rule.get("group", "") or "").strip()
     if explicit:
         return explicit
@@ -343,7 +344,7 @@ class SummaryRuleSpec:
     maximum: float | None = None
 
     @classmethod
-    def from_rule(cls, rule: dict[str, Any], context: Any) -> "SummaryRuleSpec":
+    def from_rule(cls, rule: dict[str, Any], context: ValidationRuleContextLike) -> "SummaryRuleSpec":
         return cls(
             rule_kind=str(rule["kind"]),
             check_id=str(rule["check_id"]),
@@ -703,7 +704,7 @@ class ReferenceBandPropertyRuleSpec:
     def from_rule(
         cls,
         rule: dict[str, Any],
-        context: Any,
+        context: ValidationRuleContextLike,
         *,
         property_name: str,
         metric_key: str,
@@ -783,7 +784,7 @@ class ReferenceBandRuleSpec:
     def from_rule(
         cls,
         rule: dict[str, Any],
-        context: Any,
+        context: ValidationRuleContextLike,
     ) -> "ReferenceBandRuleSpec":
         property_metric_map = {
             str(key): str(value)

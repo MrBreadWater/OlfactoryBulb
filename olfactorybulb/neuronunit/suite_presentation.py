@@ -8,6 +8,7 @@ import re
 from typing import Any, Callable, Iterable, TypeVar
 
 from olfactorybulb.audit import AuditItem, companion_visual_spec
+from olfactorybulb.audit.reference_validation_contracts import ValidationReviewLike
 from olfactorybulb.neuronunit.suite_scores import (
     SuiteCaseScorePayload,
     SuiteCaseSummary,
@@ -122,7 +123,7 @@ class AuditItemAdapterSpec:
 def audit_item_adapter_spec_from_case(
     case: Any,
     *,
-    validation_review: Any | None = None,
+    validation_review: ValidationReviewLike | None = None,
     series_visuals: Iterable[dict[str, Any]] | None = None,
     companion_visuals: Iterable[dict[str, Any]] | None = None,
     detail_level: str = "detail",

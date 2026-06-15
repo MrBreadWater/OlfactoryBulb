@@ -385,6 +385,14 @@ Remove this file when the listed items are either:
         their `protocol_result` seam explicitly as `ProtocolRunResult | None`
       - the maintained runtime now preserves the protocol contract from the
         registry/cache layer through the rule engine boundary
+- [x] Replace the remaining `context: Any` / `validation_review: Any` seams
+      around the typed rule/spec layer with one shared contract module.
+      - added `olfactorybulb.audit.reference_validation_contracts`
+      - `reference_validation_specs` now consumes a typed
+        `ValidationRuleContextLike` instead of raw `Any`
+      - `ValidationRuleRecord.resolved_review_metadata(...)` and
+        `suite_presentation.audit_item_adapter_spec_from_case(...)` now depend
+        on typed review/context interfaces instead of unstructured `Any`
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

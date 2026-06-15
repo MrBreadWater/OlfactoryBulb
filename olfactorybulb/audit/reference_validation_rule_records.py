@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Iterable
 
+from olfactorybulb.audit.reference_validation_contracts import ValidationRuleContextLike
+
 
 @dataclass(frozen=True)
 class ValidationRuleRecord:
@@ -60,7 +62,7 @@ class ValidationRuleRecord:
                 return False
         return True
 
-    def resolved_review_metadata(self, context: Any) -> dict[str, str]:
+    def resolved_review_metadata(self, context: ValidationRuleContextLike) -> dict[str, str]:
         defaults = context.design_review_defaults
         return {
             "status": self.review_status or defaults.status,
