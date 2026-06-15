@@ -219,6 +219,11 @@ presentation only: it is marked `summary_rollup_exempt`, so the report summary
 and group summary still count the detailed cases rather than double-counting
 the overview.
 
+Those overview cards and their case-matrix payloads are intentionally shared.
+Future SciUnit-backed suite families should extend
+`olfactorybulb.neuronunit.suite_presentation` rather than inventing another
+per-family overview schema.
+
 ### Step 6: create or edit the validation config
 
 Validation configs live under:

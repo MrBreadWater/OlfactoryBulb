@@ -22,7 +22,7 @@ from olfactorybulb.neuronunit.reference_bands import (
     measurement_with_unit,
     numeric_value,
 )
-from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
+from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
 
 
 @dataclass(frozen=True)
@@ -250,46 +250,50 @@ def _evidence_payload(case: ReferenceBandCase, score: ReferenceBandScore) -> dic
     return evidence
 
 
+def _reference_band_score_text(case: ReferenceBandCase, score: ReferenceBandScore) -> str:
+    observed_value = rounded(numeric_value(score.observed))
+    unit_text = str(case.observation.unit_text or "").strip()
+    if observed_value is None:
+        return ""
+    return f"observed {observed_value:g}{f' {unit_text}' if unit_text else ''}"
+
+
+def _reference_band_case_result(case: ReferenceBandCase, score: ReferenceBandScore):
+    obs = case.observation
+    item = AuditItem(
+        check_id=case.check_id,
+        status=case.pass_status if score.passed else case.fail_status,
+        title=case.title,
+        criterion=case.criterion,
+        criterion_latex=case.criterion_latex,
+        criterion_formulae=case.criterion_formulae,
+        criterion_definitions=case.criterion_definitions,
+        description=case.description,
+        acceptable=case.acceptable,
+        acceptable_basis=case.acceptable_basis,
+        evidence=_evidence_payload(case, score),
+        note=case.note,
+        validation_design_review_status=obs.review.status,
+        validation_design_review_note=obs.review.note,
+        validation_design_review_reviewer=obs.review.reviewer,
+        validation_design_review_required_expertise=obs.review.required_expertise,
+        validation_design_review_focus=obs.review.focus,
+    )
+    return suite_case_result(
+        item,
+        score_text=_reference_band_score_text(case, score),
+        norm_score=score.norm_score,
+    )
+
+
 def audit_items_from_reference_band_suite(compiled: CompiledReferenceBandSuite) -> list[AuditItem]:
     judged = compiled.judge()
-    case_entries = [
-        suite_case_entry(
-            check_id=case.check_id,
-            title=case.title,
-            status=case.pass_status if score.passed else case.fail_status,
-        )
-        for case, score in judged
-    ]
-    items: list[AuditItem] = [
-        suite_overview_item(
-            suite_name=str(compiled.suite.name or "reference-band-suite"),
-            suite_kind_label="Reference-band suite",
-            case_entries=case_entries,
-        )
-    ]
-    for case, score in judged:
-        obs = case.observation
-        item = AuditItem(
-            check_id=case.check_id,
-            status=case.pass_status if score.passed else case.fail_status,
-            title=case.title,
-            criterion=case.criterion,
-            criterion_latex=case.criterion_latex,
-            criterion_formulae=case.criterion_formulae,
-            criterion_definitions=case.criterion_definitions,
-            description=case.description,
-            acceptable=case.acceptable,
-            acceptable_basis=case.acceptable_basis,
-            evidence=_evidence_payload(case, score),
-            note=case.note,
-            validation_design_review_status=obs.review.status,
-            validation_design_review_note=obs.review.note,
-            validation_design_review_reviewer=obs.review.reviewer,
-            validation_design_review_required_expertise=obs.review.required_expertise,
-            validation_design_review_focus=obs.review.focus,
-        )
-        items.append(item)
-    return items
+    return suite_items_from_judged(
+        suite_name=str(compiled.suite.name or "reference-band-suite"),
+        suite_kind_label="Reference-band suite",
+        judged=judged,
+        result_builder=_reference_band_case_result,
+    )
 
 
 __all__ = [

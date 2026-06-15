@@ -14,7 +14,7 @@ from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
+from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -197,19 +197,16 @@ def compile_summary_rule_suite(
     return CompiledSummaryRuleSuite(suite=suite, model=model, cases=cases, tests=tests)
 
 
+def _summary_score_text(case: SummaryRuleCase, score: SummaryRuleScore) -> str:
+    observed = numeric_value(score.observed)
+    if not _is_finite_number(observed):
+        return ""
+    return f"observed {rounded(float(observed)):g}"
+
+
 def audit_items_from_summary_rule_suite(compiled: CompiledSummaryRuleSuite) -> list[AuditItem]:
     judged = compiled.judge()
-    items: list[AuditItem] = [
-        suite_overview_item(
-            suite_name=str(compiled.suite.name or "summary-rule-suite"),
-            suite_kind_label="Summary-rule suite",
-            case_entries=[
-                suite_case_entry(check_id=case.check_id, title=case.title, status=score.status)
-                for case, score in judged
-            ],
-        )
-    ]
-    for case, score in judged:
+    def _result_builder(case: SummaryRuleCase, score: SummaryRuleScore):
         observed = numeric_value(score.observed)
         base: dict[str, Any] = {"group": case.group, "observed": observed}
         if case.rule_kind == "summary_metric_min":
@@ -225,23 +222,32 @@ def audit_items_from_summary_rule_suite(compiled: CompiledSummaryRuleSuite) -> l
             base["fail_values"] = sorted(case.fail_values)
         for metric_key in case.evidence_metric_keys:
             base[metric_key] = compiled.model.summary.get(case.group, {}).get(metric_key, float("nan"))
-        items.append(
-            AuditItem(
-                check_id=case.check_id,
-                status=score.status,
-                title=case.title,
-                criterion=case.criterion,
-                criterion_latex=case.criterion_latex,
-                criterion_formulae=case.criterion_formulae,
-                criterion_definitions=case.criterion_definitions,
-                description=case.description,
-                acceptable=case.acceptable,
-                acceptable_basis=case.acceptable_basis,
-                evidence=_rounded_dict(base),
-                note=case.note,
-            )
+        item = AuditItem(
+            check_id=case.check_id,
+            status=score.status,
+            title=case.title,
+            criterion=case.criterion,
+            criterion_latex=case.criterion_latex,
+            criterion_formulae=case.criterion_formulae,
+            criterion_definitions=case.criterion_definitions,
+            description=case.description,
+            acceptable=case.acceptable,
+            acceptable_basis=case.acceptable_basis,
+            evidence=_rounded_dict(base),
+            note=case.note,
         )
-    return items
+        return suite_case_result(
+            item,
+            score_text=_summary_score_text(case, score),
+            norm_score=score.norm_score,
+        )
+
+    return suite_items_from_judged(
+        suite_name=str(compiled.suite.name or "summary-rule-suite"),
+        suite_kind_label="Summary-rule suite",
+        judged=judged,
+        result_builder=_result_builder,
+    )
 
 
 __all__ = [

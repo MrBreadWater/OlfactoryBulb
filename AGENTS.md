@@ -606,10 +606,15 @@ contract for future sessions.
     handlers.
   - When a maintained validation rule family compiles into a SciUnit-backed
     suite and also emits per-case `AuditItem`s, add one shared suite-overview
-    item through the shared suite-presentation helper rather than hand-building
-    one-off rollup cards in each adapter. Mark the overview item
+    item through `olfactorybulb.neuronunit.suite_presentation` rather than
+    hand-building one-off rollup cards in each adapter. Keep the per-suite
+    adapter focused on case-specific evidence/item construction and push the
+    shared overview/matrix contract into that helper layer. Mark the overview item
     `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts stay tied to
-    the detailed cases rather than double-counting the overview.
+    the detailed cases rather than double-counting the overview. When a suite
+    matrix has a compact score or norm label that helps scanning, emit it in
+    the suite-case payload rather than teaching the dashboard to reverse-engineer
+    it from raw detailed evidence.
 
 ## 5b. Reusable infrastructure extraction rules
 

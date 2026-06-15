@@ -156,6 +156,8 @@ assert [item.status for item in adapted_items] == ["PASS", "PASS", "PASS", "PASS
 assert adapted_items[0].detail_level == "summary"
 assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 5, "WARN": 0, "FAIL": 0}
+assert adapted_items[0].evidence["suite_cases"][1]["score_text"] == "|Δ| 0.5"
+assert adapted_items[0].evidence["suite_cases"][2]["score_text"] == "Δ -0.2"
 assert adapted_items[1].evidence["expected"] == 0.0
 assert adapted_items[2].evidence["absolute_difference"] == 0.5
 assert adapted_items[3].evidence["TC_minus_MC"] == -0.2

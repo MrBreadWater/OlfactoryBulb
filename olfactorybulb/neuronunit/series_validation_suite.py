@@ -21,7 +21,7 @@ from olfactorybulb.neuronunit.capabilities import (
 )
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
+from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -1162,48 +1162,57 @@ def compile_series_comparison_suite(
     return CompiledSeriesComparisonSuite(suite=suite, model=model, cases=cases, tests=tests)
 
 
+def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore) -> str:
+    mae = score.evidence.get("mean_absolute_error_Hz")
+    if _is_finite_number(mae):
+        return f"MAE {rounded(float(mae)):g} Hz"
+    aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
+    if _is_finite_number(aggregate_pvalue):
+        return f"p {rounded(float(aggregate_pvalue), digits=4):g}"
+    return ""
+
+
 def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonSuite) -> list[AuditItem]:
     judged = compiled.judge()
-    items: list[AuditItem] = [
-        suite_overview_item(
-            suite_name=str(compiled.suite.name or "series-comparison-suite"),
-            suite_kind_label="Series-comparison suite",
-            case_entries=[
-                suite_case_entry(check_id=case.check_id, title=case.title, status=score.status)
-                for case, score in judged
-            ],
-        )
-    ]
-    for case, score in judged:
+    def _result_builder(case: SeriesComparisonCase, score: SeriesComparisonScore):
         obs = case.observation
-        items.append(
-            AuditItem(
-                check_id=case.check_id,
-                status=score.status,
-                title=case.title,
-                criterion=case.criterion,
-                criterion_latex=case.criterion_latex,
-                criterion_formulae=case.criterion_formulae,
-                criterion_definitions=case.criterion_definitions,
-                description=case.description,
-                acceptable=case.acceptable,
-                acceptable_basis=case.acceptable_basis,
-                evidence=score.evidence,
-                series_visuals=[
-                    series_visual_spec(
-                        kind=obs.visual_kind,
-                        keys=[obs.visual_x_key, obs.visual_reference_y_key, obs.visual_model_y_key],
-                        style={
-                            "line_width": 1.8,
-                            "marker_size": 3.2,
-                            "legend_loc": "lower center",
-                        },
-                    )
-                ],
-                note=case.note,
-            )
+        item = AuditItem(
+            check_id=case.check_id,
+            status=score.status,
+            title=case.title,
+            criterion=case.criterion,
+            criterion_latex=case.criterion_latex,
+            criterion_formulae=case.criterion_formulae,
+            criterion_definitions=case.criterion_definitions,
+            description=case.description,
+            acceptable=case.acceptable,
+            acceptable_basis=case.acceptable_basis,
+            evidence=score.evidence,
+            series_visuals=[
+                series_visual_spec(
+                    kind=obs.visual_kind,
+                    keys=[obs.visual_x_key, obs.visual_reference_y_key, obs.visual_model_y_key],
+                    style={
+                        "line_width": 1.8,
+                        "marker_size": 3.2,
+                        "legend_loc": "lower center",
+                    },
+                )
+            ],
+            note=case.note,
         )
-    return items
+        return suite_case_result(
+            item,
+            score_text=_series_score_text(case, score),
+            norm_score=score.norm_score,
+        )
+
+    return suite_items_from_judged(
+        suite_name=str(compiled.suite.name or "series-comparison-suite"),
+        suite_kind_label="Series-comparison suite",
+        judged=judged,
+        result_builder=_result_builder,
+    )
 
 
 __all__ = [

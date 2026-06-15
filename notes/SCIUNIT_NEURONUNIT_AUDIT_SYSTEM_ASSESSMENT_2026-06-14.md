@@ -1754,6 +1754,15 @@ The suite-overview item is intentionally rollup-exempt so the maintained audit
 summary still reflects the detailed scientific cases rather than double-
 counting the overview card.
 
+The branch now also has a shared suite result/presentation helper so those
+overview cards are not hand-implemented four different ways. The shared helper
+owns:
+
+- suite-overview item construction
+- rollup-exempt report semantics
+- suite-case matrix payload shape
+- optional compact per-case score labels
+
 2. A per-test score distribution view:
    - histogram or strip across candidates
    - useful in optimization and model-comparison workflows

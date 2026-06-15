@@ -386,8 +386,20 @@ suite_summary_report = AuditReport(
                 "warning_cases": ["Suite warning detail"],
                 "failed_cases": [],
                 "suite_cases": [
-                    {"check_id": "suite_summary_demo.pass_detail", "title": "Suite pass detail", "status": "PASS"},
-                    {"check_id": "suite_summary_demo.warn_detail", "title": "Suite warning detail", "status": "WARN"},
+                    {
+                        "check_id": "suite_summary_demo.pass_detail",
+                        "title": "Suite pass detail",
+                        "status": "PASS",
+                        "score_text": "observed 1",
+                        "norm_score": 1.0,
+                    },
+                    {
+                        "check_id": "suite_summary_demo.warn_detail",
+                        "title": "Suite warning detail",
+                        "status": "WARN",
+                        "score_text": "observed 2",
+                        "norm_score": 0.5,
+                    },
                 ],
             },
             companion_visuals=[
@@ -441,6 +453,9 @@ with TemporaryDirectory() as tmp:
     assert "Suite case summary" in html
     assert "Suite pass detail" in html
     assert "Suite warning detail" in html
+    assert "observed 1" in html
+    assert "norm 1" in html
+    assert "norm 0.5" in html
     assert html.count("suite-status-cell") >= 2
     assert "2 cases" in html
 

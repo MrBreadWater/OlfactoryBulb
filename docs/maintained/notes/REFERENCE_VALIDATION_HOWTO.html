@@ -317,6 +317,10 @@ the maintained path now emits:</p>
 <p>The suite-overview item is intentionally <code>summary_rollup_exempt</code>, so the
 top-level PASS/WARN/FAIL counts still reflect the detailed validation cases
 rather than double-counting the overview card.</p>
+<p>The shared suite overview / matrix contract lives in
+<code>olfactorybulb.neuronunit.suite_presentation</code>. If you add another SciUnit-
+backed suite family, reuse that helper layer rather than hand-building a new
+overview card or dashboard payload shape inside the specific adapter.</p>
 <p>One consequence of that split is that <strong>reference-band assumptions belong in
 config</strong>, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as

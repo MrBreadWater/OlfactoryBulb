@@ -216,6 +216,11 @@ The suite-overview item is intentionally `summary_rollup_exempt`, so the
 top-level PASS/WARN/FAIL counts still reflect the detailed validation cases
 rather than double-counting the overview card.
 
+The shared suite overview / matrix contract lives in
+`olfactorybulb.neuronunit.suite_presentation`. If you add another SciUnit-
+backed suite family, reuse that helper layer rather than hand-building a new
+overview card or dashboard payload shape inside the specific adapter.
+
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as

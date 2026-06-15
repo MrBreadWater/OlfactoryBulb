@@ -111,6 +111,11 @@ Remove this file when the listed items are either:
       - added a compact persistent status-matrix companion visual
       - kept report/group summary counts tied to the detailed cases via
         `summary_rollup_exempt`
+- [x] Replace the four parallel suite-overview adapter patterns with one shared
+      suite result/presentation contract.
+      - added `olfactorybulb.neuronunit.suite_presentation`
+      - suite matrices can now carry compact per-case score labels in addition
+        to status
 - [ ] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

@@ -14,7 +14,7 @@ from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
+from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -263,36 +263,53 @@ def compile_comparison_rule_suite(
     return CompiledComparisonRuleSuite(suite=suite, model=model, cases=cases, tests=tests)
 
 
+def _comparison_score_text(case: ComparisonRuleCase, score: ComparisonRuleScore) -> str:
+    if case.rule_kind == "all_finite_metric":
+        return "all finite" if int(score.score) == 0 else f"missing {int(score.score)}"
+    if case.rule_kind == "all_exact_metric":
+        return "all exact" if int(score.score) == 0 else f"failing {int(score.score)}"
+    if case.rule_kind == "group_ordering":
+        delta = score.evidence.get(f"{case.right_group}_minus_{case.left_group}")
+        if _is_finite_number(delta):
+            return f"Δ {rounded(float(delta)):g}"
+    if case.rule_kind == "group_abs_diff_max":
+        difference = score.evidence.get("absolute_difference")
+        if _is_finite_number(difference):
+            return f"|Δ| {rounded(float(difference)):g}"
+    if case.rule_kind == "group_positive":
+        return "all positive" if int(score.score) == 0 else f"failing {int(score.score)}"
+    return ""
+
+
 def audit_items_from_comparison_rule_suite(compiled: CompiledComparisonRuleSuite) -> list[AuditItem]:
     judged = compiled.judge()
-    items: list[AuditItem] = [
-        suite_overview_item(
-            suite_name=str(compiled.suite.name or "comparison-rule-suite"),
-            suite_kind_label="Comparison-rule suite",
-            case_entries=[
-                suite_case_entry(check_id=case.check_id, title=case.title, status=score.status)
-                for case, score in judged
-            ],
+    def _result_builder(case: ComparisonRuleCase, score: ComparisonRuleScore):
+        item = AuditItem(
+            check_id=case.check_id,
+            status=score.status,
+            title=case.title,
+            criterion=case.criterion,
+            criterion_latex=case.criterion_latex,
+            criterion_formulae=case.criterion_formulae,
+            criterion_definitions=case.criterion_definitions,
+            description=case.description,
+            acceptable=case.acceptable,
+            acceptable_basis=case.acceptable_basis,
+            evidence=score.evidence,
+            note=case.note,
         )
-    ]
-    for case, score in judged:
-        items.append(
-            AuditItem(
-                check_id=case.check_id,
-                status=score.status,
-                title=case.title,
-                criterion=case.criterion,
-                criterion_latex=case.criterion_latex,
-                criterion_formulae=case.criterion_formulae,
-                criterion_definitions=case.criterion_definitions,
-                description=case.description,
-                acceptable=case.acceptable,
-                acceptable_basis=case.acceptable_basis,
-                evidence=score.evidence,
-                note=case.note,
-            )
+        return suite_case_result(
+            item,
+            score_text=_comparison_score_text(case, score),
+            norm_score=score.norm_score,
         )
-    return items
+
+    return suite_items_from_judged(
+        suite_name=str(compiled.suite.name or "comparison-rule-suite"),
+        suite_kind_label="Comparison-rule suite",
+        judged=judged,
+        result_builder=_result_builder,
+    )
 
 
 __all__ = [

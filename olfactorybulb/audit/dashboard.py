@@ -1366,11 +1366,19 @@ def _render_companion_visuals(
             title = str(raw_entry.get("title", "")).strip()
             if status not in {"PASS", "WARN", "FAIL"} or not title:
                 continue
+            score_text = str(raw_entry.get("score_text", "")).strip()
+            norm_score = _float_or_none(raw_entry.get("norm_score"))
             entries.append(
                 {
                     "status": status,
                     "title": title,
                     "check_id": str(raw_entry.get("check_id", "")).strip(),
+                    "score_text": score_text,
+                    "norm_score": (
+                        ""
+                        if norm_score is None
+                        else f"norm {norm_score:.3f}".rstrip("0").rstrip(".")
+                    ),
                 }
             )
 
@@ -1384,13 +1392,23 @@ def _render_companion_visuals(
         left_meta = str(spec.get("left_meta") or f"{len(entries)} cases")
         right_meta = str(spec.get("right_meta") or "suite rollup")
         cells_html = "".join(
-            "<div "
-            f"class='suite-status-cell {_status_class(entry['status'])}' "
-            f"data-suite-status-cell data-suite-status='{_esc(entry['status'])}' "
-            f"title='{_esc(entry['status'])}: {_expand_terms(entry['title'], sentence_case=True)}'>"
-            f"<span class='suite-status-cell-badge'>{_esc(entry['status'])}</span>"
-            f"<span class='suite-status-cell-title'>{_esc(_expand_terms(entry['title'], sentence_case=True))}</span>"
-            "</div>"
+            (
+                "<div "
+                f"class='suite-status-cell {_status_class(entry['status'])}' "
+                f"data-suite-status-cell data-suite-status='{_esc(entry['status'])}' "
+                f"title='{_esc(entry['status'])}: {_expand_terms(entry['title'], sentence_case=True)}'>"
+                f"<span class='suite-status-cell-badge'>{_esc(entry['status'])}</span>"
+                f"<span class='suite-status-cell-title'>{_esc(_expand_terms(entry['title'], sentence_case=True))}</span>"
+                + (
+                    f"<span class='suite-status-cell-score'>{_esc(entry['score_text'])}</span>"
+                    if entry["score_text"] else ""
+                )
+                + (
+                    f"<span class='suite-status-cell-norm'>{_esc(entry['norm_score'])}</span>"
+                    if entry["norm_score"] else ""
+                )
+                + "</div>"
+            )
             for entry in entries
         )
         return (
@@ -2729,6 +2747,15 @@ def render_audit_dashboard_html(
       font-weight: 600;
       line-height: 1.4;
       overflow-wrap: anywhere;
+    }}
+    .suite-status-cell-score,
+    .suite-status-cell-norm {{
+      color: #64748b;
+      font-size: 11px;
+      line-height: 1.3;
+    }}
+    .suite-status-cell-score {{
+      font-weight: 600;
     }}
     .series-graph-shell,
     .numeric-strip-shell,

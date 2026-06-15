@@ -270,6 +270,8 @@ assert [item.status for item in adapted_items] == ["PASS", "PASS"]
 assert adapted_items[0].detail_level == "summary"
 assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 0, "FAIL": 0}
+assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "MAE 1 Hz"
+assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
 assert adapted_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert adapted_items[1].evidence["reference_values_Hz"] == [6.0, 11.0]
 assert adapted_items[1].evidence["model_values_Hz"] == [7.0, 12.0]
