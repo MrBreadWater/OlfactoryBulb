@@ -72,6 +72,20 @@ class ComparisonRuleCase:
         if self.metric_quantity is None:
             object.__setattr__(self, "metric_quantity", resolve_metric_quantity(self.metric_key))
 
+    def observation_payload(self) -> dict[str, Any]:
+        return {
+            "rule_kind": self.rule_kind,
+            "metric_key": self.metric_key,
+            "entity_key": self.entity_key,
+            "left_group": self.left_group,
+            "right_group": self.right_group,
+            "operator": self.operator,
+            "groups": self.groups,
+            "expected": self.expected,
+            "tolerance": self.tolerance,
+            "max_difference": self.max_difference,
+        }
+
 
 class ComparisonRuleScore(sciunit.Score):
     """Status-bearing score for comparison/exactness validation rules."""
@@ -105,19 +119,7 @@ class ComparisonRuleTest(sciunit.Test):
 
     def __init__(self, case: ComparisonRuleCase) -> None:
         self.case = case
-        observation = {
-            "rule_kind": case.rule_kind,
-            "metric_key": case.metric_key,
-            "entity_key": case.entity_key,
-            "left_group": case.left_group,
-            "right_group": case.right_group,
-            "operator": case.operator,
-            "groups": case.groups,
-            "expected": case.expected,
-            "tolerance": case.tolerance,
-            "max_difference": case.max_difference,
-        }
-        super().__init__(observation=observation, name=case.title)
+        super().__init__(observation=case.observation_payload(), name=case.title)
 
     def validate_observation(self, observation: dict[str, Any]) -> None:
         required = {"rule_kind", "metric_key"}

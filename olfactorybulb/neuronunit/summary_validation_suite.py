@@ -75,6 +75,20 @@ class SummaryRuleCase:
         if self.rule_kind == "summary_metric_status_map" and self.status_map_policy is None:
             raise ValueError("summary_metric_status_map cases require a status_map_policy")
 
+    def observation_payload(self) -> dict[str, Any]:
+        payload = {
+            "rule_kind": self.rule_kind,
+            "metric_key": self.metric_key,
+            "group": self.group,
+        }
+        if self.minimum is not None:
+            payload["minimum"] = self.minimum
+        if self.maximum is not None:
+            payload["maximum"] = self.maximum
+        if self.status_map_policy is not None:
+            payload.update(self.status_map_policy.observation_payload())
+        return payload
+
 
 class SummaryRuleScore(sciunit.Score):
     """Status-bearing score for summary metric rules."""
@@ -112,18 +126,7 @@ class SummaryRuleTest(sciunit.Test):
 
     def __init__(self, case: SummaryRuleCase) -> None:
         self.case = case
-        observation = {
-            "rule_kind": case.rule_kind,
-            "metric_key": case.metric_key,
-            "group": case.group,
-        }
-        if case.minimum is not None:
-            observation["minimum"] = case.minimum
-        if case.maximum is not None:
-            observation["maximum"] = case.maximum
-        if case.status_map_policy is not None:
-            observation.update(case.status_map_policy.observation_payload())
-        super().__init__(observation=observation, name=case.title)
+        super().__init__(observation=case.observation_payload(), name=case.title)
 
     def validate_observation(self, observation: dict[str, Any]) -> None:
         required = {"rule_kind", "metric_key", "group"}

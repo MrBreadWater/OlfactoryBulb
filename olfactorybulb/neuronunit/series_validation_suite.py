@@ -890,6 +890,27 @@ class SeriesDistributionObservation:
             exclude_provenance_context_keys=(self.protocol_evidence_key,),
         )
 
+    def observation_payload(self) -> dict[str, Any]:
+        return {
+            "protocol_evidence_key": self.protocol_evidence_key,
+            "reference_x_key": self.reference_x_key,
+            "reference_y_key": self.reference_y_key,
+            "model_x_key": self.model_x_key,
+            "model_y_key": self.model_y_key,
+            "comparison_x_unit_text": self.comparison_x_unit_text,
+            "comparison_y_unit_text": self.comparison_y_unit_text,
+            "equivalence_margin": self.policy.equivalence_margin,
+            "equivalence_alpha": self.policy.equivalence_alpha,
+            "alignment_policy": self.policy.alignment_policy,
+            "x_match_tolerance": self.policy.x_match_tolerance,
+            "resampling_grid_source": self.policy.resampling_grid_source,
+            "resampling_grid_values": self.policy.resampling_grid_values,
+            "interpolation_method": self.policy.interpolation_method,
+            "distribution_kind": self.policy.distribution_kind,
+            "score_family": self.policy.score_family,
+            "pvalue_aggregation": self.policy.pvalue_aggregation,
+        }
+
 
 @dataclass(frozen=True)
 class SeriesComparisonCase:
@@ -1266,26 +1287,7 @@ class SeriesComparisonTest(sciunit.Test):
 
     def __init__(self, case: SeriesComparisonCase) -> None:
         self.case = case
-        observation = {
-            "protocol_evidence_key": case.observation.protocol_evidence_key,
-            "reference_x_key": case.observation.reference_x_key,
-            "reference_y_key": case.observation.reference_y_key,
-            "model_x_key": case.observation.model_x_key,
-            "model_y_key": case.observation.model_y_key,
-            "comparison_x_unit_text": case.observation.comparison_x_unit_text,
-            "comparison_y_unit_text": case.observation.comparison_y_unit_text,
-            "equivalence_margin": case.observation.policy.equivalence_margin,
-            "equivalence_alpha": case.observation.policy.equivalence_alpha,
-            "alignment_policy": case.observation.policy.alignment_policy,
-            "x_match_tolerance": case.observation.policy.x_match_tolerance,
-            "resampling_grid_source": case.observation.policy.resampling_grid_source,
-            "resampling_grid_values": case.observation.policy.resampling_grid_values,
-            "interpolation_method": case.observation.policy.interpolation_method,
-            "distribution_kind": case.observation.policy.distribution_kind,
-            "score_family": case.observation.policy.score_family,
-            "pvalue_aggregation": case.observation.policy.pvalue_aggregation,
-        }
-        super().__init__(observation=observation, name=case.title)
+        super().__init__(observation=case.observation.observation_payload(), name=case.title)
 
     def validate_observation(self, observation: dict[str, Any]) -> None:
         required = {

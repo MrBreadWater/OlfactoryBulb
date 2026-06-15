@@ -141,6 +141,17 @@ class ReferenceBandObservation:
             measurement_with_unit(band.high, self.unit_text),
         )
 
+    def observation_payload(self) -> dict[str, Any]:
+        return {
+            "property_name": self.property_name,
+            "group": self.group,
+            "metric_key": self.metric_key,
+            "reference_mean": self.reference_mean,
+            "reference_sd": self.reference_sd,
+            "unit_text": self.unit_text,
+            "band_mode": self.policy.mode,
+        }
+
 
 def compute_reference_acceptance_band(
     *,

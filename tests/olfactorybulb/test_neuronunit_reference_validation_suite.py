@@ -84,6 +84,15 @@ compiled = compile_reference_band_suite(
     summary={"MC": {"input_resistance_MOhm": 102.0}},
     suite_name="Synthetic reference-band suite",
 )
+assert case.observation.observation_payload() == {
+    "property_name": "Input Resistance",
+    "group": "MC",
+    "metric_key": "input_resistance_MOhm",
+    "reference_mean": 100.0,
+    "reference_sd": 10.0,
+    "unit_text": "MOhm",
+    "band_mode": "symmetric_sd",
+}
 judged = compiled.judge()
 assert len(judged) == 1
 score = judged[0][1]

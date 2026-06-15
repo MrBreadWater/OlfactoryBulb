@@ -108,6 +108,21 @@ summary = {
 }
 
 compiled = compile_summary_rule_suite(cases=cases, summary=summary, suite_name="synthetic summary suite")
+assert cases[0].observation_payload() == {
+    "rule_kind": "summary_metric_min",
+    "metric_key": "baseline_population_min_count",
+    "group": "ungrouped",
+    "minimum": 1.0,
+}
+assert cases[1].observation_payload() == {
+    "rule_kind": "summary_metric_status_map",
+    "metric_key": "epli_target_pattern_specificity_code",
+    "group": "ungrouped",
+    "pass_values": [2.0],
+    "warn_values": [1.0],
+    "fail_values": [0.0],
+    "default_status": "FAIL",
+}
 judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS", "WARN", "PASS"]
 

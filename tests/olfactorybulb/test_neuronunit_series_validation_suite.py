@@ -313,6 +313,25 @@ assert observation.reference_spec.x_key == "current_pA"
 assert observation.reference_spec.series_id_key == "cell_id"
 assert observation.model_spec.x_key == "current_flux"
 assert observation.visual_contract.reference_y_key == "reference_values_Hz"
+assert observation.observation_payload() == {
+    "protocol_evidence_key": "fi_curve_rows",
+    "reference_x_key": "current_pA",
+    "reference_y_key": "firing_rate_Hz",
+    "model_x_key": "current_flux",
+    "model_y_key": "firing_rate_Hz",
+    "comparison_x_unit_text": "pA",
+    "comparison_y_unit_text": "Hz",
+    "equivalence_margin": None,
+    "equivalence_alpha": 0.05,
+    "alignment_policy": "exact_transformed_x",
+    "x_match_tolerance": None,
+    "resampling_grid_source": "",
+    "resampling_grid_values": (),
+    "interpolation_method": "linear",
+    "distribution_kind": "empirical_by_x",
+    "score_family": "hybrid_residual_welch",
+    "pvalue_aggregation": "median",
+}
 
 case = SeriesComparisonCase(
     check_id="synthetic_series_match",

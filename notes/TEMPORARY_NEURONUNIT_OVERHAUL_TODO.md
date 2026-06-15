@@ -415,6 +415,16 @@ Remove this file when the listed items are either:
       - removed the redundant top-level `reference_series_count` /
         `model_series_count` and sibling provenance fields from the
         maintained series evidence contract
+- [x] Keep maintained SciUnit wrapper observations owned by the existing typed
+      case/observation objects instead of rebuilding raw dicts inline in each
+      wrapper constructor.
+      - `ReferenceBandObservation`, `SummaryRuleCase`,
+        `ComparisonRuleCase`, and `SeriesDistributionObservation` now each
+        expose `observation_payload()`
+      - the corresponding SciUnit `Test` wrappers now delegate to those
+        helpers instead of re-spelling the payload fields inline
+      - added focused regression assertions on the emitted payloads in the
+        suite-level test modules
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

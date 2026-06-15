@@ -170,6 +170,30 @@ compiled = compile_comparison_rule_suite(
     metrics=metrics,
     suite_name="synthetic comparison suite",
 )
+assert cases[0].observation_payload() == {
+    "rule_kind": "all_exact_metric",
+    "metric_key": "zero_step_rate_Hz",
+    "entity_key": "cell_name",
+    "left_group": "",
+    "right_group": "",
+    "operator": ">",
+    "groups": (),
+    "expected": 0.0,
+    "tolerance": 1e-09,
+    "max_difference": 0.0,
+}
+assert cases[2].observation_payload() == {
+    "rule_kind": "group_ordering",
+    "metric_key": "FWHM_ms",
+    "entity_key": "cell_name",
+    "left_group": "MC",
+    "right_group": "TC",
+    "operator": "<",
+    "groups": (),
+    "expected": 0.0,
+    "tolerance": 1e-09,
+    "max_difference": 0.0,
+}
 judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS", "PASS", "PASS", "PASS", "PASS"]
 

@@ -2199,6 +2199,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `SuiteStatisticalPolicy`, so grouped validations can override the default
     suite-level p-value rollup declaratively instead of baking it into one
     suite adapter or the dashboard
+  - the maintained SciUnit wrappers now also delegate their observation maps
+    back to the existing typed case/observation objects through small
+    `observation_payload()` helpers, so the suite layer no longer duplicates
+    field lists inline just to satisfy the SciUnit observation contract
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +

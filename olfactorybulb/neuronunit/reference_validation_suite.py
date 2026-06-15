@@ -149,16 +149,7 @@ class ReferenceBandTest(sciunit.Test):
 
     def __init__(self, case: ReferenceBandCase) -> None:
         self.case = case
-        observation = {
-            "property_name": case.observation.property_name,
-            "group": case.observation.group,
-            "metric_key": case.observation.metric_key,
-            "reference_mean": case.observation.reference_mean,
-            "reference_sd": case.observation.reference_sd,
-            "unit_text": case.observation.unit_text,
-            "band_mode": case.observation.policy.mode,
-        }
-        super().__init__(observation=observation, name=case.title)
+        super().__init__(observation=case.observation.observation_payload(), name=case.title)
 
     def validate_observation(self, observation: dict[str, Any]) -> None:
         required = {

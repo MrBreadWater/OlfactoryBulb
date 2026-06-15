@@ -984,6 +984,10 @@ contract for future sessions.
       scattering sibling keys like `reference_*` / `model_*` across the score
       evidence map unless a renderer or CLI surface truly needs flattened
       aliases
+    - when a maintained SciUnit wrapper already has a typed case or
+      observation object, make that object own the SciUnit observation payload
+      via a small `observation_payload()` helper instead of rebuilding a
+      parallel raw dict inline in each wrapper `__init__`
     - cache hits/misses should stay visible in emitted protocol evidence under
       `protocol_cache`; do not hide them behind silent control flow
 
