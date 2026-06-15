@@ -5,6 +5,7 @@ from __future__ import annotations
 from olfactorybulb.neuronunit.suite_scores import (
     SuiteAggregatePolicy,
     SuiteCaseScorePayload,
+    SuiteCaseStatisticalPayload,
     SuiteCaseSummary,
     SuiteStatisticalPolicy,
     build_suite_aggregate_score,
@@ -72,11 +73,16 @@ equivalence_score = build_suite_aggregate_score(
             norm_score=1.0,
             case_score=SuiteCaseScorePayload(
                 score_kind="hybrid_residual_equivalence",
-                observation={"aggregate_statistical_pvalue": 0.01},
-                prediction={
-                    "equivalence_alpha": 0.05,
-                    "statistical_test_family": "equivalence_tost",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.01,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
             ),
         ),
         SuiteCaseSummary(
@@ -86,11 +92,16 @@ equivalence_score = build_suite_aggregate_score(
             norm_score=0.9,
             case_score=SuiteCaseScorePayload(
                 score_kind="equivalence_only",
-                observation={"aggregate_statistical_pvalue": 0.03},
-                prediction={
-                    "equivalence_alpha": 0.05,
-                    "statistical_test_family": "equivalence_tost",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.03,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
             ),
         ),
     ],
@@ -129,11 +140,16 @@ welch_score = build_suite_aggregate_score(
             norm_score=1.0,
             case_score=SuiteCaseScorePayload(
                 score_kind="hybrid_residual_welch",
-                observation={"median_welch_pvalue": 0.08},
-                prediction={
-                    "minimum_median_welch_pvalue": 0.05,
-                    "statistical_test_family": "legacy_welch_difference",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="welch_similarity",
+                    statistical_test_family="legacy_welch_difference",
+                    pvalue=0.08,
+                    label="Welch p",
+                    default_rollup_method="min",
+                    threshold=0.05,
+                    threshold_key="minimum_median_welch_pvalue",
+                    threshold_direction="ge",
+                ),
             ),
         ),
         SuiteCaseSummary(
@@ -143,11 +159,16 @@ welch_score = build_suite_aggregate_score(
             norm_score=0.8,
             case_score=SuiteCaseScorePayload(
                 score_kind="welch_only",
-                observation={"median_welch_pvalue": 0.12},
-                prediction={
-                    "minimum_median_welch_pvalue": 0.05,
-                    "statistical_test_family": "legacy_welch_difference",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="welch_similarity",
+                    statistical_test_family="legacy_welch_difference",
+                    pvalue=0.12,
+                    label="Welch p",
+                    default_rollup_method="min",
+                    threshold=0.05,
+                    threshold_key="minimum_median_welch_pvalue",
+                    threshold_direction="ge",
+                ),
             ),
         ),
     ],
@@ -186,11 +207,16 @@ median_equivalence_score = build_suite_aggregate_score(
             norm_score=1.0,
             case_score=SuiteCaseScorePayload(
                 score_kind="hybrid_residual_equivalence",
-                observation={"aggregate_statistical_pvalue": 0.01},
-                prediction={
-                    "equivalence_alpha": 0.05,
-                    "statistical_test_family": "equivalence_tost",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.01,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
             ),
         ),
         SuiteCaseSummary(
@@ -200,11 +226,16 @@ median_equivalence_score = build_suite_aggregate_score(
             norm_score=0.9,
             case_score=SuiteCaseScorePayload(
                 score_kind="equivalence_only",
-                observation={"aggregate_statistical_pvalue": 0.05},
-                prediction={
-                    "equivalence_alpha": 0.05,
-                    "statistical_test_family": "equivalence_tost",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.05,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
             ),
         ),
         SuiteCaseSummary(
@@ -214,11 +245,16 @@ median_equivalence_score = build_suite_aggregate_score(
             norm_score=0.8,
             case_score=SuiteCaseScorePayload(
                 score_kind="equivalence_only",
-                observation={"aggregate_statistical_pvalue": 0.09},
-                prediction={
-                    "equivalence_alpha": 0.05,
-                    "statistical_test_family": "equivalence_tost",
-                },
+                statistical_summary=SuiteCaseStatisticalPayload(
+                    score_family_category="equivalence",
+                    statistical_test_family="equivalence_tost",
+                    pvalue=0.09,
+                    label="TOST p",
+                    default_rollup_method="max",
+                    threshold=0.05,
+                    threshold_key="equivalence_alpha",
+                    threshold_direction="le",
+                ),
             ),
         ),
     ],

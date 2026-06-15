@@ -29,7 +29,11 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_case_result_from_spec,
     suite_items_from_judged,
 )
-from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
+from olfactorybulb.neuronunit.suite_scores import (
+    SuiteCaseScorePayload,
+    SuiteCaseStatisticalPayload,
+    SuiteDescriptor,
+)
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -1832,6 +1836,29 @@ def _series_score_payload(case: SeriesComparisonCase, score: SeriesComparisonSco
         score_units = ""
     if score_family in {"welch_only", "hybrid_residual_welch"}:
         score_units = ""
+    statistical_summary = None
+    if score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES and _is_finite_number(evidence.get("aggregate_statistical_pvalue")):
+        statistical_summary = SuiteCaseStatisticalPayload(
+            score_family_category="equivalence",
+            statistical_test_family=str(evidence.get("statistical_test_family") or "equivalence_tost"),
+            pvalue=float(evidence.get("aggregate_statistical_pvalue")),
+            label="TOST p",
+            default_rollup_method="max",
+            threshold=evidence.get("equivalence_alpha"),
+            threshold_key="equivalence_alpha",
+            threshold_direction="le",
+        )
+    elif score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES and _is_finite_number(evidence.get("median_welch_pvalue")):
+        statistical_summary = SuiteCaseStatisticalPayload(
+            score_family_category="welch_similarity",
+            statistical_test_family=str(evidence.get("statistical_test_family") or "legacy_welch_difference"),
+            pvalue=float(evidence.get("median_welch_pvalue")),
+            label="Welch p",
+            default_rollup_method="min",
+            threshold=evidence.get("minimum_median_welch_pvalue"),
+            threshold_key="minimum_median_welch_pvalue",
+            threshold_direction="ge",
+        )
     return SuiteCaseScorePayload(
         score_kind=score_family,
         score_value=score_value,
@@ -1863,6 +1890,7 @@ def _series_score_payload(case: SeriesComparisonCase, score: SeriesComparisonSco
             "statistical_norm_score": evidence.get("statistical_norm_score"),
             "overall_norm_score": evidence.get("overall_norm_score"),
         },
+        statistical_summary=statistical_summary,
     )
 
 

@@ -13,8 +13,6 @@ from olfactorybulb.audit.core import rounded
 
 _STATUS_RANK = {"FAIL": 3, "WARN": 2, "PASS": 1}
 _VALID_STATUSES = frozenset(_STATUS_RANK)
-_EQUIVALENCE_CASE_SCORE_KINDS = frozenset({"equivalence_only", "hybrid_residual_equivalence"})
-_WELCH_CASE_SCORE_KINDS = frozenset({"welch_only", "hybrid_residual_welch"})
 
 
 def _normalized_status(value: str) -> str:
@@ -67,6 +65,53 @@ def _normalized_case_weight(value: float | int | None) -> float | None:
 
 
 @dataclass(frozen=True)
+class SuiteCaseStatisticalPayload:
+    score_family_category: str
+    statistical_test_family: str
+    pvalue: float
+    label: str
+    default_rollup_method: str
+    threshold: float | None = None
+    threshold_key: str = ""
+    threshold_direction: str = ""
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "score_family_category", str(self.score_family_category).strip())
+        object.__setattr__(self, "statistical_test_family", str(self.statistical_test_family).strip())
+        object.__setattr__(self, "label", str(self.label).strip())
+        default_rollup_method = str(self.default_rollup_method or "").strip().lower()
+        if default_rollup_method not in {"max", "min", "median"}:
+            raise ValueError(
+                f"Unsupported case statistical rollup {self.default_rollup_method!r}; "
+                "the maintained bridge currently supports max, min, or median"
+            )
+        object.__setattr__(self, "default_rollup_method", default_rollup_method)
+        normalized_pvalue = _normalized_score_value(self.pvalue)
+        if normalized_pvalue is None:
+            raise ValueError("SuiteCaseStatisticalPayload requires a finite pvalue")
+        object.__setattr__(self, "pvalue", float(normalized_pvalue))
+        object.__setattr__(self, "threshold", _normalized_score_value(self.threshold))
+        object.__setattr__(self, "threshold_key", str(self.threshold_key).strip())
+        object.__setattr__(self, "threshold_direction", str(self.threshold_direction).strip())
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "score_family_category": self.score_family_category,
+            "statistical_test_family": self.statistical_test_family,
+            "pvalue": float(self.pvalue),
+            "label": self.label,
+            "default_rollup_method": self.default_rollup_method,
+        }
+        if self.threshold is not None:
+            payload["threshold"] = float(self.threshold)
+        if self.threshold_key:
+            payload["threshold_key"] = self.threshold_key
+        if self.threshold_direction:
+            payload["threshold_direction"] = self.threshold_direction
+        return payload
+
+
+@dataclass(frozen=True)
 class SuiteCaseScorePayload:
     score_kind: str
     score_value: float | None = None
@@ -75,6 +120,7 @@ class SuiteCaseScorePayload:
     observation: dict[str, Any] | None = None
     prediction: dict[str, Any] | None = None
     normalization: dict[str, Any] | None = None
+    statistical_summary: SuiteCaseStatisticalPayload | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "score_kind", str(self.score_kind).strip())
@@ -84,6 +130,8 @@ class SuiteCaseScorePayload:
         object.__setattr__(self, "observation", _normalized_mapping(self.observation))
         object.__setattr__(self, "prediction", _normalized_mapping(self.prediction))
         object.__setattr__(self, "normalization", _normalized_mapping(self.normalization))
+        if self.statistical_summary is not None and not isinstance(self.statistical_summary, SuiteCaseStatisticalPayload):
+            raise TypeError("statistical_summary must be a SuiteCaseStatisticalPayload or None")
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -101,6 +149,8 @@ class SuiteCaseScorePayload:
             payload["prediction"] = copy.deepcopy(self.prediction)
         if self.normalization is not None:
             payload["normalization"] = copy.deepcopy(self.normalization)
+        if self.statistical_summary is not None:
+            payload["statistical_summary"] = self.statistical_summary.to_dict()
         return payload
 
 
@@ -393,39 +443,21 @@ def _aggregate_score_text(status: str, aggregate_norm_score: float | None, *, po
 
 def _suite_statistical_case_entry(case_summary: SuiteCaseSummary) -> dict[str, Any] | None:
     payload = case_summary.case_score
-    if payload is None or not isinstance(payload.observation, dict) or not isinstance(payload.prediction, dict):
+    if payload is None:
         return None
 
-    score_kind = str(payload.score_kind or "").strip()
-    observation = payload.observation
-    prediction = payload.prediction
-    if score_kind in _EQUIVALENCE_CASE_SCORE_KINDS:
-        pvalue = _normalized_score_value(observation.get("aggregate_statistical_pvalue"))
-        threshold = _normalized_score_value(prediction.get("equivalence_alpha"))
+    if payload.statistical_summary is not None:
+        statistical_payload = payload.statistical_summary
         return {
-            "category": "equivalence",
-            "label": "TOST p",
-            "default_rollup_method": "max",
-            "threshold": threshold,
-            "threshold_key": "equivalence_alpha",
-            "threshold_direction": "le",
-            "pvalue": pvalue,
+            "category": statistical_payload.score_family_category,
+            "label": statistical_payload.label,
+            "default_rollup_method": statistical_payload.default_rollup_method,
+            "threshold": statistical_payload.threshold,
+            "threshold_key": statistical_payload.threshold_key,
+            "threshold_direction": statistical_payload.threshold_direction,
+            "pvalue": statistical_payload.pvalue,
             "check_id": case_summary.check_id,
-            "test_family": str(prediction.get("statistical_test_family") or "equivalence_tost").strip(),
-        }
-    if score_kind in _WELCH_CASE_SCORE_KINDS:
-        pvalue = _normalized_score_value(observation.get("median_welch_pvalue"))
-        threshold = _normalized_score_value(prediction.get("minimum_median_welch_pvalue"))
-        return {
-            "category": "welch_similarity",
-            "label": "Welch p",
-            "default_rollup_method": "min",
-            "threshold": threshold,
-            "threshold_key": "minimum_median_welch_pvalue",
-            "threshold_direction": "ge",
-            "pvalue": pvalue,
-            "check_id": case_summary.check_id,
-            "test_family": str(prediction.get("statistical_test_family") or "legacy_welch_difference").strip(),
+            "test_family": statistical_payload.statistical_test_family,
         }
     return None
 
@@ -630,6 +662,7 @@ __all__ = [
     "SuiteAggregatePolicy",
     "SuiteAggregateScore",
     "SuiteCaseScorePayload",
+    "SuiteCaseStatisticalPayload",
     "SuiteCaseSummary",
     "SuiteDescriptor",
     "SuiteStatisticalPolicy",

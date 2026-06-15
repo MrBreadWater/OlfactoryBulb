@@ -371,6 +371,8 @@ assert adapted_items[0].evidence["suite_candidate_ids"] == ["SyntheticModel1", "
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"].startswith("MAE 1 Hz | Welch p ")
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
 assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["score_kind"] == "hybrid_residual_welch"
+assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["statistical_summary"]["score_family_category"] == "welch_similarity"
+assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["statistical_summary"]["default_rollup_method"] == "min"
 assert adapted_items[0].evidence["suite_cases"][0]["case_weight"] == 2.0
 assert adapted_items[0].evidence["suite_cases"][0]["case_weight_label"] == "matched points"
 assert "score_units" not in adapted_items[0].evidence["suite_cases"][0]["case_score"]
@@ -633,6 +635,8 @@ assert equivalence_items[0].evidence["suite_statistical_summary"]["score_family_
 assert equivalence_items[0].evidence["suite_statistical_summary"]["rollup_method"] == "max"
 assert equivalence_items[0].evidence["suite_statistical_summary"]["threshold_key"] == "equivalence_alpha"
 assert equivalence_items[0].evidence["suite_statistical_summary"]["gate_passed"] is True
+assert equivalence_items[0].evidence["suite_cases"][0]["case_score"]["statistical_summary"]["score_family_category"] == "equivalence"
+assert equivalence_items[0].evidence["suite_cases"][0]["case_score"]["statistical_summary"]["default_rollup_method"] == "max"
 
 equivalence_items_median = audit_items_from_series_comparison_suite(
     equivalence_compiled,

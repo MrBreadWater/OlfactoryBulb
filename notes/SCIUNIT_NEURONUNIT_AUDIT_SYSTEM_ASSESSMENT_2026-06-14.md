@@ -2207,6 +2207,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     instead of immediately re-splitting it into loose `rows + context`
     payloads, so the typed protocol-evidence contract survives all the way
     into model-side series scoring
+  - suite-level statistical rollups now also consume an explicit typed
+    `SuiteCaseStatisticalPayload` from case scores instead of inferring
+    p-value meaning from generic `observation` / `prediction` dict fragments,
+    so the statistical aggregation contract is explicit at the case level too
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +

@@ -991,6 +991,10 @@ contract for future sessions.
       observation object, make that object own the SciUnit observation payload
       via a small `observation_payload()` helper instead of rebuilding a
       parallel raw dict inline in each wrapper `__init__`
+    - when suite-level statistical rollups need case-level p-value metadata,
+      carry that on an explicit typed statistical payload attached to
+      `SuiteCaseScorePayload` rather than reverse-engineering it from generic
+      `observation` / `prediction` dict fragments
     - cache hits/misses should stay visible in emitted protocol evidence under
       `protocol_cache`; do not hide them behind silent control flow
 

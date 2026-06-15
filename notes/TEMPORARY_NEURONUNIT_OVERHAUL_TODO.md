@@ -434,6 +434,16 @@ Remove this file when the listed items are either:
         scorer
       - updated the direct series-suite regression fixture to use the same
         bundle-backed prediction contract
+- [x] Keep suite-level statistical rollups on an explicit typed case payload
+      instead of inferring them from raw `case_score` dict fragments.
+      - added `SuiteCaseStatisticalPayload`
+      - `SuiteCaseScorePayload` now carries an optional typed statistical
+        summary
+      - suite aggregation now consumes that typed payload directly instead of
+        reparsing statistical p-values and thresholds from generic
+        `observation` / `prediction` dicts
+      - migrated the series suite and the dedicated suite-score coverage onto
+        the typed statistical contract
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite
