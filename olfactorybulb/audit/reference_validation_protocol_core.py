@@ -68,7 +68,7 @@ class ProtocolExecutionCacheInfo:
 @dataclass(frozen=True)
 class ProtocolRunResult:
     metrics: MetricTable | list[dict[str, Any]]
-    protocol_evidence: ProtocolEvidenceBundle | dict[str, Any]
+    protocol_evidence: ProtocolEvidenceBundle
     group_field: str = "cell_type"
     cache_info: ProtocolExecutionCacheInfo | None = None
 

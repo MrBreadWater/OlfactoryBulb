@@ -393,6 +393,14 @@ Remove this file when the listed items are either:
       - `ValidationRuleRecord.resolved_review_metadata(...)` and
         `suite_presentation.audit_item_adapter_spec_from_case(...)` now depend
         on typed review/context interfaces instead of unstructured `Any`
+- [x] Tighten the public protocol-evidence seam to `ProtocolEvidenceBundle`
+      once protocol evidence has crossed the coercion layer.
+      - `ProtocolRunResult.protocol_evidence` is now typed as
+        `ProtocolEvidenceBundle`
+      - `ReferenceValidationModel` and the series-suite compiler now expose
+        that same bundle type at their public seam
+      - updated the remaining maintained/synthetic bundle call sites that were
+        still passing raw dicts into those public runtime objects
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

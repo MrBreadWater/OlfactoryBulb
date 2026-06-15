@@ -5,7 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from types import SimpleNamespace
 
-from olfactorybulb.audit.protocol_evidence import intrinsic_fi_curve_series_spec
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, intrinsic_fi_curve_series_spec
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
@@ -332,12 +332,12 @@ compiled = compile_series_comparison_suite(
     cases=[case],
     summary={},
     metrics=[],
-    protocol_evidence={
+    protocol_evidence=ProtocolEvidenceBundle(values={
         "fi_curve_rows": model_rows,
         "cell_models": ["SyntheticModel1", "SyntheticModel2"],
         "step_duration_ms": 500.0,
         "target_vm_mV": -60.0,
-    },
+    }),
     suite_name="synthetic series suite",
 )
 judged = compiled.judge()
@@ -509,7 +509,7 @@ voltage_compiled = compile_series_comparison_suite(
     cases=[voltage_case],
     summary={},
     metrics=[],
-    protocol_evidence={"response_rows": voltage_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"response_rows": voltage_model_rows}),
     suite_name="synthetic voltage series suite",
 )
 voltage_items = audit_items_from_series_comparison_suite(voltage_compiled)
@@ -582,7 +582,7 @@ equivalence_compiled = compile_series_comparison_suite(
     cases=[equivalence_case],
     summary={},
     metrics=[],
-    protocol_evidence={"fi_curve_rows": equivalence_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": equivalence_model_rows}),
     suite_name="synthetic equivalence suite",
 )
 equivalence_judged = equivalence_compiled.judge()
@@ -670,7 +670,7 @@ singleton_equivalence_compiled = compile_series_comparison_suite(
     cases=[singleton_equivalence_case],
     summary={},
     metrics=[],
-    protocol_evidence={"fi_curve_rows": equivalence_singleton_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": equivalence_singleton_model_rows}),
     suite_name="synthetic singleton equivalence suite",
 )
 singleton_equivalence_items = audit_items_from_series_comparison_suite(singleton_equivalence_compiled)
@@ -733,7 +733,7 @@ piecewise_compiled = compile_series_comparison_suite(
     cases=[piecewise_case],
     summary={},
     metrics=[],
-    protocol_evidence={"fi_curve_rows": piecewise_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": piecewise_model_rows}),
     suite_name="synthetic piecewise series suite",
 )
 piecewise_items = audit_items_from_series_comparison_suite(piecewise_compiled)
@@ -791,10 +791,10 @@ lookup_compiled = compile_series_comparison_suite(
     cases=[lookup_case],
     summary={},
     metrics=[],
-    protocol_evidence={
+    protocol_evidence=ProtocolEvidenceBundle(values={
         "fi_curve_rows": lookup_model_rows,
         "unit_conversions": {"flux_to_pA_scale": 1000.0},
-    },
+    }),
     suite_name="synthetic lookup series suite",
 )
 lookup_items = audit_items_from_series_comparison_suite(lookup_compiled)
@@ -849,7 +849,7 @@ cluster_compiled = compile_series_comparison_suite(
     cases=[cluster_case],
     summary={},
     metrics=[],
-    protocol_evidence={"fi_curve_rows": cluster_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": cluster_model_rows}),
     suite_name="synthetic cluster series suite",
 )
 cluster_items = audit_items_from_series_comparison_suite(cluster_compiled)
@@ -907,7 +907,7 @@ resampled_compiled = compile_series_comparison_suite(
     cases=[resampled_case],
     summary={},
     metrics=[],
-    protocol_evidence={"fi_curve_rows": resampled_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
     suite_name="synthetic resampled series suite",
 )
 resampled_items = audit_items_from_series_comparison_suite(resampled_compiled)
@@ -972,7 +972,7 @@ nearest_resampled_compiled = compile_series_comparison_suite(
     cases=[nearest_resampled_case],
     summary={},
     metrics=[],
-    protocol_evidence={"fi_curve_rows": resampled_model_rows},
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
     suite_name="synthetic nearest resampled series suite",
 )
 nearest_resampled_items = audit_items_from_series_comparison_suite(nearest_resampled_compiled)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from argparse import Namespace
 
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.reference_validation_protocol_core import ProtocolRunResult
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext
@@ -54,7 +55,11 @@ assert summary["MC"]["zero_step_rate_Hz"] == 0.0
 assert "label" not in summary["MC"]
 assert summary.metric_value("TC", "rheobase_pA") == 90.0
 
-protocol_result = ProtocolRunResult(metrics=rows, protocol_evidence={}, group_field="cell_type")
+protocol_result = ProtocolRunResult(
+    metrics=rows,
+    protocol_evidence=ProtocolEvidenceBundle(),
+    group_field="cell_type",
+)
 assert isinstance(protocol_result.metrics, MetricTable)
 assert protocol_result.metrics.group_field == "cell_type"
 assert protocol_result.metrics[1]["cell_name"] == "MC2"

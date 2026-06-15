@@ -15,6 +15,7 @@ import sciunit
 
 from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import rounded
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceMap,
     ProvidesProtocolEvidenceRows,
@@ -1763,7 +1764,7 @@ def compile_series_comparison_suite(
     cases: list[SeriesComparisonCase],
     summary: MetricSummaryTable | dict[str, dict[str, float]],
     metrics: MetricTable | list[dict[str, Any]],
-    protocol_evidence: dict[str, Any],
+    protocol_evidence: ProtocolEvidenceBundle,
     suite_name: str,
 ) -> CompiledSeriesComparisonSuite:
     tests = [SeriesComparisonTest(case) for case in cases]

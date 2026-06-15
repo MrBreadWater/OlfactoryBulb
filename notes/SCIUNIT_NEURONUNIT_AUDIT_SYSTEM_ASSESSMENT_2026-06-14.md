@@ -2137,6 +2137,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     interfaces for validation-rule context and review payloads, so the typed
     parser/presentation layer no longer has to fall back to `context: Any` or
     `validation_review: Any`
+  - the protocol-evidence boundary is now tighter too: once protocol evidence
+    has crossed the coercion layer, the public runtime/model seam now stays on
+    `ProtocolEvidenceBundle` rather than continuing to advertise raw dicts as
+    a first-class protocol-evidence type
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

@@ -972,6 +972,10 @@ contract for future sessions.
     - cacheable protocols should declare semantic `cache_arg_names`
       explicitly on `ValidationProtocolSpec` rather than inheriting an
       implicit "all CLI args" cache surface
+    - once protocol evidence has crossed
+      `coerce_protocol_evidence_bundle(...)`, keep the public runtime/model
+      seam on `ProtocolEvidenceBundle` instead of advertising raw dicts as a
+      first-class protocol-evidence payload type
     - cache hits/misses should stay visible in emitted protocol evidence under
       `protocol_cache`; do not hide them behind silent control flow
 

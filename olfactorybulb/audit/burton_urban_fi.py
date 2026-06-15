@@ -16,6 +16,7 @@ from scipy.optimize import curve_fit
 
 from olfactorybulb.audit.criterion_math import criterion_math_for_reference_band
 from olfactorybulb.audit.core import AuditItem, AuditReport, collect_items, rounded
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_data import (
     BMU2024_EPL_FSI_PROTOCOL_ID,
     BU2014_MC_TC_PROTOCOL_ID,
@@ -1550,7 +1551,11 @@ def build_validation_items(
     del protocol
     validation = load_reference_validation_plan(validation_id=BURTON_VALIDATION_ID)
     args = argparse.Namespace(reference_sigma_multiplier=reference_sigma_multiplier)
-    protocol_result = ProtocolRunResult(metrics=metrics, protocol_evidence={}, group_field="cell_type")
+    protocol_result = ProtocolRunResult(
+        metrics=metrics,
+        protocol_evidence=ProtocolEvidenceBundle(),
+        group_field="cell_type",
+    )
     return [_build_uploaded_reference_coverage_item()] + build_reference_validation_items(
         metrics=metrics,
         args=args,

@@ -75,7 +75,7 @@ class ValidationRuleContext:
     def __post_init__(self) -> None:
         group_field = "cell_type"
         if self.protocol_result is not None:
-            group_field = str(self.protocol_result.group_field or "cell_type")
+            group_field = str(getattr(self.protocol_result, "group_field", "cell_type") or "cell_type")
         object.__setattr__(self, "metrics", coerce_metric_table(self.metrics, group_field=group_field))
         object.__setattr__(self, "summary", coerce_metric_summary_table(self.summary))
 

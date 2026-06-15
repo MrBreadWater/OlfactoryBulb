@@ -68,7 +68,7 @@ class ReferenceValidationModel(
         *,
         summary: MetricSummaryTable | dict[str, dict[str, float]],
         metrics: MetricTable | list[dict[str, Any]] | None = None,
-        protocol_evidence: ProtocolEvidenceBundle | dict[str, Any] | None = None,
+        protocol_evidence: ProtocolEvidenceBundle | None = None,
         name: str = "reference-validation-summary-model",
     ) -> None:
         super().__init__(name=name)
