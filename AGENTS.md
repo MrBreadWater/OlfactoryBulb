@@ -948,6 +948,9 @@ contract for future sessions.
     carrying explicit fields such as `validation_id`, `notes_path`,
     `default_group`, and typed review defaults; do not reintroduce a generic
     `context.config` dict just to tunnel those values through the rule engine.
+  - Keep the protocol-result boundary typed too: the plan, engine, and rule
+    context should trade `ProtocolRunResult`, not `Any`, once protocol
+    execution has crossed the registry/cache layer.
   - Inside `olfactorybulb.audit.reference_validation_rules`, built-in
     maintained rule kinds should compile into typed dispatch records/specs
     before runtime execution instead of carrying loose raw rule dicts all the

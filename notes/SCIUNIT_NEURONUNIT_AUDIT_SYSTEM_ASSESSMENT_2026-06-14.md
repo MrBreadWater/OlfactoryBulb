@@ -2127,6 +2127,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     entries rather than a raw `checks` tuple, so both the runtime plan and the
     static validation-design-review audit now consume the same typed rule
     record layer instead of reparsing raw rule dicts independently
+  - the protocol-result seam is now typed through the maintained runtime path
+    too: `ReferenceValidationPlan`, `reference_validation_engine`, and
+    `ValidationRuleContext` now pass `ProtocolRunResult` explicitly instead of
+    falling back to `Any` once protocol execution returns from the registry/
+    cache layer
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

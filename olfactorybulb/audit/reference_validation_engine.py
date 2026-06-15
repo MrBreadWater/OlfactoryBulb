@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import argparse
-from typing import Any, Iterable
+from typing import Iterable
 
 from olfactorybulb.audit import AuditItem, AuditReport
 from olfactorybulb.audit.reference_validation_plan import (
     ReferenceValidationPlan,
     load_reference_validation_plan,
+)
+from olfactorybulb.audit.reference_validation_protocols import (
+    ProtocolRunResult,
+    ValidationProtocolSpec,
 )
 from olfactorybulb.neuronunit.metric_tables import MetricTable
 
@@ -40,7 +44,7 @@ def build_reference_validation_items(
     metrics: MetricTable | list[dict[str, Any]],
     args: argparse.Namespace,
     validation: ReferenceValidationPlan,
-    protocol_result: Any | None,
+    protocol_result: ProtocolRunResult | None,
 ) -> list:
     return validation.build_rule_items(
         metrics=metrics,
@@ -100,7 +104,7 @@ def load_validation_and_protocol(
     *,
     validation_id: str | None = None,
     config_path=None,
-) -> tuple[ReferenceValidationPlan, Any]:
+) -> tuple[ReferenceValidationPlan, ValidationProtocolSpec]:
     validation = load_reference_validation_plan(validation_id=validation_id, path=config_path)
     return validation, validation.protocol_spec
 

@@ -16,6 +16,7 @@ from olfactorybulb.audit.reference_validation_document import (
     load_reference_validation_document,
 )
 from olfactorybulb.audit.reference_validation_protocols import (
+    ProtocolRunResult,
     ValidationProtocolSpec,
     execute_validation_protocol,
     get_validation_protocol_spec,
@@ -114,12 +115,14 @@ class ReferenceValidationPlan:
                 setattr(args, key, value)
         return args
 
-    def resolved_group_field(self, protocol_result: Any | None) -> str:
+    def resolved_group_field(self, protocol_result: ProtocolRunResult | None) -> str:
         if self.metric_group_field:
             return self.metric_group_field
-        return str(getattr(protocol_result, "group_field", "cell_type"))
+        if protocol_result is None:
+            return "cell_type"
+        return str(protocol_result.group_field or "cell_type")
 
-    def run_protocol(self, args: argparse.Namespace) -> Any:
+    def run_protocol(self, args: argparse.Namespace) -> ProtocolRunResult:
         return execute_validation_protocol(
             self.protocol_spec,
             args=args,
@@ -131,7 +134,7 @@ class ReferenceValidationPlan:
         *,
         metrics: MetricTable | list[dict[str, Any]],
         args: argparse.Namespace,
-        protocol_result: Any | None,
+        protocol_result: ProtocolRunResult | None,
     ) -> list[AuditItem]:
         summary = summarize_numeric_metrics(
             metrics,

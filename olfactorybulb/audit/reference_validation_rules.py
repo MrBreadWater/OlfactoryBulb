@@ -32,6 +32,7 @@ from olfactorybulb.audit.reference_validation_specs import (
     SummaryRuleSpec,
     grouped_suite_descriptor as _grouped_suite_descriptor,
 )
+from olfactorybulb.audit.reference_validation_protocols import ProtocolRunResult
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceAcceptanceBand,
     compute_reference_acceptance_band,
@@ -69,10 +70,12 @@ class ValidationRuleContext:
     default_group: str
     notes_path: str
     design_review_defaults: ValidationDesignReviewDefaultsSpec
-    protocol_result: Any | None = None
+    protocol_result: ProtocolRunResult | None = None
 
     def __post_init__(self) -> None:
-        group_field = str(getattr(self.protocol_result, "group_field", "cell_type") or "cell_type")
+        group_field = "cell_type"
+        if self.protocol_result is not None:
+            group_field = str(self.protocol_result.group_field or "cell_type")
         object.__setattr__(self, "metrics", coerce_metric_table(self.metrics, group_field=group_field))
         object.__setattr__(self, "summary", coerce_metric_summary_table(self.summary))
 

@@ -377,6 +377,14 @@ Remove this file when the listed items are either:
         records
       - the validation-design-review status audit now walks typed rule records
         instead of reparsing loose raw rule dicts from the document
+- [x] Carry the typed protocol-result contract through the maintained runtime
+      path instead of dropping back to `Any` after protocol execution.
+      - `ReferenceValidationPlan.run_protocol(...)` now returns
+        `ProtocolRunResult`
+      - `reference_validation_engine` and `ValidationRuleContext` now type
+        their `protocol_result` seam explicitly as `ProtocolRunResult | None`
+      - the maintained runtime now preserves the protocol contract from the
+        registry/cache layer through the rule engine boundary
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite
