@@ -781,8 +781,15 @@ If you need a different grid, declare one of:
     rule
 - `resampling_grid_source = "uniform_step"`
   - and then declare `resampling_grid_step = ...`
+  - or declare `resampling_grid_step_lookup_key = "protocol_step_pA"` when the
+    step size belongs in protocol/model metadata
   - optionally declare `resampling_grid_min_x = ...` and
     `resampling_grid_max_x = ...`
+  - or load those bounds from metadata with
+    `resampling_grid_min_x_lookup_key = "protocol_grid_min_pA"` and
+    `resampling_grid_max_x_lookup_key = "protocol_grid_max_pA"`
+  - do not mix an explicit step/min/max value with the matching lookup key on
+    the same rule
   - when the min/max bounds are omitted, the maintained path derives them from
     the overall observed x-range and records the resolved bounds in the
     emitted evidence

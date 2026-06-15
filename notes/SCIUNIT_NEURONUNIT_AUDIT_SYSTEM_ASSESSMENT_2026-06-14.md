@@ -2353,6 +2353,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     path now supports `resampling_grid_source = "uniform_step"` with explicit
     step size plus optional declared min/max bounds, while keeping the
     resolved bounds visible in emitted evidence when defaults are used
+  - the same uniform-step resampling contract is less repetitive now too:
+    regular comparison lattices may load step and optional min/max bounds
+    from maintained protocol/model metadata with the
+    `resampling_grid_*_lookup_key` fields instead of repeating those values
+    in each validation TOML
   - series provenance is richer too: the shared typed provenance payload now
     carries compact per-series summaries when explicit series ids are present,
     so future example-cell validations can inspect source identity without

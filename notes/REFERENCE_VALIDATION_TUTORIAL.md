@@ -1765,9 +1765,11 @@ Important details:
   against protocol/model context metadata and should not be mixed with
   explicit grid values, uniform-step settings, or explicit grid min/max bounds
 - if `resampling_grid_source = "uniform_step"`, declare
-  `resampling_grid_step = ...`; `resampling_grid_min_x` and
-  `resampling_grid_max_x` are optional and otherwise default from the observed
-  x-range with the resolved bounds recorded in evidence
+  `resampling_grid_step = ...` or
+  `resampling_grid_step_lookup_key = "protocol_step_pA"`; `resampling_grid_min_x`
+  / `resampling_grid_max_x` or their matching `*_lookup_key` forms are optional
+  and otherwise default from the observed x-range with the resolved bounds
+  recorded in evidence
 - if the model x-axis is not expressed in the same physical quantity as the
   reference, declare the mapping explicitly with `model_x_transform` instead of
   pretending the field names are already comparable

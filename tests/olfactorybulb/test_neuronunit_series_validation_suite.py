@@ -354,8 +354,11 @@ assert series_payload.to_dict() == {
     "resampling_grid_lookup_key": "",
     "resampling_grid_values": [],
     "resampling_grid_step": None,
+    "resampling_grid_step_lookup_key": "",
     "resampling_grid_min_x": None,
+    "resampling_grid_min_x_lookup_key": "",
     "resampling_grid_max_x": None,
+    "resampling_grid_max_x_lookup_key": "",
     "interpolation_method": "linear",
     "distribution_kind": "empirical_by_x",
     "score_family": "hybrid_residual_welch",
@@ -1469,6 +1472,90 @@ assert uniform_step_resampled_items[1].evidence["resampled_support_provenance"][
     "model_series_ids": ["RsModel1", "RsModel2"],
 }
 
+lookup_uniform_step_resampled_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=8,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        alignment_policy="resampled_grid",
+        resampling_grid_source="uniform_step",
+        resampling_grid_step_lookup_key="comparison_step_pA",
+        resampling_grid_min_x_lookup_key="comparison_grid_min_pA",
+        resampling_grid_max_x_lookup_key="comparison_grid_max_pA",
+        resampling_domain_policy="intersection",
+        score_family="residual_only",
+    ),
+)
+
+lookup_uniform_step_resampled_case = SeriesComparisonCase(
+    check_id="synthetic_lookup_uniform_step_resampled_series_match",
+    title="Synthetic resampled alignment can load regular-grid settings from metadata",
+    criterion="A regular resampling grid can come from metadata-backed step and bound settings without copying those values into the rule table.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic metadata-backed uniform-step resampled-grid suite test.",
+    acceptable="The metadata-backed regular comparison grid satisfies the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=lookup_uniform_step_resampled_observation,
+)
+
+lookup_uniform_step_resampled_compiled = compile_series_comparison_suite(
+    cases=[lookup_uniform_step_resampled_case],
+    summary={},
+    metrics=[],
+    protocol_evidence=ProtocolEvidenceBundle(
+        values={
+            "fi_curve_rows": resampled_model_rows,
+            "comparison_step_pA": 25.0,
+            "comparison_grid_min_pA": 125.0,
+            "comparison_grid_max_pA": 300.0,
+        }
+    ),
+    suite_name="synthetic metadata-backed uniform-step resampled series suite",
+)
+lookup_uniform_step_resampled_items = audit_items_from_series_comparison_suite(lookup_uniform_step_resampled_compiled)
+assert lookup_uniform_step_resampled_items[1].status == "PASS"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_source"] == "uniform_step"
+assert lookup_uniform_step_resampled_items[1].evidence["declared_resampling_grid_step"] is None
+assert lookup_uniform_step_resampled_items[1].evidence["declared_resampling_grid_step_lookup_key"] == "comparison_step_pA"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_step"] == 25.0
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_step_lookup_key"] == "comparison_step_pA"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_step_lookup_scope"] == "context"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_step_origin"] == "lookup"
+assert lookup_uniform_step_resampled_items[1].evidence["declared_resampling_grid_min_x"] is None
+assert lookup_uniform_step_resampled_items[1].evidence["declared_resampling_grid_min_x_lookup_key"] == "comparison_grid_min_pA"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_min_x"] == 125.0
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_min_x_lookup_key"] == "comparison_grid_min_pA"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_min_x_lookup_scope"] == "context"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_min_x_origin"] == "lookup"
+assert lookup_uniform_step_resampled_items[1].evidence["declared_resampling_grid_max_x"] is None
+assert lookup_uniform_step_resampled_items[1].evidence["declared_resampling_grid_max_x_lookup_key"] == "comparison_grid_max_pA"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_max_x"] == 300.0
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_max_x_lookup_key"] == "comparison_grid_max_pA"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_max_x_lookup_scope"] == "context"
+assert lookup_uniform_step_resampled_items[1].evidence["resampling_grid_max_x_origin"] == "lookup"
+assert lookup_uniform_step_resampled_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
+
 lookup_grid_resampled_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=resampled_reference_rows,
@@ -2151,6 +2238,62 @@ assert uniform_step_rule_items[1].evidence["resampling_grid_max_x_origin"] == "e
 assert uniform_step_rule_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
 assert SeriesComparisonRuleSpec.from_rule(uniform_step_rule).policy.resampling_grid_step == 25.0
 
+lookup_uniform_step_rule = dict(resampled_rule)
+lookup_uniform_step_rule["check_id"] = "synthetic_lookup_uniform_step_resampled_series_match"
+lookup_uniform_step_rule["title"] = "Synthetic metadata-backed uniform-step resampled series rule"
+lookup_uniform_step_rule["criterion"] = "A declarative series rule can load regular-grid step and bounds from protocol metadata."
+lookup_uniform_step_rule["resampling_grid_source"] = "uniform_step"
+lookup_uniform_step_rule["resampling_grid_step_lookup_key"] = "comparison_step_pA"
+lookup_uniform_step_rule["resampling_grid_min_x_lookup_key"] = "comparison_grid_min_pA"
+lookup_uniform_step_rule["resampling_grid_max_x_lookup_key"] = "comparison_grid_max_pA"
+lookup_uniform_step_rule["minimum_point_count"] = 8
+lookup_uniform_step_rule["maximum_mae"] = 0.01
+lookup_uniform_step_rule["maximum_rmse"] = 0.01
+lookup_uniform_step_rule.pop("resampling_grid_values", None)
+lookup_uniform_step_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(
+            values={
+                "fi_curve_rows": resampled_model_rows,
+                "comparison_step_pA": 25.0,
+                "comparison_grid_min_pA": 125.0,
+                "comparison_grid_max_pA": 300.0,
+            }
+        ),
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    lookup_uniform_step_rule_items = build_rule_items(
+        compile_rule_dispatches([lookup_uniform_step_rule]),
+        lookup_uniform_step_context,
+    )
+finally:
+    rules_module._load_rows = original_load_rows
+
+lookup_uniform_step_rule_spec = SeriesComparisonRuleSpec.from_rule(lookup_uniform_step_rule)
+assert lookup_uniform_step_rule_spec.policy.resampling_grid_source == "uniform_step"
+assert lookup_uniform_step_rule_spec.policy.resampling_grid_step_lookup_key == "comparison_step_pA"
+assert lookup_uniform_step_rule_items[1].status == "PASS"
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_source"] == "uniform_step"
+assert lookup_uniform_step_rule_items[1].evidence["declared_resampling_grid_step_lookup_key"] == "comparison_step_pA"
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_step"] == 25.0
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_step_lookup_scope"] == "context"
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_step_origin"] == "lookup"
+assert lookup_uniform_step_rule_items[1].evidence["declared_resampling_grid_min_x_lookup_key"] == "comparison_grid_min_pA"
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_min_x"] == 125.0
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_min_x_origin"] == "lookup"
+assert lookup_uniform_step_rule_items[1].evidence["declared_resampling_grid_max_x_lookup_key"] == "comparison_grid_max_pA"
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_max_x"] == 300.0
+assert lookup_uniform_step_rule_items[1].evidence["resampling_grid_max_x_origin"] == "lookup"
+assert lookup_uniform_step_rule_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
+
 lookup_grid_rule = dict(resampled_rule)
 lookup_grid_rule["check_id"] = "synthetic_lookup_grid_resampled_series_match"
 lookup_grid_rule["title"] = "Synthetic lookup-grid resampled series rule"
@@ -2460,6 +2603,22 @@ try:
         raise AssertionError("Expected uniform-step resampling to require an explicit positive grid step")
     except ValueError as exc:
         assert "requires a positive finite 'resampling_grid_step'" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+mixed_uniform_step_lookup_rule = dict(lookup_uniform_step_rule)
+mixed_uniform_step_lookup_rule["resampling_grid_step"] = 25.0
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items(compile_rule_dispatches([mixed_uniform_step_lookup_rule]), lookup_uniform_step_context)
+        raise AssertionError("Expected metadata-backed uniform-step resampling to reject mixed explicit and lookup step declarations")
+    except ValueError as exc:
+        assert "should not declare both 'resampling_grid_step' and 'resampling_grid_step_lookup_key'" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

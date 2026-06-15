@@ -747,3 +747,14 @@ Remove this file when the listed items are either:
         x value
       - direct suite coverage and rule-level coverage now assert those
         support-provenance payloads
+- [x] Let metadata-backed regular comparison lattices reuse the maintained
+      uniform-step contract instead of forcing duplicated hardcoded step/bound
+      constants in each validation TOML.
+      - `uniform_step` now supports metadata-backed
+        `resampling_grid_step_lookup_key`,
+        `resampling_grid_min_x_lookup_key`, and
+        `resampling_grid_max_x_lookup_key`
+      - the declarative parser now forbids mixing explicit step/bound values
+        with the matching lookup key on the same rule
+      - direct suite coverage and rule-level coverage now prove the
+        metadata-backed uniform-step path

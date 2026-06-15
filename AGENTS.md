@@ -670,7 +670,10 @@ contract for future sessions.
     points from metadata with `points_lookup_key` when the monotone
     calibration map belongs in maintained protocol evidence rather than in one
     validation TOML, and do not mix `points` with `points_lookup_key` on the
-    same transform.
+    same transform. Do the same for regular resampling grids: when a
+    `uniform_step` comparison lattice belongs in maintained protocol/model
+    metadata, prefer the explicit `resampling_grid_*_lookup_key` forms over
+    copying step or bound constants into every validation TOML.
     Keep reusable provenance structure out of ad hoc evidence-dict assembly:
     when a series-comparison change affects reference/model provenance payloads
     or compact protocol-context summaries, extend the shared typed layer in

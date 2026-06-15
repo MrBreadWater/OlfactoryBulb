@@ -833,8 +833,15 @@ interpolation methods are:</p>
     rule</li>
 <li><code>resampling_grid_source = "uniform_step"</code></li>
 <li>and then declare <code>resampling_grid_step = ...</code></li>
+<li>or declare <code>resampling_grid_step_lookup_key = "protocol_step_pA"</code> when the
+    step size belongs in protocol/model metadata</li>
 <li>optionally declare <code>resampling_grid_min_x = ...</code> and
     <code>resampling_grid_max_x = ...</code></li>
+<li>or load those bounds from metadata with
+    <code>resampling_grid_min_x_lookup_key = "protocol_grid_min_pA"</code> and
+    <code>resampling_grid_max_x_lookup_key = "protocol_grid_max_pA"</code></li>
+<li>do not mix an explicit step/min/max value with the matching lookup key on
+    the same rule</li>
 <li>when the min/max bounds are omitted, the maintained path derives them from
     the overall observed x-range and records the resolved bounds in the
     emitted evidence</li>

@@ -1337,6 +1337,9 @@ class _SeriesComparisonRuleParser:
                 )
             interpolation_method = str(self.rule.get("interpolation_method", "linear")).strip() or "linear"
             resampling_grid_lookup_key = str(self.rule.get("resampling_grid_lookup_key", "")).strip()
+            resampling_grid_step_lookup_key = str(self.rule.get("resampling_grid_step_lookup_key", "")).strip()
+            resampling_grid_min_x_lookup_key = str(self.rule.get("resampling_grid_min_x_lookup_key", "")).strip()
+            resampling_grid_max_x_lookup_key = str(self.rule.get("resampling_grid_max_x_lookup_key", "")).strip()
             raw_resampling_grid_values = self.rule.get("resampling_grid_values", ())
             if raw_resampling_grid_values in (None, ""):
                 resampling_grid_values = ()
@@ -1379,11 +1382,23 @@ class _SeriesComparisonRuleParser:
                         "resampling_grid_source='lookup_grid' should not also declare "
                         "'resampling_grid_step'"
                     )
+                if resampling_grid_step_lookup_key:
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment with "
+                        "resampling_grid_source='lookup_grid' should not also declare "
+                        "'resampling_grid_step_lookup_key'"
+                    )
                 if resampling_grid_min_x is not None or resampling_grid_max_x is not None:
                     raise ValueError(
                         "reference_curve_match resampled-grid alignment with "
                         "resampling_grid_source='lookup_grid' should not also declare "
                         "'resampling_grid_min_x' or 'resampling_grid_max_x'"
+                    )
+                if resampling_grid_min_x_lookup_key or resampling_grid_max_x_lookup_key:
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment with "
+                        "resampling_grid_source='lookup_grid' should not also declare "
+                        "'resampling_grid_min_x_lookup_key' or 'resampling_grid_max_x_lookup_key'"
                     )
             elif resampling_grid_lookup_key:
                 raise ValueError(
@@ -1391,7 +1406,31 @@ class _SeriesComparisonRuleParser:
                     "resampling_grid_source='lookup_grid'"
                 )
             if resampling_grid_source == "uniform_step":
-                if resampling_grid_step is None or not math.isfinite(resampling_grid_step) or resampling_grid_step <= 0.0:
+                if resampling_grid_step is not None and resampling_grid_step_lookup_key:
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment with "
+                        "resampling_grid_source='uniform_step' should not declare both "
+                        "'resampling_grid_step' and 'resampling_grid_step_lookup_key'"
+                    )
+                if resampling_grid_min_x is not None and resampling_grid_min_x_lookup_key:
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment with "
+                        "resampling_grid_source='uniform_step' should not declare both "
+                        "'resampling_grid_min_x' and 'resampling_grid_min_x_lookup_key'"
+                    )
+                if resampling_grid_max_x is not None and resampling_grid_max_x_lookup_key:
+                    raise ValueError(
+                        "reference_curve_match resampled-grid alignment with "
+                        "resampling_grid_source='uniform_step' should not declare both "
+                        "'resampling_grid_max_x' and 'resampling_grid_max_x_lookup_key'"
+                    )
+                if (
+                    resampling_grid_step is None
+                    and not resampling_grid_step_lookup_key
+                ) or (
+                    resampling_grid_step is not None
+                    and (not math.isfinite(resampling_grid_step) or resampling_grid_step <= 0.0)
+                ):
                     raise ValueError(
                         "reference_curve_match resampled-grid alignment with "
                         "resampling_grid_source='uniform_step' requires a positive finite "
@@ -1406,6 +1445,15 @@ class _SeriesComparisonRuleParser:
                         "reference_curve_match resampled-grid alignment requires "
                         "'resampling_grid_min_x' <= 'resampling_grid_max_x'"
                     )
+            elif (
+                resampling_grid_step_lookup_key
+                or resampling_grid_min_x_lookup_key
+                or resampling_grid_max_x_lookup_key
+            ):
+                raise ValueError(
+                    "reference_curve_match metadata-backed resampling-grid lookup keys only apply when "
+                    "resampling_grid_source='uniform_step'"
+                )
         else:
             if str(self.rule.get("resampling_domain_policy", "")).strip():
                 raise ValueError(
@@ -1418,13 +1466,26 @@ class _SeriesComparisonRuleParser:
                     "alignment_policy = 'resampled_grid' and "
                     "resampling_grid_source='lookup_grid'"
                 )
+            if (
+                str(self.rule.get("resampling_grid_step_lookup_key", "")).strip()
+                or str(self.rule.get("resampling_grid_min_x_lookup_key", "")).strip()
+                or str(self.rule.get("resampling_grid_max_x_lookup_key", "")).strip()
+            ):
+                raise ValueError(
+                    "reference_curve_match metadata-backed resampling-grid lookup keys only apply when "
+                    "alignment_policy = 'resampled_grid' and "
+                    "resampling_grid_source='uniform_step'"
+                )
             resampling_grid_source = ""
             resampling_domain_policy = ""
             resampling_grid_lookup_key = ""
             resampling_grid_values = ()
             resampling_grid_step = None
+            resampling_grid_step_lookup_key = ""
             resampling_grid_min_x = None
+            resampling_grid_min_x_lookup_key = ""
             resampling_grid_max_x = None
+            resampling_grid_max_x_lookup_key = ""
             interpolation_method = "linear"
         pvalue_aggregation = str(self.rule.get("pvalue_aggregation", "auto")).strip()
         if score_family in {"welch_only", "hybrid_residual_welch"}:
@@ -1465,8 +1526,11 @@ class _SeriesComparisonRuleParser:
             resampling_grid_lookup_key=resampling_grid_lookup_key,
             resampling_grid_values=resampling_grid_values,
             resampling_grid_step=resampling_grid_step,
+            resampling_grid_step_lookup_key=resampling_grid_step_lookup_key,
             resampling_grid_min_x=resampling_grid_min_x,
+            resampling_grid_min_x_lookup_key=resampling_grid_min_x_lookup_key,
             resampling_grid_max_x=resampling_grid_max_x,
+            resampling_grid_max_x_lookup_key=resampling_grid_max_x_lookup_key,
             interpolation_method=interpolation_method,
             distribution_kind=self.required_choice("distribution_kind"),
             score_family=score_family,

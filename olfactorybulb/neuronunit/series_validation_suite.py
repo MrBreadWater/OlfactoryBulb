@@ -265,10 +265,16 @@ class ResolvedResamplingGrid:
     values: tuple[float, ...]
     resolved_step: float | None = None
     step_origin: str = ""
+    step_lookup_key: str = ""
+    step_lookup_scope: str = ""
     resolved_min_x: float | None = None
     min_x_origin: str = ""
+    min_x_lookup_key: str = ""
+    min_x_lookup_scope: str = ""
     resolved_max_x: float | None = None
     max_x_origin: str = ""
+    max_x_lookup_key: str = ""
+    max_x_lookup_scope: str = ""
     lookup_scope: str = ""
 
 
@@ -736,9 +742,25 @@ def _lookup_transform_numeric_value(
     row: Mapping[str, object] | None,
     context: Mapping[str, object] | None,
 ) -> float:
+    numeric, _scope = _lookup_numeric_value_with_scope(
+        lookup_key,
+        row=row,
+        context=context,
+        purpose_label="Transform lookup key",
+    )
+    return numeric
+
+
+def _lookup_numeric_value_with_scope(
+    lookup_key: str,
+    *,
+    row: Mapping[str, object] | None,
+    context: Mapping[str, object] | None,
+    purpose_label: str,
+) -> tuple[float, str]:
     normalized_key = str(lookup_key or "").strip()
     if not normalized_key:
-        raise ValueError("Transform lookup keys must be non-empty")
+        raise ValueError(f"{purpose_label} must be non-empty")
     for mapping_name, mapping in (("row", row), ("context", context)):
         candidate = _nested_mapping_value(mapping, normalized_key)
         if candidate is None or isinstance(candidate, bool):
@@ -747,17 +769,17 @@ def _lookup_transform_numeric_value(
             numeric = numeric_value(candidate) if isinstance(candidate, pq.Quantity) else float(candidate)
         except (TypeError, ValueError):
             raise ValueError(
-                f"Transform lookup key {normalized_key!r} resolved from {mapping_name} metadata "
+                f"{purpose_label} {normalized_key!r} resolved from {mapping_name} metadata "
                 f"but did not contain a finite numeric value"
             ) from None
         if not math.isfinite(numeric):
             raise ValueError(
-                f"Transform lookup key {normalized_key!r} resolved from {mapping_name} metadata "
+                f"{purpose_label} {normalized_key!r} resolved from {mapping_name} metadata "
                 "but did not contain a finite numeric value"
             )
-        return float(numeric)
+        return float(numeric), mapping_name
     raise ValueError(
-        f"Transform lookup key {normalized_key!r} was not found in the available row/context metadata"
+        f"{purpose_label} {normalized_key!r} was not found in the available row/context metadata"
     )
 
 
@@ -1102,8 +1124,11 @@ class SeriesComparisonPolicy:
     resampling_grid_lookup_key: str = ""
     resampling_grid_values: tuple[float, ...] = ()
     resampling_grid_step: float | None = None
+    resampling_grid_step_lookup_key: str = ""
     resampling_grid_min_x: float | None = None
+    resampling_grid_min_x_lookup_key: str = ""
     resampling_grid_max_x: float | None = None
+    resampling_grid_max_x_lookup_key: str = ""
     interpolation_method: str = "linear"
     distribution_kind: str = "empirical_by_x"
     score_family: str = "residual_only"
@@ -1419,8 +1444,11 @@ class SeriesDistributionObservation:
             "resampling_grid_lookup_key": self.policy.resampling_grid_lookup_key,
             "resampling_grid_values": self.policy.resampling_grid_values,
             "resampling_grid_step": self.policy.resampling_grid_step,
+            "resampling_grid_step_lookup_key": self.policy.resampling_grid_step_lookup_key,
             "resampling_grid_min_x": self.policy.resampling_grid_min_x,
+            "resampling_grid_min_x_lookup_key": self.policy.resampling_grid_min_x_lookup_key,
             "resampling_grid_max_x": self.policy.resampling_grid_max_x,
+            "resampling_grid_max_x_lookup_key": self.policy.resampling_grid_max_x_lookup_key,
             "interpolation_method": self.policy.interpolation_method,
             "distribution_kind": self.policy.distribution_kind,
             "score_family": self.policy.score_family,
@@ -1613,12 +1641,21 @@ class SeriesComparisonEvidencePayload:
     resampling_grid_values: tuple[float, ...] = ()
     declared_resampling_grid_step: float | None = None
     resampling_grid_step: float | None = None
+    declared_resampling_grid_step_lookup_key: str = ""
+    resampling_grid_step_lookup_key: str = ""
+    resampling_grid_step_lookup_scope: str = ""
     resampling_grid_step_origin: str = ""
     declared_resampling_grid_min_x: float | None = None
     resampling_grid_min_x: float | None = None
+    declared_resampling_grid_min_x_lookup_key: str = ""
+    resampling_grid_min_x_lookup_key: str = ""
+    resampling_grid_min_x_lookup_scope: str = ""
     resampling_grid_min_x_origin: str = ""
     declared_resampling_grid_max_x: float | None = None
     resampling_grid_max_x: float | None = None
+    declared_resampling_grid_max_x_lookup_key: str = ""
+    resampling_grid_max_x_lookup_key: str = ""
+    resampling_grid_max_x_lookup_scope: str = ""
     resampling_grid_max_x_origin: str = ""
     resampling_excluded_x_values: tuple[float, ...] = ()
     reference_resampling_domain_min_x: float | None = None
@@ -1733,12 +1770,21 @@ class SeriesComparisonEvidencePayload:
         object.__setattr__(self, "resampling_grid_values", _coerced_float_sequence(self.resampling_grid_values))
         object.__setattr__(self, "declared_resampling_grid_step", _coerced_float(self.declared_resampling_grid_step))
         object.__setattr__(self, "resampling_grid_step", _coerced_float(self.resampling_grid_step))
+        object.__setattr__(self, "declared_resampling_grid_step_lookup_key", str(self.declared_resampling_grid_step_lookup_key).strip())
+        object.__setattr__(self, "resampling_grid_step_lookup_key", str(self.resampling_grid_step_lookup_key).strip())
+        object.__setattr__(self, "resampling_grid_step_lookup_scope", str(self.resampling_grid_step_lookup_scope).strip())
         object.__setattr__(self, "resampling_grid_step_origin", str(self.resampling_grid_step_origin).strip())
         object.__setattr__(self, "declared_resampling_grid_min_x", _coerced_float(self.declared_resampling_grid_min_x))
         object.__setattr__(self, "resampling_grid_min_x", _coerced_float(self.resampling_grid_min_x))
+        object.__setattr__(self, "declared_resampling_grid_min_x_lookup_key", str(self.declared_resampling_grid_min_x_lookup_key).strip())
+        object.__setattr__(self, "resampling_grid_min_x_lookup_key", str(self.resampling_grid_min_x_lookup_key).strip())
+        object.__setattr__(self, "resampling_grid_min_x_lookup_scope", str(self.resampling_grid_min_x_lookup_scope).strip())
         object.__setattr__(self, "resampling_grid_min_x_origin", str(self.resampling_grid_min_x_origin).strip())
         object.__setattr__(self, "declared_resampling_grid_max_x", _coerced_float(self.declared_resampling_grid_max_x))
         object.__setattr__(self, "resampling_grid_max_x", _coerced_float(self.resampling_grid_max_x))
+        object.__setattr__(self, "declared_resampling_grid_max_x_lookup_key", str(self.declared_resampling_grid_max_x_lookup_key).strip())
+        object.__setattr__(self, "resampling_grid_max_x_lookup_key", str(self.resampling_grid_max_x_lookup_key).strip())
+        object.__setattr__(self, "resampling_grid_max_x_lookup_scope", str(self.resampling_grid_max_x_lookup_scope).strip())
         object.__setattr__(self, "resampling_grid_max_x_origin", str(self.resampling_grid_max_x_origin).strip())
         object.__setattr__(self, "resampling_excluded_x_values", _coerced_float_sequence(self.resampling_excluded_x_values))
         object.__setattr__(self, "reference_resampling_domain_min_x", _coerced_float(self.reference_resampling_domain_min_x))
@@ -1960,12 +2006,21 @@ class SeriesComparisonEvidencePayload:
             "resampling_grid_values": _rounded_list(list(self.resampling_grid_values)),
             "declared_resampling_grid_step": _rounded_float_or_raw(self.declared_resampling_grid_step),
             "resampling_grid_step": _rounded_float_or_raw(self.resampling_grid_step),
+            "declared_resampling_grid_step_lookup_key": self.declared_resampling_grid_step_lookup_key,
+            "resampling_grid_step_lookup_key": self.resampling_grid_step_lookup_key,
+            "resampling_grid_step_lookup_scope": self.resampling_grid_step_lookup_scope,
             "resampling_grid_step_origin": self.resampling_grid_step_origin,
             "declared_resampling_grid_min_x": _rounded_float_or_raw(self.declared_resampling_grid_min_x),
             "resampling_grid_min_x": _rounded_float_or_raw(self.resampling_grid_min_x),
+            "declared_resampling_grid_min_x_lookup_key": self.declared_resampling_grid_min_x_lookup_key,
+            "resampling_grid_min_x_lookup_key": self.resampling_grid_min_x_lookup_key,
+            "resampling_grid_min_x_lookup_scope": self.resampling_grid_min_x_lookup_scope,
             "resampling_grid_min_x_origin": self.resampling_grid_min_x_origin,
             "declared_resampling_grid_max_x": _rounded_float_or_raw(self.declared_resampling_grid_max_x),
             "resampling_grid_max_x": _rounded_float_or_raw(self.resampling_grid_max_x),
+            "declared_resampling_grid_max_x_lookup_key": self.declared_resampling_grid_max_x_lookup_key,
+            "resampling_grid_max_x_lookup_key": self.resampling_grid_max_x_lookup_key,
+            "resampling_grid_max_x_lookup_scope": self.resampling_grid_max_x_lookup_scope,
             "resampling_grid_max_x_origin": self.resampling_grid_max_x_origin,
             "resampling_excluded_x_values": _rounded_list(list(self.resampling_excluded_x_values)),
             "reference_resampling_domain_min_x": _rounded_float_or_raw(self.reference_resampling_domain_min_x),
@@ -2358,8 +2413,11 @@ def _resolved_resampling_grid(
     grid_lookup_key: str,
     grid_values: tuple[float, ...],
     grid_step: float | None,
+    grid_step_lookup_key: str,
     grid_min_x: float | None,
+    grid_min_x_lookup_key: str,
     grid_max_x: float | None,
+    grid_max_x_lookup_key: str,
     context: Mapping[str, object] | None,
     precision_digits: int,
 ) -> ResolvedResamplingGrid:
@@ -2399,13 +2457,34 @@ def _resolved_resampling_grid(
             lookup_scope=lookup_scope,
         )
     if normalized_source == "uniform_step":
-        if not _is_finite_number(grid_step) or float(grid_step) <= 0.0:
+        declared_step_lookup_key = str(grid_step_lookup_key or "").strip()
+        declared_min_lookup_key = str(grid_min_x_lookup_key or "").strip()
+        declared_max_lookup_key = str(grid_max_x_lookup_key or "").strip()
+        if _is_finite_number(grid_step):
+            step = float(grid_step)
+            step_origin = "explicit"
+            step_lookup_scope = ""
+        elif declared_step_lookup_key:
+            step, step_lookup_scope = _lookup_numeric_value_with_scope(
+                declared_step_lookup_key,
+                row=None,
+                context=context,
+                purpose_label="Resampling grid step lookup key",
+            )
+            step_origin = "lookup"
+        else:
+            step = None
+            step_origin = ""
+            step_lookup_scope = ""
+        if not _is_finite_number(step) or float(step) <= 0.0:
             raise ValueError(
                 "Alignment policy 'resampled_grid' with resampling_grid_source='uniform_step' "
                 "requires a positive finite 'resampling_grid_step'"
             )
         observed_x_values = sorted(set(reference_bins).union(model_bins))
-        if not observed_x_values and (not _is_finite_number(grid_min_x) or not _is_finite_number(grid_max_x)):
+        has_declared_min = _is_finite_number(grid_min_x) or bool(declared_min_lookup_key)
+        has_declared_max = _is_finite_number(grid_max_x) or bool(declared_max_lookup_key)
+        if not observed_x_values and (not has_declared_min or not has_declared_max):
             raise ValueError(
                 "Alignment policy 'resampled_grid' with resampling_grid_source='uniform_step' "
                 "requires finite observed x-values or explicit 'resampling_grid_min_x' and "
@@ -2414,21 +2493,41 @@ def _resolved_resampling_grid(
         if _is_finite_number(grid_min_x):
             resolved_min_x = float(grid_min_x)
             min_x_origin = "explicit"
+            min_x_lookup_scope = ""
+        elif declared_min_lookup_key:
+            resolved_min_x, min_x_lookup_scope = _lookup_numeric_value_with_scope(
+                declared_min_lookup_key,
+                row=None,
+                context=context,
+                purpose_label="Resampling grid minimum lookup key",
+            )
+            min_x_origin = "lookup"
         else:
             resolved_min_x = float(min(observed_x_values))
             min_x_origin = "default_observed_min"
+            min_x_lookup_scope = ""
         if _is_finite_number(grid_max_x):
             resolved_max_x = float(grid_max_x)
             max_x_origin = "explicit"
+            max_x_lookup_scope = ""
+        elif declared_max_lookup_key:
+            resolved_max_x, max_x_lookup_scope = _lookup_numeric_value_with_scope(
+                declared_max_lookup_key,
+                row=None,
+                context=context,
+                purpose_label="Resampling grid maximum lookup key",
+            )
+            max_x_origin = "lookup"
         else:
             resolved_max_x = float(max(observed_x_values))
             max_x_origin = "default_observed_max"
+            max_x_lookup_scope = ""
         if resolved_min_x > resolved_max_x:
             raise ValueError(
                 "Alignment policy 'resampled_grid' with resampling_grid_source='uniform_step' "
                 "requires 'resampling_grid_min_x' <= 'resampling_grid_max_x'"
             )
-        step = float(grid_step)
+        step = float(step)
         tolerance = max(1e-12, step * 1e-9, 10 ** (-int(precision_digits)))
         point_count = int(math.floor(((resolved_max_x - resolved_min_x) / step) + tolerance)) + 1
         values = [
@@ -2441,11 +2540,17 @@ def _resolved_resampling_grid(
         return ResolvedResamplingGrid(
             values=tuple(sorted(set(values))),
             resolved_step=step,
-            step_origin="explicit",
+            step_origin=step_origin,
+            step_lookup_key=declared_step_lookup_key,
+            step_lookup_scope=step_lookup_scope,
             resolved_min_x=resolved_min_x,
             min_x_origin=min_x_origin,
+            min_x_lookup_key=declared_min_lookup_key,
+            min_x_lookup_scope=min_x_lookup_scope,
             resolved_max_x=resolved_max_x,
             max_x_origin=max_x_origin,
+            max_x_lookup_key=declared_max_lookup_key,
+            max_x_lookup_scope=max_x_lookup_scope,
         )
     raise ValueError(
         f"Unsupported resampling grid source {grid_source!r}; expected one of "
@@ -2724,20 +2829,73 @@ class SeriesComparisonTest(sciunit.Test):
                         "resampling_grid_source='lookup_grid' should not also declare "
                         "'resampling_grid_step'"
                     )
+                if str(obs.policy.resampling_grid_step_lookup_key or "").strip():
+                    raise ValueError(
+                        "Series alignment policy 'resampled_grid' with "
+                        "resampling_grid_source='lookup_grid' should not also declare "
+                        "'resampling_grid_step_lookup_key'"
+                    )
                 if obs.policy.resampling_grid_min_x is not None or obs.policy.resampling_grid_max_x is not None:
                     raise ValueError(
                         "Series alignment policy 'resampled_grid' with "
                         "resampling_grid_source='lookup_grid' should not also declare "
                         "'resampling_grid_min_x' or 'resampling_grid_max_x'"
                     )
+                if str(obs.policy.resampling_grid_min_x_lookup_key or "").strip() or str(obs.policy.resampling_grid_max_x_lookup_key or "").strip():
+                    raise ValueError(
+                        "Series alignment policy 'resampled_grid' with "
+                        "resampling_grid_source='lookup_grid' should not also declare "
+                        "'resampling_grid_min_x_lookup_key' or 'resampling_grid_max_x_lookup_key'"
+                    )
             elif declared_grid_lookup_key:
                 raise ValueError(
                     "Series alignment policy 'resampled_grid' only supports "
                     "'resampling_grid_lookup_key' when resampling_grid_source='lookup_grid'"
                 )
+            if declared_grid_source == "uniform_step":
+                declared_step_lookup_key = str(obs.policy.resampling_grid_step_lookup_key or "").strip()
+                declared_min_lookup_key = str(obs.policy.resampling_grid_min_x_lookup_key or "").strip()
+                declared_max_lookup_key = str(obs.policy.resampling_grid_max_x_lookup_key or "").strip()
+                if obs.policy.resampling_grid_step is not None and declared_step_lookup_key:
+                    raise ValueError(
+                        "Series alignment policy 'resampled_grid' with "
+                        "resampling_grid_source='uniform_step' should not declare both "
+                        "'resampling_grid_step' and 'resampling_grid_step_lookup_key'"
+                    )
+                if obs.policy.resampling_grid_min_x is not None and declared_min_lookup_key:
+                    raise ValueError(
+                        "Series alignment policy 'resampled_grid' with "
+                        "resampling_grid_source='uniform_step' should not declare both "
+                        "'resampling_grid_min_x' and 'resampling_grid_min_x_lookup_key'"
+                    )
+                if obs.policy.resampling_grid_max_x is not None and declared_max_lookup_key:
+                    raise ValueError(
+                        "Series alignment policy 'resampled_grid' with "
+                        "resampling_grid_source='uniform_step' should not declare both "
+                        "'resampling_grid_max_x' and 'resampling_grid_max_x_lookup_key'"
+                    )
+            elif (
+                str(obs.policy.resampling_grid_step_lookup_key or "").strip()
+                or str(obs.policy.resampling_grid_min_x_lookup_key or "").strip()
+                or str(obs.policy.resampling_grid_max_x_lookup_key or "").strip()
+            ):
+                raise ValueError(
+                    "Series alignment policy 'resampled_grid' only supports "
+                    "'resampling_grid_step_lookup_key', 'resampling_grid_min_x_lookup_key', and "
+                    "'resampling_grid_max_x_lookup_key' when resampling_grid_source='uniform_step'"
+                )
         elif str(obs.policy.resampling_grid_lookup_key or "").strip():
             raise ValueError(
                 "Series alignment policy only supports 'resampling_grid_lookup_key' when "
+                "alignment_policy = 'resampled_grid'"
+            )
+        elif (
+            str(obs.policy.resampling_grid_step_lookup_key or "").strip()
+            or str(obs.policy.resampling_grid_min_x_lookup_key or "").strip()
+            or str(obs.policy.resampling_grid_max_x_lookup_key or "").strip()
+        ):
+            raise ValueError(
+                "Series alignment policy only supports metadata-backed uniform-step grid lookups when "
                 "alignment_policy = 'resampled_grid'"
             )
         if obs.policy.alignment_policy != "resampled_grid" and str(obs.policy.resampling_domain_policy or "").strip():
@@ -2840,8 +2998,11 @@ class SeriesComparisonTest(sciunit.Test):
                 grid_lookup_key=obs.policy.resampling_grid_lookup_key,
                 grid_values=obs.policy.resampling_grid_values,
                 grid_step=obs.policy.resampling_grid_step,
+                grid_step_lookup_key=obs.policy.resampling_grid_step_lookup_key,
                 grid_min_x=obs.policy.resampling_grid_min_x,
+                grid_min_x_lookup_key=obs.policy.resampling_grid_min_x_lookup_key,
                 grid_max_x=obs.policy.resampling_grid_max_x,
+                grid_max_x_lookup_key=obs.policy.resampling_grid_max_x_lookup_key,
                 context=model_dataset.context or None,
                 precision_digits=obs.policy.x_precision_digits,
             )
@@ -3087,12 +3248,21 @@ class SeriesComparisonTest(sciunit.Test):
             resampling_grid_values=tuple(alignment_summary.resampling_metadata.target_grid),
             declared_resampling_grid_step=obs.policy.resampling_grid_step,
             resampling_grid_step=resolved_grid.resolved_step,
+            declared_resampling_grid_step_lookup_key=obs.policy.resampling_grid_step_lookup_key,
+            resampling_grid_step_lookup_key=resolved_grid.step_lookup_key,
+            resampling_grid_step_lookup_scope=resolved_grid.step_lookup_scope,
             resampling_grid_step_origin=resolved_grid.step_origin,
             declared_resampling_grid_min_x=obs.policy.resampling_grid_min_x,
             resampling_grid_min_x=resolved_grid.resolved_min_x,
+            declared_resampling_grid_min_x_lookup_key=obs.policy.resampling_grid_min_x_lookup_key,
+            resampling_grid_min_x_lookup_key=resolved_grid.min_x_lookup_key,
+            resampling_grid_min_x_lookup_scope=resolved_grid.min_x_lookup_scope,
             resampling_grid_min_x_origin=resolved_grid.min_x_origin,
             declared_resampling_grid_max_x=obs.policy.resampling_grid_max_x,
             resampling_grid_max_x=resolved_grid.resolved_max_x,
+            declared_resampling_grid_max_x_lookup_key=obs.policy.resampling_grid_max_x_lookup_key,
+            resampling_grid_max_x_lookup_key=resolved_grid.max_x_lookup_key,
+            resampling_grid_max_x_lookup_scope=resolved_grid.max_x_lookup_scope,
             resampling_grid_max_x_origin=resolved_grid.max_x_origin,
             resampling_excluded_x_values=tuple(alignment_summary.resampling_metadata.excluded_grid),
             reference_resampling_domain_min_x=alignment_summary.resampling_metadata.reference_min_x,
