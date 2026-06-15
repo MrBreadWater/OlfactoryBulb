@@ -25,6 +25,7 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     audit_items_from_series_comparison_suite,
     compile_series_comparison_suite,
 )
+from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor, SuiteStatisticalPolicy
 
 
 def _rule_context(
@@ -594,6 +595,18 @@ assert equivalence_items[0].evidence["suite_statistical_summary"]["rollup_method
 assert equivalence_items[0].evidence["suite_statistical_summary"]["threshold_key"] == "equivalence_alpha"
 assert equivalence_items[0].evidence["suite_statistical_summary"]["gate_passed"] is True
 
+equivalence_items_median = audit_items_from_series_comparison_suite(
+    equivalence_compiled,
+    descriptor=SuiteDescriptor(
+        suite_id="synthetic equivalence suite",
+        suite_kind_label="Series-comparison suite",
+        statistical_policy=SuiteStatisticalPolicy(rollup_method="median"),
+    ),
+)
+assert equivalence_items_median[0].evidence["suite_statistical_policy"] == {"rollup_method": "median"}
+assert equivalence_items_median[0].evidence["suite_statistical_summary"]["rollup_method"] == "median"
+assert equivalence_items_median[0].evidence["suite_statistical_summary"]["rollup_source"] == "explicit"
+
 singleton_equivalence_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=equivalence_reference_rows,
@@ -1064,6 +1077,24 @@ assert equivalence_rule_items[1].evidence["equivalence_margin_Hz"] == 0.2
 assert equivalence_rule_items[1].evidence["equivalence_margin_source"] == "maximum_mae_default"
 assert equivalence_rule_items[1].evidence["statistical_test_family"] == "equivalence_tost"
 assert equivalence_rule_items[1].evidence["statistical_gate_passed"] is True
+
+explicit_statistical_rule = dict(equivalence_rule)
+explicit_statistical_rule["suite_statistical_policy"] = {"rollup_method": "median"}
+rules_module._load_rows = (
+    lambda loader_spec: equivalence_reference_rows
+    if loader_spec == "csv:/tmp/equivalence.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    equivalence_rule_items_median = build_rule_items(
+        compile_rule_dispatches([explicit_statistical_rule]),
+        equivalence_context,
+    )
+finally:
+    rules_module._load_rows = original_load_rows
+assert equivalence_rule_items_median[0].evidence["suite_statistical_policy"] == {"rollup_method": "median"}
+assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["rollup_method"] == "median"
+assert equivalence_rule_items_median[0].evidence["suite_statistical_summary"]["rollup_source"] == "explicit"
 
 piecewise_rule = dict(residual_only_rule)
 piecewise_rule["loader"] = "csv:/tmp/piecewise.csv"

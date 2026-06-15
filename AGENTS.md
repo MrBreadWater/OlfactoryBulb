@@ -689,7 +689,13 @@ contract for future sessions.
     detailed evidence. `reference_band_rows` is not an exception here: it also
     compiles through a `SuiteDescriptor` and accepts the same
     `suite_aggregate_policy` contract as the grouped summary/comparison/series
-    suite families. Keep the migrated NeuronUnit-to-`AuditItem` adapter
+    suite families. When a grouped suite exposes real case-level statistical
+    diagnostics, carry the suite-level policy through the same descriptor path
+    with `suite_statistical_policy` rather than baking an aggregation choice
+    into the dashboard or one suite adapter. The maintained default remains
+    category-specific auto selection, but explicit rollups such as `median`
+    should stay declarative and surface their resolved source in emitted
+    evidence. Keep the migrated NeuronUnit-to-`AuditItem` adapter
     centralized in `olfactorybulb.neuronunit.suite_presentation`; use the
     shared `AuditItemAdapterSpec` path instead of hand-constructing the same
     criterion/review/visual field bundle in every suite adapter, and add or

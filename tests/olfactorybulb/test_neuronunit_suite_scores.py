@@ -6,6 +6,7 @@ from olfactorybulb.neuronunit.suite_scores import (
     SuiteAggregatePolicy,
     SuiteCaseScorePayload,
     SuiteCaseSummary,
+    SuiteStatisticalPolicy,
     build_suite_aggregate_score,
 )
 
@@ -173,6 +174,79 @@ assert welch_summary == {
     "gate_passed": True,
     "case_pvalues": [0.08, 0.12],
     "case_check_ids": ["welch_a", "welch_b"],
+}
+
+median_equivalence_score = build_suite_aggregate_score(
+    suite_id="synthetic.equivalence_suite_median",
+    case_summaries=[
+        SuiteCaseSummary(
+            check_id="equiv_a",
+            title="Equivalence case A",
+            status="PASS",
+            norm_score=1.0,
+            case_score=SuiteCaseScorePayload(
+                score_kind="hybrid_residual_equivalence",
+                observation={"aggregate_statistical_pvalue": 0.01},
+                prediction={
+                    "equivalence_alpha": 0.05,
+                    "statistical_test_family": "equivalence_tost",
+                },
+            ),
+        ),
+        SuiteCaseSummary(
+            check_id="equiv_b",
+            title="Equivalence case B",
+            status="PASS",
+            norm_score=0.9,
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                observation={"aggregate_statistical_pvalue": 0.05},
+                prediction={
+                    "equivalence_alpha": 0.05,
+                    "statistical_test_family": "equivalence_tost",
+                },
+            ),
+        ),
+        SuiteCaseSummary(
+            check_id="equiv_c",
+            title="Equivalence case C",
+            status="PASS",
+            norm_score=0.8,
+            case_score=SuiteCaseScorePayload(
+                score_kind="equivalence_only",
+                observation={"aggregate_statistical_pvalue": 0.09},
+                prediction={
+                    "equivalence_alpha": 0.05,
+                    "statistical_test_family": "equivalence_tost",
+                },
+            ),
+        ),
+    ],
+    statistical_policy=SuiteStatisticalPolicy(rollup_method="median"),
+)
+
+median_equivalence_summary = median_equivalence_score.to_evidence()["suite_statistical_summary"]
+assert median_equivalence_score.to_evidence()["suite_statistical_policy"] == {"rollup_method": "median"}
+assert median_equivalence_summary == {
+    "score_family_category": "equivalence",
+    "statistical_test_family": "equivalence_tost",
+    "rollup_method": "median",
+    "rollup_source": "explicit",
+    "rollup_pvalue": 0.05,
+    "available_case_count": 3,
+    "total_case_count": 3,
+    "score_text": "median TOST p 0.05",
+    "score_interpretation": (
+        "Diagnostic suite-level statistical summary derived from the case-level "
+        "TOST p values. It does not replace the detailed per-case gates. "
+        "(threshold 0.05)"
+    ),
+    "threshold": 0.05,
+    "threshold_key": "equivalence_alpha",
+    "threshold_direction": "le",
+    "gate_passed": True,
+    "case_pvalues": [0.01, 0.05, 0.09],
+    "case_check_ids": ["equiv_a", "equiv_b", "equiv_c"],
 }
 
 print("neuronunit_suite_scores: OK")

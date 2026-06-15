@@ -46,8 +46,10 @@ from olfactorybulb.neuronunit.series_validation_suite import (
 from olfactorybulb.neuronunit.summary_validation_suite import SummaryRuleCase
 from olfactorybulb.neuronunit.suite_scores import (
     DEFAULT_SUITE_AGGREGATE_POLICY,
+    DEFAULT_SUITE_STATISTICAL_POLICY,
     SuiteAggregatePolicy,
     SuiteDescriptor,
+    SuiteStatisticalPolicy,
 )
 
 
@@ -204,6 +206,25 @@ def _explicit_suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAgg
     return suite_aggregate_policy_from_rule(rule)
 
 
+def suite_statistical_policy_from_rule(rule: dict[str, Any]) -> SuiteStatisticalPolicy:
+    raw_policy = rule.get("suite_statistical_policy")
+    if raw_policy in (None, ""):
+        return DEFAULT_SUITE_STATISTICAL_POLICY
+    if not isinstance(raw_policy, dict):
+        raise ValueError("suite_statistical_policy must be a table when provided")
+    rollup_method = str(raw_policy.get("rollup_method", DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method)).strip()
+    return SuiteStatisticalPolicy(
+        rollup_method=rollup_method or DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method,
+    )
+
+
+def _explicit_suite_statistical_policy_from_rule(rule: dict[str, Any]) -> SuiteStatisticalPolicy | None:
+    raw_policy = rule.get("suite_statistical_policy")
+    if raw_policy in (None, ""):
+        return None
+    return suite_statistical_policy_from_rule(rule)
+
+
 def grouped_suite_descriptor(
     rules: list[dict[str, Any]],
     *,
@@ -233,13 +254,25 @@ def grouped_suite_descriptor(
         raise ValueError(
             "Grouped SciUnit-backed rules require a consistent suite_aggregate_policy when compiled together"
         )
+    explicit_statistical_policies = {
+        policy
+        for rule in rules
+        for policy in [_explicit_suite_statistical_policy_from_rule(rule)]
+        if policy is not None
+    }
+    if len(explicit_statistical_policies) > 1:
+        raise ValueError(
+            "Grouped SciUnit-backed rules require a consistent suite_statistical_policy when compiled together"
+        )
     suite_id = next(iter(explicit_suite_names), default_suite_id)
     aggregate_policy = next(iter(explicit_policies), DEFAULT_SUITE_AGGREGATE_POLICY)
+    statistical_policy = next(iter(explicit_statistical_policies), DEFAULT_SUITE_STATISTICAL_POLICY)
     return SuiteDescriptor(
         suite_id=suite_id,
         suite_kind_label=suite_kind_label,
         candidate_ids=tuple(candidate_ids),
         aggregate_policy=aggregate_policy,
+        statistical_policy=statistical_policy,
     )
 
 
@@ -788,6 +821,7 @@ class ReferenceBandRuleSpec:
                 suite_id=str(rule.get("suite_name", rule.get("title", "reference-band-suite"))).strip() or "reference-band-suite",
                 suite_kind_label="Reference-band suite",
                 aggregate_policy=suite_aggregate_policy_from_rule(rule),
+                statistical_policy=suite_statistical_policy_from_rule(rule),
             ),
             pass_status=str(rule.get("pass_status", "PASS")),
             fail_status=str(rule.get("fail_status", "FAIL")),

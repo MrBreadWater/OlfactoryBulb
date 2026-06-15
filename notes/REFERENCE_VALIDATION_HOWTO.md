@@ -283,6 +283,18 @@ suite_aggregate_policy = { norm_rollup = "mean" }
 The maintained default is still `norm_rollup = "minimum"` with
 `status_rollup = "worst_case"`.
 
+If the suite emits case-level statistical diagnostics, you may also declare an
+explicit suite-level statistical rollup:
+
+```toml
+suite_statistical_policy = { rollup_method = "median" }
+```
+
+The maintained default is still category-specific auto selection:
+
+- equivalence-family suites default to `max`
+- Welch-family suites default to `min`
+
 For single-rule SciUnit-backed families such as `reference_band_rows`, the same
 field works directly on that rule without any repetition:
 
@@ -514,6 +526,19 @@ Use `weighted_mean` only when the suite family emits a principled per-case
 weight. The maintained series-comparison suite currently does this by carrying
 matched-point count through the shared suite-case contract and into the suite
 overview evidence.
+
+For grouped suites that expose compatible case-level p-values, an optional
+`suite_statistical_policy` table may select the overview rollup method:
+
+- `auto`
+- `max`
+- `min`
+- `median`
+
+Leave it at `auto` unless you have a principled reason to summarize the suite
+statistics differently. The emitted `suite_statistical_summary` evidence will
+record whether the rollup came from the category default or from an explicit
+override.
 
 For `reference_curve_match`, treat axis metadata as part of the rule contract:
 

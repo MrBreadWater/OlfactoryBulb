@@ -379,6 +379,15 @@ declare it explicitly on every contiguous rule in the block:</p>
 </code></pre>
 <p>The maintained default is still <code>norm_rollup = "minimum"</code> with
 <code>status_rollup = "worst_case"</code>.</p>
+<p>If the suite emits case-level statistical diagnostics, you may also declare an
+explicit suite-level statistical rollup:</p>
+<pre><code class="language-toml">suite_statistical_policy = { rollup_method = &quot;median&quot; }
+</code></pre>
+<p>The maintained default is still category-specific auto selection:</p>
+<ul>
+<li>equivalence-family suites default to <code>max</code></li>
+<li>Welch-family suites default to <code>min</code></li>
+</ul>
 <p>For single-rule SciUnit-backed families such as <code>reference_band_rows</code>, the same
 field works directly on that rule without any repetition:</p>
 <pre><code class="language-toml">suite_aggregate_policy = { norm_rollup = &quot;mean&quot; }
@@ -583,6 +592,18 @@ derive that math instead of hand-writing endpoint notation per rule.</p>
 weight. The maintained series-comparison suite currently does this by carrying
 matched-point count through the shared suite-case contract and into the suite
 overview evidence.</p>
+<p>For grouped suites that expose compatible case-level p-values, an optional
+<code>suite_statistical_policy</code> table may select the overview rollup method:</p>
+<ul>
+<li><code>auto</code></li>
+<li><code>max</code></li>
+<li><code>min</code></li>
+<li><code>median</code></li>
+</ul>
+<p>Leave it at <code>auto</code> unless you have a principled reason to summarize the suite
+statistics differently. The emitted <code>suite_statistical_summary</code> evidence will
+record whether the rollup came from the category default or from an explicit
+override.</p>
 <p>For <code>reference_curve_match</code>, treat axis metadata as part of the rule contract:</p>
 <ul>
 <li>declare reference/model x and y units explicitly</li>

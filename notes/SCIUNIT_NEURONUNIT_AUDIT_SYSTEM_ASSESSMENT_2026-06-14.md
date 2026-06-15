@@ -2156,6 +2156,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     when detailed cases expose compatible equivalence or Welch diagnostics, so
     the overview layer no longer flattens that statistical evidence down to
     norm scores only
+  - the same suite-descriptor layer now also carries an explicit
+    `SuiteStatisticalPolicy`, so grouped validations can override the default
+    suite-level p-value rollup declaratively instead of baking it into one
+    suite adapter or the dashboard
   - the typed suite-aggregation layer now supports a richer
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite
@@ -2166,9 +2170,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
 
 The remaining open questions are now narrower:
 
-- whether the next statistical layer should stop at the new typed
-  `suite_statistical_summary` diagnostics or later grow into configurable
-  alternative suite-level statistical rollups
+- whether the new typed `suite_statistical_summary` plus declarative
+  `SuiteStatisticalPolicy` support is enough, or whether future work should
+  promote additional suite-level statistical contracts beyond alternative
+  p-value rollups
 - whether transform generalization should stop at explicit piecewise-linear
   mappings or later grow into context-dependent transforms
 - whether alignment generalization should stop at the current

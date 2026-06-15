@@ -1781,6 +1781,10 @@ Important details:
   `suite_aggregate_policy = { norm_rollup = "mean" | "median" }`; the
   maintained default remains `worst_case` status plus `minimum` normalized
   score
+- those same grouped suites may also declare
+  `suite_statistical_policy = { rollup_method = "median" }` when the suite
+  emits case-level statistical diagnostics and you want a non-default
+  suite-level p-value summary
 - single-rule SciUnit-backed families such as `reference_band_rows` use the
   same field directly on that rule
 - reference/model provenance summaries for series comparisons now come from a

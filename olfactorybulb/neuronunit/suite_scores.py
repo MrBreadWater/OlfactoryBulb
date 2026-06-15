@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 import math
+import statistics
 from typing import Any
 
 from olfactorybulb.audit.core import rounded
@@ -214,6 +215,25 @@ class SuiteStatisticalSummary:
 
 
 @dataclass(frozen=True)
+class SuiteStatisticalPolicy:
+    rollup_method: str = "auto"
+
+    def __post_init__(self) -> None:
+        rollup_method = str(self.rollup_method or "").strip().lower() or "auto"
+        if rollup_method not in {"auto", "max", "min", "median"}:
+            raise ValueError(
+                f"Unsupported suite statistical rollup {self.rollup_method!r}; "
+                "the maintained bridge currently supports auto, max, min, or median"
+            )
+        object.__setattr__(self, "rollup_method", rollup_method)
+
+    def to_dict(self) -> dict[str, str]:
+        return {
+            "rollup_method": self.rollup_method,
+        }
+
+
+@dataclass(frozen=True)
 class SuiteAggregatePolicy:
     status_rollup: str = "worst_case"
     norm_rollup: str = "minimum"
@@ -261,6 +281,7 @@ class SuiteAggregatePolicy:
 
 
 DEFAULT_SUITE_AGGREGATE_POLICY = SuiteAggregatePolicy()
+DEFAULT_SUITE_STATISTICAL_POLICY = SuiteStatisticalPolicy()
 
 
 @dataclass(frozen=True)
@@ -269,6 +290,7 @@ class SuiteDescriptor:
     suite_kind_label: str
     candidate_ids: tuple[str, ...] = ()
     aggregate_policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY
+    statistical_policy: SuiteStatisticalPolicy = DEFAULT_SUITE_STATISTICAL_POLICY
 
     def __post_init__(self) -> None:
         suite_id = str(self.suite_id).strip()
@@ -383,8 +405,7 @@ def _suite_statistical_case_entry(case_summary: SuiteCaseSummary) -> dict[str, A
         return {
             "category": "equivalence",
             "label": "TOST p",
-            "rollup_method": "max",
-            "rollup_source": "auto_default",
+            "default_rollup_method": "max",
             "threshold": threshold,
             "threshold_key": "equivalence_alpha",
             "threshold_direction": "le",
@@ -398,8 +419,7 @@ def _suite_statistical_case_entry(case_summary: SuiteCaseSummary) -> dict[str, A
         return {
             "category": "welch_similarity",
             "label": "Welch p",
-            "rollup_method": "min",
-            "rollup_source": "auto_default",
+            "default_rollup_method": "min",
             "threshold": threshold,
             "threshold_key": "minimum_median_welch_pvalue",
             "threshold_direction": "ge",
@@ -410,7 +430,11 @@ def _suite_statistical_case_entry(case_summary: SuiteCaseSummary) -> dict[str, A
     return None
 
 
-def _suite_statistical_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> SuiteStatisticalSummary | None:
+def _suite_statistical_summary(
+    case_summaries: tuple[SuiteCaseSummary, ...],
+    *,
+    policy: SuiteStatisticalPolicy = DEFAULT_SUITE_STATISTICAL_POLICY,
+) -> SuiteStatisticalSummary | None:
     entries = [
         entry
         for entry in (_suite_statistical_case_entry(case_summary) for case_summary in case_summaries)
@@ -426,8 +450,14 @@ def _suite_statistical_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> 
     if any(entry.get("pvalue") is None for entry in entries):
         return None
 
-    rollup_method = str(entries[0]["rollup_method"])
-    rollup_source = str(entries[0]["rollup_source"])
+    declared_rollup_method = str(policy.rollup_method or "auto").strip().lower() or "auto"
+    default_rollup_method = str(entries[0]["default_rollup_method"])
+    if declared_rollup_method == "auto":
+        rollup_method = default_rollup_method
+        rollup_source = "auto_default"
+    else:
+        rollup_method = declared_rollup_method
+        rollup_source = "explicit"
     label = str(entries[0]["label"])
     statistical_test_family = str(entries[0]["test_family"])
     threshold_key = str(entries[0]["threshold_key"])
@@ -441,8 +471,10 @@ def _suite_statistical_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> 
     pvalues = [float(entry["pvalue"]) for entry in entries]
     if rollup_method == "max":
         rollup_pvalue = max(pvalues)
-    else:
+    elif rollup_method == "min":
         rollup_pvalue = min(pvalues)
+    else:
+        rollup_pvalue = float(statistics.median(pvalues))
     rounded_rollup_pvalue = rounded(rollup_pvalue, digits=4)
     threshold_phrase = ""
     gate_passed: bool | None = None
@@ -481,6 +513,7 @@ class SuiteAggregateScore:
     suite_id: str
     case_summaries: tuple[SuiteCaseSummary, ...]
     policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY
+    statistical_policy: SuiteStatisticalPolicy = DEFAULT_SUITE_STATISTICAL_POLICY
     candidate_ids: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
@@ -533,7 +566,7 @@ class SuiteAggregateScore:
 
     @property
     def statistical_summary(self) -> SuiteStatisticalSummary | None:
-        return _suite_statistical_summary(self.case_summaries)
+        return _suite_statistical_summary(self.case_summaries, policy=self.statistical_policy)
 
     @property
     def warning_case_titles(self) -> tuple[str, ...]:
@@ -556,6 +589,7 @@ class SuiteAggregateScore:
             "warning_cases": list(self.warning_case_titles),
             "failed_cases": list(self.failed_case_titles),
             "suite_case_check_ids": list(self.case_check_ids),
+            "suite_statistical_policy": self.statistical_policy.to_dict(),
             "suite_aggregate_score": {
                 **self.policy.to_dict(),
                 "status": self.status,
@@ -578,23 +612,27 @@ def build_suite_aggregate_score(
     suite_id: str,
     case_summaries: list[SuiteCaseSummary] | tuple[SuiteCaseSummary, ...],
     policy: SuiteAggregatePolicy = DEFAULT_SUITE_AGGREGATE_POLICY,
+    statistical_policy: SuiteStatisticalPolicy = DEFAULT_SUITE_STATISTICAL_POLICY,
     candidate_ids: list[str] | tuple[str, ...] = (),
 ) -> SuiteAggregateScore:
     return SuiteAggregateScore(
         suite_id=suite_id,
         case_summaries=tuple(case_summaries),
         policy=policy,
+        statistical_policy=statistical_policy,
         candidate_ids=tuple(candidate_ids),
     )
 
 
 __all__ = [
     "DEFAULT_SUITE_AGGREGATE_POLICY",
+    "DEFAULT_SUITE_STATISTICAL_POLICY",
     "SuiteAggregatePolicy",
     "SuiteAggregateScore",
     "SuiteCaseScorePayload",
     "SuiteCaseSummary",
     "SuiteDescriptor",
+    "SuiteStatisticalPolicy",
     "SuiteStatisticalSummary",
     "build_suite_aggregate_score",
 ]

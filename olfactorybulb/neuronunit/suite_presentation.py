@@ -237,6 +237,7 @@ def suite_overview_item(
         suite_id=suite_name_text,
         case_summaries=case_summaries,
         policy=descriptor.aggregate_policy,
+        statistical_policy=descriptor.statistical_policy,
         candidate_ids=descriptor.candidate_ids,
     )
     summary = suite_score.status_summary

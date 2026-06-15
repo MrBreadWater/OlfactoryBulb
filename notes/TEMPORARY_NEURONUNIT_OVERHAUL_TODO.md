@@ -317,6 +317,14 @@ Remove this file when the listed items are either:
       - suite overviews and the status-matrix header now surface a compact
         statistical summary when the detailed cases expose compatible
         equivalence or Welch diagnostics
+- [x] Make suite-level statistical rollups configurable through the same typed
+      descriptor path instead of hardcoding the overview p-value summary per
+      score family.
+      - added `SuiteStatisticalPolicy` to the shared suite-score/descriptor
+        layer
+      - grouped validations may now declare `suite_statistical_policy`
+      - explicit rollups such as `median` now surface as `rollup_source =
+        "explicit"` in the emitted suite statistical summary
 - [x] Lift protocol metric rows and grouped numeric summaries onto one typed
       shared contract instead of reintroducing fresh raw `list[dict]` /
       `dict[group][metric]` bundles at the protocol, plan, context, and
