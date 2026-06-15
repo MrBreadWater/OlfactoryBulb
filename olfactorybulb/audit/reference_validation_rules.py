@@ -61,6 +61,12 @@ class ValidationRuleContext:
 RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
 
 
+@dataclass(frozen=True)
+class _GroupedRuleFamily:
+    family_id: str
+    build_items: Callable[[list[dict[str, Any]], ValidationRuleContext], list[AuditItem]]
+
+
 RULE_HANDLERS: dict[str, RuleHandler] = {}
 SUMMARY_RULE_KINDS = {
     "summary_metric_min",
@@ -136,9 +142,8 @@ def build_rule_items(
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
     items: list[AuditItem] = []
-    pending_summary_rules: list[dict[str, Any]] = []
-    pending_comparison_rules: list[dict[str, Any]] = []
-    pending_series_rules: list[dict[str, Any]] = []
+    pending_family: _GroupedRuleFamily | None = None
+    pending_rules: list[dict[str, Any]] = []
 
     def _append_grouped_suite_items(
         generated_items: list[AuditItem],
@@ -156,29 +161,14 @@ def build_rule_items(
         if len(detail_items) > len(source_rules):
             items.extend(detail_items[len(source_rules):])
 
-    def flush_pending_summary_rules() -> None:
-        nonlocal pending_summary_rules
-        if not pending_summary_rules:
+    def flush_pending_rules() -> None:
+        nonlocal pending_family, pending_rules
+        if pending_family is None or not pending_rules:
             return
-        generated_items = _build_summary_rule_items(pending_summary_rules, context)
-        _append_grouped_suite_items(generated_items, pending_summary_rules)
-        pending_summary_rules = []
-
-    def flush_pending_comparison_rules() -> None:
-        nonlocal pending_comparison_rules
-        if not pending_comparison_rules:
-            return
-        generated_items = _build_comparison_rule_items(pending_comparison_rules, context)
-        _append_grouped_suite_items(generated_items, pending_comparison_rules)
-        pending_comparison_rules = []
-
-    def flush_pending_series_rules() -> None:
-        nonlocal pending_series_rules
-        if not pending_series_rules:
-            return
-        generated_items = _build_series_rule_items(pending_series_rules, context)
-        _append_grouped_suite_items(generated_items, pending_series_rules)
-        pending_series_rules = []
+        generated_items = pending_family.build_items(pending_rules, context)
+        _append_grouped_suite_items(generated_items, pending_rules)
+        pending_family = None
+        pending_rules = []
 
     for rule in rules:
         if not _rule_enabled(rule, context.args):
@@ -186,24 +176,14 @@ def build_rule_items(
         kind = str(rule.get("kind") or "").strip()
         if not kind:
             raise ValueError("Validation rule is missing required 'kind'")
-        if kind in SUMMARY_RULE_KINDS:
-            flush_pending_series_rules()
-            flush_pending_comparison_rules()
-            pending_summary_rules.append(rule)
+        grouped_family = _grouped_rule_family_for_kind(kind)
+        if grouped_family is not None:
+            if pending_family is not None and pending_family != grouped_family:
+                flush_pending_rules()
+            pending_family = grouped_family
+            pending_rules.append(rule)
             continue
-        if kind in COMPARISON_RULE_KINDS:
-            flush_pending_series_rules()
-            flush_pending_summary_rules()
-            pending_comparison_rules.append(rule)
-            continue
-        if kind in SERIES_RULE_KINDS:
-            flush_pending_summary_rules()
-            flush_pending_comparison_rules()
-            pending_series_rules.append(rule)
-            continue
-        flush_pending_summary_rules()
-        flush_pending_comparison_rules()
-        flush_pending_series_rules()
+        flush_pending_rules()
         try:
             handler = RULE_HANDLERS[kind]
         except KeyError as exc:
@@ -212,9 +192,7 @@ def build_rule_items(
         rule_items = handler(rule, context)
         _apply_rule_level_validation_design_review(rule_items, rule, context)
         items.extend(rule_items)
-    flush_pending_summary_rules()
-    flush_pending_comparison_rules()
-    flush_pending_series_rules()
+    flush_pending_rules()
     return items
 
 
@@ -535,6 +513,29 @@ def _build_series_rule_items(
         suite_name=descriptor.suite_id,
     )
     return audit_items_from_series_comparison_suite(compiled, descriptor=descriptor)
+
+
+SUMMARY_RULE_FAMILY = _GroupedRuleFamily(
+    family_id="summary_rules",
+    build_items=_build_summary_rule_items,
+)
+COMPARISON_RULE_FAMILY = _GroupedRuleFamily(
+    family_id="comparison_rules",
+    build_items=_build_comparison_rule_items,
+)
+SERIES_RULE_FAMILY = _GroupedRuleFamily(
+    family_id="series_rules",
+    build_items=_build_series_rule_items,
+)
+GROUPED_RULE_FAMILIES_BY_KIND: dict[str, _GroupedRuleFamily] = {
+    **{kind: SUMMARY_RULE_FAMILY for kind in SUMMARY_RULE_KINDS},
+    **{kind: COMPARISON_RULE_FAMILY for kind in COMPARISON_RULE_KINDS},
+    **{kind: SERIES_RULE_FAMILY for kind in SERIES_RULE_KINDS},
+}
+
+
+def _grouped_rule_family_for_kind(kind: str) -> _GroupedRuleFamily | None:
+    return GROUPED_RULE_FAMILIES_BY_KIND.get(kind)
 
 
 def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:
