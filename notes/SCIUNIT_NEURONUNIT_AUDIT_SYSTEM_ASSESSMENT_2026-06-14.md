@@ -1743,6 +1743,17 @@ piece is proper suite-level presentation.
    - columns = tests
    - cells = typed scores or normalized pass distance
 
+Current branch state: the first maintained presentation step is now in place.
+The migrated SciUnit-backed suite families emit:
+
+- one compact suite-overview item
+- a persistent status-matrix companion visual
+- the original detailed case items
+
+The suite-overview item is intentionally rollup-exempt so the maintained audit
+summary still reflects the detailed scientific cases rather than double-
+counting the overview card.
+
 2. A per-test score distribution view:
    - histogram or strip across candidates
    - useful in optimization and model-comparison workflows

@@ -22,6 +22,7 @@ from olfactorybulb.neuronunit.reference_bands import (
     measurement_with_unit,
     numeric_value,
 )
+from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
 
 
 @dataclass(frozen=True)
@@ -250,8 +251,23 @@ def _evidence_payload(case: ReferenceBandCase, score: ReferenceBandScore) -> dic
 
 
 def audit_items_from_reference_band_suite(compiled: CompiledReferenceBandSuite) -> list[AuditItem]:
-    items: list[AuditItem] = []
-    for case, score in compiled.judge():
+    judged = compiled.judge()
+    case_entries = [
+        suite_case_entry(
+            check_id=case.check_id,
+            title=case.title,
+            status=case.pass_status if score.passed else case.fail_status,
+        )
+        for case, score in judged
+    ]
+    items: list[AuditItem] = [
+        suite_overview_item(
+            suite_name=str(compiled.suite.name or "reference-band-suite"),
+            suite_kind_label="Reference-band suite",
+            case_entries=case_entries,
+        )
+    ]
+    for case, score in judged:
         obs = case.observation
         item = AuditItem(
             check_id=case.check_id,

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from argparse import Namespace
 
+from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
 from olfactorybulb.neuronunit.comparison_validation_suite import (
     ComparisonRuleCase,
@@ -151,12 +152,17 @@ judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS", "PASS", "PASS", "PASS", "PASS"]
 
 adapted_items = audit_items_from_comparison_rule_suite(compiled)
-assert [item.status for item in adapted_items] == ["PASS", "PASS", "PASS", "PASS", "PASS"]
-assert adapted_items[0].evidence["expected"] == 0.0
-assert adapted_items[1].evidence["absolute_difference"] == 0.5
-assert adapted_items[2].evidence["TC_minus_MC"] == -0.2
-assert adapted_items[3].evidence["MC_mean"] == 100.0
-assert adapted_items[4].evidence["cell_count"] == 2
+assert [item.status for item in adapted_items] == ["PASS", "PASS", "PASS", "PASS", "PASS", "PASS"]
+assert adapted_items[0].detail_level == "summary"
+assert adapted_items[0].summary_rollup_exempt is True
+assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 5, "WARN": 0, "FAIL": 0}
+assert adapted_items[1].evidence["expected"] == 0.0
+assert adapted_items[2].evidence["absolute_difference"] == 0.5
+assert adapted_items[3].evidence["TC_minus_MC"] == -0.2
+assert adapted_items[4].evidence["MC_mean"] == 100.0
+assert adapted_items[5].evidence["cell_count"] == 2
+report = AuditReport(audit_id="synthetic_comparison_suite", title="Synthetic comparison suite", items=adapted_items)
+assert report.summary == {"PASS": 5, "WARN": 0, "FAIL": 0}
 
 rules = [
     {
@@ -230,18 +236,20 @@ context = ValidationRuleContext(
 )
 items = build_rule_items(rules, context)
 assert [item.check_id for item in items] == [
+    "burton_urban_fi.comparison_rules.overview",
     "zero_current_quiescence_at_normalized_vm",
     "ap_threshold_similarity",
     "tc_action_potentials_narrower",
     "rheobase_in_paper_regime",
     "input_resistance_recorded",
 ]
-assert [item.status for item in items] == ["PASS", "PASS", "PASS", "PASS", "PASS"]
-assert items[0].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
-assert items[1].evidence["absolute_difference"] == 0.5
-assert items[2].evidence["TC_minus_MC"] == -0.2
-assert items[3].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
-assert items[4].evidence["cell_count"] == 2
+assert items[0].detail_level == "summary"
+assert [item.status for item in items] == ["PASS", "PASS", "PASS", "PASS", "PASS", "PASS"]
+assert items[1].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
+assert items[2].evidence["absolute_difference"] == 0.5
+assert items[3].evidence["TC_minus_MC"] == -0.2
+assert items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
+assert items[5].evidence["cell_count"] == 2
 
 
 print("neuronunit_comparison_validation_suite: OK")

@@ -5,6 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from types import SimpleNamespace
 
+from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
@@ -265,28 +266,33 @@ judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS"]
 
 adapted_items = audit_items_from_series_comparison_suite(compiled)
-assert [item.status for item in adapted_items] == ["PASS"]
-assert adapted_items[0].evidence["currents_pA"] == [100.0, 200.0]
-assert adapted_items[0].evidence["reference_values_Hz"] == [6.0, 11.0]
-assert adapted_items[0].evidence["model_values_Hz"] == [7.0, 12.0]
-assert adapted_items[0].evidence["reference_count_values"] == [2, 2]
-assert adapted_items[0].evidence["model_count_values"] == [2, 2]
-assert adapted_items[0].evidence["mean_absolute_error_Hz"] == 1.0
-assert adapted_items[0].evidence["reference_series_count"] == 2
-assert adapted_items[0].evidence["model_series_count"] == 2
-assert adapted_items[0].evidence["model_x_transform"].startswith("affine(")
-assert adapted_items[0].evidence["score_family"] == "hybrid_residual_welch"
-assert adapted_items[0].evidence["pvalue_aggregation"] == "median"
-assert adapted_items[0].evidence["residual_gate_passed"] is True
-assert adapted_items[0].evidence["pvalue_gate_passed"] is True
-assert adapted_items[0].evidence["reference_provenance"]["source_files"] == ["synthetic_curve.csv"]
-assert adapted_items[0].evidence["reference_provenance"]["note_ids"] == ["NOTE_A", "NOTE_B"]
-assert adapted_items[0].evidence["model_provenance"]["sample_scopes"] == ["model_population"]
-assert adapted_items[0].evidence["model_provenance"]["protocol_context"]["cell_models"] == [
+assert [item.status for item in adapted_items] == ["PASS", "PASS"]
+assert adapted_items[0].detail_level == "summary"
+assert adapted_items[0].summary_rollup_exempt is True
+assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 0, "FAIL": 0}
+assert adapted_items[1].evidence["currents_pA"] == [100.0, 200.0]
+assert adapted_items[1].evidence["reference_values_Hz"] == [6.0, 11.0]
+assert adapted_items[1].evidence["model_values_Hz"] == [7.0, 12.0]
+assert adapted_items[1].evidence["reference_count_values"] == [2, 2]
+assert adapted_items[1].evidence["model_count_values"] == [2, 2]
+assert adapted_items[1].evidence["mean_absolute_error_Hz"] == 1.0
+assert adapted_items[1].evidence["reference_series_count"] == 2
+assert adapted_items[1].evidence["model_series_count"] == 2
+assert adapted_items[1].evidence["model_x_transform"].startswith("affine(")
+assert adapted_items[1].evidence["score_family"] == "hybrid_residual_welch"
+assert adapted_items[1].evidence["pvalue_aggregation"] == "median"
+assert adapted_items[1].evidence["residual_gate_passed"] is True
+assert adapted_items[1].evidence["pvalue_gate_passed"] is True
+assert adapted_items[1].evidence["reference_provenance"]["source_files"] == ["synthetic_curve.csv"]
+assert adapted_items[1].evidence["reference_provenance"]["note_ids"] == ["NOTE_A", "NOTE_B"]
+assert adapted_items[1].evidence["model_provenance"]["sample_scopes"] == ["model_population"]
+assert adapted_items[1].evidence["model_provenance"]["protocol_context"]["cell_models"] == [
     "SyntheticModel1",
     "SyntheticModel2",
 ]
-assert adapted_items[0].evidence["model_provenance"]["protocol_context"]["step_duration_ms"] == 500.0
+assert adapted_items[1].evidence["model_provenance"]["protocol_context"]["step_duration_ms"] == 500.0
+report = AuditReport(audit_id="synthetic_series_suite", title="Synthetic series suite", items=adapted_items)
+assert report.summary == {"PASS": 1, "WARN": 0, "FAIL": 0}
 
 equivalence_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -333,18 +339,18 @@ equivalence_compiled = compile_series_comparison_suite(
 equivalence_judged = equivalence_compiled.judge()
 assert [score.status for _case, score in equivalence_judged] == ["PASS"]
 equivalence_items = audit_items_from_series_comparison_suite(equivalence_compiled)
-assert equivalence_items[0].evidence["score_family"] == "hybrid_residual_equivalence"
-assert equivalence_items[0].evidence["statistical_test_family"] == "equivalence_tost"
-assert equivalence_items[0].evidence["statistical_test_kinds"] == ["welch_tost", "welch_tost"]
-assert equivalence_items[0].evidence["pvalue_aggregation"] == "max"
-assert equivalence_items[0].evidence["pvalue_aggregation_source"] == "auto_default"
-assert equivalence_items[0].evidence["equivalence_margin_Hz"] == 0.2
-assert equivalence_items[0].evidence["declared_equivalence_margin_Hz"] is None
-assert equivalence_items[0].evidence["equivalence_margin_source"] == "maximum_mae_default"
-assert equivalence_items[0].evidence["supported_statistical_bin_count"] == 2
-assert equivalence_items[0].evidence["unsupported_statistical_bin_count"] == 0
-assert equivalence_items[0].evidence["statistical_gate_passed"] is True
-assert equivalence_items[0].evidence["aggregate_statistical_pvalue"] <= 0.05
+assert equivalence_items[1].evidence["score_family"] == "hybrid_residual_equivalence"
+assert equivalence_items[1].evidence["statistical_test_family"] == "equivalence_tost"
+assert equivalence_items[1].evidence["statistical_test_kinds"] == ["welch_tost", "welch_tost"]
+assert equivalence_items[1].evidence["pvalue_aggregation"] == "max"
+assert equivalence_items[1].evidence["pvalue_aggregation_source"] == "auto_default"
+assert equivalence_items[1].evidence["equivalence_margin_Hz"] == 0.2
+assert equivalence_items[1].evidence["declared_equivalence_margin_Hz"] is None
+assert equivalence_items[1].evidence["equivalence_margin_source"] == "maximum_mae_default"
+assert equivalence_items[1].evidence["supported_statistical_bin_count"] == 2
+assert equivalence_items[1].evidence["unsupported_statistical_bin_count"] == 0
+assert equivalence_items[1].evidence["statistical_gate_passed"] is True
+assert equivalence_items[1].evidence["aggregate_statistical_pvalue"] <= 0.05
 
 singleton_equivalence_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -390,13 +396,13 @@ singleton_equivalence_compiled = compile_series_comparison_suite(
     suite_name="synthetic singleton equivalence suite",
 )
 singleton_equivalence_items = audit_items_from_series_comparison_suite(singleton_equivalence_compiled)
-assert singleton_equivalence_items[0].status == "PASS"
-assert singleton_equivalence_items[0].evidence["statistical_test_kinds"] == [
+assert singleton_equivalence_items[1].status == "PASS"
+assert singleton_equivalence_items[1].evidence["statistical_test_kinds"] == [
     "one_sample_reference_tost",
     "one_sample_reference_tost",
 ]
-assert singleton_equivalence_items[0].evidence["equivalence_margin_source"] == "explicit"
-assert singleton_equivalence_items[0].evidence["statistical_gate_passed"] is True
+assert singleton_equivalence_items[1].evidence["equivalence_margin_source"] == "explicit"
+assert singleton_equivalence_items[1].evidence["statistical_gate_passed"] is True
 
 piecewise_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -446,9 +452,9 @@ piecewise_compiled = compile_series_comparison_suite(
     suite_name="synthetic piecewise series suite",
 )
 piecewise_items = audit_items_from_series_comparison_suite(piecewise_compiled)
-assert piecewise_items[0].status == "PASS"
-assert piecewise_items[0].evidence["currents_pA"] == [100.0, 210.0, 330.0]
-assert piecewise_items[0].evidence["model_x_transform"].startswith("piecewise_linear(")
+assert piecewise_items[1].status == "PASS"
+assert piecewise_items[1].evidence["currents_pA"] == [100.0, 210.0, 330.0]
+assert piecewise_items[1].evidence["model_x_transform"].startswith("piecewise_linear(")
 
 cluster_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -495,13 +501,13 @@ cluster_compiled = compile_series_comparison_suite(
     suite_name="synthetic cluster series suite",
 )
 cluster_items = audit_items_from_series_comparison_suite(cluster_compiled)
-assert cluster_items[0].status == "PASS"
-assert cluster_items[0].evidence["alignment_policy"] == "tolerance_clusters"
-assert cluster_items[0].evidence["currents_pA"] == [100.2, 200.2]
-assert cluster_items[0].evidence["reference_cluster_x_groups"] == [[100.0, 100.3], [200.0, 200.3]]
-assert cluster_items[0].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [200.1, 200.4]]
-assert cluster_items[0].evidence["reference_count_values"] == [2, 2]
-assert cluster_items[0].evidence["model_count_values"] == [2, 2]
+assert cluster_items[1].status == "PASS"
+assert cluster_items[1].evidence["alignment_policy"] == "tolerance_clusters"
+assert cluster_items[1].evidence["currents_pA"] == [100.2, 200.2]
+assert cluster_items[1].evidence["reference_cluster_x_groups"] == [[100.0, 100.3], [200.0, 200.3]]
+assert cluster_items[1].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [200.1, 200.4]]
+assert cluster_items[1].evidence["reference_count_values"] == [2, 2]
+assert cluster_items[1].evidence["model_count_values"] == [2, 2]
 
 rule = {
     "kind": "reference_curve_match",
@@ -557,15 +563,16 @@ try:
 finally:
     rules_module._load_rows = original_load_rows
 
-assert len(items) == 1
-assert items[0].status == "PASS"
-assert items[0].series_visuals[0]["keys"] == ["currents_pA", "reference_values_Hz", "model_values_Hz"]
-assert items[0].evidence["median_welch_pvalue"] is not None
-assert items[0].evidence["score_family"] == "hybrid_residual_welch"
-assert items[0].evidence["pvalue_aggregation"] == "median"
-assert items[0].evidence["pvalue_aggregation_source"] == "auto_default"
-assert items[0].evidence["reference_provenance"]["protocol_ids"] == ["SYNTHETIC_PROTOCOL"]
-assert items[0].evidence["model_provenance"]["protocol_context"]["target_vm_mV"] == -60.0
+assert len(items) == 2
+assert items[0].detail_level == "summary"
+assert items[1].status == "PASS"
+assert items[1].series_visuals[0]["keys"] == ["currents_pA", "reference_values_Hz", "model_values_Hz"]
+assert items[1].evidence["median_welch_pvalue"] is not None
+assert items[1].evidence["score_family"] == "hybrid_residual_welch"
+assert items[1].evidence["pvalue_aggregation"] == "median"
+assert items[1].evidence["pvalue_aggregation_source"] == "auto_default"
+assert items[1].evidence["reference_provenance"]["protocol_ids"] == ["SYNTHETIC_PROTOCOL"]
+assert items[1].evidence["model_provenance"]["protocol_context"]["target_vm_mV"] == -60.0
 
 residual_only_rule = dict(rule)
 residual_only_rule["score_family"] = "residual_only"
@@ -576,10 +583,10 @@ try:
 finally:
     rules_module._load_rows = original_load_rows
 
-assert len(residual_items) == 1
-assert residual_items[0].status == "PASS"
-assert residual_items[0].evidence["score_family"] == "residual_only"
-assert residual_items[0].evidence["minimum_median_welch_pvalue"] is None
+assert len(residual_items) == 2
+assert residual_items[1].status == "PASS"
+assert residual_items[1].evidence["score_family"] == "residual_only"
+assert residual_items[1].evidence["minimum_median_welch_pvalue"] is None
 
 equivalence_rule = dict(rule)
 equivalence_rule["loader"] = "csv:/tmp/equivalence.csv"
@@ -609,15 +616,15 @@ try:
 finally:
     rules_module._load_rows = original_load_rows
 
-assert len(equivalence_rule_items) == 1
-assert equivalence_rule_items[0].status == "PASS"
-assert equivalence_rule_items[0].evidence["score_family"] == "hybrid_residual_equivalence"
-assert equivalence_rule_items[0].evidence["pvalue_aggregation"] == "max"
-assert equivalence_rule_items[0].evidence["pvalue_aggregation_source"] == "auto_default"
-assert equivalence_rule_items[0].evidence["equivalence_margin_Hz"] == 0.2
-assert equivalence_rule_items[0].evidence["equivalence_margin_source"] == "maximum_mae_default"
-assert equivalence_rule_items[0].evidence["statistical_test_family"] == "equivalence_tost"
-assert equivalence_rule_items[0].evidence["statistical_gate_passed"] is True
+assert len(equivalence_rule_items) == 2
+assert equivalence_rule_items[1].status == "PASS"
+assert equivalence_rule_items[1].evidence["score_family"] == "hybrid_residual_equivalence"
+assert equivalence_rule_items[1].evidence["pvalue_aggregation"] == "max"
+assert equivalence_rule_items[1].evidence["pvalue_aggregation_source"] == "auto_default"
+assert equivalence_rule_items[1].evidence["equivalence_margin_Hz"] == 0.2
+assert equivalence_rule_items[1].evidence["equivalence_margin_source"] == "maximum_mae_default"
+assert equivalence_rule_items[1].evidence["statistical_test_family"] == "equivalence_tost"
+assert equivalence_rule_items[1].evidence["statistical_gate_passed"] is True
 
 piecewise_rule = dict(residual_only_rule)
 piecewise_rule["loader"] = "csv:/tmp/piecewise.csv"
@@ -653,8 +660,8 @@ try:
 finally:
     rules_module._load_rows = original_load_rows
 
-assert piecewise_rule_items[0].status == "PASS"
-assert piecewise_rule_items[0].evidence["model_x_transform"].startswith("piecewise_linear(")
+assert piecewise_rule_items[1].status == "PASS"
+assert piecewise_rule_items[1].evidence["model_x_transform"].startswith("piecewise_linear(")
 
 cluster_rule = dict(residual_only_rule)
 cluster_rule["loader"] = "csv:/tmp/cluster.csv"
@@ -682,10 +689,10 @@ try:
 finally:
     rules_module._load_rows = original_load_rows
 
-assert cluster_rule_items[0].status == "PASS"
-assert cluster_rule_items[0].evidence["alignment_policy"] == "tolerance_clusters"
-assert cluster_rule_items[0].evidence["reference_cluster_x_groups"] == [[100.0, 100.3], [200.0, 200.3]]
-assert cluster_rule_items[0].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [200.1, 200.4]]
+assert cluster_rule_items[1].status == "PASS"
+assert cluster_rule_items[1].evidence["alignment_policy"] == "tolerance_clusters"
+assert cluster_rule_items[1].evidence["reference_cluster_x_groups"] == [[100.0, 100.3], [200.0, 200.3]]
+assert cluster_rule_items[1].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [200.1, 200.4]]
 
 nearest_rule = dict(residual_only_rule)
 nearest_rule["alignment_policy"] = "nearest_within_tolerance"
@@ -709,13 +716,13 @@ try:
 finally:
     rules_module._load_rows = original_load_rows
 
-assert len(nearest_items) == 1
-assert nearest_items[0].status == "PASS"
-assert nearest_items[0].evidence["alignment_policy"] == "nearest_within_tolerance"
-assert nearest_items[0].evidence["x_match_tolerance"] == 0.5
-assert nearest_items[0].evidence["reference_matched_x_values"] == [100.0, 200.0]
-assert nearest_items[0].evidence["model_matched_x_values"] == [100.4, 200.4]
-assert nearest_items[0].evidence["matched_x_differences"] == [0.4, 0.4]
+assert len(nearest_items) == 2
+assert nearest_items[1].status == "PASS"
+assert nearest_items[1].evidence["alignment_policy"] == "nearest_within_tolerance"
+assert nearest_items[1].evidence["x_match_tolerance"] == 0.5
+assert nearest_items[1].evidence["reference_matched_x_values"] == [100.0, 200.0]
+assert nearest_items[1].evidence["model_matched_x_values"] == [100.4, 200.4]
+assert nearest_items[1].evidence["matched_x_differences"] == [0.4, 0.4]
 
 missing_units_rule = dict(rule)
 del missing_units_rule["reference_x_unit_text"]

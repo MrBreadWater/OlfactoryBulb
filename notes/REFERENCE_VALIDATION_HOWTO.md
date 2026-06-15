@@ -205,6 +205,17 @@ series_visuals = [
 Use `backend="matplotlib"` for the standard plots and reserve `backend="svg"`
 for compact bespoke renderers that really need hand-tuned HTML/SVG behavior.
 
+For the SciUnit-backed suite rule families (`reference_band_rows`,
+`summary_metric_*`, the grouped comparison rules, and `reference_curve_match`),
+the maintained path now emits:
+
+- one compact suite-overview item
+- followed by the individual case items
+
+The suite-overview item is intentionally `summary_rollup_exempt`, so the
+top-level PASS/WARN/FAIL counts still reflect the detailed validation cases
+rather than double-counting the overview card.
+
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as

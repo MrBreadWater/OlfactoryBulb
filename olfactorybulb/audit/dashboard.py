@@ -1112,7 +1112,7 @@ def _render_series_graph(
     ), used_keys
 
 
-def _render_numeric_companions(
+def _render_companion_visuals(
     item: AuditItem,
     evidence: dict[str, Any],
     *,
@@ -1346,12 +1346,77 @@ def _render_numeric_companions(
             {key},
         )
 
+    def _render_status_matrix(spec: dict[str, Any]) -> tuple[str, set[str]]:
+        keys = _requested_keys(spec)
+        if not keys:
+            return "", set()
+
+        key = keys[0]
+        if key in exclude or key == "__reference_annotations__":
+            return "", set()
+        raw_entries = evidence.get(key)
+        if not isinstance(raw_entries, list):
+            return "", set()
+
+        entries: list[dict[str, str]] = []
+        for raw_entry in raw_entries:
+            if not isinstance(raw_entry, dict):
+                continue
+            status = str(raw_entry.get("status", "")).upper().strip()
+            title = str(raw_entry.get("title", "")).strip()
+            if status not in {"PASS", "WARN", "FAIL"} or not title:
+                continue
+            entries.append(
+                {
+                    "status": status,
+                    "title": title,
+                    "check_id": str(raw_entry.get("check_id", "")).strip(),
+                }
+            )
+
+        if not entries:
+            return "", set()
+
+        summary_counts = {"PASS": 0, "WARN": 0, "FAIL": 0}
+        for entry in entries:
+            summary_counts[entry["status"]] = summary_counts.get(entry["status"], 0) + 1
+        block_title = str(spec.get("title") or "Suite case summary")
+        left_meta = str(spec.get("left_meta") or f"{len(entries)} cases")
+        right_meta = str(spec.get("right_meta") or "suite rollup")
+        cells_html = "".join(
+            "<div "
+            f"class='suite-status-cell {_status_class(entry['status'])}' "
+            f"data-suite-status-cell data-suite-status='{_esc(entry['status'])}' "
+            f"title='{_esc(entry['status'])}: {_expand_terms(entry['title'], sentence_case=True)}'>"
+            f"<span class='suite-status-cell-badge'>{_esc(entry['status'])}</span>"
+            f"<span class='suite-status-cell-title'>{_esc(_expand_terms(entry['title'], sentence_case=True))}</span>"
+            "</div>"
+            for entry in entries
+        )
+        return (
+            "".join(
+                [
+                    "<div class='item-block suite-status-matrix-block'>",
+                    f"<h4>{_esc(block_title)}</h4>",
+                    f"<div class='suite-status-matrix-meta'><span>{_esc(left_meta)}</span><span>{_esc(right_meta)}</span></div>",
+                    f"<div class='suite-status-matrix-summary'>{_render_summary(summary_counts)}</div>",
+                    "<div class='suite-status-matrix-grid' data-suite-status-matrix data-visual-kind='status_matrix'>",
+                    cells_html,
+                    "</div>",
+                    "</div>",
+                ]
+            ),
+            {key},
+        )
+
     for spec in requested_visuals:
         kind = str(spec.get("kind") or "").strip().lower()
         if kind in {"numeric_strip", "scalar_strip", "strip", "numeric_summary", "summary"}:
             block_html, local_used = _render_numeric_strip(spec)
         elif kind in {"numeric_sparkline", "sparkline", "sequence", "numeric_sequence"}:
             block_html, local_used = _render_numeric_sparkline(spec)
+        elif kind in {"status_matrix", "suite_status_matrix", "status_grid", "suite_matrix"}:
+            block_html, local_used = _render_status_matrix(spec)
         else:
             continue
         if block_html:
@@ -1610,7 +1675,7 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
     numeric_companion_html = ""
     numeric_companion_keys: set[str] = set()
     if interval is None and not series_graph_html and item.companion_visuals:
-        numeric_companion_html, numeric_companion_keys = _render_numeric_companions(
+        numeric_companion_html, numeric_companion_keys = _render_companion_visuals(
             item,
             evidence,
             visuals=item.companion_visuals,
@@ -2584,7 +2649,8 @@ def render_audit_dashboard_html(
     .legend-swatch.observed.status-fail {{ background: var(--red); border-color: var(--red); }}
     .series-graph-block,
     .numeric-strip-block,
-    .numeric-sparkline-block {{
+    .numeric-sparkline-block,
+    .suite-status-matrix-block {{
       margin: 14px 18px 12px;
       border: 1px solid #dbe4f0;
       border-radius: 10px;
@@ -2593,7 +2659,8 @@ def render_audit_dashboard_html(
     }}
     .series-graph-meta,
     .numeric-strip-meta,
-    .numeric-sparkline-meta {{
+    .numeric-sparkline-meta,
+    .suite-status-matrix-meta {{
       display: flex;
       justify-content: space-between;
       gap: 12px;
@@ -2601,6 +2668,67 @@ def render_audit_dashboard_html(
       font-size: 11px;
       line-height: 1.35;
       margin-bottom: 8px;
+    }}
+    .suite-status-matrix-summary {{
+      margin-bottom: 10px;
+    }}
+    .suite-status-matrix-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+      gap: 10px;
+    }}
+    .suite-status-cell {{
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 84px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #dbe4f0;
+      background: #f8fbff;
+    }}
+    .suite-status-cell.status-pass {{
+      border-color: rgba(34, 197, 94, 0.24);
+      background: rgba(240, 253, 244, 0.92);
+    }}
+    .suite-status-cell.status-warn {{
+      border-color: rgba(245, 158, 11, 0.26);
+      background: rgba(255, 251, 235, 0.96);
+    }}
+    .suite-status-cell.status-fail {{
+      border-color: rgba(239, 68, 68, 0.24);
+      background: rgba(254, 242, 242, 0.96);
+    }}
+    .suite-status-cell-badge {{
+      display: inline-flex;
+      align-self: flex-start;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid currentColor;
+      font-size: 10px;
+      font-weight: 700;
+      line-height: 1;
+      letter-spacing: 0.04em;
+    }}
+    .suite-status-cell.status-pass .suite-status-cell-badge {{
+      color: #15803d;
+      background: rgba(220, 252, 231, 0.88);
+    }}
+    .suite-status-cell.status-warn .suite-status-cell-badge {{
+      color: #b45309;
+      background: rgba(254, 243, 199, 0.92);
+    }}
+    .suite-status-cell.status-fail .suite-status-cell-badge {{
+      color: #b91c1c;
+      background: rgba(254, 226, 226, 0.94);
+    }}
+    .suite-status-cell-title {{
+      color: #0f172a;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
     }}
     .series-graph-shell,
     .numeric-strip-shell,

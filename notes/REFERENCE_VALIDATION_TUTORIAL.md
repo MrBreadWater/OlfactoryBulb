@@ -213,6 +213,12 @@ If one of those fits, stay in config.
 
 If none of those fits, add a new rule kind and document it in the same task.
 
+For the built-in SciUnit-backed suite families, the maintained report now adds
+one suite-overview item ahead of the detailed cases. That overview card is for
+presentation only: it is marked `summary_rollup_exempt`, so the report summary
+and group summary still count the detailed cases rather than double-counting
+the overview.
+
 ### Step 6: create or edit the validation config
 
 Validation configs live under:

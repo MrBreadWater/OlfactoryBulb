@@ -137,6 +137,7 @@ def _prefixed_items(report: AuditReport) -> list[AuditItem]:
             group_id=report.audit_id,
             group_title=report.title,
             detail_level=item.detail_level,
+            summary_rollup_exempt=item.summary_rollup_exempt,
         )
         for item in report.items
     ]

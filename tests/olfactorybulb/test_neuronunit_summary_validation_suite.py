@@ -5,6 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from types import SimpleNamespace
 
+from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
 from olfactorybulb.neuronunit.summary_validation_suite import (
     SummaryRuleCase,
@@ -84,11 +85,16 @@ judged = compiled.judge()
 assert [score.status for _case, score in judged] == ["PASS", "WARN", "PASS"]
 
 adapted_items = audit_items_from_summary_rule_suite(compiled)
-assert [item.status for item in adapted_items] == ["PASS", "WARN", "PASS"]
-assert adapted_items[0].evidence["baseline_MCs_count"] == 12.0
-assert adapted_items[1].evidence["warn_values"] == [1.0]
-assert adapted_items[2].evidence["minimum"] == 8.9
-assert adapted_items[2].evidence["maximum"] == 10.3
+assert [item.status for item in adapted_items] == ["WARN", "PASS", "WARN", "PASS"]
+assert adapted_items[0].detail_level == "summary"
+assert adapted_items[0].summary_rollup_exempt is True
+assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 2, "WARN": 1, "FAIL": 0}
+assert adapted_items[1].evidence["baseline_MCs_count"] == 12.0
+assert adapted_items[2].evidence["warn_values"] == [1.0]
+assert adapted_items[3].evidence["minimum"] == 8.9
+assert adapted_items[3].evidence["maximum"] == 10.3
+report = AuditReport(audit_id="synthetic_summary_suite", title="Synthetic summary suite", items=adapted_items)
+assert report.summary == {"PASS": 2, "WARN": 1, "FAIL": 0}
 
 
 context = ValidationRuleContext(
@@ -140,12 +146,14 @@ rules = [
 ]
 items = build_rule_items(rules, context)
 assert [item.check_id for item in items] == [
+    "epli_correctness.summary_rules.overview",
     "baseline_slice_population_counts",
     "epli_target_pattern_specificity",
 ]
-assert [item.status for item in items] == ["PASS", "WARN"]
-assert items[0].criterion_latex == r"\bar{x}_{\mathrm{ungrouped}} \geq 1"
-assert items[1].evidence["warn_values"] == [1.0]
+assert [item.status for item in items] == ["WARN", "PASS", "WARN"]
+assert items[0].detail_level == "summary"
+assert items[1].criterion_latex == r"\bar{x}_{\mathrm{ungrouped}} \geq 1"
+assert items[2].evidence["warn_values"] == [1.0]
 
 non_skip_context = ValidationRuleContext(
     metrics=[],
@@ -156,11 +164,12 @@ non_skip_context = ValidationRuleContext(
 )
 items_non_skip = build_rule_items(rules, non_skip_context)
 assert [item.check_id for item in items_non_skip] == [
+    "epli_correctness.summary_rules.overview",
     "baseline_slice_population_counts",
     "epli_target_pattern_specificity",
     "synthetic_soma_diameter",
 ]
-assert [item.status for item in items_non_skip] == ["PASS", "WARN", "PASS"]
+assert [item.status for item in items_non_skip] == ["WARN", "PASS", "WARN", "PASS"]
 
 
 print("neuronunit_summary_validation_suite: OK")

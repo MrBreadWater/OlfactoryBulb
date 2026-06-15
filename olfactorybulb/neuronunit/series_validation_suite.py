@@ -21,6 +21,7 @@ from olfactorybulb.neuronunit.capabilities import (
 )
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -1162,8 +1163,18 @@ def compile_series_comparison_suite(
 
 
 def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonSuite) -> list[AuditItem]:
-    items: list[AuditItem] = []
-    for case, score in compiled.judge():
+    judged = compiled.judge()
+    items: list[AuditItem] = [
+        suite_overview_item(
+            suite_name=str(compiled.suite.name or "series-comparison-suite"),
+            suite_kind_label="Series-comparison suite",
+            case_entries=[
+                suite_case_entry(check_id=case.check_id, title=case.title, status=score.status)
+                for case, score in judged
+            ],
+        )
+    ]
+    for case, score in judged:
         obs = case.observation
         items.append(
             AuditItem(

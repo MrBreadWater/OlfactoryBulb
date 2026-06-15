@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from olfactorybulb.audit import series_visual_spec
+from olfactorybulb.audit import companion_visual_spec, series_visual_spec
 from olfactorybulb.audit.core import AuditItem, AuditReport
 from olfactorybulb.audit.dashboard import export_audit_dashboard
 
@@ -365,5 +365,83 @@ with TemporaryDirectory() as tmp:
     html = (output_dir / "index.html").read_text()
     assert "Show detail items" in html
     assert "data-item-toggle" in html
+
+suite_summary_report = AuditReport(
+    audit_id="suite_summary_demo",
+    title="Suite summary demo",
+    items=[
+        AuditItem(
+            check_id="suite_summary_demo.synthetic_suite.overview",
+            status="WARN",
+            title="Synthetic suite overview",
+            criterion="Every compiled suite case should satisfy its declared criterion.",
+            description="Synthetic suite summary item.",
+            acceptable="The detailed suite cases pass.",
+            acceptable_basis="Synthetic basis.",
+            evidence={
+                "suite_name": "suite_summary_demo.synthetic_suite",
+                "suite_kind": "Synthetic suite",
+                "suite_case_count": 2,
+                "suite_status_summary": {"PASS": 1, "WARN": 1, "FAIL": 0},
+                "warning_cases": ["Suite warning detail"],
+                "failed_cases": [],
+                "suite_cases": [
+                    {"check_id": "suite_summary_demo.pass_detail", "title": "Suite pass detail", "status": "PASS"},
+                    {"check_id": "suite_summary_demo.warn_detail", "title": "Suite warning detail", "status": "WARN"},
+                ],
+            },
+            companion_visuals=[
+                companion_visual_spec(kind="status_matrix", key="suite_cases", title="Suite case summary")
+            ],
+            group_id="suite_summary_demo",
+            group_title="Suite summary demo",
+            detail_level="summary",
+            summary_rollup_exempt=True,
+        ),
+        AuditItem(
+            check_id="suite_summary_demo.pass_detail",
+            status="PASS",
+            title="Suite pass detail",
+            criterion="Criterion",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"count": 1},
+            group_id="suite_summary_demo",
+            group_title="Suite summary demo",
+        ),
+        AuditItem(
+            check_id="suite_summary_demo.warn_detail",
+            status="WARN",
+            title="Suite warning detail",
+            criterion="Criterion",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={"count": 2},
+            status_reason="Synthetic suite warning.",
+            group_id="suite_summary_demo",
+            group_title="Suite summary demo",
+        ),
+    ],
+)
+
+with TemporaryDirectory() as tmp:
+    output_dir = Path(tmp)
+    export_audit_dashboard(suite_summary_report, output_dir)
+    html = (output_dir / "index.html").read_text()
+    payload = json.loads((output_dir / "report.json").read_text())
+    group_payload = payload["groups"][0]
+    assert payload["summary"] == {"FAIL": 0, "WARN": 1, "PASS": 1}
+    assert group_payload["summary"] == {"FAIL": 0, "WARN": 1, "PASS": 1}
+    assert group_payload["item_count"] == 2
+    assert "Show detail items" in html
+    assert "data-suite-status-matrix" in html
+    assert "data-visual-kind='status_matrix'" in html
+    assert "Suite case summary" in html
+    assert "Suite pass detail" in html
+    assert "Suite warning detail" in html
+    assert html.count("suite-status-cell") >= 2
+    assert "2 cases" in html
 
 print("audit_dashboard: OK")

@@ -14,6 +14,7 @@ from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.suite_presentation import suite_case_entry, suite_overview_item
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -197,8 +198,18 @@ def compile_summary_rule_suite(
 
 
 def audit_items_from_summary_rule_suite(compiled: CompiledSummaryRuleSuite) -> list[AuditItem]:
-    items: list[AuditItem] = []
-    for case, score in compiled.judge():
+    judged = compiled.judge()
+    items: list[AuditItem] = [
+        suite_overview_item(
+            suite_name=str(compiled.suite.name or "summary-rule-suite"),
+            suite_kind_label="Summary-rule suite",
+            case_entries=[
+                suite_case_entry(check_id=case.check_id, title=case.title, status=score.status)
+                for case, score in judged
+            ],
+        )
+    ]
+    for case, score in judged:
         observed = numeric_value(score.observed)
         base: dict[str, Any] = {"group": case.group, "observed": observed}
         if case.rule_kind == "summary_metric_min":

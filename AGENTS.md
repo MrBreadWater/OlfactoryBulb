@@ -604,6 +604,12 @@ contract for future sessions.
     Prefer explicit transform objects such as `affine` or `piecewise_linear`
     over one-off hardcoded x-axis conversion logic in protocol runners or rule
     handlers.
+  - When a maintained validation rule family compiles into a SciUnit-backed
+    suite and also emits per-case `AuditItem`s, add one shared suite-overview
+    item through the shared suite-presentation helper rather than hand-building
+    one-off rollup cards in each adapter. Mark the overview item
+    `summary_rollup_exempt` so report/group PASS/WARN/FAIL counts stay tied to
+    the detailed cases rather than double-counting the overview.
 
 ## 5b. Reusable infrastructure extraction rules
 

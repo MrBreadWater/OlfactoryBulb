@@ -105,8 +105,12 @@ Remove this file when the listed items are either:
       something better justified than those first two choices.
       - implemented `tolerance_clusters` to pool nearby transformed x bins into
         shared tolerance-bounded empirical comparison groups
-- [ ] Improve result presentation for the migrated NeuronUnit-backed suite
+- [x] Improve result presentation for the migrated NeuronUnit-backed suite
       outputs without moving repo-level meta checks out of the audit shell.
+      - added one shared suite-overview item per migrated suite family
+      - added a compact persistent status-matrix companion visual
+      - kept report/group summary counts tied to the detailed cases via
+        `summary_rollup_exempt`
 - [ ] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

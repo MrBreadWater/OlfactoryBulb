@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import quantities as pq
 
+from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceBandObservation,
@@ -70,8 +71,15 @@ assert unit_conversion_score.passed is True
 assert round(numeric_value(unit_conversion_score.observed), 6) == 100.0
 
 adapted_items = audit_items_from_reference_band_suite(compiled)
-assert len(adapted_items) == 1
-adapted_item = adapted_items[0]
+assert len(adapted_items) == 2
+assert adapted_items[0].check_id == "Synthetic_reference-band_suite.overview"
+assert adapted_items[0].detail_level == "summary"
+assert adapted_items[0].summary_rollup_exempt is True
+assert adapted_items[0].companion_visuals[0]["kind"] == "status_matrix"
+assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 0, "FAIL": 0}
+report = AuditReport(audit_id="synthetic_reference_band", title="Synthetic reference band", items=adapted_items)
+assert report.summary == {"PASS": 1, "WARN": 0, "FAIL": 0}
+adapted_item = adapted_items[1]
 assert adapted_item.status == "PASS"
 assert adapted_item.validation_design_review_status == "approved"
 assert adapted_item.evidence["accepted_interval_standard"] == "symmetric reference interval"
@@ -114,8 +122,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
         protocol_result=None,
     )
     items = build_rule_items([rule], context)
-    assert len(items) == 1
-    item = items[0]
+    assert len(items) == 2
+    assert items[0].detail_level == "summary"
+    assert items[0].summary_rollup_exempt is True
+    item = items[1]
     assert item.status == "PASS"
     assert item.title == "MC input resistance stays within the uploaded reference band"
     assert item.note == "Synthetic note."

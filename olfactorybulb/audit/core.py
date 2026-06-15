@@ -160,6 +160,7 @@ class AuditItem:
     group_id: str = ""
     group_title: str = ""
     detail_level: str = "detail"
+    summary_rollup_exempt: bool = False
 
     def __post_init__(self) -> None:
         self.criterion_latex = str(self.criterion_latex or "").strip()
@@ -175,14 +176,11 @@ class AuditReport:
 
     @property
     def summary(self) -> dict[str, int]:
-        counts: dict[str, int] = {"PASS": 0, "WARN": 0, "FAIL": 0}
-        for item in self.items:
-            counts[item.status] = counts.get(item.status, 0) + 1
-        return counts
+        return _items_summary(self.items)
 
     @property
     def worst_status(self) -> str:
-        return max((item.status for item in self.items), key=lambda status: STATUS_RANK.get(status, 0), default="PASS")
+        return _worst_status_for_items(self.items)
 
     @property
     def exit_code(self) -> int:
@@ -401,15 +399,22 @@ def _summary_chunks(summary: dict[str, int], *, enabled: bool) -> list[str]:
     return parts
 
 
+def _rollup_items(items: Iterable[AuditItem]) -> list[AuditItem]:
+    items_list = list(items)
+    counted_items = [item for item in items_list if not bool(item.summary_rollup_exempt)]
+    return counted_items or items_list
+
+
 def _items_summary(items: Iterable[AuditItem]) -> dict[str, int]:
     counts: dict[str, int] = {"PASS": 0, "WARN": 0, "FAIL": 0}
-    for item in items:
+    for item in _rollup_items(items):
         counts[item.status] = counts.get(item.status, 0) + 1
     return counts
 
 
 def _worst_status_for_items(items: Iterable[AuditItem]) -> str:
-    return max((item.status for item in items), key=lambda status: STATUS_RANK.get(status, 0), default="PASS")
+    rollup_items = _rollup_items(items)
+    return max((item.status for item in rollup_items), key=lambda status: STATUS_RANK.get(status, 0), default="PASS")
 
 
 def report_groups(report: AuditReport) -> list[dict[str, Any]]:
@@ -429,13 +434,14 @@ def report_groups(report: AuditReport) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for group in grouped.values():
         raw_items = [AuditItem(**item_payload) for item_payload in group["items"]]
+        rollup_items = _rollup_items(raw_items)
         results.append(
             {
                 "group_id": group["group_id"],
                 "title": group["title"],
-                "summary": _items_summary(raw_items),
-                "worst_status": _worst_status_for_items(raw_items),
-                "item_count": len(raw_items),
+                "summary": _items_summary(rollup_items),
+                "worst_status": _worst_status_for_items(rollup_items),
+                "item_count": len(rollup_items),
                 "items": group["items"],
             }
         )

@@ -29,6 +29,7 @@ REPO_IMPORTS = [
     "olfactorybulb.neuronunit.reference_bands",
     "olfactorybulb.neuronunit.comparison_validation_suite",
     "olfactorybulb.neuronunit.series_validation_suite",
+    "olfactorybulb.neuronunit.suite_presentation",
     "olfactorybulb.neuronunit.summary_validation_suite",
     "olfactorybulb.neuronunit.reference_validation_suite",
     "olfactorybulb.audit.reference_validation_rules",

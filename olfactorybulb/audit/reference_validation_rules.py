@@ -149,14 +149,28 @@ def build_rule_items(
     pending_summary_rules: list[dict[str, Any]] = []
     pending_comparison_rules: list[dict[str, Any]] = []
 
+    def _append_grouped_suite_items(
+        generated_items: list[AuditItem],
+        source_rules: list[dict[str, Any]],
+    ) -> None:
+        if not generated_items:
+            return
+        detail_items = list(generated_items)
+        if bool(detail_items[0].summary_rollup_exempt) and str(detail_items[0].detail_level or "detail") != "detail":
+            items.append(detail_items[0])
+            detail_items = detail_items[1:]
+        for rule, item in zip(source_rules, detail_items, strict=False):
+            _apply_rule_level_validation_design_review([item], rule, context)
+            items.append(item)
+        if len(detail_items) > len(source_rules):
+            items.extend(detail_items[len(source_rules):])
+
     def flush_pending_summary_rules() -> None:
         nonlocal pending_summary_rules
         if not pending_summary_rules:
             return
         generated_items = _build_summary_rule_items(pending_summary_rules, context)
-        for rule, item in zip(pending_summary_rules, generated_items, strict=False):
-            _apply_rule_level_validation_design_review([item], rule, context)
-            items.append(item)
+        _append_grouped_suite_items(generated_items, pending_summary_rules)
         pending_summary_rules = []
 
     def flush_pending_comparison_rules() -> None:
@@ -164,9 +178,7 @@ def build_rule_items(
         if not pending_comparison_rules:
             return
         generated_items = _build_comparison_rule_items(pending_comparison_rules, context)
-        for rule, item in zip(pending_comparison_rules, generated_items, strict=False):
-            _apply_rule_level_validation_design_review([item], rule, context)
-            items.append(item)
+        _append_grouped_suite_items(generated_items, pending_comparison_rules)
         pending_comparison_rules = []
 
     for rule in rules:
