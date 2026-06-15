@@ -28,6 +28,11 @@ from olfactorybulb.neuronunit.reference_bands import (
     compute_reference_acceptance_band,
 )
 from olfactorybulb.neuronunit.comparison_validation_suite import ComparisonRuleCase
+from olfactorybulb.neuronunit.metric_quantities import (
+    MetricQuantitySpec,
+    metric_definition_text,
+    resolve_metric_quantity,
+)
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceBandCase
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
@@ -294,6 +299,7 @@ class SummaryRuleSpec:
     acceptable_basis: str
     note: str
     metric_key: str
+    metric_quantity: MetricQuantitySpec
     group: str
     evidence_metric_keys: list[str]
     pass_status: str
@@ -320,6 +326,11 @@ class SummaryRuleSpec:
             acceptable_basis=str(rule["acceptable_basis"]),
             note=str(rule.get("note", "")),
             metric_key=str(rule["metric_key"]),
+            metric_quantity=resolve_metric_quantity(
+                str(rule["metric_key"]),
+                unit_text=str(rule.get("metric_unit_text", "")).strip(),
+                quantity_name=str(rule.get("metric_quantity_name", "")).strip(),
+            ),
             group=summary_group(rule, context),
             evidence_metric_keys=[str(metric).strip() for metric in rule.get("evidence_metric_keys", []) if str(metric).strip()],
             pass_status=str(rule.get("pass_status", "PASS")),
@@ -355,6 +366,7 @@ class SummaryRuleSpec:
             "acceptable_basis": self.acceptable_basis,
             "note": self.note,
             "metric_key": self.metric_key,
+            "metric_quantity": self.metric_quantity,
             "group": self.group,
             "evidence_metric_keys": self.evidence_metric_keys,
             "pass_status": self.pass_status,
@@ -365,7 +377,7 @@ class SummaryRuleSpec:
             criterion_math = criterion_math_for_lower_bound(
                 observed_symbol,
                 float(self.minimum),
-                definitions=[{"symbol": observed_symbol, "definition": f"{self.group} mean {self.metric_key}"}],
+                definitions=[{"symbol": observed_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.group)}],
             )
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = criterion_math.latex
@@ -376,7 +388,7 @@ class SummaryRuleSpec:
             criterion_math = criterion_math_for_upper_bound(
                 observed_symbol,
                 float(self.maximum),
-                definitions=[{"symbol": observed_symbol, "definition": f"{self.group} mean {self.metric_key}"}],
+                definitions=[{"symbol": observed_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.group)}],
             )
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = criterion_math.latex
@@ -390,7 +402,7 @@ class SummaryRuleSpec:
                 observed_symbol,
                 minimum,
                 maximum,
-                definitions=[{"symbol": observed_symbol, "definition": f"{self.group} mean {self.metric_key}"}],
+                definitions=[{"symbol": observed_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.group)}],
             )
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = criterion_math.latex
@@ -500,6 +512,7 @@ class ComparisonRuleSpec:
     acceptable_basis: str
     note: str
     metric_key: str
+    metric_quantity: MetricQuantitySpec
     entity_key: str
     pass_status: str
     fail_status: str
@@ -526,6 +539,11 @@ class ComparisonRuleSpec:
             acceptable_basis=str(rule["acceptable_basis"]),
             note=str(rule.get("note", "")),
             metric_key=str(rule["metric_key"]),
+            metric_quantity=resolve_metric_quantity(
+                str(rule["metric_key"]),
+                unit_text=str(rule.get("metric_unit_text", "")).strip(),
+                quantity_name=str(rule.get("metric_quantity_name", "")).strip(),
+            ),
             entity_key=str(rule.get("entity_key", "cell_name")),
             pass_status=str(rule.get("pass_status", "PASS")),
             fail_status=str(rule.get("fail_status", "FAIL")),
@@ -564,6 +582,7 @@ class ComparisonRuleSpec:
             "acceptable_basis": self.acceptable_basis,
             "note": self.note,
             "metric_key": self.metric_key,
+            "metric_quantity": self.metric_quantity,
             "entity_key": self.entity_key,
             "pass_status": self.pass_status,
             "fail_status": self.fail_status,
@@ -585,8 +604,8 @@ class ComparisonRuleSpec:
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = criterion_math.latex
             case_kwargs["criterion_definitions"] = [
-                {"symbol": left_symbol, "definition": f"{self.left_group} mean {self.metric_key}"},
-                {"symbol": right_symbol, "definition": f"{self.right_group} mean {self.metric_key}"},
+                {"symbol": left_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.left_group)},
+                {"symbol": right_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.right_group)},
             ]
             case_kwargs["left_group"] = self.left_group
             case_kwargs["right_group"] = self.right_group
@@ -600,8 +619,8 @@ class ComparisonRuleSpec:
                 right_symbol,
                 float(self.max_difference),
                 definitions=[
-                    {"symbol": left_symbol, "definition": f"{self.left_group} mean {self.metric_key}"},
-                    {"symbol": right_symbol, "definition": f"{self.right_group} mean {self.metric_key}"},
+                    {"symbol": left_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.left_group)},
+                    {"symbol": right_symbol, "definition": metric_definition_text(self.metric_quantity, group=self.right_group)},
                 ],
             )
             case_kwargs = dict(base_kwargs)
@@ -618,7 +637,7 @@ class ComparisonRuleSpec:
             case_kwargs = dict(base_kwargs)
             case_kwargs["criterion_latex"] = " \\wedge ".join(rf"{symbol} > 0" for symbol in group_symbols)
             case_kwargs["criterion_definitions"] = [
-                {"symbol": symbol, "definition": f"{group} mean {self.metric_key}"}
+                {"symbol": symbol, "definition": metric_definition_text(self.metric_quantity, group=group)}
                 for symbol, group in zip(group_symbols, self.groups, strict=False)
             ]
             case_kwargs["groups"] = self.groups

@@ -11,6 +11,10 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
+from olfactorybulb.neuronunit.metric_quantities import (
+    MetricQuantitySpec,
+    resolve_metric_quantity,
+)
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 from olfactorybulb.neuronunit.suite_presentation import (
@@ -25,7 +29,7 @@ def _is_finite_number(value: Any) -> bool:
     if isinstance(value, bool) or value is None:
         return False
     try:
-        number = float(value)
+        number = numeric_value(value) if isinstance(value, pq.Quantity) else float(value)
     except (TypeError, ValueError):
         return False
     return math.isfinite(number)
@@ -37,9 +41,9 @@ def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, dict):
             result[key] = _rounded_dict(value)
         elif isinstance(value, list):
-            result[key] = [rounded(float(item)) if _is_finite_number(item) else item for item in value]
+            result[key] = [rounded(numeric_value(item)) if _is_finite_number(item) else item for item in value]
         elif _is_finite_number(value):
-            result[key] = rounded(float(value))
+            result[key] = rounded(numeric_value(value) if isinstance(value, pq.Quantity) else float(value))
         else:
             result[key] = value
     return result
@@ -60,12 +64,17 @@ class SummaryRuleCase:
     note: str
     metric_key: str
     group: str
+    metric_quantity: MetricQuantitySpec | None = None
     evidence_metric_keys: list[str] = field(default_factory=list)
     minimum: float | None = None
     maximum: float | None = None
     pass_values: tuple[float, ...] = ()
     warn_values: tuple[float, ...] = ()
     fail_values: tuple[float, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.metric_quantity is None:
+            object.__setattr__(self, "metric_quantity", resolve_metric_quantity(self.metric_key))
     pass_status: str = "PASS"
     fail_status: str = "FAIL"
     default_status: str = "FAIL"
@@ -133,7 +142,11 @@ class SummaryRuleTest(sciunit.Test):
             )
 
     def generate_prediction(self, model: ReferenceValidationModel) -> float | pq.Quantity:
-        return model.get_metric_summary(self.case.group, self.case.metric_key)
+        return model.get_metric_summary(
+            self.case.group,
+            self.case.metric_key,
+            unit_text=self.case.metric_quantity.unit_text if self.case.metric_quantity is not None else "",
+        )
 
     def compute_score(self, observation: dict[str, Any], prediction: float | pq.Quantity) -> SummaryRuleScore:
         observed_numeric = numeric_value(prediction)
@@ -205,11 +218,14 @@ def _summary_score_text(case: SummaryRuleCase, score: SummaryRuleScore) -> str:
     observed = numeric_value(score.observed)
     if not _is_finite_number(observed):
         return ""
-    return f"observed {rounded(float(observed)):g}"
+    unit_text = case.metric_quantity.unit_text if case.metric_quantity is not None else ""
+    unit_suffix = f" {unit_text}" if unit_text else ""
+    return f"observed {rounded(float(observed)):g}{unit_suffix}"
 
 
 def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> SuiteCaseScorePayload:
     observed = numeric_value(score.observed)
+    unit_text = case.metric_quantity.unit_text if case.metric_quantity is not None else ""
     prediction: dict[str, Any] = {}
     if case.rule_kind == "summary_metric_min":
         prediction["minimum"] = case.minimum
@@ -225,6 +241,11 @@ def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> Su
     return SuiteCaseScorePayload(
         score_kind=case.rule_kind,
         score_value=numeric_value(score.score),
+        score_units=(
+            unit_text
+            if case.rule_kind in {"summary_metric_min", "summary_metric_max", "summary_metric_range"}
+            else ""
+        ),
         score_interpretation=(
             "Status-bearing summary-rule score derived from the observed group summary "
             "value against the configured summary-rule contract."
@@ -232,6 +253,8 @@ def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> Su
         observation={
             "group": case.group,
             "metric_key": case.metric_key,
+            "metric_quantity_name": case.metric_quantity.resolved_quantity_name if case.metric_quantity is not None else "",
+            "metric_unit_text": unit_text,
             "observed": rounded(observed),
         },
         prediction=prediction or None,
@@ -256,6 +279,11 @@ def audit_items_from_summary_rule_suite(
     def _result_builder(case: SummaryRuleCase, score: SummaryRuleScore):
         observed = numeric_value(score.observed)
         base: dict[str, Any] = {"group": case.group, "observed": observed}
+        if case.metric_quantity is not None:
+            if case.metric_quantity.unit_text:
+                base["metric_unit"] = case.metric_quantity.unit_text
+            if case.metric_quantity.resolved_quantity_name:
+                base["metric_quantity_name"] = case.metric_quantity.resolved_quantity_name
         if case.rule_kind == "summary_metric_min":
             base["minimum"] = case.minimum
         elif case.rule_kind == "summary_metric_max":

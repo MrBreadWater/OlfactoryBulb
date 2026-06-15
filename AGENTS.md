@@ -683,7 +683,14 @@ contract for future sessions.
     numeric/statistical score behind the compact label, emit the typed
     `case_score` payload in the suite-case evidence rather than forcing the
     dashboard or downstream tools to recover semantics from `score_text`
-    alone.
+    alone. Scalar SciUnit-backed rule families should also resolve one typed
+    metric-quantity contract instead of threading raw `metric_key` strings and
+    one-off unit labels through the spec, case, score, and presentation
+    layers. Use the shared `olfactorybulb.neuronunit.metric_quantities`
+    helpers there, let common suffixes such as `_mV`, `_ms`, `_pA`, `_pF`,
+    `_MOhm`, `_Hz`, and `_um` provide ergonomic defaults, and use explicit
+    `metric_unit_text` / `metric_quantity_name` overrides only when the metric
+    key is ambiguous or the displayed scientific name needs refinement.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

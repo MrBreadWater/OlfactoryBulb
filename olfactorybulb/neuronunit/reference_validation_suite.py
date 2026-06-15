@@ -73,11 +73,26 @@ class ReferenceValidationModel(
         value = float(self.summary.get(group, {}).get(metric_key, float("nan")))
         return measurement_with_unit(value, unit_text)
 
-    def get_metric_value_map(self, metric_key: str, entity_key: str = "cell_name") -> dict[str, Any]:
+    def get_metric_value_map(
+        self,
+        metric_key: str,
+        entity_key: str = "cell_name",
+        *,
+        unit_text: str = "",
+    ) -> dict[str, Any]:
         values: dict[str, Any] = {}
         for index, row in enumerate(self.metrics):
             entity = str(row.get(entity_key, f"row_{index}"))
-            values[entity] = row.get(metric_key)
+            value = row.get(metric_key)
+            if isinstance(value, bool) or value is None:
+                values[entity] = value
+                continue
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                values[entity] = value
+                continue
+            values[entity] = measurement_with_unit(numeric, unit_text)
         return values
 
     def get_protocol_evidence_rows(self, evidence_key: str) -> list[dict[str, Any]]:

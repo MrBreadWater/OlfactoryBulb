@@ -263,3 +263,12 @@ Remove this file when the listed items are either:
         numeric value, units, interpretation, and structured observation /
         prediction / normalization metadata when available
       - kept the compact `score_text` label for glanceable matrix rendering
+- [x] Make the scalar SciUnit-backed rule families unit-aware through one typed
+      metric-quantity contract instead of raw `metric_key` strings plus
+      ad hoc labels.
+      - added `olfactorybulb.neuronunit.metric_quantities`
+      - summary/comparison rule specs now resolve `metric_key` through one
+        typed metric quantity with ergonomic suffix-based defaults plus
+        explicit `metric_unit_text` / `metric_quantity_name` overrides
+      - the summary/comparison suite cases, score payloads, and maintained
+        evidence now carry those resolved units and quantity names directly

@@ -258,6 +258,10 @@ validation that uses one registered protocol runner:</p>
 <li>when a migrated suite case has real numeric/statistical semantics behind its
   compact score label, carry them through the typed <code>case_score</code> payload in
   <code>suite_cases</code> instead of flattening everything to <code>score_text</code> alone</li>
+<li>scalar SciUnit-backed rule families now resolve one typed metric-quantity
+  contract from <code>metric_key</code> plus optional overrides instead of threading raw
+  keys and one-off unit strings through the spec, case, score, and
+  presentation layers independently</li>
 <li>static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite</li>
 </ul>
@@ -534,6 +538,20 @@ python tools/run_audit.py validation_design_review_status
 <li><code>note_presence</code></li>
 </ul>
 <p>Use config alone whenever one of these can express the paper cleanly.</p>
+<p>For the scalar SciUnit-backed rule families (<code>all_*</code>, <code>group_*</code>,
+<code>summary_metric_*</code>), the maintained path now resolves one typed metric
+quantity per rule:</p>
+<ul>
+<li>if <code>metric_key</code> ends with a maintained unit suffix such as <code>_mV</code>, <code>_ms</code>,
+  <code>_pA</code>, <code>_pF</code>, <code>_MOhm</code>, <code>_Hz</code>, or <code>_um</code>, the rule will infer a unit label
+  and a human-facing quantity name automatically</li>
+<li>use <code>metric_unit_text</code> when the metric key does not already encode the right
+  display unit clearly</li>
+<li>use <code>metric_quantity_name</code> when the metric key is technically correct but
+  the displayed scientific name should be more legible</li>
+</ul>
+<p>Those resolved choices now flow through the NeuronUnit-backed scalar cases,
+their typed <code>case_score</code> payloads, and the maintained dashboard/CLI evidence.</p>
 <p>For <code>reference_curve_match</code>, treat axis metadata as part of the rule contract:</p>
 <ul>
 <li>declare reference/model x and y units explicitly</li>

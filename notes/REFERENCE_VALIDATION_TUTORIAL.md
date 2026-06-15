@@ -224,6 +224,17 @@ Future SciUnit-backed suite families should extend
 `olfactorybulb.neuronunit.suite_presentation` rather than inventing another
 per-family overview schema.
 
+For the scalar SciUnit-backed rule kinds (`all_*`, `group_*`,
+`summary_metric_*`), the maintained path also resolves one typed metric
+quantity per rule:
+
+- common suffixes such as `_mV`, `_ms`, `_pA`, `_pF`, `_MOhm`, `_Hz`, and
+  `_um` infer the display unit automatically
+- the same path infers a human-facing quantity name for suite evidence and the
+  typed `case_score` payload
+- use `metric_unit_text` or `metric_quantity_name` only when the metric key is
+  ambiguous or the displayed scientific name needs refinement
+
 ### Step 6: create or edit the validation config
 
 Validation configs live under:
@@ -1261,6 +1272,14 @@ Use it for:
 
 - prerequisite sanity checks
 
+Optional scalar-metric quantity fields:
+
+- `metric_unit_text`
+- `metric_quantity_name`
+
+If those are omitted, the maintained path infers them from `metric_key` when
+the suffix is informative.
+
 Example:
 
 ```toml
@@ -1268,6 +1287,8 @@ Example:
 kind = "all_finite_metric"
 check_id = "resting_potential_recorded"
 metric_key = "resting_potential_mV"
+# metric_unit_text = "mV"
+# metric_quantity_name = "Resting potential"
 entity_key = "cell_name"
 title = "Resting potential was recorded"
 criterion = "Every audited model should produce a finite resting membrane potential."
@@ -1295,6 +1316,8 @@ Example:
 kind = "all_exact_metric"
 check_id = "zero_current_quiescence"
 metric_key = "zero_step_rate_Hz"
+# metric_unit_text = "Hz"
+# metric_quantity_name = "Zero-step firing rate"
 entity_key = "cell_name"
 expected = 0.0
 tolerance = 1e-9
@@ -1328,6 +1351,8 @@ Example:
 kind = "group_ordering"
 check_id = "tc_fi_gain_higher"
 metric_key = "fi_gain_Hz_per_50pA"
+# metric_unit_text = "Hz/50pA"
+# metric_quantity_name = "FI gain"
 left_group = "MC"
 right_group = "TC"
 operator = ">"
@@ -1356,6 +1381,8 @@ Example:
 kind = "group_abs_diff_max"
 check_id = "ap_threshold_similarity"
 metric_key = "AP_onset_mV"
+# metric_unit_text = "mV"
+# metric_quantity_name = "AP onset"
 left_group = "MC"
 right_group = "TC"
 max_difference = 5.0
@@ -1383,6 +1410,8 @@ Example:
 kind = "group_positive"
 check_id = "rheobase_positive"
 metric_key = "rheobase_pA"
+# metric_unit_text = "pA"
+# metric_quantity_name = "Rheobase current"
 groups = ["MC", "TC"]
 title = "Rheobases remain positive"
 criterion = "Both groups should require a depolarizing step before spiking."
@@ -1409,6 +1438,7 @@ Example:
 kind = "summary_metric_min"
 check_id = "baseline_slice_population_counts"
 metric_key = "baseline_population_min_count"
+# metric_quantity_name = "Baseline population count"
 minimum = 1.0
 title = "Baseline slice contains nonzero populations"
 criterion = "The maintained baseline slice should export nonempty key populations."
@@ -1434,6 +1464,8 @@ Example:
 kind = "summary_metric_max"
 check_id = "example_latency_ceiling"
 metric_key = "latency_ms"
+# metric_unit_text = "ms"
+# metric_quantity_name = "Latency"
 maximum = 25.0
 title = "Latency stays below the ceiling"
 criterion = "The observed latency should not exceed the accepted ceiling."
@@ -1459,6 +1491,8 @@ Example:
 kind = "summary_metric_range"
 check_id = "synthetic_soma_diameter"
 metric_key = "soma_diameter_um"
+# metric_unit_text = "um"
+# metric_quantity_name = "Soma diameter"
 minimum = 8.9
 maximum = 10.3
 title = "Synthetic soma diameter matches the target"
@@ -1485,6 +1519,7 @@ Example:
 kind = "summary_metric_status_map"
 check_id = "epli_reciprocal_architecture"
 metric_key = "epli_reciprocal_architecture_code"
+# metric_quantity_name = "Reciprocal architecture status code"
 pass_values = [2]
 warn_values = [1]
 fail_values = [0]

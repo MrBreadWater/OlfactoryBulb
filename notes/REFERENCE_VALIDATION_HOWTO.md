@@ -124,6 +124,10 @@ At runtime, keep those layers distinct:
 - when a migrated suite case has real numeric/statistical semantics behind its
   compact score label, carry them through the typed `case_score` payload in
   `suite_cases` instead of flattening everything to `score_text` alone
+- scalar SciUnit-backed rule families now resolve one typed metric-quantity
+  contract from `metric_key` plus optional overrides instead of threading raw
+  keys and one-off unit strings through the spec, case, score, and
+  presentation layers independently
 - static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite
 
@@ -462,6 +466,21 @@ The built-in rule layer already covers common cases:
 - `note_presence`
 
 Use config alone whenever one of these can express the paper cleanly.
+
+For the scalar SciUnit-backed rule families (`all_*`, `group_*`,
+`summary_metric_*`), the maintained path now resolves one typed metric
+quantity per rule:
+
+- if `metric_key` ends with a maintained unit suffix such as `_mV`, `_ms`,
+  `_pA`, `_pF`, `_MOhm`, `_Hz`, or `_um`, the rule will infer a unit label
+  and a human-facing quantity name automatically
+- use `metric_unit_text` when the metric key does not already encode the right
+  display unit clearly
+- use `metric_quantity_name` when the metric key is technically correct but
+  the displayed scientific name should be more legible
+
+Those resolved choices now flow through the NeuronUnit-backed scalar cases,
+their typed `case_score` payloads, and the maintained dashboard/CLI evidence.
 
 For `reference_curve_match`, treat axis metadata as part of the rule contract:
 

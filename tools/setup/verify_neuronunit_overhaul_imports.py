@@ -30,6 +30,7 @@ REPO_IMPORTS = [
     "olfactorybulb.audit.reference_validation_engine",
     "olfactorybulb.neuronunit.capabilities",
     "olfactorybulb.neuronunit.provenance",
+    "olfactorybulb.neuronunit.metric_quantities",
     "olfactorybulb.neuronunit.tests.publications",
     "olfactorybulb.neuronunit.tests.tests",
     "olfactorybulb.neuronunit.models.neuron_cell",

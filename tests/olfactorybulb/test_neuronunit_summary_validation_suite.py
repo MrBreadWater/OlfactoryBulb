@@ -118,10 +118,14 @@ assert adapted_items[0].evidence["suite_aggregate_score"]["score_text"] == "wors
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "observed 4"
 assert adapted_items[0].evidence["suite_cases"][1]["norm_score"] == 0.5
 assert adapted_items[0].evidence["suite_cases"][1]["case_score"]["score_kind"] == "summary_metric_status_map"
+assert adapted_items[0].evidence["suite_cases"][2]["score_text"] == "observed 9.7 um"
+assert adapted_items[0].evidence["suite_cases"][2]["case_score"]["score_units"] == "um"
 assert adapted_items[1].evidence["baseline_MCs_count"] == 12.0
 assert adapted_items[2].evidence["warn_values"] == [1.0]
 assert adapted_items[3].evidence["minimum"] == 8.9
 assert adapted_items[3].evidence["maximum"] == 10.3
+assert adapted_items[3].evidence["metric_unit"] == "um"
+assert adapted_items[3].evidence["metric_quantity_name"] == "Soma Diameter"
 report = AuditReport(audit_id="synthetic_summary_suite", title="Synthetic summary suite", items=adapted_items)
 assert report.summary == {"PASS": 2, "WARN": 1, "FAIL": 0}
 

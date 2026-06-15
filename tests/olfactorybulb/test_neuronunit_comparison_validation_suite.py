@@ -180,14 +180,20 @@ assert adapted_items[0].summary_rollup_exempt is True
 assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 5, "WARN": 0, "FAIL": 0}
 assert adapted_items[0].evidence["suite_aggregate_score"]["status"] == "PASS"
 assert adapted_items[0].evidence["suite_aggregate_score"]["score_text"] == "worst PASS, min norm 1"
-assert adapted_items[0].evidence["suite_cases"][1]["score_text"] == "|Δ| 0.5"
-assert adapted_items[0].evidence["suite_cases"][2]["score_text"] == "Δ -0.2"
+assert adapted_items[0].evidence["suite_cases"][1]["score_text"] == "|Δ| 0.5 mV"
+assert adapted_items[0].evidence["suite_cases"][2]["score_text"] == "Δ -0.2 ms"
 assert adapted_items[0].evidence["suite_cases"][1]["case_score"]["score_kind"] == "group_abs_diff_max"
+assert adapted_items[0].evidence["suite_cases"][1]["case_score"]["score_units"] == "mV"
 assert adapted_items[1].evidence["expected"] == 0.0
+assert adapted_items[1].evidence["metric_unit"] == "Hz"
 assert adapted_items[2].evidence["absolute_difference"] == 0.5
+assert adapted_items[2].evidence["metric_unit"] == "mV"
 assert adapted_items[3].evidence["TC_minus_MC"] == -0.2
+assert adapted_items[3].evidence["metric_unit"] == "ms"
 assert adapted_items[4].evidence["MC_mean"] == 100.0
+assert adapted_items[4].evidence["metric_unit"] == "pA"
 assert adapted_items[5].evidence["cell_count"] == 2
+assert adapted_items[5].evidence["metric_unit"] == "MOhm"
 report = AuditReport(audit_id="synthetic_comparison_suite", title="Synthetic comparison suite", items=adapted_items)
 assert report.summary == {"PASS": 5, "WARN": 0, "FAIL": 0}
 

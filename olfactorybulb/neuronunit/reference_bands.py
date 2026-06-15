@@ -68,6 +68,7 @@ _UNIT_ALIASES: dict[str, pq.Quantity] = {
     "Hz": pq.Hz,
     "pF": pq.pF,
     "MOhm": pq.MOhm,
+    "um": pq.um,
     "mV/ms": pq.mV / pq.ms,
     "Hz/nA": pq.Hz / pq.nA,
 }

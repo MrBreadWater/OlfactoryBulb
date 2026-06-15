@@ -85,11 +85,21 @@ validation_design_review_status = "pending"
 # #   { source = "EXAMPLE_fI_curve.csv", protocol_id = "EXAMPLE_PROTOCOL", cell_type = "Example Cell" },
 # # ]
 
+# Scalar SciUnit-backed rule families (`all_*`, `group_*`, `summary_metric_*`)
+# infer a typed metric quantity from `metric_key` when the suffix is
+# informative, for example `_mV`, `_ms`, `_pA`, `_pF`, `_MOhm`, `_Hz`, or
+# `_um`. Use `metric_unit_text` / `metric_quantity_name` only when the metric
+# key is ambiguous or the displayed scientific name should be refined.
+
 # Optional finite-value check.
 # [[checks]]
 # kind = "all_finite_metric"
 # check_id = "example_input_resistance_recorded"
 # metric_key = "input_resistance_MOhm"
+# Optional override when the metric key does not already encode a clear unit or
+# human-facing quantity name:
+# metric_unit_text = "MOhm"
+# metric_quantity_name = "Input resistance"
 # entity_key = "cell_name"
 # title = "Input resistance was measured for every audited cell"
 # criterion = "Every audited cell should report a finite input-resistance estimate."
@@ -102,6 +112,9 @@ validation_design_review_status = "pending"
 # kind = "all_exact_metric"
 # check_id = "example_zero_current_quiescence"
 # metric_key = "zero_step_rate_Hz"
+# Optional override:
+# metric_unit_text = "Hz"
+# metric_quantity_name = "Zero-step firing rate"
 # expected = 0.0
 # tolerance = 1e-9
 # title = "Cells remain quiescent during the zero-current step"
@@ -115,6 +128,9 @@ validation_design_review_status = "pending"
 # kind = "group_ordering"
 # check_id = "example_group_ordering"
 # metric_key = "fi_gain_Hz_per_50pA"
+# Optional override:
+# metric_unit_text = "Hz/50pA"
+# metric_quantity_name = "FI gain"
 # left_group = "MC"
 # right_group = "TC"
 # operator = ">"
@@ -129,6 +145,9 @@ validation_design_review_status = "pending"
 # kind = "group_abs_diff_max"
 # check_id = "example_threshold_similarity"
 # metric_key = "AP_onset_mV"
+# Optional override:
+# metric_unit_text = "mV"
+# metric_quantity_name = "AP onset"
 # left_group = "MC"
 # right_group = "TC"
 # max_difference = 5.0
@@ -143,6 +162,9 @@ validation_design_review_status = "pending"
 # kind = "group_positive"
 # check_id = "example_rheobase_positive"
 # metric_key = "rheobase_pA"
+# Optional override:
+# metric_unit_text = "pA"
+# metric_quantity_name = "Rheobase current"
 # groups = ["MC", "TC"]
 # title = "Rheobases remain positive"
 # criterion = "Both groups should require a depolarizing step before spiking."
@@ -157,6 +179,8 @@ validation_design_review_status = "pending"
 # kind = "summary_metric_min"
 # check_id = "example_entry_count_present"
 # metric_key = "candidate_entry_count"
+# Optional override:
+# metric_quantity_name = "Candidate entry count"
 # minimum = 1.0
 # title = "Candidate export contains at least one entry"
 # criterion = "Explain the required lower bound."
@@ -171,6 +195,9 @@ validation_design_review_status = "pending"
 # kind = "summary_metric_range"
 # check_id = "example_soma_diameter_range"
 # metric_key = "soma_diameter_um"
+# Optional override:
+# metric_unit_text = "um"
+# metric_quantity_name = "Soma diameter"
 # minimum = 8.0
 # maximum = 12.0
 # title = "Soma diameter stays inside the accepted range"
@@ -187,6 +214,8 @@ validation_design_review_status = "pending"
 # kind = "summary_metric_status_map"
 # check_id = "example_runtime_state"
 # metric_key = "geometry_status_code"
+# Optional override:
+# metric_quantity_name = "Geometry status code"
 # pass_values = [2]
 # warn_values = [1]
 # fail_values = [0]

@@ -2121,6 +2121,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     as well as the grouped summary/comparison/series suite families, so the
     declarative suite contract is uniform across the migrated scientific rule
     surface
+  - the scalar summary/comparison suite families now resolve one typed metric
+    quantity from `metric_key` plus optional overrides, so unit-bearing scalar
+    rules no longer have to pass raw metric keys and ad hoc unit labels
+    separately through the spec, case, score, and maintained presentation
+    layers
   - the remaining shell-side meta checks such as `protocol_executed` and
     `note_presence` now parse through typed config specs too, while still
     remaining outside the NeuronUnit scientific-core layer
