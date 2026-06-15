@@ -8,11 +8,13 @@ from types import SimpleNamespace
 
 import quantities as pq
 
+from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
     ReferenceBandRuleSpec,
     ValidationRuleContext,
     build_rule_items,
+    compile_rule_dispatches,
 )
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceBandObservation,
@@ -27,6 +29,26 @@ from olfactorybulb.neuronunit.reference_validation_suite import (
     compile_reference_band_suite,
 )
 from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor, SuiteAggregatePolicy
+
+
+def _rule_context(
+    *,
+    metrics: list[dict[str, object]],
+    summary: dict[str, dict[str, float]],
+    args: object,
+    validation_id: str = "synthetic_reference_band",
+    protocol_result: object | None = None,
+) -> ValidationRuleContext:
+    return ValidationRuleContext(
+        metrics=metrics,
+        summary=summary,
+        args=args,
+        validation_id=validation_id,
+        default_group="",
+        notes_path="",
+        design_review_defaults=ValidationDesignReviewDefaultsSpec(status="pending"),
+        protocol_result=protocol_result,
+    )
 
 
 case = ReferenceBandCase(
@@ -143,11 +165,10 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "acceptable_basis": "Synthetic acceptable basis.",
         "property_notes": {"Input Resistance": "Synthetic note."},
     }
-    context = ValidationRuleContext(
+    context = _rule_context(
         metrics=[{"cell_type": "MC", "input_resistance_MOhm": 105.0}],
         summary={"MC": {"input_resistance_MOhm": 105.0}},
         args=SimpleNamespace(reference_sigma_multiplier=2.0),
-        config={},
         protocol_result=None,
     )
     parsed_rule_spec = ReferenceBandRuleSpec.from_rule(rule, context)
@@ -186,7 +207,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert built_cases[0].observation.policy.mode == "symmetric_sd"
     assert built_cases[0].observation.review.status == "approved"
     assert built_cases[0].reference_annotation == "reference: 100.0 +/- 10.0 MOhm from Synthetic Study (n=12)"
-    items = build_rule_items([rule], context)
+    items = build_rule_items(compile_rule_dispatches([rule]), context)
     assert len(items) == 2
     assert items[0].detail_level == "summary"
     assert items[0].summary_rollup_exempt is True
@@ -208,7 +229,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
     mean_rule = dict(rule)
     mean_rule["suite_name"] = "Synthetic reference-band mean suite"
     mean_rule["suite_aggregate_policy"] = {"norm_rollup": "mean"}
-    mean_items = build_rule_items([mean_rule], context)
+    mean_items = build_rule_items(compile_rule_dispatches([mean_rule]), context)
     assert mean_items[0].check_id == "Synthetic_reference-band_mean_suite.overview"
     assert mean_items[0].evidence["suite_aggregate_score"]["norm_rollup"] == "mean"
     assert mean_items[0].evidence["suite_aggregate_score"]["score_text"] == "worst PASS, mean norm 1"

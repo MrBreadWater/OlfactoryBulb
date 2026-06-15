@@ -9,12 +9,15 @@ from typing import Any
 import quantities as pq
 import sciunit
 
-from olfactorybulb.audit import AuditItem
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
+from olfactorybulb.neuronunit.suite_presentation import (
+    audit_item_adapter_spec_from_case,
+    suite_case_result_from_spec,
+    suite_items_from_judged,
+)
 from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
 
 
@@ -232,22 +235,11 @@ def audit_items_from_summary_rule_suite(
             base["fail_values"] = sorted(case.fail_values)
         for metric_key in case.evidence_metric_keys:
             base[metric_key] = compiled.model.summary.get(case.group, {}).get(metric_key, float("nan"))
-        item = AuditItem(
-            check_id=case.check_id,
+        spec = audit_item_adapter_spec_from_case(case)
+        return suite_case_result_from_spec(
+            spec,
             status=score.status,
-            title=case.title,
-            criterion=case.criterion,
-            criterion_latex=case.criterion_latex,
-            criterion_formulae=case.criterion_formulae,
-            criterion_definitions=case.criterion_definitions,
-            description=case.description,
-            acceptable=case.acceptable,
-            acceptable_basis=case.acceptable_basis,
             evidence=_rounded_dict(base),
-            note=case.note,
-        )
-        return suite_case_result(
-            item,
             score_text=_summary_score_text(case, score),
             norm_score=score.norm_score,
         )

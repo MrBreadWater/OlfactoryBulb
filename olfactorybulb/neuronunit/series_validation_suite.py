@@ -13,7 +13,7 @@ from scipy.stats import t as student_t
 from scipy.stats import ttest_ind
 import sciunit
 
-from olfactorybulb.audit import AuditItem, series_visual_spec
+from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceMap,
@@ -22,7 +22,11 @@ from olfactorybulb.neuronunit.capabilities import (
 from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
+from olfactorybulb.neuronunit.suite_presentation import (
+    audit_item_adapter_spec_from_case,
+    suite_case_result_from_spec,
+    suite_items_from_judged,
+)
 from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
 
 
@@ -1627,18 +1631,8 @@ def audit_items_from_series_comparison_suite(
     def _result_builder(case: SeriesComparisonCase, score: SeriesComparisonScore):
         obs = case.observation
         visual_contract = obs.visual_contract
-        item = AuditItem(
-            check_id=case.check_id,
-            status=score.status,
-            title=case.title,
-            criterion=case.criterion,
-            criterion_latex=case.criterion_latex,
-            criterion_formulae=case.criterion_formulae,
-            criterion_definitions=case.criterion_definitions,
-            description=case.description,
-            acceptable=case.acceptable,
-            acceptable_basis=case.acceptable_basis,
-            evidence=score.evidence,
+        spec = audit_item_adapter_spec_from_case(
+            case,
             series_visuals=[
                 series_visual_spec(
                     kind=visual_contract.kind,
@@ -1650,10 +1644,11 @@ def audit_items_from_series_comparison_suite(
                     },
                 )
             ],
-            note=case.note,
         )
-        return suite_case_result(
-            item,
+        return suite_case_result_from_spec(
+            spec,
+            status=score.status,
+            evidence=score.evidence,
             score_text=_series_score_text(case, score),
             norm_score=score.norm_score,
         )

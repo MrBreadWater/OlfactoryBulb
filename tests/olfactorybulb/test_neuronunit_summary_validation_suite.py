@@ -5,13 +5,37 @@ from __future__ import annotations
 from argparse import Namespace
 from types import SimpleNamespace
 
+from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
-from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
+from olfactorybulb.audit.reference_validation_rules import (
+    ValidationRuleContext,
+    build_rule_items,
+    compile_rule_dispatches,
+)
 from olfactorybulb.neuronunit.summary_validation_suite import (
     SummaryRuleCase,
     audit_items_from_summary_rule_suite,
     compile_summary_rule_suite,
 )
+
+
+def _rule_context(
+    *,
+    summary: dict[str, dict[str, float]],
+    args: object,
+    validation_id: str = "epli_correctness",
+    protocol_result: object | None = None,
+) -> ValidationRuleContext:
+    return ValidationRuleContext(
+        metrics=[],
+        summary=summary,
+        args=args,
+        validation_id=validation_id,
+        default_group="ungrouped",
+        notes_path="",
+        design_review_defaults=ValidationDesignReviewDefaultsSpec(status="pending"),
+        protocol_result=protocol_result,
+    )
 
 
 cases = [
@@ -101,11 +125,9 @@ report = AuditReport(audit_id="synthetic_summary_suite", title="Synthetic summar
 assert report.summary == {"PASS": 2, "WARN": 1, "FAIL": 0}
 
 
-context = ValidationRuleContext(
-    metrics=[],
+context = _rule_context(
     summary=summary,
     args=Namespace(skip_neuron=True),
-    config={"validation_id": "epli_correctness"},
     protocol_result=None,
 )
 rules = [
@@ -151,7 +173,7 @@ rules = [
         "enabled_when_arg_falsey": "skip_neuron",
     },
 ]
-items = build_rule_items(rules, context)
+items = build_rule_items(compile_rule_dispatches(rules), context)
 assert [item.check_id for item in items] == [
     "synthetic_summary_policy_demo.overview",
     "baseline_slice_population_counts",
@@ -163,14 +185,12 @@ assert items[0].evidence["suite_aggregate_score"]["score_text"] == "worst WARN, 
 assert items[1].criterion_latex == r"\bar{x}_{\mathrm{ungrouped}} \geq 1"
 assert items[2].evidence["warn_values"] == [1.0]
 
-non_skip_context = ValidationRuleContext(
-    metrics=[],
+non_skip_context = _rule_context(
     summary=summary,
     args=SimpleNamespace(skip_neuron=False),
-    config={"validation_id": "epli_correctness"},
     protocol_result=None,
 )
-items_non_skip = build_rule_items(rules, non_skip_context)
+items_non_skip = build_rule_items(compile_rule_dispatches(rules), non_skip_context)
 assert [item.check_id for item in items_non_skip] == [
     "synthetic_summary_policy_demo.overview",
     "baseline_slice_population_counts",

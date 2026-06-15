@@ -1546,6 +1546,15 @@ Concrete steps:
    - compact interval visuals
 3. write explicit adapter tests for those fields
 
+Current overhaul-branch status:
+
+- added a shared `AuditItemAdapterSpec` bridge in
+  `olfactorybulb.neuronunit.suite_presentation`
+- migrated the SciUnit-backed suite adapters onto that shared contract instead
+  of hand-copying the same presentation field bundle in each suite module
+- added explicit adapter coverage for criterion math, review metadata, notes,
+  visuals, status reasons, and suite-overview rollup preservation
+
 Required gate before any migrated family is exposed in the control center:
 
 - the migrated family renders through the same maintained report path

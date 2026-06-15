@@ -674,7 +674,12 @@ contract for future sessions.
     detailed evidence. `reference_band_rows` is not an exception here: it also
     compiles through a `SuiteDescriptor` and accepts the same
     `suite_aggregate_policy` contract as the grouped summary/comparison/series
-    suite families.
+    suite families. Keep the migrated NeuronUnit-to-`AuditItem` adapter
+    centralized in `olfactorybulb.neuronunit.suite_presentation`; use the
+    shared `AuditItemAdapterSpec` path instead of hand-constructing the same
+    criterion/review/visual field bundle in every suite adapter, and add or
+    extend explicit adapter tests when a new user-facing audit field must
+    survive the bridge into the maintained shell.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

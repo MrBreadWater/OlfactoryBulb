@@ -247,3 +247,12 @@ Remove this file when the listed items are either:
         `cache_arg_names`
       - the engine smoke test now asserts same-process cache miss/hit behavior
         and argument-sensitive invalidation
+- [x] Centralize the migrated NeuronUnit-to-`AuditItem` bridge behind one
+      shared adapter contract instead of hand-copying the same presentation
+      fields in every suite module.
+      - added `AuditItemAdapterSpec` in
+        `olfactorybulb.neuronunit.suite_presentation`
+      - migrated the reference-band, summary-rule, comparison-rule, and
+        series-comparison adapters onto that shared contract
+      - added explicit adapter coverage for criterion math, review metadata,
+        notes, visuals, status reasons, and overview-rollup preservation

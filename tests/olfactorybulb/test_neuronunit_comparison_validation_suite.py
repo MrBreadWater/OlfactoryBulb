@@ -4,13 +4,35 @@ from __future__ import annotations
 
 from argparse import Namespace
 
+from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
+from olfactorybulb.audit.reference_validation_rules import compile_rule_dispatches
 from olfactorybulb.neuronunit.comparison_validation_suite import (
     ComparisonRuleCase,
     audit_items_from_comparison_rule_suite,
     compile_comparison_rule_suite,
 )
+
+
+def _rule_context(
+    *,
+    metrics: list[dict[str, object]],
+    summary: dict[str, dict[str, float]],
+    args: object,
+    validation_id: str = "burton_urban_fi",
+    protocol_result: object | None = None,
+) -> ValidationRuleContext:
+    return ValidationRuleContext(
+        metrics=metrics,
+        summary=summary,
+        args=args,
+        validation_id=validation_id,
+        default_group="",
+        notes_path="",
+        design_review_defaults=ValidationDesignReviewDefaultsSpec(status="pending"),
+        protocol_result=protocol_result,
+    )
 
 
 metrics = [
@@ -231,14 +253,13 @@ rules = [
     },
 ]
 
-context = ValidationRuleContext(
+context = _rule_context(
     metrics=metrics,
     summary=summary,
     args=Namespace(skip_neuron=False),
-    config={"validation_id": "burton_urban_fi"},
     protocol_result=None,
 )
-items = build_rule_items(rules, context)
+items = build_rule_items(compile_rule_dispatches(rules), context)
 assert [item.check_id for item in items] == [
     "burton_urban_fi.comparison_rules.overview",
     "zero_current_quiescence_at_normalized_vm",

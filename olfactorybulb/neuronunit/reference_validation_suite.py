@@ -9,7 +9,6 @@ import numpy as np
 import quantities as pq
 import sciunit
 
-from olfactorybulb.audit import AuditItem
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesMetricRows,
@@ -22,7 +21,11 @@ from olfactorybulb.neuronunit.reference_bands import (
     measurement_with_unit,
     numeric_value,
 )
-from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
+from olfactorybulb.neuronunit.suite_presentation import (
+    audit_item_adapter_spec_from_case,
+    suite_case_result_from_spec,
+    suite_items_from_judged,
+)
 from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
 
 
@@ -261,27 +264,14 @@ def _reference_band_score_text(case: ReferenceBandCase, score: ReferenceBandScor
 
 def _reference_band_case_result(case: ReferenceBandCase, score: ReferenceBandScore):
     obs = case.observation
-    item = AuditItem(
-        check_id=case.check_id,
-        status=case.pass_status if score.passed else case.fail_status,
-        title=case.title,
-        criterion=case.criterion,
-        criterion_latex=case.criterion_latex,
-        criterion_formulae=case.criterion_formulae,
-        criterion_definitions=case.criterion_definitions,
-        description=case.description,
-        acceptable=case.acceptable,
-        acceptable_basis=case.acceptable_basis,
-        evidence=_evidence_payload(case, score),
-        note=case.note,
-        validation_design_review_status=obs.review.status,
-        validation_design_review_note=obs.review.note,
-        validation_design_review_reviewer=obs.review.reviewer,
-        validation_design_review_required_expertise=obs.review.required_expertise,
-        validation_design_review_focus=obs.review.focus,
+    spec = audit_item_adapter_spec_from_case(
+        case,
+        validation_review=obs.review,
     )
-    return suite_case_result(
-        item,
+    return suite_case_result_from_spec(
+        spec,
+        status=case.pass_status if score.passed else case.fail_status,
+        evidence=_evidence_payload(case, score),
         score_text=_reference_band_score_text(case, score),
         norm_score=score.norm_score,
     )

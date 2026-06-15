@@ -251,6 +251,10 @@ validation that uses one registered protocol runner:</p>
 <li><code>reference_validation_rules.py</code> and <code>reference_validation_specs.py</code> should
   consume a typed <code>ValidationRuleContext</code> rather than a catch-all config dict
   tunneled through the rule engine</li>
+<li>migrated SciUnit-backed suite adapters should route detailed user-facing
+  <code>AuditItem</code> construction through the shared adapter contract in
+  <code>olfactorybulb.neuronunit.suite_presentation</code> rather than hand-copying the
+  same criterion, review, caveat, and visual fields in each suite module</li>
 <li>static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite</li>
 </ul>

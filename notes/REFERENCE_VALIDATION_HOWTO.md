@@ -117,6 +117,10 @@ At runtime, keep those layers distinct:
 - `reference_validation_rules.py` and `reference_validation_specs.py` should
   consume a typed `ValidationRuleContext` rather than a catch-all config dict
   tunneled through the rule engine
+- migrated SciUnit-backed suite adapters should route detailed user-facing
+  `AuditItem` construction through the shared adapter contract in
+  `olfactorybulb.neuronunit.suite_presentation` rather than hand-copying the
+  same criterion, review, caveat, and visual fields in each suite module
 - static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite
 

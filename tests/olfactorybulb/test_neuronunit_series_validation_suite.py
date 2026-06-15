@@ -6,11 +6,13 @@ from argparse import Namespace
 from types import SimpleNamespace
 
 from olfactorybulb.audit.protocol_evidence import intrinsic_fi_curve_series_spec
+from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
     SeriesComparisonRuleSpec,
     ValidationRuleContext,
     build_rule_items,
+    compile_rule_dispatches,
 )
 from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.series_validation_suite import (
@@ -23,6 +25,24 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     audit_items_from_series_comparison_suite,
     compile_series_comparison_suite,
 )
+
+
+def _rule_context(
+    *,
+    args: object,
+    protocol_result: object | None = None,
+    validation_id: str = "synthetic_series_validation",
+) -> ValidationRuleContext:
+    return ValidationRuleContext(
+        metrics=[],
+        summary={},
+        args=args,
+        validation_id=validation_id,
+        default_group="",
+        notes_path="",
+        design_review_defaults=ValidationDesignReviewDefaultsSpec(status="pending"),
+        protocol_result=protocol_result,
+    )
 
 
 reference_rows = [
@@ -835,11 +855,8 @@ assert fallback_rule_spec.model_spec.series_id_key == "cell_name"
 assert fallback_rule_spec.x_quantity_name == "Injected current"
 assert fallback_rule_spec.y_quantity_name == "Firing rate"
 
-context = ValidationRuleContext(
-    metrics=[],
-    summary={},
+context = _rule_context(
     args=Namespace(),
-    config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(
         protocol_evidence={
             "fi_curve_rows": model_rows,
@@ -856,7 +873,7 @@ from olfactorybulb.audit import reference_validation_rules as rules_module
 original_load_rows = rules_module._load_rows
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
-    items = build_rule_items([rule], context)
+    items = build_rule_items(compile_rule_dispatches([rule]), context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -877,7 +894,7 @@ residual_only_rule["score_family"] = "residual_only"
 del residual_only_rule["minimum_median_welch_pvalue"]
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
-    residual_items = build_rule_items([residual_only_rule], context)
+    residual_items = build_rule_items(compile_rule_dispatches([residual_only_rule]), context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -892,7 +909,7 @@ second_residual_rule["title"] = "Synthetic second series comparison"
 second_residual_rule["criterion"] = "A second synthetic series check should share the same compiled suite."
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
-    grouped_series_items = build_rule_items([residual_only_rule, second_residual_rule], context)
+    grouped_series_items = build_rule_items(compile_rule_dispatches([residual_only_rule, second_residual_rule]), context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -915,11 +932,8 @@ equivalence_rule["maximum_mae"] = 0.2
 equivalence_rule["maximum_rmse"] = 0.2
 del equivalence_rule["minimum_median_welch_pvalue"]
 del equivalence_rule["model_x_transform"]
-equivalence_context = ValidationRuleContext(
-    metrics=[],
-    summary={},
+equivalence_context = _rule_context(
     args=Namespace(),
-    config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(
         protocol_evidence={"fi_curve_rows": equivalence_model_rows},
         evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
@@ -931,7 +945,7 @@ rules_module._load_rows = (
     else original_load_rows(loader_spec)
 )
 try:
-    equivalence_rule_items = build_rule_items([equivalence_rule], equivalence_context)
+    equivalence_rule_items = build_rule_items(compile_rule_dispatches([equivalence_rule]), equivalence_context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -963,11 +977,8 @@ piecewise_rule["model_x_transform"] = {
         {"input": 0.30, "output": 330.0},
     ],
 }
-piecewise_context = ValidationRuleContext(
-    metrics=[],
-    summary={},
+piecewise_context = _rule_context(
     args=Namespace(),
-    config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": piecewise_model_rows}),
 )
 rules_module._load_rows = (
@@ -976,7 +987,7 @@ rules_module._load_rows = (
     else original_load_rows(loader_spec)
 )
 try:
-    piecewise_rule_items = build_rule_items([piecewise_rule], piecewise_context)
+    piecewise_rule_items = build_rule_items(compile_rule_dispatches([piecewise_rule]), piecewise_context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -992,11 +1003,8 @@ cluster_rule["x_match_tolerance"] = 0.5
 cluster_rule["maximum_mae"] = 0.2
 cluster_rule["maximum_rmse"] = 0.2
 del cluster_rule["model_x_transform"]
-cluster_context = ValidationRuleContext(
-    metrics=[],
-    summary={},
+cluster_context = _rule_context(
     args=Namespace(),
-    config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": cluster_model_rows}),
 )
 rules_module._load_rows = (
@@ -1005,7 +1013,7 @@ rules_module._load_rows = (
     else original_load_rows(loader_spec)
 )
 try:
-    cluster_rule_items = build_rule_items([cluster_rule], cluster_context)
+    cluster_rule_items = build_rule_items(compile_rule_dispatches([cluster_rule]), cluster_context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -1017,11 +1025,8 @@ assert cluster_rule_items[1].evidence["model_cluster_x_groups"] == [[100.1, 100.
 nearest_rule = dict(residual_only_rule)
 nearest_rule["alignment_policy"] = "nearest_within_tolerance"
 nearest_rule["x_match_tolerance"] = 0.5
-nearest_context = ValidationRuleContext(
-    metrics=[],
-    summary={},
+nearest_context = _rule_context(
     args=Namespace(),
-    config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(
         protocol_evidence={
             "fi_curve_rows": offset_model_rows,
@@ -1032,7 +1037,7 @@ nearest_context = ValidationRuleContext(
 )
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
-    nearest_items = build_rule_items([nearest_rule], nearest_context)
+    nearest_items = build_rule_items(compile_rule_dispatches([nearest_rule]), nearest_context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -1055,11 +1060,8 @@ resampled_rule["minimum_point_count"] = 2
 del resampled_rule["model_x_transform"]
 resampled_rule["resampling_grid_source"] = "explicit_grid"
 resampled_rule["resampling_grid_values"] = [150.0, 250.0]
-resampled_context = ValidationRuleContext(
-    metrics=[],
-    summary={},
+resampled_context = _rule_context(
     args=Namespace(),
-    config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(
         protocol_evidence={"fi_curve_rows": resampled_model_rows},
         evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
@@ -1071,7 +1073,7 @@ rules_module._load_rows = (
     else original_load_rows(loader_spec)
 )
 try:
-    resampled_rule_items = build_rule_items([resampled_rule], resampled_context)
+    resampled_rule_items = build_rule_items(compile_rule_dispatches([resampled_rule]), resampled_context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -1096,7 +1098,7 @@ rules_module._load_rows = (
     else original_load_rows(loader_spec)
 )
 try:
-    protocol_default_items = build_rule_items([protocol_default_rule], equivalence_context)
+    protocol_default_items = build_rule_items(compile_rule_dispatches([protocol_default_rule]), equivalence_context)
 finally:
     rules_module._load_rows = original_load_rows
 
@@ -1113,7 +1115,7 @@ del missing_units_rule["reference_x_unit_text"]
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
     try:
-        build_rule_items([missing_units_rule], context)
+        build_rule_items(compile_rule_dispatches([missing_units_rule]), context)
         raise AssertionError("Expected reference_curve_match to require explicit unit metadata")
     except ValueError as exc:
         assert "requires explicit 'reference_x_unit_text'" in str(exc)
@@ -1125,7 +1127,7 @@ del missing_score_family_rule["score_family"]
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
     try:
-        build_rule_items([missing_score_family_rule], context)
+        build_rule_items(compile_rule_dispatches([missing_score_family_rule]), context)
         raise AssertionError("Expected reference_curve_match to require explicit score-family metadata")
     except ValueError as exc:
         assert "requires explicit 'score_family'" in str(exc)
@@ -1137,7 +1139,7 @@ del missing_tolerance_rule["x_match_tolerance"]
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
 try:
     try:
-        build_rule_items([missing_tolerance_rule], nearest_context)
+        build_rule_items(compile_rule_dispatches([missing_tolerance_rule]), nearest_context)
         raise AssertionError("Expected tolerance-based alignment to require an explicit x-match tolerance")
     except ValueError as exc:
         assert "requires explicit 'x_match_tolerance'" in str(exc)
@@ -1149,7 +1151,7 @@ del missing_cluster_tolerance_rule["x_match_tolerance"]
 rules_module._load_rows = lambda loader_spec: cluster_reference_rows if loader_spec == "csv:/tmp/cluster.csv" else original_load_rows(loader_spec)
 try:
     try:
-        build_rule_items([missing_cluster_tolerance_rule], cluster_context)
+        build_rule_items(compile_rule_dispatches([missing_cluster_tolerance_rule]), cluster_context)
         raise AssertionError("Expected tolerance-cluster alignment to require an explicit x-match tolerance")
     except ValueError as exc:
         assert "requires explicit 'x_match_tolerance'" in str(exc)
@@ -1165,7 +1167,7 @@ rules_module._load_rows = (
 )
 try:
     try:
-        build_rule_items([missing_explicit_resampling_grid_rule], resampled_context)
+        build_rule_items(compile_rule_dispatches([missing_explicit_resampling_grid_rule]), resampled_context)
         raise AssertionError("Expected explicit-grid resampling to require explicit grid values")
     except ValueError as exc:
         assert "requires explicit 'resampling_grid_values'" in str(exc)

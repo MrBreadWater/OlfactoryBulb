@@ -9,12 +9,15 @@ from typing import Any
 import quantities as pq
 import sciunit
 
-from olfactorybulb.audit import AuditItem
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.suite_presentation import suite_case_result, suite_items_from_judged
+from olfactorybulb.neuronunit.suite_presentation import (
+    audit_item_adapter_spec_from_case,
+    suite_case_result_from_spec,
+    suite_items_from_judged,
+)
 from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
 
 
@@ -294,22 +297,11 @@ def audit_items_from_comparison_rule_suite(
             suite_kind_label="Comparison-rule suite",
         )
     def _result_builder(case: ComparisonRuleCase, score: ComparisonRuleScore):
-        item = AuditItem(
-            check_id=case.check_id,
+        spec = audit_item_adapter_spec_from_case(case)
+        return suite_case_result_from_spec(
+            spec,
             status=score.status,
-            title=case.title,
-            criterion=case.criterion,
-            criterion_latex=case.criterion_latex,
-            criterion_formulae=case.criterion_formulae,
-            criterion_definitions=case.criterion_definitions,
-            description=case.description,
-            acceptable=case.acceptable,
-            acceptable_basis=case.acceptable_basis,
             evidence=score.evidence,
-            note=case.note,
-        )
-        return suite_case_result(
-            item,
             score_text=_comparison_score_text(case, score),
             norm_score=score.norm_score,
         )
