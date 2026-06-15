@@ -2238,6 +2238,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `MetricTable` / `MetricSummaryTable` as the maintained post-protocol
     contract, while outer helpers still coerce raw rows for ergonomic tests
     and legacy call sites at the boundary
+  - the typed scalar helper layer is tighter too: `ScalarMetricValueMap` and
+    `ScalarGroupValueSet` now keep their stored per-entity / per-group values
+    on one shared frozen `ScalarValueMapPayload` instead of advertising fresh
+    mutable dict seams after the scalar prediction has crossed into the
+    NeuronUnit-side scientific core
   - the literature-row seam is tighter too: `_load_rows`, `_filter_rows`, and
     the `reference_band_rows` / `reference_curve_match` spec entrypoints now
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer

@@ -11,6 +11,7 @@ from olfactorybulb.neuronunit.scalar_observations import (
     ScalarMetricValue,
     ScalarMetricValueMap,
     ScalarStatusMapPolicy,
+    ScalarValueMapPayload,
     is_finite_scalar,
 )
 
@@ -41,6 +42,7 @@ value_map = ScalarMetricValueMap(
     },
 )
 assert value_map.entity_count == 3
+assert isinstance(value_map.values, ScalarValueMapPayload)
 assert sorted(value_map.failing_nonfinite()) == ["TC2"]
 assert sorted(value_map.failing_not_equal(expected=0.0, tolerance=1e-9)) == ["TC1", "TC2"]
 assert value_map.metadata()["metric_observed_symbol"] == r"\bar{f}_{0}"
@@ -68,6 +70,7 @@ group_values = ScalarGroupValueSet(
     },
 )
 assert group_values.numeric_group_values() == {"MC": 100.0, "TC": 0.0}
+assert isinstance(group_values.values_by_group, ScalarValueMapPayload)
 assert group_values.failing_positive_groups() == ["TC"]
 assert group_values.metadata()["metric_observed_symbol"] == r"\bar{I}_{\mathrm{rh}}"
 

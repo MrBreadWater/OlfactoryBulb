@@ -700,6 +700,11 @@ contract for future sessions.
     local summary CSV, move it under `research_context/source_data/<dataset>/`
     and route it through a declarative reference-dataset config rather than
     leaving a one-off repo-side loader as the long-term source of truth.
+    Keep typed scalar entity/group value maps frozen too. Once a maintained
+    scalar prediction helper has crossed into the NeuronUnit-side scientific
+    core, store per-entity or per-group values on a shared frozen mapping
+    payload instead of leaving `ScalarMetricValueMap` /
+    `ScalarGroupValueSet` to advertise fresh mutable dict seams.
     Inside the series-comparison core itself, prefer the typed
     `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
     x-key/y-key/unit/transform parameter bundles across bins, paths,

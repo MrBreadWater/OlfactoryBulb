@@ -556,6 +556,14 @@ Remove this file when the listed items are either:
       - outer helpers still coerce raw rows at the boundary so tests and
         thin wrappers stay concise without reintroducing raw list/dict unions
         into the runtime plan/context seam
+- [x] Keep typed scalar entity/group value maps frozen instead of leaving the
+      scalar helper layer to advertise mutable dict seams.
+      - added `ScalarValueMapPayload`
+      - `ScalarMetricValueMap.values` and
+        `ScalarGroupValueSet.values_by_group` now coerce onto that shared
+        payload while preserving the low-ceremony helper constructors
+      - direct scalar-observation coverage now asserts those stored maps are
+        typed payloads
 - [x] Keep the literature-row loading/filtering seam on a shared typed wrapper
       instead of rediscovering raw CSV-style dict rows inside each rule/spec
       helper.

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Any
+from typing import Any, Mapping
 
 import quantities as pq
 
 from olfactorybulb.audit.core import rounded
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload, coerce_mapping_payload
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value
 
@@ -31,6 +32,10 @@ def is_finite_scalar(value: Any) -> bool:
     except (TypeError, ValueError):
         return False
     return math.isfinite(number)
+
+
+class ScalarValueMapPayload(FrozenMappingPayload):
+    """Frozen scalar value map used by typed scalar prediction helpers."""
 
 
 @dataclass(frozen=True)
@@ -162,12 +167,19 @@ class ScalarMetricValue:
 @dataclass(frozen=True)
 class ScalarMetricValueMap:
     metric_quantity: MetricQuantitySpec
-    values: dict[str, Any]
+    values: ScalarValueMapPayload | Mapping[str, Any]
     entity_key: str = "cell_name"
 
     def __post_init__(self) -> None:
-        normalized = {str(entity): value for entity, value in dict(self.values).items()}
-        object.__setattr__(self, "values", normalized)
+        normalized = {
+            str(entity): value
+            for entity, value in dict(self.values).items()
+        }
+        object.__setattr__(
+            self,
+            "values",
+            coerce_mapping_payload(normalized, payload_type=ScalarValueMapPayload),
+        )
         object.__setattr__(self, "entity_key", str(self.entity_key or "cell_name").strip() or "cell_name")
 
     @property
@@ -278,12 +290,16 @@ class ScalarGroupPair:
 @dataclass(frozen=True)
 class ScalarGroupValueSet:
     metric_quantity: MetricQuantitySpec
-    values_by_group: dict[str, Any]
+    values_by_group: ScalarValueMapPayload | Mapping[str, Any]
     reducer: str = "mean"
 
     def __post_init__(self) -> None:
         normalized = {str(group): value for group, value in dict(self.values_by_group).items()}
-        object.__setattr__(self, "values_by_group", normalized)
+        object.__setattr__(
+            self,
+            "values_by_group",
+            coerce_mapping_payload(normalized, payload_type=ScalarValueMapPayload),
+        )
         object.__setattr__(self, "reducer", str(self.reducer or "mean").strip() or "mean")
 
     @property
@@ -376,6 +392,7 @@ __all__ = [
     "ScalarGroupValueSet",
     "ScalarMetricValue",
     "ScalarMetricValueMap",
+    "ScalarValueMapPayload",
     "is_finite_scalar",
     "scalar_metric_map",
     "scalar_metric_value",
