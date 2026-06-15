@@ -1420,6 +1420,17 @@ def _render_companion_visuals(
             if status not in {"PASS", "WARN", "FAIL"} or not title:
                 continue
             score_text = str(raw_entry.get("score_text", "")).strip()
+            if not score_text:
+                case_score = raw_entry.get("case_score")
+                if isinstance(case_score, dict):
+                    score_value = _float_or_none(case_score.get("score_value"))
+                    score_units = str(case_score.get("score_units", "")).strip()
+                    if score_value is not None:
+                        score_text = _format_numeric(score_value)
+                        if score_units:
+                            score_text += f" {score_units}"
+                    else:
+                        score_text = str(case_score.get("score_kind", "")).strip().replace("_", " ")
             norm_score = _float_or_none(raw_entry.get("norm_score"))
             entries.append(
                 {

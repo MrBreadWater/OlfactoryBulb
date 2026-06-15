@@ -472,7 +472,11 @@ suite_summary_report = AuditReport(
                         "check_id": "suite_summary_demo.warn_detail",
                         "title": "Suite warning detail",
                         "status": "WARN",
-                        "score_text": "observed 2",
+                        "case_score": {
+                            "score_kind": "observed_value",
+                            "score_value": 2.0,
+                            "score_units": "Hz",
+                        },
                         "norm_score": 0.5,
                     },
                 ],
@@ -529,6 +533,7 @@ with TemporaryDirectory() as tmp:
     assert "Suite pass detail" in html
     assert "Suite warning detail" in html
     assert "observed 1" in html
+    assert "2 Hz" in html
     assert "norm 1" in html
     assert "norm 0.5" in html
     assert html.count("suite-status-cell") >= 2
