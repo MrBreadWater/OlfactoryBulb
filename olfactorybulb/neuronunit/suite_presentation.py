@@ -160,6 +160,8 @@ class SuiteCaseResult:
     score_text: str = ""
     norm_score: float | None = None
     score_payload: SuiteCaseScorePayload | None = None
+    case_weight: float | None = None
+    case_weight_label: str = ""
 
 
 def suite_case_result(
@@ -168,12 +170,16 @@ def suite_case_result(
     score_text: str = "",
     norm_score: float | None = None,
     score_payload: SuiteCaseScorePayload | None = None,
+    case_weight: float | None = None,
+    case_weight_label: str = "",
 ) -> SuiteCaseResult:
     return SuiteCaseResult(
         item=item,
         score_text=str(score_text).strip(),
         norm_score=norm_score,
         score_payload=score_payload,
+        case_weight=case_weight,
+        case_weight_label=str(case_weight_label).strip(),
     )
 
 
@@ -185,6 +191,8 @@ def suite_case_result_from_spec(
     score_text: str = "",
     norm_score: float | None = None,
     score_payload: SuiteCaseScorePayload | None = None,
+    case_weight: float | None = None,
+    case_weight_label: str = "",
     status_reason: str = "",
 ) -> SuiteCaseResult:
     return suite_case_result(
@@ -196,6 +204,8 @@ def suite_case_result_from_spec(
         score_text=score_text,
         norm_score=norm_score,
         score_payload=score_payload,
+        case_weight=case_weight,
+        case_weight_label=case_weight_label,
     )
 
 
@@ -211,6 +221,8 @@ def suite_case_summary(result: SuiteCaseResult) -> SuiteCaseSummary:
         score_text=result.score_text,
         norm_score=result.norm_score,
         case_score=result.score_payload,
+        case_weight=result.case_weight,
+        case_weight_label=result.case_weight_label,
     )
 
 

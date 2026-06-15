@@ -272,3 +272,10 @@ Remove this file when the listed items are either:
         explicit `metric_unit_text` / `metric_quantity_name` overrides
       - the summary/comparison suite cases, score payloads, and maintained
         evidence now carry those resolved units and quantity names directly
+- [x] Grow the suite aggregate layer beyond equal-case mean/min/median when a
+      migrated family has a principled case weight.
+      - added `weighted_mean` to `SuiteAggregatePolicy`
+      - suite cases can now carry typed aggregate weights through the shared
+        suite-case contract
+      - the maintained series-comparison suite currently uses
+        `matched_point_count` as that weight source

@@ -235,6 +235,11 @@ quantity per rule:
 - use `metric_unit_text` or `metric_quantity_name` only when the metric key is
   ambiguous or the displayed scientific name needs refinement
 
+Grouped SciUnit-backed suite families may also override
+`suite_aggregate_policy.norm_rollup` with `weighted_mean`, but only when the
+suite family emits a principled per-case weight. In the maintained branch,
+series comparison currently does this via matched-point count.
+
 ### Step 6: create or edit the validation config
 
 Validation configs live under:

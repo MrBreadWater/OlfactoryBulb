@@ -51,6 +51,18 @@ def _normalized_score_value(value: float | int | None) -> float | None:
     return rounded(candidate, digits=3)
 
 
+def _normalized_case_weight(value: float | int | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        candidate = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(candidate) or candidate <= 0.0:
+        return None
+    return rounded(candidate, digits=3)
+
+
 @dataclass(frozen=True)
 class SuiteCaseScorePayload:
     score_kind: str
@@ -97,6 +109,8 @@ class SuiteCaseSummary:
     score_text: str = ""
     norm_score: float | None = None
     case_score: SuiteCaseScorePayload | None = None
+    case_weight: float | None = None
+    case_weight_label: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "check_id", str(self.check_id).strip())
@@ -104,6 +118,8 @@ class SuiteCaseSummary:
         object.__setattr__(self, "status", _normalized_status(self.status))
         object.__setattr__(self, "score_text", str(self.score_text).strip())
         object.__setattr__(self, "norm_score", _normalized_norm_score(self.norm_score))
+        object.__setattr__(self, "case_weight", _normalized_case_weight(self.case_weight))
+        object.__setattr__(self, "case_weight_label", str(self.case_weight_label).strip())
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -117,6 +133,10 @@ class SuiteCaseSummary:
             payload["norm_score"] = float(self.norm_score)
         if self.case_score is not None:
             payload["case_score"] = self.case_score.to_dict()
+        if self.case_weight is not None:
+            payload["case_weight"] = float(self.case_weight)
+        if self.case_weight_label:
+            payload["case_weight_label"] = self.case_weight_label
         return payload
 
 
@@ -133,10 +153,10 @@ class SuiteAggregatePolicy:
                 f"Unsupported suite status rollup {self.status_rollup!r}; "
                 "the maintained bridge currently supports only worst_case"
             )
-        if norm_rollup not in {"minimum", "mean", "median"}:
+        if norm_rollup not in {"minimum", "mean", "median", "weighted_mean"}:
             raise ValueError(
                 f"Unsupported suite norm rollup {self.norm_rollup!r}; "
-                "the maintained bridge currently supports minimum, mean, or median"
+                "the maintained bridge currently supports minimum, mean, median, or weighted_mean"
             )
         object.__setattr__(self, "status_rollup", status_rollup)
         object.__setattr__(self, "norm_rollup", norm_rollup)
@@ -151,6 +171,7 @@ class SuiteAggregatePolicy:
             "minimum": "minimum normalized case score",
             "mean": "mean normalized case score",
             "median": "median normalized case score",
+            "weighted_mean": "weighted mean normalized case score using the per-case aggregate weights",
         }[self.norm_rollup]
         return (
             "Aggregate suite score derived from the worst detailed-case status "
@@ -205,33 +226,58 @@ def _worst_case_status(case_summaries: tuple[SuiteCaseSummary, ...]) -> str:
     return max(case_summaries, key=lambda case: _STATUS_RANK.get(case.status, 0)).status
 
 
-def _norm_score_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> dict[str, float] | None:
+def _norm_score_summary(case_summaries: tuple[SuiteCaseSummary, ...]) -> dict[str, Any] | None:
     scores = [float(case.norm_score) for case in case_summaries if case.norm_score is not None]
     if not scores:
         return None
+    weighted_cases = [case for case in case_summaries if case.norm_score is not None]
+    weights = [float(case.case_weight) if case.case_weight is not None else 1.0 for case in weighted_cases]
+    total_weight = sum(weights)
+    weighted_mean = None
+    if total_weight > 0.0:
+        weighted_mean = rounded(
+            sum(float(case.norm_score) * weight for case, weight in zip(weighted_cases, weights, strict=False)) / total_weight,
+            digits=3,
+        )
     scores.sort()
     midpoint = len(scores) // 2
     if len(scores) % 2 == 0:
         median = (scores[midpoint - 1] + scores[midpoint]) / 2.0
     else:
         median = scores[midpoint]
-    return {
+    summary: dict[str, Any] = {
         "mean": rounded(sum(scores) / len(scores), digits=3),
         "median": rounded(median, digits=3),
         "min": rounded(scores[0], digits=3),
         "max": rounded(scores[-1], digits=3),
         "count": float(len(scores)),
     }
+    if weighted_mean is not None:
+        summary["weighted_mean"] = weighted_mean
+        summary["total_weight"] = rounded(total_weight, digits=3)
+    explicit_labels = {
+        case.case_weight_label
+        for case in weighted_cases
+        if case.case_weight is not None and case.case_weight_label
+    }
+    if explicit_labels:
+        summary["weight_label"] = next(iter(explicit_labels)) if len(explicit_labels) == 1 else "mixed"
+    return summary
 
 
 def _aggregate_norm_score(
-    norm_summary: dict[str, float] | None,
+    norm_summary: dict[str, Any] | None,
     *,
     policy: SuiteAggregatePolicy,
 ) -> float | None:
     if norm_summary is None:
         return None
-    key = {"minimum": "min", "mean": "mean", "median": "median"}[policy.norm_rollup]
+    key = {
+        "minimum": "min",
+        "mean": "mean",
+        "median": "median",
+        "weighted_mean": "weighted_mean",
+    }[policy.norm_rollup]
     value = norm_summary.get(key)
     if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
         return None
@@ -241,7 +287,12 @@ def _aggregate_norm_score(
 def _aggregate_score_text(status: str, aggregate_norm_score: float | None, *, policy: SuiteAggregatePolicy) -> str:
     if aggregate_norm_score is None:
         return f"worst {status}"
-    norm_label = {"minimum": "min", "mean": "mean", "median": "median"}[policy.norm_rollup]
+    norm_label = {
+        "minimum": "min",
+        "mean": "mean",
+        "median": "median",
+        "weighted_mean": "weighted mean",
+    }[policy.norm_rollup]
     return f"worst {status}, {norm_label} norm {aggregate_norm_score:g}"
 
 
@@ -277,7 +328,7 @@ class SuiteAggregateScore:
         return _worst_case_status(self.case_summaries)
 
     @property
-    def norm_summary(self) -> dict[str, float] | None:
+    def norm_summary(self) -> dict[str, Any] | None:
         return _norm_score_summary(self.case_summaries)
 
     @property

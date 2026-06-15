@@ -336,6 +336,8 @@ assert adapted_items[0].evidence["suite_candidate_ids"] == ["SyntheticModel1", "
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"].startswith("MAE 1 Hz | Welch p ")
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
 assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["score_kind"] == "hybrid_residual_welch"
+assert adapted_items[0].evidence["suite_cases"][0]["case_weight"] == 2.0
+assert adapted_items[0].evidence["suite_cases"][0]["case_weight_label"] == "matched points"
 assert "score_units" not in adapted_items[0].evidence["suite_cases"][0]["case_score"]
 assert adapted_items[0].evidence["suite_norm_score_summary"] == {
     "count": 1.0,
@@ -343,6 +345,9 @@ assert adapted_items[0].evidence["suite_norm_score_summary"] == {
     "mean": 1.0,
     "median": 1.0,
     "min": 1.0,
+    "weighted_mean": 1.0,
+    "total_weight": 2.0,
+    "weight_label": "matched points",
 }
 assert adapted_items[0].evidence["suite_aggregate_score"] == {
     "status_rollup": "worst_case",
@@ -921,6 +926,8 @@ assert grouped_series_items[0].detail_level == "summary"
 assert grouped_series_items[0].summary_rollup_exempt is True
 assert grouped_series_items[0].evidence["suite_case_count"] == 2
 assert grouped_series_items[0].evidence["suite_norm_score_summary"]["mean"] == 1.0
+assert grouped_series_items[0].evidence["suite_norm_score_summary"]["weighted_mean"] == 1.0
+assert grouped_series_items[0].evidence["suite_norm_score_summary"]["weight_label"] == "matched points"
 assert [item.check_id for item in grouped_series_items[1:]] == [
     "synthetic_series_match",
     "synthetic_series_match_second",

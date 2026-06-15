@@ -128,6 +128,10 @@ At runtime, keep those layers distinct:
   contract from `metric_key` plus optional overrides instead of threading raw
   keys and one-off unit strings through the spec, case, score, and
   presentation layers independently
+- suite aggregate policies now also support `norm_rollup = "weighted_mean"`
+  when a migrated suite family emits a principled per-case aggregate weight;
+  the maintained series-comparison suite currently uses matched-point count
+  for that role
 - static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite
 
@@ -481,6 +485,18 @@ quantity per rule:
 
 Those resolved choices now flow through the NeuronUnit-backed scalar cases,
 their typed `case_score` payloads, and the maintained dashboard/CLI evidence.
+
+For grouped SciUnit-backed suites, `suite_aggregate_policy` may now use:
+
+- `minimum`
+- `mean`
+- `median`
+- `weighted_mean`
+
+Use `weighted_mean` only when the suite family emits a principled per-case
+weight. The maintained series-comparison suite currently does this by carrying
+matched-point count through the shared suite-case contract and into the suite
+overview evidence.
 
 For `reference_curve_match`, treat axis metadata as part of the rule contract:
 

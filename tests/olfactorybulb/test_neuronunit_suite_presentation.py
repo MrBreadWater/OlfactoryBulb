@@ -67,6 +67,8 @@ result = suite_case_result_from_spec(
         score_units="Hz",
         score_interpretation="Synthetic adapter score payload.",
     ),
+    case_weight=4.0,
+    case_weight_label="matched points",
 )
 item = result.item
 
@@ -96,6 +98,8 @@ assert result.score_text == "observed 3.2 Hz"
 assert result.norm_score == 0.5
 assert result.score_payload is not None
 assert result.score_payload.score_kind == "synthetic_distance"
+assert result.case_weight == 4.0
+assert result.case_weight_label == "matched points"
 
 raw_series_visual["kind"] = "mutated"
 raw_companion_visual["title"] = "mutated"
@@ -117,6 +121,8 @@ assert items[0].evidence["suite_cases"][0]["score_text"] == "observed 3.2 Hz"
 assert items[0].evidence["suite_cases"][0]["norm_score"] == 0.5
 assert items[0].evidence["suite_cases"][0]["case_score"]["score_kind"] == "synthetic_distance"
 assert items[0].evidence["suite_cases"][0]["case_score"]["score_value"] == 1.8
+assert items[0].evidence["suite_cases"][0]["case_weight"] == 4.0
+assert items[0].evidence["suite_cases"][0]["case_weight_label"] == "matched points"
 
 report = AuditReport(
     audit_id="synthetic_adapter_suite",

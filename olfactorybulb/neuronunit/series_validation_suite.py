@@ -1651,6 +1651,16 @@ def _series_score_payload(case: SeriesComparisonCase, score: SeriesComparisonSco
     )
 
 
+def _series_case_weight(score: SeriesComparisonScore) -> float | None:
+    matched_point_count = score.evidence.get("matched_point_count")
+    if not _is_finite_number(matched_point_count):
+        return None
+    candidate = float(matched_point_count)
+    if candidate <= 0.0:
+        return None
+    return candidate
+
+
 def audit_items_from_series_comparison_suite(
     compiled: CompiledSeriesComparisonSuite,
     *,
@@ -1693,6 +1703,8 @@ def audit_items_from_series_comparison_suite(
             score_text=_series_score_text(case, score),
             norm_score=score.norm_score,
             score_payload=_series_score_payload(case, score),
+            case_weight=_series_case_weight(score),
+            case_weight_label="matched points",
         )
 
     return suite_items_from_judged(

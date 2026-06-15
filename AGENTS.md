@@ -690,7 +690,13 @@ contract for future sessions.
     helpers there, let common suffixes such as `_mV`, `_ms`, `_pA`, `_pF`,
     `_MOhm`, `_Hz`, and `_um` provide ergonomic defaults, and use explicit
     `metric_unit_text` / `metric_quantity_name` overrides only when the metric
-    key is ambiguous or the displayed scientific name needs refinement.
+    key is ambiguous or the displayed scientific name needs refinement. When a
+    suite aggregate policy uses `norm_rollup = "weighted_mean"`, only do so
+    for a suite family that emits a principled per-case weight through the
+    shared suite-case contract. In the maintained branch that currently means
+    the series-comparison suite family, which uses matched-point count as its
+    aggregate weight source. Keep the case weight visible in `suite_cases`
+    rather than hiding it only inside the aggregate rollup.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

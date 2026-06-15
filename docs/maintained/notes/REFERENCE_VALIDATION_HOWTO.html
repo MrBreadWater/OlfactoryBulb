@@ -262,6 +262,10 @@ validation that uses one registered protocol runner:</p>
   contract from <code>metric_key</code> plus optional overrides instead of threading raw
   keys and one-off unit strings through the spec, case, score, and
   presentation layers independently</li>
+<li>suite aggregate policies now also support <code>norm_rollup = "weighted_mean"</code>
+  when a migrated suite family emits a principled per-case aggregate weight;
+  the maintained series-comparison suite currently uses matched-point count
+  for that role</li>
 <li>static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite</li>
 </ul>
@@ -552,6 +556,17 @@ quantity per rule:</p>
 </ul>
 <p>Those resolved choices now flow through the NeuronUnit-backed scalar cases,
 their typed <code>case_score</code> payloads, and the maintained dashboard/CLI evidence.</p>
+<p>For grouped SciUnit-backed suites, <code>suite_aggregate_policy</code> may now use:</p>
+<ul>
+<li><code>minimum</code></li>
+<li><code>mean</code></li>
+<li><code>median</code></li>
+<li><code>weighted_mean</code></li>
+</ul>
+<p>Use <code>weighted_mean</code> only when the suite family emits a principled per-case
+weight. The maintained series-comparison suite currently does this by carrying
+matched-point count through the shared suite-case contract and into the suite
+overview evidence.</p>
 <p>For <code>reference_curve_match</code>, treat axis metadata as part of the rule contract:</p>
 <ul>
 <li>declare reference/model x and y units explicitly</li>
