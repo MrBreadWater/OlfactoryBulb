@@ -519,6 +519,86 @@ class SeriesComparisonPolicy:
 
 
 @dataclass(frozen=True)
+class SeriesDataSpec:
+    x_key: str
+    y_key: str
+    x_unit_text: str
+    y_unit_text: str
+    x_transform: AxisTransform = field(default_factory=AxisTransform)
+    y_transform: AxisTransform = field(default_factory=AxisTransform)
+    series_id_key: str = ""
+
+    def bins(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        comparison_x_unit_text: str,
+        comparison_y_unit_text: str,
+        precision_digits: int,
+    ) -> dict[float, list[float]]:
+        return _series_bins(
+            rows,
+            x_key=self.x_key,
+            y_key=self.y_key,
+            x_unit_text=self.x_unit_text,
+            y_unit_text=self.y_unit_text,
+            comparison_x_unit_text=comparison_x_unit_text,
+            comparison_y_unit_text=comparison_y_unit_text,
+            x_transform=self.x_transform,
+            y_transform=self.y_transform,
+            precision_digits=precision_digits,
+        )
+
+    def paths(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        comparison_x_unit_text: str,
+        comparison_y_unit_text: str,
+        precision_digits: int,
+    ) -> dict[str, list[tuple[float, float]]]:
+        return _series_paths(
+            rows,
+            series_id_key=self.series_id_key,
+            x_key=self.x_key,
+            y_key=self.y_key,
+            x_unit_text=self.x_unit_text,
+            y_unit_text=self.y_unit_text,
+            comparison_x_unit_text=comparison_x_unit_text,
+            comparison_y_unit_text=comparison_y_unit_text,
+            x_transform=self.x_transform,
+            y_transform=self.y_transform,
+            precision_digits=precision_digits,
+        )
+
+    def provenance_summary(
+        self,
+        rows: list[dict[str, Any]],
+        *,
+        context: dict[str, Any] | None = None,
+        exclude_context_keys: set[str] | None = None,
+    ) -> SeriesProvenanceSummary:
+        return SeriesProvenanceSummary.from_rows(
+            rows,
+            series_id_key=self.series_id_key,
+            x_key=self.x_key,
+            y_key=self.y_key,
+            x_unit_text=self.x_unit_text,
+            y_unit_text=self.y_unit_text,
+            context=context,
+            exclude_context_keys=exclude_context_keys,
+        )
+
+
+@dataclass(frozen=True)
+class SeriesVisualContract:
+    x_key: str = "currents_pA"
+    reference_y_key: str = "reference_values_Hz"
+    model_y_key: str = "model_values_Hz"
+    kind: str = "fi_curve"
+
+
+@dataclass(frozen=True)
 class SeriesDistributionObservation:
     protocol_evidence_key: str
     reference_rows: list[dict[str, Any]]
@@ -545,6 +625,39 @@ class SeriesDistributionObservation:
     visual_model_y_key: str = "model_values_Hz"
     visual_kind: str = "fi_curve"
     policy: SeriesComparisonPolicy = field(default_factory=SeriesComparisonPolicy)
+
+    @property
+    def reference_spec(self) -> SeriesDataSpec:
+        return SeriesDataSpec(
+            x_key=self.reference_x_key,
+            y_key=self.reference_y_key,
+            x_unit_text=self.reference_x_unit_text,
+            y_unit_text=self.reference_y_unit_text,
+            x_transform=self.reference_x_transform,
+            y_transform=self.reference_y_transform,
+            series_id_key=self.reference_series_id_key,
+        )
+
+    @property
+    def model_spec(self) -> SeriesDataSpec:
+        return SeriesDataSpec(
+            x_key=self.model_x_key,
+            y_key=self.model_y_key,
+            x_unit_text=self.model_x_unit_text,
+            y_unit_text=self.model_y_unit_text,
+            x_transform=self.model_x_transform,
+            y_transform=self.model_y_transform,
+            series_id_key=self.model_series_id_key,
+        )
+
+    @property
+    def visual_contract(self) -> SeriesVisualContract:
+        return SeriesVisualContract(
+            x_key=self.visual_x_key,
+            reference_y_key=self.visual_reference_y_key,
+            model_y_key=self.visual_model_y_key,
+            kind=self.visual_kind,
+        )
 
 
 @dataclass(frozen=True)
@@ -952,6 +1065,9 @@ class SeriesComparisonTest(sciunit.Test):
     def compute_score(self, observation: dict[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
         del observation
         obs = self.case.observation
+        reference_spec = obs.reference_spec
+        model_spec = obs.model_spec
+        visual_contract = obs.visual_contract
         prediction_rows = list(prediction.rows)
         prediction_context = dict(prediction.context)
         if obs.policy.alignment_policy not in SERIES_ALIGNMENT_POLICIES:
@@ -1024,57 +1140,31 @@ class SeriesComparisonTest(sciunit.Test):
             raise ValueError(
                 f"Series score family {obs.policy.score_family!r} should not declare an equivalence margin"
             )
-        reference_bins = _series_bins(
+        reference_bins = reference_spec.bins(
             obs.reference_rows,
-            x_key=obs.reference_x_key,
-            y_key=obs.reference_y_key,
-            x_unit_text=obs.reference_x_unit_text,
-            y_unit_text=obs.reference_y_unit_text,
             comparison_x_unit_text=obs.comparison_x_unit_text,
             comparison_y_unit_text=obs.comparison_y_unit_text,
-            x_transform=obs.reference_x_transform,
-            y_transform=obs.reference_y_transform,
             precision_digits=obs.policy.x_precision_digits,
         )
-        model_bins = _series_bins(
+        model_bins = model_spec.bins(
             prediction_rows,
-            x_key=obs.model_x_key,
-            y_key=obs.model_y_key,
-            x_unit_text=obs.model_x_unit_text,
-            y_unit_text=obs.model_y_unit_text,
             comparison_x_unit_text=obs.comparison_x_unit_text,
             comparison_y_unit_text=obs.comparison_y_unit_text,
-            x_transform=obs.model_x_transform,
-            y_transform=obs.model_y_transform,
             precision_digits=obs.policy.x_precision_digits,
         )
         cluster_metadata: dict[float, dict[str, list[float]]] = {}
         resampling_metadata: dict[str, Any] = {}
         if obs.policy.alignment_policy == "resampled_grid":
-            reference_paths = _series_paths(
+            reference_paths = reference_spec.paths(
                 obs.reference_rows,
-                series_id_key=obs.reference_series_id_key,
-                x_key=obs.reference_x_key,
-                y_key=obs.reference_y_key,
-                x_unit_text=obs.reference_x_unit_text,
-                y_unit_text=obs.reference_y_unit_text,
                 comparison_x_unit_text=obs.comparison_x_unit_text,
                 comparison_y_unit_text=obs.comparison_y_unit_text,
-                x_transform=obs.reference_x_transform,
-                y_transform=obs.reference_y_transform,
                 precision_digits=obs.policy.x_precision_digits,
             )
-            model_paths = _series_paths(
+            model_paths = model_spec.paths(
                 prediction_rows,
-                series_id_key=obs.model_series_id_key,
-                x_key=obs.model_x_key,
-                y_key=obs.model_y_key,
-                x_unit_text=obs.model_x_unit_text,
-                y_unit_text=obs.model_y_unit_text,
                 comparison_x_unit_text=obs.comparison_x_unit_text,
                 comparison_y_unit_text=obs.comparison_y_unit_text,
-                x_transform=obs.model_x_transform,
-                y_transform=obs.model_y_transform,
                 precision_digits=obs.policy.x_precision_digits,
             )
             if not reference_paths:
@@ -1269,26 +1359,16 @@ class SeriesComparisonTest(sciunit.Test):
             statistical_norm_score=statistical_norm_score,
             fallback_status=status,
         )
-        reference_provenance_summary = SeriesProvenanceSummary.from_rows(
+        reference_provenance_summary = reference_spec.provenance_summary(
             obs.reference_rows,
-            series_id_key=obs.reference_series_id_key,
-            x_key=obs.reference_x_key,
-            y_key=obs.reference_y_key,
-            x_unit_text=obs.reference_x_unit_text,
-            y_unit_text=obs.reference_y_unit_text,
         )
-        model_provenance_summary = SeriesProvenanceSummary.from_rows(
+        model_provenance_summary = model_spec.provenance_summary(
             prediction_rows,
-            series_id_key=obs.model_series_id_key,
-            x_key=obs.model_x_key,
-            y_key=obs.model_y_key,
-            x_unit_text=obs.model_x_unit_text,
-            y_unit_text=obs.model_y_unit_text,
             context=prediction_context,
             exclude_context_keys={obs.protocol_evidence_key},
         )
         evidence = {
-            obs.visual_x_key: _rounded_list(visual_x_values),
+            visual_contract.x_key: _rounded_list(visual_x_values),
             "reference_matched_x_values": _rounded_list(reference_x_values),
             "model_matched_x_values": _rounded_list(model_x_values),
             "matched_x_differences": _rounded_list(matched_x_differences),
@@ -1304,8 +1384,8 @@ class SeriesComparisonTest(sciunit.Test):
             ]
             if cluster_metadata
             else [],
-            obs.visual_reference_y_key: _rounded_list(reference_mean_values),
-            obs.visual_model_y_key: _rounded_list(model_mean_values),
+            visual_contract.reference_y_key: _rounded_list(reference_mean_values),
+            visual_contract.model_y_key: _rounded_list(model_mean_values),
             "reference_sd_values": _rounded_list(reference_sd_values),
             "model_sd_values": _rounded_list(model_sd_values),
             "reference_count_values": list(reference_count_values),
@@ -1401,8 +1481,8 @@ class SeriesComparisonTest(sciunit.Test):
             "comparison_y_unit_text": obs.comparison_y_unit_text,
             "reference_series_count": reference_provenance_summary.series_count,
             "model_series_count": model_provenance_summary.series_count,
-            "reference_x_transform": obs.reference_x_transform.description(),
-            "model_x_transform": obs.model_x_transform.description(),
+            "reference_x_transform": reference_spec.x_transform.description(),
+            "model_x_transform": model_spec.x_transform.description(),
             "reference_provenance": reference_provenance_summary.to_dict(),
             "model_provenance": model_provenance_summary.to_dict(),
         }
@@ -1495,6 +1575,7 @@ def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonS
     judged = compiled.judge()
     def _result_builder(case: SeriesComparisonCase, score: SeriesComparisonScore):
         obs = case.observation
+        visual_contract = obs.visual_contract
         item = AuditItem(
             check_id=case.check_id,
             status=score.status,
@@ -1509,8 +1590,8 @@ def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonS
             evidence=score.evidence,
             series_visuals=[
                 series_visual_spec(
-                    kind=obs.visual_kind,
-                    keys=[obs.visual_x_key, obs.visual_reference_y_key, obs.visual_model_y_key],
+                    kind=visual_contract.kind,
+                    keys=[visual_contract.x_key, visual_contract.reference_y_key, visual_contract.model_y_key],
                     style={
                         "line_width": 1.8,
                         "marker_size": 3.2,
@@ -1541,11 +1622,13 @@ __all__ = [
     "SERIES_INTERPOLATION_METHODS",
     "SERIES_RESAMPLING_GRID_SOURCES",
     "SeriesComparisonCase",
+    "SeriesDataSpec",
     "SeriesComparisonPolicy",
     "SeriesComparisonScore",
     "SeriesComparisonTest",
     "SeriesPredictionBundle",
     "SeriesDistributionObservation",
+    "SeriesVisualContract",
     "audit_items_from_series_comparison_suite",
     "compile_series_comparison_suite",
 ]

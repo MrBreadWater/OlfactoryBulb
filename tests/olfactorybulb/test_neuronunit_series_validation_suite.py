@@ -254,6 +254,10 @@ observation = SeriesDistributionObservation(
         pvalue_aggregation="median",
     ),
 )
+assert observation.reference_spec.x_key == "current_pA"
+assert observation.reference_spec.series_id_key == "cell_id"
+assert observation.model_spec.x_key == "current_flux"
+assert observation.visual_contract.reference_y_key == "reference_values_Hz"
 
 case = SeriesComparisonCase(
     check_id="synthetic_series_match",

@@ -2018,6 +2018,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     summaries when normalized case scores are available
   - shared typed provenance summaries for reference/model series payloads and
     compact protocol-context metadata
+  - typed `SeriesDataSpec` / `SeriesVisualContract` structure inside the core
+    so the series bridge no longer has to repeat the same axis/unit/transform
+    plumbing across bins, paths, provenance, and visual payload assembly
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

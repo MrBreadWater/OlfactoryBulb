@@ -121,6 +121,8 @@ Remove this file when the listed items are either:
       collapsing every case to a bare MAE label plus binary PASS/FAIL.
 - [x] Replace ad hoc series-provenance dict assembly with a shared typed
       provenance layer and route the series suite through it.
+- [x] Factor repeated series axis/visual field bundles into typed core specs
+      instead of re-plumbing raw keys and units through every helper call.
 - [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

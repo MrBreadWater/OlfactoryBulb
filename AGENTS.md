@@ -630,6 +630,10 @@ contract for future sessions.
     `olfactorybulb.neuronunit.provenance` and then adapt it into evidence,
     rather than growing more one-off dict-building helpers inside
     `series_validation_suite.py`.
+    Inside the series-comparison core itself, prefer the typed
+    `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
+    x-key/y-key/unit/transform parameter bundles across bins, paths,
+    provenance, and renderer-facing evidence assembly.
   - When a maintained validation rule family compiles into a SciUnit-backed
     suite and also emits per-case `AuditItem`s, add one shared suite-overview
     item through `olfactorybulb.neuronunit.suite_presentation` rather than
