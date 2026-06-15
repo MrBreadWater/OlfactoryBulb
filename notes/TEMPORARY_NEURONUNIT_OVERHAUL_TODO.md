@@ -256,3 +256,10 @@ Remove this file when the listed items are either:
         series-comparison adapters onto that shared contract
       - added explicit adapter coverage for criterion math, review metadata,
         notes, visuals, status reasons, and overview-rollup preservation
+- [x] Add a typed per-case score payload so migrated suite cases no longer
+      collapse their semantics to `score_text` plus `norm_score` only.
+      - added the shared `SuiteCaseScorePayload` contract
+      - suite cases now emit typed `case_score` payloads with score kind,
+        numeric value, units, interpretation, and structured observation /
+        prediction / normalization metadata when available
+      - kept the compact `score_text` label for glanceable matrix rendering

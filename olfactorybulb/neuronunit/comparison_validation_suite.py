@@ -18,7 +18,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_case_result_from_spec,
     suite_items_from_judged,
 )
-from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
+from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -285,6 +285,40 @@ def _comparison_score_text(case: ComparisonRuleCase, score: ComparisonRuleScore)
     return ""
 
 
+def _comparison_score_payload(case: ComparisonRuleCase, score: ComparisonRuleScore) -> SuiteCaseScorePayload:
+    prediction: dict[str, Any] = {"metric_key": case.metric_key}
+    if case.rule_kind == "all_exact_metric":
+        prediction["expected"] = case.expected
+        prediction["tolerance"] = case.tolerance
+    elif case.rule_kind == "group_abs_diff_max":
+        prediction["max_difference"] = case.max_difference
+        prediction["left_group"] = case.left_group
+        prediction["right_group"] = case.right_group
+    elif case.rule_kind == "group_ordering":
+        prediction["operator"] = case.operator
+        prediction["left_group"] = case.left_group
+        prediction["right_group"] = case.right_group
+    elif case.rule_kind == "group_positive":
+        prediction["groups"] = list(case.groups)
+        prediction["lower_bound"] = 0.0
+    elif case.rule_kind == "all_finite_metric":
+        prediction["entity_key"] = case.entity_key
+    return SuiteCaseScorePayload(
+        score_kind=case.rule_kind,
+        score_value=numeric_value(score.score),
+        score_interpretation=(
+            "Status-bearing comparison/exactness score derived from the configured "
+            "cross-group or per-entity comparison rule."
+        ),
+        observation=dict(score.evidence),
+        prediction=prediction,
+        normalization={
+            "norm_score": score.norm_score,
+            "status": score.status,
+        },
+    )
+
+
 def audit_items_from_comparison_rule_suite(
     compiled: CompiledComparisonRuleSuite,
     *,
@@ -304,6 +338,7 @@ def audit_items_from_comparison_rule_suite(
             evidence=score.evidence,
             score_text=_comparison_score_text(case, score),
             norm_score=score.norm_score,
+            score_payload=_comparison_score_payload(case, score),
         )
 
     return suite_items_from_judged(

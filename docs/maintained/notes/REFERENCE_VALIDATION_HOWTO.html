@@ -255,6 +255,9 @@ validation that uses one registered protocol runner:</p>
   <code>AuditItem</code> construction through the shared adapter contract in
   <code>olfactorybulb.neuronunit.suite_presentation</code> rather than hand-copying the
   same criterion, review, caveat, and visual fields in each suite module</li>
+<li>when a migrated suite case has real numeric/statistical semantics behind its
+  compact score label, carry them through the typed <code>case_score</code> payload in
+  <code>suite_cases</code> instead of flattening everything to <code>score_text</code> alone</li>
 <li>static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite</li>
 </ul>

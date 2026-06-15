@@ -12,7 +12,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_case_result_from_spec,
     suite_items_from_case_results,
 )
-from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
+from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
 raw_series_visual = series_visual_spec(
@@ -61,6 +61,12 @@ result = suite_case_result_from_spec(
     evidence={"observed": 3.2, "reference": 5.0},
     score_text="observed 3.2 Hz",
     norm_score=0.5,
+    score_payload=SuiteCaseScorePayload(
+        score_kind="synthetic_distance",
+        score_value=1.8,
+        score_units="Hz",
+        score_interpretation="Synthetic adapter score payload.",
+    ),
 )
 item = result.item
 
@@ -88,6 +94,8 @@ assert item.summary_rollup_exempt is False
 assert item.evidence == {"observed": 3.2, "reference": 5.0}
 assert result.score_text == "observed 3.2 Hz"
 assert result.norm_score == 0.5
+assert result.score_payload is not None
+assert result.score_payload.score_kind == "synthetic_distance"
 
 raw_series_visual["kind"] = "mutated"
 raw_companion_visual["title"] = "mutated"
@@ -107,6 +115,8 @@ assert items[0].summary_rollup_exempt is True
 assert items[0].evidence["suite_cases"][0]["check_id"] == "synthetic_curve_match"
 assert items[0].evidence["suite_cases"][0]["score_text"] == "observed 3.2 Hz"
 assert items[0].evidence["suite_cases"][0]["norm_score"] == 0.5
+assert items[0].evidence["suite_cases"][0]["case_score"]["score_kind"] == "synthetic_distance"
+assert items[0].evidence["suite_cases"][0]["case_score"]["score_value"] == 1.8
 
 report = AuditReport(
     audit_id="synthetic_adapter_suite",

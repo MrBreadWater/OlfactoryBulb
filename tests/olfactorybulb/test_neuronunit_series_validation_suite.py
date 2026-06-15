@@ -335,6 +335,8 @@ assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 
 assert adapted_items[0].evidence["suite_candidate_ids"] == ["SyntheticModel1", "SyntheticModel2"]
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"].startswith("MAE 1 Hz | Welch p ")
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
+assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["score_kind"] == "hybrid_residual_welch"
+assert "score_units" not in adapted_items[0].evidence["suite_cases"][0]["case_score"]
 assert adapted_items[0].evidence["suite_norm_score_summary"] == {
     "count": 1.0,
     "max": 1.0,
@@ -475,6 +477,7 @@ voltage_compiled = compile_series_comparison_suite(
 )
 voltage_items = audit_items_from_series_comparison_suite(voltage_compiled)
 assert voltage_items[0].evidence["suite_cases"][0]["score_text"] == "MAE 1 mV"
+assert voltage_items[0].evidence["suite_cases"][0]["case_score"]["score_units"] == "mV"
 assert voltage_items[1].evidence["error_unit_text"] == "mV"
 assert voltage_items[1].evidence["mean_absolute_error"] == 1.0
 assert voltage_items[1].evidence["reference_sd_values"] == [1.414, 1.414]

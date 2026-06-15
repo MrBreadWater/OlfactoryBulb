@@ -679,7 +679,11 @@ contract for future sessions.
     shared `AuditItemAdapterSpec` path instead of hand-constructing the same
     criterion/review/visual field bundle in every suite adapter, and add or
     extend explicit adapter tests when a new user-facing audit field must
-    survive the bridge into the maintained shell.
+    survive the bridge into the maintained shell. When a suite case has a real
+    numeric/statistical score behind the compact label, emit the typed
+    `case_score` payload in the suite-case evidence rather than forcing the
+    dashboard or downstream tools to recover semantics from `score_text`
+    alone.
   - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
     in the audit layer, but do not leave their declarative parsing as raw
     handler-local dict plumbing. Route their rule-specific config through typed

@@ -117,6 +117,7 @@ assert adapted_items[0].evidence["suite_aggregate_score"]["status"] == "WARN"
 assert adapted_items[0].evidence["suite_aggregate_score"]["score_text"] == "worst WARN, min norm 0.5"
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "observed 4"
 assert adapted_items[0].evidence["suite_cases"][1]["norm_score"] == 0.5
+assert adapted_items[0].evidence["suite_cases"][1]["case_score"]["score_kind"] == "summary_metric_status_map"
 assert adapted_items[1].evidence["baseline_MCs_count"] == 12.0
 assert adapted_items[2].evidence["warn_values"] == [1.0]
 assert adapted_items[3].evidence["minimum"] == 8.9

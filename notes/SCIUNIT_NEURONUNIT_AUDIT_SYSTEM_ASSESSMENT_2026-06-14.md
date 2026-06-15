@@ -1845,6 +1845,15 @@ Add a local score schema, for example:
 
 This can coexist with PASS / WARN / FAIL.
 
+Current overhaul-branch status:
+
+- added a typed per-case `case_score` payload on the migrated suite bridge
+- suite cases now carry explicit `score_kind`, `score_value`, `score_units`,
+  `score_interpretation`, plus structured `observation`, `prediction`, and
+  `normalization` payloads when that information is available
+- the compact `score_text` labels remain for scanning, but they no longer have
+  to serve as the only preserved score semantics
+
 ### Layer C: suite aggregation
 
 Add a local suite schema:

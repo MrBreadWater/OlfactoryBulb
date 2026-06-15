@@ -26,7 +26,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_case_result_from_spec,
     suite_items_from_judged,
 )
-from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
+from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
 @dataclass(frozen=True)
@@ -262,6 +262,32 @@ def _reference_band_score_text(case: ReferenceBandCase, score: ReferenceBandScor
     return f"observed {observed_value:g}{f' {unit_text}' if unit_text else ''}"
 
 
+def _reference_band_score_payload(case: ReferenceBandCase, score: ReferenceBandScore) -> SuiteCaseScorePayload:
+    unit_text = str(case.observation.unit_text or "").strip()
+    return SuiteCaseScorePayload(
+        score_kind="reference_band_distance",
+        score_value=numeric_value(score.score),
+        score_units=unit_text,
+        score_interpretation=(
+            "Distance from the accepted reference band in observed units. "
+            "Zero means the observed value remained inside the accepted band."
+        ),
+        observation={
+            "observed": rounded(numeric_value(score.observed)),
+            "reference_mean": rounded(numeric_value(score.reference_mean)),
+        },
+        prediction={
+            "accepted_low": rounded(numeric_value(score.accepted_low)),
+            "accepted_high": rounded(numeric_value(score.accepted_high)),
+            "interval_mode": str(case.observation.policy.mode),
+        },
+        normalization={
+            "norm_score": score.norm_score,
+            "passed": bool(score.passed),
+        },
+    )
+
+
 def _reference_band_case_result(case: ReferenceBandCase, score: ReferenceBandScore):
     obs = case.observation
     spec = audit_item_adapter_spec_from_case(
@@ -274,6 +300,7 @@ def _reference_band_case_result(case: ReferenceBandCase, score: ReferenceBandSco
         evidence=_evidence_payload(case, score),
         score_text=_reference_band_score_text(case, score),
         norm_score=score.norm_score,
+        score_payload=_reference_band_score_payload(case, score),
     )
 
 

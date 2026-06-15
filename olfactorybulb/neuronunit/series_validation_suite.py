@@ -27,7 +27,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_case_result_from_spec,
     suite_items_from_judged,
 )
-from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
+from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -1610,6 +1610,47 @@ def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore)
     return residual_text or statistical_text
 
 
+def _series_score_payload(case: SeriesComparisonCase, score: SeriesComparisonScore) -> SuiteCaseScorePayload:
+    evidence = score.evidence
+    score_family = str(evidence.get("score_family") or case.observation.policy.score_family)
+    score_units = ""
+    if score_family == "residual_only":
+        score_units = str(evidence.get("error_unit_text") or "")
+    score_value = numeric_value(score.score)
+    if score_family in {"equivalence_only", "hybrid_residual_equivalence"}:
+        score_units = ""
+    if score_family in {"welch_only", "hybrid_residual_welch"}:
+        score_units = ""
+    return SuiteCaseScorePayload(
+        score_kind=score_family,
+        score_value=score_value,
+        score_units=score_units,
+        score_interpretation=(
+            "Unit-aware series-comparison score derived from the configured alignment, "
+            "distribution, and statistical policy."
+        ),
+        observation={
+            "matched_point_count": evidence.get("matched_point_count"),
+            "mean_absolute_error": evidence.get("mean_absolute_error"),
+            "root_mean_square_error": evidence.get("root_mean_square_error"),
+            "aggregate_statistical_pvalue": evidence.get("aggregate_statistical_pvalue"),
+        },
+        prediction={
+            "score_family": score_family,
+            "maximum_mae": evidence.get("maximum_mae"),
+            "maximum_rmse": evidence.get("maximum_rmse"),
+            "equivalence_margin": evidence.get("equivalence_margin"),
+            "minimum_median_welch_pvalue": evidence.get("minimum_median_welch_pvalue"),
+        },
+        normalization={
+            "norm_score": score.norm_score,
+            "residual_norm_score": evidence.get("residual_norm_score"),
+            "statistical_norm_score": evidence.get("statistical_norm_score"),
+            "overall_norm_score": evidence.get("overall_norm_score"),
+        },
+    )
+
+
 def audit_items_from_series_comparison_suite(
     compiled: CompiledSeriesComparisonSuite,
     *,
@@ -1651,6 +1692,7 @@ def audit_items_from_series_comparison_suite(
             evidence=score.evidence,
             score_text=_series_score_text(case, score),
             norm_score=score.norm_score,
+            score_payload=_series_score_payload(case, score),
         )
 
     return suite_items_from_judged(

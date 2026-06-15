@@ -9,6 +9,7 @@ from typing import Any, Callable, Iterable, TypeVar
 
 from olfactorybulb.audit import AuditItem, companion_visual_spec
 from olfactorybulb.neuronunit.suite_scores import (
+    SuiteCaseScorePayload,
     SuiteCaseSummary,
     SuiteDescriptor,
     build_suite_aggregate_score,
@@ -158,6 +159,7 @@ class SuiteCaseResult:
     item: AuditItem
     score_text: str = ""
     norm_score: float | None = None
+    score_payload: SuiteCaseScorePayload | None = None
 
 
 def suite_case_result(
@@ -165,11 +167,13 @@ def suite_case_result(
     *,
     score_text: str = "",
     norm_score: float | None = None,
+    score_payload: SuiteCaseScorePayload | None = None,
 ) -> SuiteCaseResult:
     return SuiteCaseResult(
         item=item,
         score_text=str(score_text).strip(),
         norm_score=norm_score,
+        score_payload=score_payload,
     )
 
 
@@ -180,6 +184,7 @@ def suite_case_result_from_spec(
     evidence: dict[str, Any],
     score_text: str = "",
     norm_score: float | None = None,
+    score_payload: SuiteCaseScorePayload | None = None,
     status_reason: str = "",
 ) -> SuiteCaseResult:
     return suite_case_result(
@@ -190,6 +195,7 @@ def suite_case_result_from_spec(
         ),
         score_text=score_text,
         norm_score=norm_score,
+        score_payload=score_payload,
     )
 
 
@@ -204,6 +210,7 @@ def suite_case_summary(result: SuiteCaseResult) -> SuiteCaseSummary:
         status=str(result.item.status).upper(),
         score_text=result.score_text,
         norm_score=result.norm_score,
+        case_score=result.score_payload,
     )
 
 

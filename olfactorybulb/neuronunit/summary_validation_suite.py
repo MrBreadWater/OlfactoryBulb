@@ -18,7 +18,7 @@ from olfactorybulb.neuronunit.suite_presentation import (
     suite_case_result_from_spec,
     suite_items_from_judged,
 )
-from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor
+from olfactorybulb.neuronunit.suite_scores import SuiteCaseScorePayload, SuiteDescriptor
 
 
 def _is_finite_number(value: Any) -> bool:
@@ -208,6 +208,40 @@ def _summary_score_text(case: SummaryRuleCase, score: SummaryRuleScore) -> str:
     return f"observed {rounded(float(observed)):g}"
 
 
+def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> SuiteCaseScorePayload:
+    observed = numeric_value(score.observed)
+    prediction: dict[str, Any] = {}
+    if case.rule_kind == "summary_metric_min":
+        prediction["minimum"] = case.minimum
+    elif case.rule_kind == "summary_metric_max":
+        prediction["maximum"] = case.maximum
+    elif case.rule_kind == "summary_metric_range":
+        prediction["minimum"] = case.minimum
+        prediction["maximum"] = case.maximum
+    elif case.rule_kind == "summary_metric_status_map":
+        prediction["pass_values"] = list(case.pass_values)
+        prediction["warn_values"] = list(case.warn_values)
+        prediction["fail_values"] = list(case.fail_values)
+    return SuiteCaseScorePayload(
+        score_kind=case.rule_kind,
+        score_value=numeric_value(score.score),
+        score_interpretation=(
+            "Status-bearing summary-rule score derived from the observed group summary "
+            "value against the configured summary-rule contract."
+        ),
+        observation={
+            "group": case.group,
+            "metric_key": case.metric_key,
+            "observed": rounded(observed),
+        },
+        prediction=prediction or None,
+        normalization={
+            "norm_score": score.norm_score,
+            "status": score.status,
+        },
+    )
+
+
 def audit_items_from_summary_rule_suite(
     compiled: CompiledSummaryRuleSuite,
     *,
@@ -242,6 +276,7 @@ def audit_items_from_summary_rule_suite(
             evidence=_rounded_dict(base),
             score_text=_summary_score_text(case, score),
             norm_score=score.norm_score,
+            score_payload=_summary_score_payload(case, score),
         )
 
     return suite_items_from_judged(

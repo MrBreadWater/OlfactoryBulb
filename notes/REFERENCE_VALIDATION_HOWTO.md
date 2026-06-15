@@ -121,6 +121,9 @@ At runtime, keep those layers distinct:
   `AuditItem` construction through the shared adapter contract in
   `olfactorybulb.neuronunit.suite_presentation` rather than hand-copying the
   same criterion, review, caveat, and visual fields in each suite module
+- when a migrated suite case has real numeric/statistical semantics behind its
+  compact score label, carry them through the typed `case_score` payload in
+  `suite_cases` instead of flattening everything to `score_text` alone
 - static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite
 

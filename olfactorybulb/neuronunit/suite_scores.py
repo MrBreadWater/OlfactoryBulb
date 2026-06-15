@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 from dataclasses import dataclass
 import math
 from typing import Any
@@ -32,6 +33,62 @@ def _normalized_norm_score(value: float | None) -> float | None:
     return rounded(candidate, digits=3)
 
 
+def _normalized_mapping(value: dict[str, Any] | None) -> dict[str, Any] | None:
+    if value is None:
+        return None
+    return copy.deepcopy(dict(value))
+
+
+def _normalized_score_value(value: float | int | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        candidate = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(candidate):
+        return None
+    return rounded(candidate, digits=3)
+
+
+@dataclass(frozen=True)
+class SuiteCaseScorePayload:
+    score_kind: str
+    score_value: float | None = None
+    score_units: str = ""
+    score_interpretation: str = ""
+    observation: dict[str, Any] | None = None
+    prediction: dict[str, Any] | None = None
+    normalization: dict[str, Any] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "score_kind", str(self.score_kind).strip())
+        object.__setattr__(self, "score_value", _normalized_score_value(self.score_value))
+        object.__setattr__(self, "score_units", str(self.score_units).strip())
+        object.__setattr__(self, "score_interpretation", str(self.score_interpretation).strip())
+        object.__setattr__(self, "observation", _normalized_mapping(self.observation))
+        object.__setattr__(self, "prediction", _normalized_mapping(self.prediction))
+        object.__setattr__(self, "normalization", _normalized_mapping(self.normalization))
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "score_kind": self.score_kind,
+        }
+        if self.score_value is not None:
+            payload["score_value"] = float(self.score_value)
+        if self.score_units:
+            payload["score_units"] = self.score_units
+        if self.score_interpretation:
+            payload["score_interpretation"] = self.score_interpretation
+        if self.observation is not None:
+            payload["observation"] = copy.deepcopy(self.observation)
+        if self.prediction is not None:
+            payload["prediction"] = copy.deepcopy(self.prediction)
+        if self.normalization is not None:
+            payload["normalization"] = copy.deepcopy(self.normalization)
+        return payload
+
+
 @dataclass(frozen=True)
 class SuiteCaseSummary:
     check_id: str
@@ -39,6 +96,7 @@ class SuiteCaseSummary:
     status: str
     score_text: str = ""
     norm_score: float | None = None
+    case_score: SuiteCaseScorePayload | None = None
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "check_id", str(self.check_id).strip())
@@ -57,6 +115,8 @@ class SuiteCaseSummary:
             payload["score_text"] = self.score_text
         if self.norm_score is not None:
             payload["norm_score"] = float(self.norm_score)
+        if self.case_score is not None:
+            payload["case_score"] = self.case_score.to_dict()
         return payload
 
 
@@ -295,6 +355,7 @@ __all__ = [
     "DEFAULT_SUITE_AGGREGATE_POLICY",
     "SuiteAggregatePolicy",
     "SuiteAggregateScore",
+    "SuiteCaseScorePayload",
     "SuiteCaseSummary",
     "SuiteDescriptor",
     "build_suite_aggregate_score",

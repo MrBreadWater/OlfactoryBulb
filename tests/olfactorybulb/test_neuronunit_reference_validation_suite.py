@@ -107,6 +107,8 @@ assert adapted_items[0].evidence["suite_status_summary"] == {"PASS": 1, "WARN": 
 assert adapted_items[0].evidence["suite_case_check_ids"] == ["input_resistance_within_band"]
 assert adapted_items[0].evidence["suite_cases"][0]["score_text"] == "observed 102 MOhm"
 assert adapted_items[0].evidence["suite_cases"][0]["norm_score"] == 1.0
+assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["score_kind"] == "reference_band_distance"
+assert adapted_items[0].evidence["suite_cases"][0]["case_score"]["score_units"] == "MOhm"
 assert adapted_items[0].evidence["suite_aggregate_score"] == {
     "status_rollup": "worst_case",
     "norm_rollup": "minimum",
