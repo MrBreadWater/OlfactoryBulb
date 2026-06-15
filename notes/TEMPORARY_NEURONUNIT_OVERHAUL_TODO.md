@@ -206,3 +206,20 @@ Remove this file when the listed items are either:
       - the runtime plan now compiles from that typed document
       - `validation_design_review_status` and the generic validation listing
         path now consume the typed document instead of raw config accessors
+- [x] Collapse the remaining duplicated raw-config accessor layer so
+      `reference_validation_config.py` stays a narrow loader/extension module
+      and the typed parsing actually lives in the document layer.
+      - `ReferenceValidationDocument` now owns the typed title/protocol/
+        defaults/rule/skip parsing directly
+      - `load_validation_extensions(...)` accepts extension-spec iterables
+        directly, so the runtime plan no longer has to fake a mini config dict
+        just to register extensions
+      - the validation-engine smoke test now exercises the typed document path
+        directly instead of asserting against parallel raw-config helpers
+- [x] Remove the last generic runtime config dict from the rule-engine boundary.
+      - `ValidationRuleContext` now carries typed runtime fields such as
+        `validation_id`, `notes_path`, `default_group`, and typed
+        validation-design-review defaults
+      - `reference_validation_rules.py` and
+        `reference_validation_specs.py` no longer depend on a catch-all
+        `context.config` tunnel for those values

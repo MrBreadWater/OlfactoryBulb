@@ -77,19 +77,19 @@ def property_review_metadata(
     property_name: str,
 ) -> dict[str, str]:
     defaults = {
-        "status": str(rule.get("validation_design_review_status", context.config.get("validation_design_review", {}).get("default_status", ""))).strip(),
-        "note": str(rule.get("validation_design_review_note", context.config.get("validation_design_review", {}).get("default_note", ""))).strip(),
-        "reviewer": str(rule.get("validation_design_review_reviewer", context.config.get("validation_design_review", {}).get("default_reviewer", ""))).strip(),
+        "status": str(rule.get("validation_design_review_status", context.design_review_defaults.status)).strip(),
+        "note": str(rule.get("validation_design_review_note", context.design_review_defaults.note)).strip(),
+        "reviewer": str(rule.get("validation_design_review_reviewer", context.design_review_defaults.reviewer)).strip(),
         "required_expertise": str(
             rule.get(
                 "validation_design_review_required_expertise",
-                context.config.get("validation_design_review", {}).get("default_required_expertise", ""),
+                context.design_review_defaults.required_expertise,
             )
         ).strip(),
         "focus": str(
             rule.get(
                 "validation_design_review_focus",
-                context.config.get("validation_design_review", {}).get("default_focus", ""),
+                context.design_review_defaults.focus,
             )
         ).strip(),
     }
@@ -175,7 +175,7 @@ def summary_group(rule: dict[str, Any], context: Any) -> str:
         return explicit
     if len(context.summary) == 1:
         return next(iter(context.summary))
-    return str(context.config.get("default_group", "ungrouped"))
+    return str(context.default_group or "ungrouped")
 
 
 def suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAggregatePolicy:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 import importlib
 from pathlib import Path
 from typing import Any
@@ -49,47 +50,24 @@ def list_reference_validation_ids() -> list[str]:
     return ids
 
 
-def validation_title(config: dict[str, Any]) -> str:
-    return str(config.get("title") or config.get("validation_id") or "Reference validation")
-
-
-def validation_protocol_runner_id(config: dict[str, Any]) -> str:
-    return str(config.get("protocol_runner") or "").strip()
-
-
-def validation_rule_specs(config: dict[str, Any]) -> list[dict[str, Any]]:
-    rules = config.get("checks", [])
-    if not isinstance(rules, list):
-        raise ValueError("Reference validation config 'checks' must be an array of tables")
-    return [dict(rule) for rule in rules]
-
-
-def validation_defaults(config: dict[str, Any]) -> dict[str, Any]:
-    defaults = config.get("defaults", {})
-    if not isinstance(defaults, dict):
-        raise ValueError("Reference validation config 'defaults' must be a table")
-    return dict(defaults)
-
-
-def validation_protocol_defaults(config: dict[str, Any]) -> dict[str, Any]:
-    defaults = config.get("protocol", {})
-    if not isinstance(defaults, dict):
-        raise ValueError("Reference validation config 'protocol' must be a table")
-    return dict(defaults)
-
-
-def validation_extension_specs(config: dict[str, Any]) -> list[str]:
-    raw = config.get("extensions", [])
+def _normalize_extension_specs(
+    source: Mapping[str, Any] | Iterable[str] | None,
+) -> list[str]:
+    if source is None:
+        return []
+    raw: Any = source.get("extensions", []) if isinstance(source, Mapping) else source
     if raw is None:
         return []
-    if not isinstance(raw, list):
-        raise ValueError("Reference validation config 'extensions' must be an array of module specs")
+    if isinstance(raw, (str, bytes)):
+        raw = [raw]
+    if not isinstance(raw, Iterable):
+        raise ValueError("Reference validation extensions must be an iterable of module specs")
     return [str(spec).strip() for spec in raw if str(spec).strip()]
 
 
-def load_validation_extensions(config: dict[str, Any]) -> list[str]:
+def load_validation_extensions(source: Mapping[str, Any] | Iterable[str] | None) -> list[str]:
     loaded: list[str] = []
-    for spec in validation_extension_specs(config):
+    for spec in _normalize_extension_specs(source):
         if spec in _LOADED_EXTENSION_SPECS:
             loaded.append(spec)
             continue
@@ -105,47 +83,10 @@ def load_validation_extensions(config: dict[str, Any]) -> list[str]:
     return loaded
 
 
-def validation_skip_item(config: dict[str, Any]) -> dict[str, Any] | None:
-    skip_item = config.get("skip_item")
-    if skip_item is None:
-        return None
-    if not isinstance(skip_item, dict):
-        raise ValueError("Reference validation config 'skip_item' must be a table")
-    return dict(skip_item)
-
-
-def validation_skip_neuron_mode(config: dict[str, Any]) -> str:
-    mode = str(config.get("skip_neuron_mode", "short_circuit") or "short_circuit").strip()
-    if mode not in {"short_circuit", "protocol_handles_skip"}:
-        raise ValueError(
-            "Reference validation config 'skip_neuron_mode' must be "
-            "'short_circuit' or 'protocol_handles_skip'"
-        )
-    return mode
-
-
-def validation_design_review_defaults(config: dict[str, Any]) -> dict[str, Any]:
-    defaults = config.get("validation_design_review", {})
-    if defaults is None:
-        return {}
-    if not isinstance(defaults, dict):
-        raise ValueError("Reference validation config 'validation_design_review' must be a table")
-    return dict(defaults)
-
-
 __all__ = [
     "DEFAULT_REFERENCE_VALIDATION_ID",
     "REFERENCE_VALIDATION_CONFIG_DIR",
     "list_reference_validation_ids",
     "load_reference_validation_config",
     "load_validation_extensions",
-    "validation_defaults",
-    "validation_extension_specs",
-    "validation_design_review_defaults",
-    "validation_protocol_defaults",
-    "validation_protocol_runner_id",
-    "validation_rule_specs",
-    "validation_skip_item",
-    "validation_skip_neuron_mode",
-    "validation_title",
 ]

@@ -109,9 +109,7 @@ def _burton_note_fixture():
 
         def _patched_loader(*, validation_id=None, path=None):
             validation = original_loader(validation_id=validation_id, path=path)
-            updated_context = dict(validation.rule_context_config)
-            updated_context["notes_path"] = str(notes_path)
-            return replace(validation, rule_context_config=updated_context)
+            return replace(validation, notes_path=str(notes_path))
 
         burton_urban_fi_module.load_reference_validation_plan = _patched_loader
         try:

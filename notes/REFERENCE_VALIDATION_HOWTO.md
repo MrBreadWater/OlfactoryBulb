@@ -96,7 +96,8 @@ The same framework now also drives:
 
 At runtime, keep those layers distinct:
 
-- `reference_validation_config.py` loads raw TOML plus extension declarations
+- `reference_validation_config.py` is the boring raw-I/O layer: load raw TOML,
+  list available validation ids, and register declared extension modules
 - `reference_validation_document.py` compiles that raw config into one typed
   `ReferenceValidationDocument`
 - `reference_validation_plan.py` compiles that typed document into one typed
@@ -104,6 +105,9 @@ At runtime, keep those layers distinct:
 - `reference_validation_engine.py` and the maintained audit/CLI entrypoints
   should consume the typed plan rather than passing loose config dicts and
   parallel accessor calls around at runtime
+- `reference_validation_rules.py` and `reference_validation_specs.py` should
+  consume a typed `ValidationRuleContext` rather than a catch-all config dict
+  tunneled through the rule engine
 - static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite
 

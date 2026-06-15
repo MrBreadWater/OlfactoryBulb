@@ -2057,6 +2057,14 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     consumers such as validation-design-review coverage audits no longer need
     to hand-walk loose config dicts either; the runtime plan now composes from
     that typed document instead of bypassing it
+  - `olfactorybulb.audit.reference_validation_config` is correspondingly
+    shrinking toward the narrow boring layer it should have been all along:
+    raw TOML I/O, validation-id discovery, and extension registration, rather
+    than a second semi-typed API parallel to the document layer
+  - the rule-runtime boundary is now typed too: `ValidationRuleContext` carries
+    explicit runtime fields such as validation id, notes path, default group,
+    and typed validation-design-review defaults instead of one generic config
+    dict leaking through the rule engine
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

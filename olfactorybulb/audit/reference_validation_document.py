@@ -8,16 +8,50 @@ from typing import Any
 
 from olfactorybulb.audit.reference_validation_config import (
     load_reference_validation_config,
-    validation_defaults,
-    validation_design_review_defaults,
-    validation_extension_specs,
-    validation_protocol_defaults,
-    validation_protocol_runner_id,
-    validation_rule_specs,
-    validation_skip_item,
-    validation_skip_neuron_mode,
-    validation_title,
 )
+
+
+def _optional_table(config: dict[str, Any], key: str) -> dict[str, Any]:
+    value = config.get(key, {})
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"Reference validation config '{key}' must be a table")
+    return dict(value)
+
+
+def _validation_title(config: dict[str, Any]) -> str:
+    return str(config.get("title") or config.get("validation_id") or "Reference validation")
+
+
+def _validation_protocol_runner_id(config: dict[str, Any]) -> str:
+    return str(config.get("protocol_runner") or "").strip()
+
+
+def _validation_rule_specs(config: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+    rules = config.get("checks", [])
+    if not isinstance(rules, list):
+        raise ValueError("Reference validation config 'checks' must be an array of tables")
+    return tuple(dict(rule) for rule in rules)
+
+
+def _validation_extension_specs(config: dict[str, Any]) -> tuple[str, ...]:
+    raw = config.get("extensions", [])
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise ValueError("Reference validation config 'extensions' must be an array of module specs")
+    return tuple(str(spec).strip() for spec in raw if str(spec).strip())
+
+
+def _validation_skip_neuron_mode(config: dict[str, Any]) -> str:
+    mode = str(config.get("skip_neuron_mode", "short_circuit") or "short_circuit").strip()
+    if mode not in {"short_circuit", "protocol_handles_skip"}:
+        raise ValueError(
+            "Reference validation config 'skip_neuron_mode' must be "
+            "'short_circuit' or 'protocol_handles_skip'"
+        )
+    return mode
 
 
 @dataclass(frozen=True)
@@ -30,7 +64,7 @@ class ValidationDesignReviewDefaultsSpec:
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "ValidationDesignReviewDefaultsSpec":
-        defaults = validation_design_review_defaults(config)
+        defaults = _optional_table(config, "validation_design_review")
         return cls(
             status=str(defaults.get("default_status", "")).strip(),
             note=str(defaults.get("default_note", "")).strip(),
@@ -63,9 +97,11 @@ class ReferenceValidationSkipItemSpec:
 
     @classmethod
     def from_config(cls, config: dict[str, Any]) -> "ReferenceValidationSkipItemSpec | None":
-        spec = validation_skip_item(config)
+        spec = config.get("skip_item")
         if spec is None:
             return None
+        if not isinstance(spec, dict):
+            raise ValueError("Reference validation config 'skip_item' must be a table")
         return cls(
             check_id=str(spec["check_id"]),
             status=str(spec.get("status", "WARN")),
@@ -113,17 +149,17 @@ class ReferenceValidationDocument:
     def from_config(cls, config: dict[str, Any]) -> "ReferenceValidationDocument":
         return cls(
             validation_id=str(config.get("validation_id", "")).strip(),
-            title=validation_title(config),
+            title=_validation_title(config),
             config_path=str(config.get("__path__", "")).strip(),
-            extension_specs=tuple(validation_extension_specs(config)),
-            protocol_runner_id=validation_protocol_runner_id(config),
+            extension_specs=_validation_extension_specs(config),
+            protocol_runner_id=_validation_protocol_runner_id(config),
             metric_group_field=str(config.get("metric_group_field", "")).strip(),
             default_group=str(config.get("default_group", "")).strip(),
             notes_path=str(config.get("notes_path", "")).strip(),
-            skip_neuron_mode=validation_skip_neuron_mode(config),
-            defaults=validation_defaults(config),
-            protocol_defaults=validation_protocol_defaults(config),
-            rules=tuple(dict(rule) for rule in validation_rule_specs(config)),
+            skip_neuron_mode=_validation_skip_neuron_mode(config),
+            defaults=_optional_table(config, "defaults"),
+            protocol_defaults=_optional_table(config, "protocol"),
+            rules=_validation_rule_specs(config),
             design_review_defaults=ValidationDesignReviewDefaultsSpec.from_config(config),
             skip_item=ReferenceValidationSkipItemSpec.from_config(config),
         )

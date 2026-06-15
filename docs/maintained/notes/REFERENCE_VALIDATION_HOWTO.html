@@ -230,7 +230,8 @@ validation that uses one registered protocol runner:</p>
 </ul>
 <p>At runtime, keep those layers distinct:</p>
 <ul>
-<li><code>reference_validation_config.py</code> loads raw TOML plus extension declarations</li>
+<li><code>reference_validation_config.py</code> is the boring raw-I/O layer: load raw TOML,
+  list available validation ids, and register declared extension modules</li>
 <li><code>reference_validation_document.py</code> compiles that raw config into one typed
   <code>ReferenceValidationDocument</code></li>
 <li><code>reference_validation_plan.py</code> compiles that typed document into one typed
@@ -238,6 +239,9 @@ validation that uses one registered protocol runner:</p>
 <li><code>reference_validation_engine.py</code> and the maintained audit/CLI entrypoints
   should consume the typed plan rather than passing loose config dicts and
   parallel accessor calls around at runtime</li>
+<li><code>reference_validation_rules.py</code> and <code>reference_validation_specs.py</code> should
+  consume a typed <code>ValidationRuleContext</code> rather than a catch-all config dict
+  tunneled through the rule engine</li>
 <li>static config-inspection paths should consume the typed document instead of
   re-parsing raw config dict structure at each callsite</li>
 </ul>

@@ -11,6 +11,7 @@ import numpy as np
 
 from olfactorybulb.audit import AuditItem, series_visual_spec
 from olfactorybulb.audit.protocol_evidence import protocol_series_spec_map
+from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
     csv_rows,
@@ -54,7 +55,10 @@ class ValidationRuleContext:
     metrics: list[dict[str, Any]]
     summary: dict[str, dict[str, float]]
     args: Any
-    config: dict[str, Any]
+    validation_id: str
+    default_group: str
+    notes_path: str
+    design_review_defaults: ValidationDesignReviewDefaultsSpec
     protocol_result: Any | None = None
 
 
@@ -196,30 +200,24 @@ def build_rule_items(
     return items
 
 
-def _config_validation_design_review_defaults(context: ValidationRuleContext) -> dict[str, Any]:
-    defaults = context.config.get("validation_design_review", {})
-    return dict(defaults) if isinstance(defaults, dict) else {}
-
-
 def _resolved_rule_validation_design_review(
     rule: dict[str, Any],
     context: ValidationRuleContext,
 ) -> dict[str, str]:
-    defaults = _config_validation_design_review_defaults(context)
     return {
-        "status": str(rule.get("validation_design_review_status", defaults.get("default_status", ""))).strip(),
-        "note": str(rule.get("validation_design_review_note", defaults.get("default_note", ""))).strip(),
-        "reviewer": str(rule.get("validation_design_review_reviewer", defaults.get("default_reviewer", ""))).strip(),
+        "status": str(rule.get("validation_design_review_status", context.design_review_defaults.status)).strip(),
+        "note": str(rule.get("validation_design_review_note", context.design_review_defaults.note)).strip(),
+        "reviewer": str(rule.get("validation_design_review_reviewer", context.design_review_defaults.reviewer)).strip(),
         "required_expertise": str(
             rule.get(
                 "validation_design_review_required_expertise",
-                defaults.get("default_required_expertise", ""),
+                context.design_review_defaults.required_expertise,
             )
         ).strip(),
         "focus": str(
             rule.get(
                 "validation_design_review_focus",
-                defaults.get("default_focus", ""),
+                context.design_review_defaults.focus,
             )
         ).strip(),
     }
@@ -444,7 +442,7 @@ def _build_summary_rule_items(
     cases = [SummaryRuleSpec.from_rule(rule, context).to_case() for rule in rules]
     descriptor = _grouped_suite_descriptor(
         rules,
-        default_suite_id=f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.summary_rules",
+        default_suite_id=f"{context.validation_id or 'validation'}.summary_rules",
         suite_kind_label="Summary-rule suite",
     )
     compiled = compile_summary_rule_suite(cases=cases, summary=context.summary, suite_name=descriptor.suite_id)
@@ -460,7 +458,7 @@ def _build_comparison_rule_items(
     cases = [ComparisonRuleSpec.from_rule(rule).to_case() for rule in rules]
     descriptor = _grouped_suite_descriptor(
         rules,
-        default_suite_id=f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.comparison_rules",
+        default_suite_id=f"{context.validation_id or 'validation'}.comparison_rules",
         suite_kind_label="Comparison-rule suite",
     )
     compiled = compile_comparison_rule_suite(
@@ -501,7 +499,7 @@ def _build_series_rule_items(
         raw_candidate_ids = []
     descriptor = _grouped_suite_descriptor(
         rules,
-        default_suite_id=str(context.config.get("validation_id", "validation")).strip() or "validation",
+        default_suite_id=context.validation_id or "validation",
         suite_kind_label="Series-comparison suite",
         candidate_ids=[str(candidate_id) for candidate_id in raw_candidate_ids if str(candidate_id).strip()],
     )
@@ -539,7 +537,7 @@ def _grouped_rule_family_for_kind(kind: str) -> _GroupedRuleFamily | None:
 
 
 def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:
-    path_text = str(rule.get("notes_path") or context.config.get("notes_path") or "").strip()
+    path_text = str(rule.get("notes_path") or context.notes_path or "").strip()
     if not path_text:
         return None
     path = Path(path_text)

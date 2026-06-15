@@ -850,13 +850,19 @@ contract for future sessions.
   bridge rather than rebuilding the flat observation bundle inline.
 
 - Keep the top-level runtime path on the same side of that boundary.
-  - Raw TOML loading belongs in `olfactorybulb.audit.reference_validation_config`.
+  - `olfactorybulb.audit.reference_validation_config` should stay the boring
+    raw-I/O layer: load raw TOML, list validation ids, and register declared
+    extension modules.
   - The first structured layer above that is the typed
     `ReferenceValidationDocument` in
     `olfactorybulb.audit.reference_validation_document`.
   - The maintained runtime should compile that raw config into the typed
     `ReferenceValidationPlan` in `olfactorybulb.audit.reference_validation_plan`
     before the engine, CLI, or maintained audit wrappers consume it.
+  - The runtime rule layer should consume a typed `ValidationRuleContext`
+    carrying explicit fields such as `validation_id`, `notes_path`,
+    `default_group`, and typed review defaults; do not reintroduce a generic
+    `context.config` dict just to tunnel those values through the rule engine.
   - Static config-inspection surfaces such as validation-design-review audits
     should consume the typed document rather than hand-walking loose config
     dicts and parallel accessor calls.

@@ -65,11 +65,12 @@ class ReferenceValidationPlan:
     config_path: str
     extension_specs: tuple[str, ...]
     metric_group_field: str
+    default_group: str
+    notes_path: str
     skip_neuron_mode: str
     defaults: dict[str, Any]
     protocol_defaults: dict[str, Any]
     rules: tuple[dict[str, Any], ...]
-    rule_context_config: dict[str, Any]
     protocol_runner_id: str
     protocol_spec: ValidationProtocolSpec
     design_review_defaults: ValidationDesignReviewDefaultsSpec
@@ -77,29 +78,19 @@ class ReferenceValidationPlan:
 
     @classmethod
     def from_document(cls, document: ReferenceValidationDocument) -> "ReferenceValidationPlan":
-        load_validation_extensions({"extensions": list(document.extension_specs)})
+        load_validation_extensions(document.extension_specs)
         return cls(
             validation_id=document.validation_id,
             title=document.title,
             config_path=document.config_path,
             extension_specs=document.extension_specs,
             metric_group_field=document.metric_group_field,
+            default_group=document.default_group,
+            notes_path=document.notes_path,
             skip_neuron_mode=document.skip_neuron_mode,
             defaults=dict(document.defaults),
             protocol_defaults=dict(document.protocol_defaults),
             rules=tuple(dict(rule) for rule in document.rules),
-            rule_context_config={
-                "validation_id": document.validation_id,
-                "notes_path": document.notes_path,
-                "default_group": document.default_group,
-                "validation_design_review": {
-                    "default_status": document.design_review_defaults.status,
-                    "default_note": document.design_review_defaults.note,
-                    "default_reviewer": document.design_review_defaults.reviewer,
-                    "default_required_expertise": document.design_review_defaults.required_expertise,
-                    "default_focus": document.design_review_defaults.focus,
-                },
-            },
             protocol_runner_id=document.protocol_runner_id,
             protocol_spec=get_validation_protocol_spec(document.protocol_runner_id),
             design_review_defaults=document.design_review_defaults,
@@ -139,7 +130,10 @@ class ReferenceValidationPlan:
             metrics=metrics,
             summary=summary,
             args=args,
-            config=dict(self.rule_context_config),
+            validation_id=self.validation_id,
+            default_group=self.default_group,
+            notes_path=self.notes_path,
+            design_review_defaults=self.design_review_defaults,
             protocol_result=protocol_result,
         )
         return build_rule_items([dict(rule) for rule in self.rules], context)
