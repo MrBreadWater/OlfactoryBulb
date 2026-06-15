@@ -235,6 +235,13 @@ suite_aggregate_policy = { norm_rollup = "mean" }
 The maintained default is still `norm_rollup = "minimum"` with
 `status_rollup = "worst_case"`.
 
+For single-rule SciUnit-backed families such as `reference_band_rows`, the same
+field works directly on that rule without any repetition:
+
+```toml
+suite_aggregate_policy = { norm_rollup = "mean" }
+```
+
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as

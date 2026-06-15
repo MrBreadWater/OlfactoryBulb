@@ -586,7 +586,7 @@ class ReferenceBandRuleSpec:
     sigma_arg_name: str
     sigma_multiplier: float
     sigma_phrase: str
-    suite_name: str
+    suite_descriptor: SuiteDescriptor
     pass_status: str
     fail_status: str
     properties: dict[str, ReferenceBandPropertyRuleSpec]
@@ -625,7 +625,11 @@ class ReferenceBandRuleSpec:
             sigma_arg_name=sigma_arg_name,
             sigma_multiplier=sigma_multiplier,
             sigma_phrase=_sigma_phrase(sigma_multiplier),
-            suite_name=str(rule.get("suite_name", rule.get("title", "reference-band-suite"))),
+            suite_descriptor=SuiteDescriptor(
+                suite_id=str(rule.get("suite_name", rule.get("title", "reference-band-suite"))).strip() or "reference-band-suite",
+                suite_kind_label="Reference-band suite",
+                aggregate_policy=suite_aggregate_policy_from_rule(rule),
+            ),
             pass_status=str(rule.get("pass_status", "PASS")),
             fail_status=str(rule.get("fail_status", "FAIL")),
             properties=properties,

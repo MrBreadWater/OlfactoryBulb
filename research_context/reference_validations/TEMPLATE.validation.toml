@@ -203,6 +203,8 @@ validation_design_review_status = "pending"
 # reference_source = "Example et al. (2026)"
 # group_field = "cell_type"
 # sigma_arg_name = "reference_sigma_multiplier"
+# Optional suite rollup override for the generated reference-band suite:
+# suite_aggregate_policy = { norm_rollup = "mean" }
 # property_metric_map = {
 #   "Membrane Resting Voltage" = "resting_potential_mV",
 #   "ISI Coefficient of Variation" = "cv_isi",

@@ -173,3 +173,8 @@ Remove this file when the listed items are either:
       - added `SuiteDescriptor`
       - migrated the SciUnit-backed suite adapters to pass that bundle through
         `suite_presentation`
+- [x] Extend the new suite-descriptor / aggregate-policy contract to
+      `reference_band_rows` so the declarative scientific suite families share
+      one consistent rollup path.
+      - `ReferenceBandRuleSpec` now carries a `SuiteDescriptor`
+      - `reference_band_rows` accepts the same `suite_aggregate_policy` field

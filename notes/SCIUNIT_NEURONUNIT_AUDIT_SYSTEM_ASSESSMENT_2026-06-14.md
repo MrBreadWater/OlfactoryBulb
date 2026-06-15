@@ -2050,6 +2050,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - a typed `SuiteDescriptor` bundle so suite id, suite-kind label,
     candidate/model ids, and aggregate-policy choices do not have to be
     threaded as parallel parameters through every suite adapter
+  - the same `suite_aggregate_policy` path now reaches `reference_band_rows`
+    as well as the grouped summary/comparison/series suite families, so the
+    declarative suite contract is uniform across the migrated scientific rule
+    surface
 
 The remaining open questions are now narrower:
 

@@ -777,9 +777,9 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
     compiled = compile_reference_band_suite(
         cases=cases,
         summary=context.summary,
-        suite_name=spec.suite_name,
+        suite_name=spec.suite_descriptor.suite_id,
     )
-    return audit_items_from_reference_band_suite(compiled)
+    return audit_items_from_reference_band_suite(compiled, descriptor=spec.suite_descriptor)
 
 
 @register_validation_rule("note_presence")

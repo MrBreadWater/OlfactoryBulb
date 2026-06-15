@@ -671,7 +671,10 @@ contract for future sessions.
     instead of hiding it only in raw evidence. If the matrix has a compact
     score or norm label that helps scanning, emit it in the suite-case payload
     rather than teaching the dashboard to reverse-engineer it from raw
-    detailed evidence.
+    detailed evidence. `reference_band_rows` is not an exception here: it also
+    compiles through a `SuiteDescriptor` and accepts the same
+    `suite_aggregate_policy` contract as the grouped summary/comparison/series
+    suite families.
 
 ## 5b. Reusable infrastructure extraction rules
 

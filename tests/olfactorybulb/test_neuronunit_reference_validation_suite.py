@@ -26,6 +26,7 @@ from olfactorybulb.neuronunit.reference_validation_suite import (
     audit_items_from_reference_band_suite,
     compile_reference_band_suite,
 )
+from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor, SuiteAggregatePolicy
 
 
 case = ReferenceBandCase(
@@ -101,6 +102,18 @@ assert adapted_item.validation_design_review_status == "approved"
 assert adapted_item.evidence["accepted_interval_standard"] == "symmetric reference interval"
 assert adapted_item.evidence["MC_mean"] == 102.0
 
+mean_policy_items = audit_items_from_reference_band_suite(
+    compiled,
+    descriptor=SuiteDescriptor(
+        suite_id="synthetic_reference_band.mean_rollup",
+        suite_kind_label="Reference-band suite",
+        aggregate_policy=SuiteAggregatePolicy(norm_rollup="mean"),
+    ),
+)
+assert mean_policy_items[0].check_id == "synthetic_reference_band.mean_rollup.overview"
+assert mean_policy_items[0].evidence["suite_aggregate_score"]["norm_rollup"] == "mean"
+assert mean_policy_items[0].evidence["suite_aggregate_score"]["score_text"] == "worst PASS, mean norm 1"
+
 
 with tempfile.TemporaryDirectory() as tmpdir:
     csv_path = Path(tmpdir) / "reference_rows.csv"
@@ -143,6 +156,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert parsed_rule_spec.group_field == "cell_type"
     assert parsed_rule_spec.sigma_arg_name == "reference_sigma_multiplier"
     assert parsed_rule_spec.sigma_multiplier == 2.0
+    assert parsed_rule_spec.suite_descriptor.suite_id == "Synthetic reference-band rows"
+    assert parsed_rule_spec.suite_descriptor.aggregate_policy.norm_rollup == "minimum"
     assert parsed_rule_spec.properties["Input Resistance"].metric_key == "input_resistance_MOhm"
     assert parsed_rule_spec.properties["Input Resistance"].band_mode == "symmetric_sd"
     assert parsed_rule_spec.properties["Input Resistance"].note == "Synthetic note."
@@ -165,6 +180,14 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert item.evidence["reference_unit"] == "MOhm"
     assert "reference: 100.0 +/- 10.0 MOhm from Synthetic Study" in item.evidence["__reference_annotations__"]["MC_mean"]
     assert item.criterion_latex == r"\left|\bar{R}_{\mathrm{in}} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}"
+
+    mean_rule = dict(rule)
+    mean_rule["suite_name"] = "Synthetic reference-band mean suite"
+    mean_rule["suite_aggregate_policy"] = {"norm_rollup": "mean"}
+    mean_items = build_rule_items([mean_rule], context)
+    assert mean_items[0].check_id == "Synthetic_reference-band_mean_suite.overview"
+    assert mean_items[0].evidence["suite_aggregate_score"]["norm_rollup"] == "mean"
+    assert mean_items[0].evidence["suite_aggregate_score"]["score_text"] == "worst PASS, mean norm 1"
 
 
 print("neuronunit_reference_validation_suite: OK")
