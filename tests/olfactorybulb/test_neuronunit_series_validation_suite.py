@@ -923,6 +923,65 @@ assert resampled_items[1].evidence["model_resampled_support_counts"] == [2, 2, 2
 assert resampled_items[1].evidence["mean_absolute_error"] == 0.0
 assert resampled_items[1].evidence["mean_absolute_error_Hz"] == 0.0
 
+nearest_resampled_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=2,
+        maximum_mae=1.3,
+        maximum_rmse=1.3,
+        alignment_policy="resampled_grid",
+        resampling_grid_source="explicit_grid",
+        resampling_grid_values=(150.0, 250.0),
+        interpolation_method="nearest",
+        score_family="residual_only",
+    ),
+)
+
+nearest_resampled_case = SeriesComparisonCase(
+    check_id="synthetic_nearest_resampled_series_match",
+    title="Synthetic resampled alignment can use nearest-neighbor interpolation",
+    criterion="Nearest-neighbor resampling should remain available when stepwise comparison is more sensible than linear interpolation.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic nearest-neighbor resampled-grid suite test.",
+    acceptable="The nearest-neighbor comparison stays within the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=nearest_resampled_observation,
+)
+
+nearest_resampled_compiled = compile_series_comparison_suite(
+    cases=[nearest_resampled_case],
+    summary={},
+    metrics=[],
+    protocol_evidence={"fi_curve_rows": resampled_model_rows},
+    suite_name="synthetic nearest resampled series suite",
+)
+nearest_resampled_items = audit_items_from_series_comparison_suite(nearest_resampled_compiled)
+assert nearest_resampled_items[1].status == "PASS"
+assert nearest_resampled_items[1].evidence["interpolation_method"] == "nearest"
+assert nearest_resampled_items[1].evidence["currents_pA"] == [150.0, 250.0]
+assert nearest_resampled_items[1].evidence["mean_absolute_error"] == 1.25
+assert nearest_resampled_items[1].evidence["root_mean_square_error"] == 1.25
+
 rule = {
     "kind": "reference_curve_match",
     "check_id": "synthetic_series_match",
@@ -1274,6 +1333,36 @@ assert resampled_rule_items[1].evidence["declared_resampling_grid_values"] == [1
 assert resampled_rule_items[1].evidence["currents_pA"] == [150.0, 250.0]
 assert resampled_rule_items[1].evidence["matched_point_count"] == 2
 
+step_hold_rule = dict(resampled_rule)
+step_hold_rule["resampling_grid_values"] = [175.0]
+step_hold_rule["interpolation_method"] = "step_hold"
+step_hold_rule["maximum_mae"] = 1.3
+step_hold_rule["maximum_rmse"] = 1.3
+step_hold_rule["minimum_point_count"] = 1
+step_hold_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence={"fi_curve_rows": resampled_model_rows},
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    step_hold_rule_items = build_rule_items(compile_rule_dispatches([step_hold_rule]), step_hold_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert step_hold_rule_items[1].status == "PASS"
+assert step_hold_rule_items[1].evidence["alignment_policy"] == "resampled_grid"
+assert step_hold_rule_items[1].evidence["interpolation_method"] == "step_hold"
+assert step_hold_rule_items[1].evidence["currents_pA"] == [175.0]
+assert step_hold_rule_items[1].evidence["mean_absolute_error"] == 1.25
+assert step_hold_rule_items[1].evidence["matched_point_count"] == 1
+
 protocol_default_rule = dict(equivalence_rule)
 protocol_default_rule["loader"] = "csv:/tmp/equivalence.csv"
 del protocol_default_rule["model_current_key"]
@@ -1361,6 +1450,22 @@ try:
         raise AssertionError("Expected explicit-grid resampling to require explicit grid values")
     except ValueError as exc:
         assert "requires explicit 'resampling_grid_values'" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+invalid_interpolation_rule = dict(resampled_rule)
+invalid_interpolation_rule["interpolation_method"] = "cubic"
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items(compile_rule_dispatches([invalid_interpolation_rule]), resampled_context)
+        raise AssertionError("Expected resampled-grid alignment to reject unsupported interpolation methods")
+    except ValueError as exc:
+        assert "Unsupported interpolation method" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

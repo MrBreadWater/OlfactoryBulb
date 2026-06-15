@@ -2169,6 +2169,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +
     context` tuples at each scoring step
+  - the resampled-grid alignment path now also supports an explicit small
+    interpolation family (`linear`, `nearest`, `step_hold`) instead of
+    treating straight-line interpolation as the only possible series
+    resampling contract
   - the typed suite-aggregation layer now supports a richer
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite
@@ -2186,8 +2190,8 @@ The remaining open questions are now narrower:
 - whether transform generalization should stop at explicit piecewise-linear
   mappings or later grow into context-dependent transforms
 - whether alignment generalization should stop at the current
-  distribution-preserving resampled-grid contract or later grow into broader
-  interpolation / resampling families
+  distribution-preserving resampled-grid contract or later grow beyond the
+  current explicit interpolation family (`linear`, `nearest`, `step_hold`)
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path
 - how much NeuronUnit-native result presentation should grow before it starts

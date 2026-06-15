@@ -680,8 +680,16 @@ When you use `alignment_policy = "nearest_within_tolerance"` or
 explicitly in the comparison x-axis units.
 When you use `alignment_policy = "resampled_grid"`, the maintained path now
 defaults `resampling_grid_source` to `union_observed_x` and
-`interpolation_method` to `linear`. If you need a different grid, declare one
-of:
+`interpolation_method` to `linear`. Supported interpolation methods are:
+
+- `interpolation_method = "linear"` for straight-line interpolation between
+  neighboring support points
+- `interpolation_method = "nearest"` for nearest-neighbor lookup on the
+  resampling grid
+- `interpolation_method = "step_hold"` for zero-order hold from the most
+  recent support point
+
+If you need a different grid, declare one of:
 
 - `resampling_grid_source = "reference_observed_x"`
 - `resampling_grid_source = "model_observed_x"`

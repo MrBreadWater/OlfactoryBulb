@@ -1741,6 +1741,8 @@ Important details:
 - `alignment_policy = "resampled_grid"` defaults `resampling_grid_source` to
   `union_observed_x` and `interpolation_method` to `linear`; the emitted
   evidence records that resolved choice
+- supported `interpolation_method` values are `linear`, `nearest`, and
+  `step_hold`
 - if `resampling_grid_source = "explicit_grid"`, also declare
   `resampling_grid_values = [ ... ]`
 - if the model x-axis is not expressed in the same physical quantity as the

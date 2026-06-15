@@ -366,6 +366,8 @@ validation_design_review_status = "pending"
 # resampling_grid_source = "explicit_grid"
 # resampling_grid_values = [150.0, 250.0]
 # interpolation_method = "linear"
+# interpolation_method = "nearest"
+# interpolation_method = "step_hold"
 # distribution_kind = "empirical_by_x"
 # score_family = "hybrid_residual_equivalence"
 # Optional for equivalence score families; if omitted, the maintained path falls

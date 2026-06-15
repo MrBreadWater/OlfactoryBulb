@@ -103,6 +103,8 @@ SERIES_RESAMPLING_GRID_SOURCES = {
 
 SERIES_INTERPOLATION_METHODS = {
     "linear",
+    "nearest",
+    "step_hold",
 }
 
 EQUIVALENCE_SERIES_SCORE_FAMILIES = {
@@ -1181,6 +1183,22 @@ def _interpolated_series_value(
     for x_value, y_value in path:
         if np.isclose(x_value, target_x):
             return float(y_value)
+    if normalized_method == "nearest":
+        insert_at = int(np.searchsorted(np.asarray(x_values, dtype=float), float(target_x), side="left"))
+        if insert_at <= 0:
+            return float(y_values[0])
+        if insert_at >= len(path):
+            return float(y_values[-1])
+        left_x, left_y = path[insert_at - 1]
+        right_x, right_y = path[insert_at]
+        if abs(float(target_x) - float(left_x)) <= abs(float(right_x) - float(target_x)):
+            return float(left_y)
+        return float(right_y)
+    if normalized_method == "step_hold":
+        insert_at = int(np.searchsorted(np.asarray(x_values, dtype=float), float(target_x), side="right")) - 1
+        if insert_at < 0 or insert_at >= len(path):
+            return None
+        return float(path[insert_at][1])
     insert_at = int(np.searchsorted(np.asarray(x_values, dtype=float), float(target_x), side="left"))
     if insert_at <= 0 or insert_at >= len(path):
         return None

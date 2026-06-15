@@ -735,8 +735,16 @@ series-rule contract from one place.</p>
 explicitly in the comparison x-axis units.
 When you use <code>alignment_policy = "resampled_grid"</code>, the maintained path now
 defaults <code>resampling_grid_source</code> to <code>union_observed_x</code> and
-<code>interpolation_method</code> to <code>linear</code>. If you need a different grid, declare one
-of:</p>
+<code>interpolation_method</code> to <code>linear</code>. Supported interpolation methods are:</p>
+<ul>
+<li><code>interpolation_method = "linear"</code> for straight-line interpolation between
+  neighboring support points</li>
+<li><code>interpolation_method = "nearest"</code> for nearest-neighbor lookup on the
+  resampling grid</li>
+<li><code>interpolation_method = "step_hold"</code> for zero-order hold from the most
+  recent support point</li>
+</ul>
+<p>If you need a different grid, declare one of:</p>
 <ul>
 <li><code>resampling_grid_source = "reference_observed_x"</code></li>
 <li><code>resampling_grid_source = "model_observed_x"</code></li>

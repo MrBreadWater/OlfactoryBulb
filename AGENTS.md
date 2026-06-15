@@ -615,7 +615,9 @@ contract for future sessions.
     `alignment_policy = "resampled_grid"`, the maintained path may default
     `resampling_grid_source` to `union_observed_x` and
     `interpolation_method` to `linear`, but the emitted evidence must record
-    the resolved choice.
+    the resolved choice. Keep the interpolation family explicit and small:
+    `linear`, `nearest`, and `step_hold` are the maintained options until a
+    broader resampling contract is actually justified.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
     Prefer unit-neutral residual/statistical evidence keys such as

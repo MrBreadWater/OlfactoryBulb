@@ -340,6 +340,14 @@ Remove this file when the listed items are either:
       - `SeriesDistributionObservation` now produces typed reference/model
         datasets instead of making the scorer pair raw `rows + spec + context`
         repeatedly
+- [x] Grow the resampled-grid alignment path beyond linear-only interpolation
+      without reopening the rule surface into bespoke special cases.
+      - the shared series-comparison core now supports the explicit
+        interpolation family `linear`, `nearest`, and `step_hold`
+      - the maintained HOWTO/tutorial/template contract now records those
+        options
+      - direct suite and declarative rule coverage now exercises the new
+        interpolation modes
 - [x] Lift protocol metric rows and grouped numeric summaries onto one typed
       shared contract instead of reintroducing fresh raw `list[dict]` /
       `dict[group][metric]` bundles at the protocol, plan, context, and
