@@ -360,10 +360,14 @@ validation_design_review_status = "pending"
 # alignment_policy = "resampled_grid"
 # Optional ergonomic default:
 # resampling_grid_source = "union_observed_x"
+# resampling_domain_policy = "allow_partial_support"
 # Alternative explicit choices:
 # resampling_grid_source = "reference_observed_x"
 # resampling_grid_source = "model_observed_x"
 # resampling_grid_source = "explicit_grid"
+# resampling_domain_policy = "intersection"
+# resampling_domain_policy = "reference"
+# resampling_domain_policy = "model"
 # resampling_grid_values = [150.0, 250.0]
 # interpolation_method = "linear"
 # interpolation_method = "nearest"

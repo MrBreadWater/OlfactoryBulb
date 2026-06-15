@@ -694,7 +694,9 @@ aligned comparison.
 
 When you use `alignment_policy = "resampled_grid"`, the maintained path now
 defaults `resampling_grid_source` to `union_observed_x` and
-`interpolation_method` to `linear`. Supported interpolation methods are:
+`interpolation_method` to `linear`, and defaults
+`resampling_domain_policy` to `allow_partial_support`. Supported
+interpolation methods are:
 
 - `interpolation_method = "linear"` for straight-line interpolation between
   neighboring support points
@@ -713,6 +715,24 @@ If you need a different grid, declare one of:
 - `resampling_grid_source = "union_observed_x"`
 - `resampling_grid_source = "explicit_grid"`
   - and then also declare `resampling_grid_values = [ ... ]`
+
+If you need the resampled grid clipped before interpolation support is counted,
+declare one of:
+
+- `resampling_domain_policy = "allow_partial_support"`
+  - keep the full chosen grid and let each side contribute only where that
+    series has support; this is the maintained default
+- `resampling_domain_policy = "intersection"`
+  - clip the grid to the shared overall interpolation domain of the reference
+    and model series before resampling
+- `resampling_domain_policy = "reference"`
+  - clip the grid to the overall reference-side interpolation domain
+- `resampling_domain_policy = "model"`
+  - clip the grid to the overall model-side interpolation domain
+
+The emitted evidence records both the resolved policy and the filtered-out
+grid points, so the domain choice stays visible instead of hiding behind a
+coverage fraction alone.
 
 For transforms, start with:
 

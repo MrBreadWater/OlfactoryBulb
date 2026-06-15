@@ -748,7 +748,9 @@ percent of the reference-side comparable bins must participate in the final
 aligned comparison.</p>
 <p>When you use <code>alignment_policy = "resampled_grid"</code>, the maintained path now
 defaults <code>resampling_grid_source</code> to <code>union_observed_x</code> and
-<code>interpolation_method</code> to <code>linear</code>. Supported interpolation methods are:</p>
+<code>interpolation_method</code> to <code>linear</code>, and defaults
+<code>resampling_domain_policy</code> to <code>allow_partial_support</code>. Supported
+interpolation methods are:</p>
 <ul>
 <li><code>interpolation_method = "linear"</code> for straight-line interpolation between
   neighboring support points</li>
@@ -768,6 +770,23 @@ defaults <code>resampling_grid_source</code> to <code>union_observed_x</code> an
 <li><code>resampling_grid_source = "explicit_grid"</code></li>
 <li>and then also declare <code>resampling_grid_values = [ ... ]</code></li>
 </ul>
+<p>If you need the resampled grid clipped before interpolation support is counted,
+declare one of:</p>
+<ul>
+<li><code>resampling_domain_policy = "allow_partial_support"</code></li>
+<li>keep the full chosen grid and let each side contribute only where that
+    series has support; this is the maintained default</li>
+<li><code>resampling_domain_policy = "intersection"</code></li>
+<li>clip the grid to the shared overall interpolation domain of the reference
+    and model series before resampling</li>
+<li><code>resampling_domain_policy = "reference"</code></li>
+<li>clip the grid to the overall reference-side interpolation domain</li>
+<li><code>resampling_domain_policy = "model"</code></li>
+<li>clip the grid to the overall model-side interpolation domain</li>
+</ul>
+<p>The emitted evidence records both the resolved policy and the filtered-out
+grid points, so the domain choice stays visible instead of hiding behind a
+coverage fraction alone.</p>
 <p>For transforms, start with:</p>
 <ul>
 <li><code>kind = "identity"</code> when the source axis is already expressed in the desired

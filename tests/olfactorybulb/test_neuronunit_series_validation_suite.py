@@ -331,6 +331,7 @@ assert observation.observation_payload() == {
     "alignment_policy": "exact_transformed_x",
     "x_match_tolerance": None,
     "resampling_grid_source": "",
+    "resampling_domain_policy": "",
     "resampling_grid_values": (),
     "interpolation_method": "linear",
     "distribution_kind": "empirical_by_x",
@@ -1025,6 +1026,72 @@ assert _interpolated_series_value(
     interpolation_method="pchip",
 ) == 0.75
 
+intersection_resampled_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=4,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        alignment_policy="resampled_grid",
+        resampling_grid_source="explicit_grid",
+        resampling_grid_values=(100.0, 150.0, 200.0, 250.0, 300.0),
+        resampling_domain_policy="intersection",
+        score_family="residual_only",
+    ),
+)
+
+intersection_resampled_case = SeriesComparisonCase(
+    check_id="synthetic_intersection_resampled_series_match",
+    title="Synthetic resampled alignment can clip to the shared interpolation domain",
+    criterion="A resampled-grid comparison can explicitly restrict the comparison domain before interpolation support is evaluated.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic intersection-domain resampled-grid suite test.",
+    acceptable="The shared interpolation domain satisfies the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=intersection_resampled_observation,
+)
+
+intersection_resampled_compiled = compile_series_comparison_suite(
+    cases=[intersection_resampled_case],
+    summary={},
+    metrics=[],
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+    suite_name="synthetic intersection resampled series suite",
+)
+intersection_resampled_items = audit_items_from_series_comparison_suite(intersection_resampled_compiled)
+assert intersection_resampled_items[1].status == "PASS"
+assert intersection_resampled_items[1].evidence["resampling_domain_policy"] == "intersection"
+assert intersection_resampled_items[1].evidence["resampling_domain_policy_origin"] == "explicit"
+assert intersection_resampled_items[1].evidence["currents_pA"] == [150.0, 200.0, 250.0, 300.0]
+assert intersection_resampled_items[1].evidence["resampling_grid_values"] == [150.0, 200.0, 250.0, 300.0]
+assert intersection_resampled_items[1].evidence["resampling_excluded_x_values"] == [100.0]
+assert intersection_resampled_items[1].evidence["reference_resampling_domain_min_x"] == 100.0
+assert intersection_resampled_items[1].evidence["reference_resampling_domain_max_x"] == 300.0
+assert intersection_resampled_items[1].evidence["model_resampling_domain_min_x"] == 125.0
+assert intersection_resampled_items[1].evidence["model_resampling_domain_max_x"] == 325.0
+assert intersection_resampled_items[1].evidence["reference_coverage_fraction"] == 1.0
+assert intersection_resampled_items[1].evidence["model_coverage_fraction"] == 1.0
+
 coverage_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=resampled_reference_rows,
@@ -1483,6 +1550,35 @@ assert coverage_rule_items[1].evidence["coverage_gate_passed"] is False
 assert coverage_rule_items[1].evidence["alignment_support_gate_passed"] is False
 assert SeriesComparisonRuleSpec.from_rule(coverage_rule).policy.minimum_reference_coverage_fraction == 0.9
 
+intersection_rule = dict(resampled_rule)
+intersection_rule["check_id"] = "synthetic_intersection_resampled_series_match"
+intersection_rule["title"] = "Synthetic intersection-domain series rule"
+intersection_rule["criterion"] = "A declarative series rule can clip the resampling grid to the shared interpolation domain."
+intersection_rule["resampling_grid_values"] = [100.0, 150.0, 200.0, 250.0, 300.0]
+intersection_rule["resampling_domain_policy"] = "intersection"
+intersection_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    intersection_rule_items = build_rule_items(compile_rule_dispatches([intersection_rule]), intersection_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert intersection_rule_items[1].status == "PASS"
+assert intersection_rule_items[1].evidence["resampling_domain_policy"] == "intersection"
+assert intersection_rule_items[1].evidence["currents_pA"] == [150.0, 200.0, 250.0, 300.0]
+assert intersection_rule_items[1].evidence["resampling_excluded_x_values"] == [100.0]
+assert SeriesComparisonRuleSpec.from_rule(intersection_rule).policy.resampling_domain_policy == "intersection"
+
 pchip_rule = dict(resampled_rule)
 pchip_rule["resampling_grid_values"] = [150.0, 250.0]
 pchip_rule["interpolation_method"] = "pchip"
@@ -1657,6 +1753,23 @@ try:
         raise AssertionError("Expected series coverage fractions outside [0, 1] to be rejected")
     except ValueError as exc:
         assert "minimum_reference_coverage_fraction" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+invalid_domain_policy_rule = dict(resampled_rule)
+invalid_domain_policy_rule["resampling_domain_policy"] = "clip_everything"
+
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items(compile_rule_dispatches([invalid_domain_policy_rule]), resampled_context)
+        raise AssertionError("Expected unsupported resampling domain policy to fail")
+    except ValueError as exc:
+        assert "resampling domain policy" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

@@ -40,6 +40,7 @@ from olfactorybulb.neuronunit.scalar_observations import ScalarStatusMapPolicy
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SERIES_ALIGNMENT_POLICIES,
+    SERIES_RESAMPLING_DOMAIN_POLICIES,
     SeriesComparisonCase,
     SeriesComparisonPolicy,
     SeriesDataSpec,
@@ -1194,6 +1195,12 @@ class _SeriesComparisonRuleParser:
             x_match_tolerance = None
         if alignment_policy == "resampled_grid":
             resampling_grid_source = str(self.rule.get("resampling_grid_source", "")).strip()
+            resampling_domain_policy = str(self.rule.get("resampling_domain_policy", "")).strip()
+            if resampling_domain_policy and resampling_domain_policy not in SERIES_RESAMPLING_DOMAIN_POLICIES:
+                raise ValueError(
+                    f"reference_curve_match resampling domain policy {resampling_domain_policy!r} is unsupported; "
+                    f"expected one of {', '.join(sorted(SERIES_RESAMPLING_DOMAIN_POLICIES))}"
+                )
             interpolation_method = str(self.rule.get("interpolation_method", "linear")).strip() or "linear"
             raw_resampling_grid_values = self.rule.get("resampling_grid_values", ())
             if raw_resampling_grid_values in (None, ""):
@@ -1208,7 +1215,13 @@ class _SeriesComparisonRuleParser:
                     "resampling_grid_source='explicit_grid' requires explicit 'resampling_grid_values'"
                 )
         else:
+            if str(self.rule.get("resampling_domain_policy", "")).strip():
+                raise ValueError(
+                    "reference_curve_match 'resampling_domain_policy' only applies when "
+                    "alignment_policy = 'resampled_grid'"
+                )
             resampling_grid_source = ""
+            resampling_domain_policy = ""
             resampling_grid_values = ()
             interpolation_method = "linear"
         pvalue_aggregation = str(self.rule.get("pvalue_aggregation", "auto")).strip()
@@ -1246,6 +1259,7 @@ class _SeriesComparisonRuleParser:
             alignment_policy=alignment_policy,
             x_match_tolerance=x_match_tolerance,
             resampling_grid_source=resampling_grid_source,
+            resampling_domain_policy=resampling_domain_policy,
             resampling_grid_values=resampling_grid_values,
             interpolation_method=interpolation_method,
             distribution_kind=self.required_choice("distribution_kind"),

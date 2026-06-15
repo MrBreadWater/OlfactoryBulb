@@ -2256,6 +2256,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     interpolation family (`linear`, `nearest`, `pchip`, `step_hold`) instead of
     treating straight-line interpolation as the only possible series
     resampling contract
+  - the resampled-grid alignment path now also separates grid choice from
+    domain choice: the policy can keep partial support on the whole grid or
+    clip to the shared/reference/model interpolation domain explicitly via
+    `resampling_domain_policy`, and the emitted evidence records both the
+    resolved policy and the filtered-out grid points
   - alignment support is now a first-class typed contract too: the
     series-comparison policy can declare minimum reference/model coverage
     fractions in addition to `minimum_point_count`, and the emitted evidence
@@ -2277,10 +2282,12 @@ The remaining open questions are now narrower:
   promote additional suite-level statistical contracts beyond alternative
   p-value rollups
 - whether transform generalization should stop at explicit piecewise-linear
-  mappings or later grow into context-dependent transforms
+  mappings plus the current context-dependent affine lookup path, or later
+  grow into richer metadata-driven transforms
 - whether alignment generalization should stop at the current
-  distribution-preserving resampled-grid contract or later grow beyond the
-  current explicit interpolation family (`linear`, `nearest`, `step_hold`)
+  distribution-preserving resampled-grid contract with its current explicit
+  interpolation/domain families (`linear`, `nearest`, `pchip`, `step_hold`;
+  `allow_partial_support`, `intersection`, `reference`, `model`)
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path
 - how much NeuronUnit-native result presentation should grow before it starts

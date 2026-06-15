@@ -613,11 +613,13 @@ contract for future sessions.
     default is stable and the emitted evidence records the resolved choice.
     The same applies to secondary resampling knobs: for
     `alignment_policy = "resampled_grid"`, the maintained path may default
-    `resampling_grid_source` to `union_observed_x` and
+    `resampling_grid_source` to `union_observed_x`,
+    `resampling_domain_policy` to `allow_partial_support`, and
     `interpolation_method` to `linear`, but the emitted evidence must record
-    the resolved choice. Keep the interpolation family explicit and small:
-    `linear`, `nearest`, and `step_hold` are the maintained options until a
-    broader resampling contract is actually justified.
+    the resolved choice. Keep the resampling contract explicit and small:
+    current interpolation options are `linear`, `nearest`, `pchip`, and
+    `step_hold`, and current domain policies are `allow_partial_support`,
+    `intersection`, `reference`, and `model`.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
     Prefer unit-neutral residual/statistical evidence keys such as
@@ -1022,6 +1024,11 @@ contract for future sessions.
       `linear`, `nearest`, `pchip`, and `step_hold`; extend that explicit
       family deliberately rather than smuggling a new interpolation behavior
       in behind the same label
+    - keep resampled-grid domain handling explicit too: the maintained domain
+      policies are `allow_partial_support`, `intersection`, `reference`, and
+      `model`, and the emitted evidence should expose both the resolved policy
+      and any filtered-out grid points instead of leaving domain clipping
+      implicit in missing-support counts
     - when a maintained SciUnit wrapper already has a typed case or
       observation object, make that object own the SciUnit observation payload
       via a small `observation_payload()` helper instead of rebuilding a

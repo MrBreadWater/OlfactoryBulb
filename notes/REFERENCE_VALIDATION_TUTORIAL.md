@@ -1746,10 +1746,13 @@ Important details:
   evaluate the aligned-bin coverage fraction on each side after the chosen
   alignment policy has produced the comparable support
 - `alignment_policy = "resampled_grid"` defaults `resampling_grid_source` to
-  `union_observed_x` and `interpolation_method` to `linear`; the emitted
-  evidence records that resolved choice
+  `union_observed_x`, `resampling_domain_policy` to
+  `allow_partial_support`, and `interpolation_method` to `linear`; the
+  emitted evidence records those resolved choices
 - supported `interpolation_method` values are `linear`, `nearest`, `pchip`,
   and `step_hold`
+- supported `resampling_domain_policy` values are `allow_partial_support`,
+  `intersection`, `reference`, and `model`
 - if `resampling_grid_source = "explicit_grid"`, also declare
   `resampling_grid_values = [ ... ]`
 - if the model x-axis is not expressed in the same physical quantity as the

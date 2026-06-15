@@ -515,6 +515,14 @@ Remove this file when the listed items are either:
       - the series scorer now routes that through SciPy's monotone
         `PchipInterpolator`
       - docs/template/tests now expose `pchip` as a maintained option
+- [x] Split resampled-grid domain handling into an explicit policy instead of
+      forcing coverage thresholds to stand in for domain choice.
+      - added `resampling_domain_policy` with
+        `allow_partial_support`, `intersection`, `reference`, and `model`
+      - the scorer now records resolved domain policy plus filtered-out grid
+        points and the reference/model interpolation bounds in emitted
+        evidence
+      - docs/template/tests now expose the shared-domain clipping path
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite
