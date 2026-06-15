@@ -766,3 +766,17 @@ Remove this file when the listed items are either:
       - direct suite coverage and rule-level coverage now assert the new
         transform-lineage payloads for affine lookup, metadata-backed
         piecewise lookup, and transform pipelines
+- [x] Turn the remaining branch-level open questions into explicit
+      stop-boundaries for the maintained overhaul plan instead of leaving the
+      branch in an indefinite “maybe more” state.
+      - suite-level statistical contracts stop at the current rollup /
+        support / threshold surface unless a new maintained validation needs
+        more
+      - transform and alignment contracts stop at the current maintained
+        metadata-driven families unless a new maintained validation needs a
+        distinct scientific policy
+      - series provenance stops at the current aggregate/per-series/support /
+        transform-lineage surface unless a new maintained validation needs
+        more
+      - NeuronUnit-native presentation stops at feeding the maintained audit
+        shell rather than competing with it

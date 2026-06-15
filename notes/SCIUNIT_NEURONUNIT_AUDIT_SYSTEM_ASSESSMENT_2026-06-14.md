@@ -2381,30 +2381,29 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `note_presence` now parse through typed config specs too, while still
     remaining outside the NeuronUnit scientific-core layer
 
-The remaining open questions are now narrower:
+Current closure decision for the maintained overhaul plan:
 
-- whether the new typed `suite_statistical_summary` plus declarative
-  `SuiteStatisticalPolicy` support is enough, or whether future work should
-  promote additional suite-level statistical contracts beyond rollup choice
-  plus the current supported/unsupported-case count/fraction/weight
-  diagnostics, threshold pass/fail distributions, their maintained
-  status-matrix presentation, and support gates
-- whether transform generalization should stop at explicit piecewise-linear
-  mappings plus the current context-dependent affine lookup / pipeline path,
-  or later grow into richer metadata-driven transforms beyond the current
-  metadata-backed `points_lookup_key` path for monotone piecewise calibrations
-- whether alignment generalization should stop at the current
-  distribution-preserving resampled-grid contract with its current grid /
-  interpolation / domain families (`reference_observed_x`,
-  `model_observed_x`, `union_observed_x`, `explicit_grid`, `lookup_grid`,
-  `uniform_step`; `linear`, `nearest`, `pchip`, `step_hold`;
-  `allow_partial_support`, `intersection`, `reference`, `model`)
-- more explicit provenance-bearing series observation objects if future
-  validations need more than the current aggregate/per-series summaries, the
-  new aligned-bin resampling-support provenance, and the current transform
-  lineage summaries
-- how much NeuronUnit-native result presentation should grow before it starts
-  competing with the maintained audit shell instead of feeding it
+- the new typed `suite_statistical_summary` plus declarative
+  `SuiteStatisticalPolicy` support is sufficient for the current maintained
+  surface; future statistical-contract growth should be demand-driven by a new
+  maintained validation, not added preemptively
+- transform generalization stops at the current explicit piecewise-linear,
+  affine-lookup, metadata-backed point lookup, and composable pipeline path
+  unless a maintained validation needs a richer transform family
+- alignment generalization stops at the current distribution-preserving
+  resampled-grid contract with its current grid / interpolation / domain
+  families (`reference_observed_x`, `model_observed_x`,
+  `union_observed_x`, `explicit_grid`, `lookup_grid`, `uniform_step`;
+  `linear`, `nearest`, `pchip`, `step_hold`; `allow_partial_support`,
+  `intersection`, `reference`, `model`) unless a maintained validation needs
+  a scientifically distinct alignment family
+- the current provenance-bearing series observation layer is sufficient for
+  the maintained surface: aggregate/per-series provenance summaries,
+  aligned-bin support provenance, and transform-lineage summaries are the stop
+  boundary for this overhaul plan
+- NeuronUnit-native result presentation should stop at feeding the maintained
+  audit shell; future presentational growth belongs in the audit/dashboard
+  shell unless a scientific-core contract genuinely requires more
 
 ## Source Pointers
 
