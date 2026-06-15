@@ -51,7 +51,7 @@ assert burton_document.protocol_runner_id == "burton_urban_mctc_current_clamp"
 assert burton_document.design_review_defaults.status == "pending"
 assert burton_document.skip_item is not None
 assert burton_document.skip_item.check_id == "burton_urban_fi_skipped"
-assert burton_document.rules[0]["kind"] == "note_presence"
+assert burton_document.rule_records[0].kind == "note_presence"
 assert burton_document.extension_specs == ()
 assert get_validation_protocol_spec("burton_urban_mctc_current_clamp").title.startswith("Burton and Urban 2014")
 burton_plan = load_reference_validation_plan(validation_id="burton_urban_fi")

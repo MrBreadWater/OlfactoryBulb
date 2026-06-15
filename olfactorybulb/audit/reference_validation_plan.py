@@ -94,7 +94,7 @@ class ReferenceValidationPlan:
             skip_neuron_mode=document.skip_neuron_mode,
             defaults=dict(document.defaults),
             protocol_defaults=dict(document.protocol_defaults),
-            rule_dispatches=compile_rule_dispatches(document.rules),
+            rule_dispatches=compile_rule_dispatches(document.rule_records),
             protocol_runner_id=document.protocol_runner_id,
             protocol_spec=get_validation_protocol_spec(document.protocol_runner_id),
             design_review_defaults=document.design_review_defaults,

@@ -368,6 +368,15 @@ Remove this file when the listed items are either:
         dicts
       - the raw `register_validation_rule(...)` hook remains only as the
         compatibility surface for extension-defined custom rules
+- [x] Move the typed rule-record layer above the runtime boundary so the
+      document/plan path stops carrying raw `checks` dicts.
+      - added shared `ValidationRuleRecord` / `coerce_validation_rule_records`
+        in `olfactorybulb.audit.reference_validation_rule_records`
+      - `ReferenceValidationDocument` now carries `rule_records`
+      - `ReferenceValidationPlan` now compiles dispatches from those typed rule
+        records
+      - the validation-design-review status audit now walks typed rule records
+        instead of reparsing loose raw rule dicts from the document
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

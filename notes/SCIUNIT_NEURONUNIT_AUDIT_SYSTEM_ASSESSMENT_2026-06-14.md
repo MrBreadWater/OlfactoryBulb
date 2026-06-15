@@ -2122,6 +2122,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     suite families from raw rule dicts after the plan has already been built;
     correspondingly, the raw `checks` list is staying with the typed document
     layer rather than being duplicated yet again inside the runtime plan
+  - the typed document boundary has moved up one more step too:
+    `ReferenceValidationDocument` now carries typed `ValidationRuleRecord`
+    entries rather than a raw `checks` tuple, so both the runtime plan and the
+    static validation-design-review audit now consume the same typed rule
+    record layer instead of reparsing raw rule dicts independently
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

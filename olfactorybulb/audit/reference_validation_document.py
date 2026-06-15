@@ -9,6 +9,10 @@ from typing import Any
 from olfactorybulb.audit.reference_validation_config import (
     load_reference_validation_config,
 )
+from olfactorybulb.audit.reference_validation_rule_records import (
+    ValidationRuleRecord,
+    coerce_validation_rule_records,
+)
 
 
 def _optional_table(config: dict[str, Any], key: str) -> dict[str, Any]:
@@ -28,11 +32,11 @@ def _validation_protocol_runner_id(config: dict[str, Any]) -> str:
     return str(config.get("protocol_runner") or "").strip()
 
 
-def _validation_rule_specs(config: dict[str, Any]) -> tuple[dict[str, Any], ...]:
+def _validation_rule_records(config: dict[str, Any]) -> tuple[ValidationRuleRecord, ...]:
     rules = config.get("checks", [])
     if not isinstance(rules, list):
         raise ValueError("Reference validation config 'checks' must be an array of tables")
-    return tuple(dict(rule) for rule in rules)
+    return coerce_validation_rule_records(dict(rule) for rule in rules)
 
 
 def _validation_extension_specs(config: dict[str, Any]) -> tuple[str, ...]:
@@ -141,7 +145,7 @@ class ReferenceValidationDocument:
     skip_neuron_mode: str
     defaults: dict[str, Any]
     protocol_defaults: dict[str, Any]
-    rules: tuple[dict[str, Any], ...]
+    rule_records: tuple[ValidationRuleRecord, ...]
     design_review_defaults: ValidationDesignReviewDefaultsSpec
     skip_item: ReferenceValidationSkipItemSpec | None = None
 
@@ -159,7 +163,7 @@ class ReferenceValidationDocument:
             skip_neuron_mode=_validation_skip_neuron_mode(config),
             defaults=_optional_table(config, "defaults"),
             protocol_defaults=_optional_table(config, "protocol"),
-            rules=_validation_rule_specs(config),
+            rule_records=_validation_rule_records(config),
             design_review_defaults=ValidationDesignReviewDefaultsSpec.from_config(config),
             skip_item=ReferenceValidationSkipItemSpec.from_config(config),
         )
@@ -178,6 +182,7 @@ def load_reference_validation_document(
 __all__ = [
     "ReferenceValidationDocument",
     "ReferenceValidationSkipItemSpec",
+    "ValidationRuleRecord",
     "ValidationDesignReviewDefaultsSpec",
     "load_reference_validation_document",
 ]

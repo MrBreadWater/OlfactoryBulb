@@ -10,6 +10,7 @@ from olfactorybulb.audit.reference_validation_config import (
     list_reference_validation_ids,
 )
 from olfactorybulb.audit.reference_validation_document import load_reference_validation_document
+from olfactorybulb.audit.reference_validation_rule_records import ValidationRuleRecord
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
@@ -26,12 +27,14 @@ def _item_label(validation_id: str, *, check_id: str, property_name: str | None 
 
 
 def _resolved_property_statuses(
-    rule: dict[str, Any],
+    rule: ValidationRuleRecord | dict[str, Any],
     *,
     validation_id: str,
     default_status: str,
     fallback_check_id: str,
 ) -> tuple[list[str], list[str], list[str], list[str]]:
+    if isinstance(rule, ValidationRuleRecord):
+        rule = rule.raw_rule
     property_metric_map = dict(rule.get("property_metric_map", {}))
     property_statuses = dict(rule.get("property_validation_design_review_statuses", {}))
     check_id = str(rule.get("check_id") or fallback_check_id)
@@ -73,12 +76,14 @@ def _resolved_property_statuses(
 
 
 def _resolved_check_statuses(
-    rule: dict[str, Any],
+    rule: ValidationRuleRecord | dict[str, Any],
     *,
     validation_id: str,
     default_status: str,
     fallback_check_id: str,
 ) -> tuple[list[str], list[str], list[str], list[str]]:
+    if isinstance(rule, ValidationRuleRecord):
+        rule = rule.raw_rule
     check_id = str(rule.get("check_id") or fallback_check_id)
     resolved = _resolved_status(rule.get("validation_design_review_status"), default_status)
     label = _item_label(validation_id, check_id=check_id)
@@ -131,7 +136,7 @@ def run(args: argparse.Namespace) -> AuditReport:
             elif resolved == "provisional":
                 provisional_statuses.append(label)
 
-        for rule_index, rule in enumerate(document.rules, start=1):
+        for rule_index, rule in enumerate(document.rule_records, start=1):
             missing, unknown, pending, provisional = _resolved_check_statuses(
                 rule,
                 validation_id=validation_id,

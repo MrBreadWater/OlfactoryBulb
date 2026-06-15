@@ -10,6 +10,10 @@ import math
 from olfactorybulb.audit import AuditItem, series_visual_spec
 from olfactorybulb.audit.protocol_evidence import protocol_evidence_bundle_from_resultish
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
+from olfactorybulb.audit.reference_validation_rule_records import (
+    ValidationRuleRecord,
+    coerce_validation_rule_records,
+)
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
     csv_rows,
@@ -74,72 +78,6 @@ class ValidationRuleContext:
 
 
 RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
-
-
-@dataclass(frozen=True)
-class ValidationRuleRecord:
-    raw_rule: dict[str, Any]
-    kind: str
-    enabled_when_arg_truthy: str = ""
-    enabled_when_arg_falsey: str = ""
-    enabled_when_arg_in: str = ""
-    enabled_values: tuple[str, ...] = ()
-    review_status: str = ""
-    review_note: str = ""
-    review_reviewer: str = ""
-    review_required_expertise: str = ""
-    review_focus: str = ""
-
-    @classmethod
-    def from_rule(cls, rule: dict[str, Any]) -> "ValidationRuleRecord":
-        raw_rule = dict(rule)
-        kind = str(raw_rule.get("kind") or "").strip()
-        if not kind:
-            raise ValueError("Validation rule is missing required 'kind'")
-        return cls(
-            raw_rule=raw_rule,
-            kind=kind,
-            enabled_when_arg_truthy=str(raw_rule.get("enabled_when_arg_truthy", "") or "").strip(),
-            enabled_when_arg_falsey=str(raw_rule.get("enabled_when_arg_falsey", "") or "").strip(),
-            enabled_when_arg_in=str(raw_rule.get("enabled_when_arg_in", "") or "").strip(),
-            enabled_values=tuple(
-                str(value).strip()
-                for value in raw_rule.get("enabled_values", [])
-                if str(value).strip()
-            ),
-            review_status=str(raw_rule.get("validation_design_review_status", "") or "").strip(),
-            review_note=str(raw_rule.get("validation_design_review_note", "") or "").strip(),
-            review_reviewer=str(raw_rule.get("validation_design_review_reviewer", "") or "").strip(),
-            review_required_expertise=str(
-                raw_rule.get("validation_design_review_required_expertise", "") or ""
-            ).strip(),
-            review_focus=str(raw_rule.get("validation_design_review_focus", "") or "").strip(),
-        )
-
-    def is_enabled(self, args: Any) -> bool:
-        truthy_arg = self.enabled_when_arg_truthy
-        if truthy_arg and not bool(getattr(args, truthy_arg, None)):
-            return False
-        falsey_arg = self.enabled_when_arg_falsey
-        if falsey_arg and bool(getattr(args, falsey_arg, None)):
-            return False
-        enabled_arg = self.enabled_when_arg_in
-        if enabled_arg:
-            current = set(_arg_values(getattr(args, enabled_arg, None)))
-            if self.enabled_values and not current.intersection(self.enabled_values):
-                return False
-        return True
-
-    def resolved_review_metadata(self, context: ValidationRuleContext) -> dict[str, str]:
-        return {
-            "status": self.review_status or context.design_review_defaults.status,
-            "note": self.review_note or context.design_review_defaults.note,
-            "reviewer": self.review_reviewer or context.design_review_defaults.reviewer,
-            "required_expertise": (
-                self.review_required_expertise or context.design_review_defaults.required_expertise
-            ),
-            "focus": self.review_focus or context.design_review_defaults.focus,
-        }
 
 
 @dataclass(frozen=True)
@@ -289,7 +227,7 @@ def build_rule_items(
 
 
 def compile_rule_dispatches(
-    rules: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+    rules: list[ValidationRuleRecord | dict[str, Any]] | tuple[ValidationRuleRecord | dict[str, Any], ...],
 ) -> tuple[ValidationRuleDispatch, ...]:
     dispatches: list[ValidationRuleDispatch] = []
     pending_family: _GroupedRuleFamily | None = None
@@ -308,8 +246,7 @@ def compile_rule_dispatches(
         pending_family = None
         pending_records = []
 
-    for raw_rule in rules:
-        record = ValidationRuleRecord.from_rule(raw_rule)
+    for record in coerce_validation_rule_records(rules):
         grouped_family = _grouped_rule_family_for_kind(record.kind)
         if grouped_family is not None:
             if pending_family is not None and pending_family != grouped_family:

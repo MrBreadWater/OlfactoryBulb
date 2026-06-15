@@ -933,6 +933,8 @@ contract for future sessions.
   - The first structured layer above that is the typed
     `ReferenceValidationDocument` in
     `olfactorybulb.audit.reference_validation_document`.
+    That document should carry typed `ValidationRuleRecord` entries rather
+    than a raw `checks` list once the config has crossed the raw-I/O layer.
   - The maintained runtime should compile that raw config into the typed
     `ReferenceValidationPlan` in `olfactorybulb.audit.reference_validation_plan`
     before the engine, CLI, or maintained audit wrappers consume it.
@@ -953,8 +955,8 @@ contract for future sessions.
     hook as the compatibility surface for extension-defined custom rule kinds,
     not as the internal execution model for the maintained built-in rules.
   - Static config-inspection surfaces such as validation-design-review audits
-    should consume the typed document rather than hand-walking loose config
-    dicts and parallel accessor calls.
+    should consume the typed document and its typed rule records rather than
+    hand-walking loose config dicts and parallel accessor calls.
   - Do not let `reference_validation_engine.py` or the maintained wrapper
     modules drift back toward passing loose config dicts and parallel accessor
     calls around at runtime.
