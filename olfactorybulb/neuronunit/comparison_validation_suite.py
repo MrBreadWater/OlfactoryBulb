@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 import quantities as pq
 import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import numeric_value
@@ -60,8 +61,8 @@ class ComparisonRuleCase:
         if self.metric_quantity is None:
             object.__setattr__(self, "metric_quantity", resolve_metric_quantity(self.metric_key))
 
-    def observation_payload(self) -> dict[str, Any]:
-        return {
+    def observation_payload(self) -> "ComparisonRuleObservationPayload":
+        return ComparisonRuleObservationPayload.from_mapping({
             "rule_kind": self.rule_kind,
             "metric_key": self.metric_key,
             "entity_key": self.entity_key,
@@ -72,7 +73,11 @@ class ComparisonRuleCase:
             "expected": self.expected,
             "tolerance": self.tolerance,
             "max_difference": self.max_difference,
-        }
+        })
+
+
+class ComparisonRuleObservationPayload(FrozenMappingPayload):
+    """Frozen observation payload for comparison-rule SciUnit tests."""
 
 
 class ComparisonRuleScore(sciunit.Score):
@@ -113,7 +118,7 @@ class ComparisonRuleTest(sciunit.Test):
         self.case = case
         super().__init__(observation=case.observation_payload(), name=case.title)
 
-    def validate_observation(self, observation: dict[str, Any]) -> None:
+    def validate_observation(self, observation: Mapping[str, Any]) -> None:
         required = {"rule_kind", "metric_key"}
         missing = sorted(required - set(observation))
         if missing:
@@ -166,7 +171,7 @@ class ComparisonRuleTest(sciunit.Test):
 
     def compute_score(
         self,
-        observation: dict[str, Any],
+        observation: Mapping[str, Any],
         prediction: ScalarMetricValueMap | ScalarGroupPair | ScalarGroupValueSet,
     ) -> ComparisonRuleScore:
         case = self.case
@@ -378,6 +383,7 @@ def audit_items_from_comparison_rule_suite(
 
 __all__ = [
     "ComparisonRuleCase",
+    "ComparisonRuleObservationPayload",
     "ComparisonRuleScore",
     "ComparisonRuleTest",
     "CompiledComparisonRuleSuite",

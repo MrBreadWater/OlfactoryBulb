@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Mapping
 
 import quantities as pq
 import sciunit
@@ -15,6 +15,7 @@ from olfactorybulb.neuronunit.metric_quantities import (
     MetricQuantitySpec,
     resolve_metric_quantity,
 )
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationRuntimeData
@@ -63,7 +64,7 @@ class SummaryRuleCase:
         if self.rule_kind == "summary_metric_status_map" and self.status_map_policy is None:
             raise ValueError("summary_metric_status_map cases require a status_map_policy")
 
-    def observation_payload(self) -> dict[str, Any]:
+    def observation_payload(self) -> "SummaryRuleObservationPayload":
         payload = {
             "rule_kind": self.rule_kind,
             "metric_key": self.metric_key,
@@ -75,7 +76,11 @@ class SummaryRuleCase:
             payload["maximum"] = self.maximum
         if self.status_map_policy is not None:
             payload.update(self.status_map_policy.observation_payload())
-        return payload
+        return SummaryRuleObservationPayload.from_mapping(payload)
+
+
+class SummaryRuleObservationPayload(FrozenMappingPayload):
+    """Frozen observation payload for summary-rule SciUnit tests."""
 
 
 class SummaryRuleScore(sciunit.Score):
@@ -116,7 +121,7 @@ class SummaryRuleTest(sciunit.Test):
         self.case = case
         super().__init__(observation=case.observation_payload(), name=case.title)
 
-    def validate_observation(self, observation: dict[str, Any]) -> None:
+    def validate_observation(self, observation: Mapping[str, Any]) -> None:
         required = {"rule_kind", "metric_key", "group"}
         missing = sorted(required - set(observation))
         if missing:
@@ -136,7 +141,7 @@ class SummaryRuleTest(sciunit.Test):
             ),
         )
 
-    def compute_score(self, observation: dict[str, Any], prediction: ScalarMetricValue) -> SummaryRuleScore:
+    def compute_score(self, observation: Mapping[str, Any], prediction: ScalarMetricValue) -> SummaryRuleScore:
         observed_numeric = prediction.numeric
         if self.case.rule_kind == "summary_metric_min":
             passed = is_finite_scalar(observed_numeric) and observed_numeric >= float(self.case.minimum)
@@ -282,6 +287,7 @@ def audit_items_from_summary_rule_suite(
 __all__ = [
     "CompiledSummaryRuleSuite",
     "SummaryRuleCase",
+    "SummaryRuleObservationPayload",
     "SummaryRuleScore",
     "SummaryRuleTest",
     "audit_items_from_summary_rule_suite",

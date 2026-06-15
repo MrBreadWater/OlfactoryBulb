@@ -13,6 +13,7 @@ from olfactorybulb.audit.reference_validation_rules import (
     compile_rule_dispatches,
 )
 from olfactorybulb.neuronunit.summary_validation_suite import (
+    SummaryRuleObservationPayload,
     SummaryRuleCase,
     audit_items_from_summary_rule_suite,
     compile_summary_rule_suite,
@@ -111,13 +112,17 @@ compiled = compile_summary_rule_suite(cases=cases, summary=summary, suite_name="
 assert compiled.model.runtime_data.summary is compiled.model.summary
 assert compiled.model.runtime_data.metrics.rows == ()
 assert compiled.model.runtime_data.protocol_evidence.to_dict() == {}
-assert cases[0].observation_payload() == {
+payload0 = cases[0].observation_payload()
+assert isinstance(payload0, SummaryRuleObservationPayload)
+assert payload0.to_dict() == {
     "rule_kind": "summary_metric_min",
     "metric_key": "baseline_population_min_count",
     "group": "ungrouped",
     "minimum": 1.0,
 }
-assert cases[1].observation_payload() == {
+payload1 = cases[1].observation_payload()
+assert isinstance(payload1, SummaryRuleObservationPayload)
+assert payload1.to_dict() == {
     "rule_kind": "summary_metric_status_map",
     "metric_key": "epli_target_pattern_specificity_code",
     "group": "ungrouped",

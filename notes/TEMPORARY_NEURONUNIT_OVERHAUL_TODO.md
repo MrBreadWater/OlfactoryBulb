@@ -573,6 +573,13 @@ Remove this file when the listed items are either:
         shared frozen payload
       - direct metric-table, comparison-suite, and reference-model coverage
         now assert the maintained accessor returns the typed payload
+- [x] Keep the migrated SciUnit observation export seam typed instead of
+      letting each case object emit one more anonymous dict into
+      `sciunit.Test(...)`.
+      - added named frozen observation payload types for summary, comparison,
+        reference-band, and series cases
+      - the suite tests now assert those maintained `observation_payload()`
+        methods return typed payloads and preserve the same serialized content
 - [x] Keep the literature-row loading/filtering seam on a shared typed wrapper
       instead of rediscovering raw CSV-style dict rows inside each rule/spec
       helper.

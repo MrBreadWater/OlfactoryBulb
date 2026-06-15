@@ -710,6 +710,10 @@ contract for future sessions.
     map, return one shared frozen `MetricValueMapPayload` instead of
     rediscovering a fresh mutable dict and then re-coercing it again in the
     scalar helper layer.
+    Keep the migrated SciUnit observation payload seam typed too. When a
+    maintained summary, comparison, reference-band, or series case exports its
+    observation into `sciunit.Test(...)`, do that through a named frozen
+    payload type rather than one more anonymous dict built at the callsite.
     Inside the series-comparison core itself, prefer the typed
     `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
     x-key/y-key/unit/transform parameter bundles across bins, paths,

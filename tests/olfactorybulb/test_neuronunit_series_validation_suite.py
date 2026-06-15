@@ -21,6 +21,7 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SeriesComparisonCase,
     SeriesComparisonEvidencePayload,
+    SeriesComparisonObservationPayload,
     SeriesComparisonPolicy,
     SeriesDataSpec,
     SeriesDistributionObservation,
@@ -318,7 +319,9 @@ assert observation.reference_spec.x_key == "current_pA"
 assert observation.reference_spec.series_id_key == "cell_id"
 assert observation.model_spec.x_key == "current_flux"
 assert observation.visual_contract.reference_y_key == "reference_values_Hz"
-assert observation.observation_payload() == {
+series_payload = observation.observation_payload()
+assert isinstance(series_payload, SeriesComparisonObservationPayload)
+assert series_payload.to_dict() == {
     "protocol_evidence_key": "fi_curve_rows",
     "reference_x_key": "current_pA",
     "reference_y_key": "firing_rate_Hz",
@@ -335,7 +338,7 @@ assert observation.observation_payload() == {
     "x_match_tolerance": None,
     "resampling_grid_source": "",
     "resampling_domain_policy": "",
-    "resampling_grid_values": (),
+    "resampling_grid_values": [],
     "interpolation_method": "linear",
     "distribution_kind": "empirical_by_x",
     "score_family": "hybrid_residual_welch",

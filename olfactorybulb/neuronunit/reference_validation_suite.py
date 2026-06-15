@@ -186,7 +186,7 @@ class ReferenceBandTest(sciunit.Test):
         self.case = case
         super().__init__(observation=case.observation.observation_payload(), name=case.title)
 
-    def validate_observation(self, observation: dict[str, Any]) -> None:
+    def validate_observation(self, observation: Mapping[str, Any]) -> None:
         required = {
             "property_name",
             "group",
@@ -210,7 +210,7 @@ class ReferenceBandTest(sciunit.Test):
             unit_text=obs.resolved_prediction_unit_text,
         )
 
-    def compute_score(self, observation: dict[str, Any], prediction: float | pq.Quantity) -> ReferenceBandScore:
+    def compute_score(self, observation: Mapping[str, Any], prediction: float | pq.Quantity) -> ReferenceBandScore:
         obs = self.case.observation
         band = obs.accepted_band
         normalized_prediction = obs.normalize_prediction(prediction)

@@ -10,6 +10,7 @@ import numpy as np
 import quantities as pq
 from scipy.stats import beta as beta_distribution
 
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload
 from olfactorybulb.neuronunit.provenance import ProvenanceRecord, ValidationReview
 
 
@@ -141,8 +142,8 @@ class ReferenceBandObservation:
             measurement_with_unit(band.high, self.unit_text),
         )
 
-    def observation_payload(self) -> dict[str, Any]:
-        return {
+    def observation_payload(self) -> "ReferenceBandObservationPayload":
+        return ReferenceBandObservationPayload.from_mapping({
             "property_name": self.property_name,
             "group": self.group,
             "metric_key": self.metric_key,
@@ -150,7 +151,11 @@ class ReferenceBandObservation:
             "reference_sd": self.reference_sd,
             "unit_text": self.unit_text,
             "band_mode": self.policy.mode,
-        }
+        })
+
+
+class ReferenceBandObservationPayload(FrozenMappingPayload):
+    """Frozen observation payload for reference-band SciUnit tests."""
 
 
 def compute_reference_acceptance_band(
@@ -245,6 +250,7 @@ __all__ = [
     "ProvenanceRecord",
     "ReferenceAcceptanceBand",
     "ReferenceBandObservation",
+    "ReferenceBandObservationPayload",
     "ReferenceBandPolicy",
     "ValidationReview",
     "compute_reference_acceptance_band",

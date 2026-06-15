@@ -10,6 +10,7 @@ from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext
 from olfactorybulb.audit.reference_validation_rules import compile_rule_dispatches
 from olfactorybulb.neuronunit.metric_tables import MetricValueMapPayload
 from olfactorybulb.neuronunit.comparison_validation_suite import (
+    ComparisonRuleObservationPayload,
     ComparisonRuleCase,
     audit_items_from_comparison_rule_suite,
     compile_comparison_rule_suite,
@@ -177,26 +178,30 @@ assert len(compiled.model.runtime_data.metrics.rows) == 2
 metric_value_map = compiled.model.get_metric_value_map("zero_step_rate_Hz")
 assert isinstance(metric_value_map, MetricValueMapPayload)
 assert metric_value_map.to_dict() == {"MC1": 0.0, "TC1": 0.0}
-assert cases[0].observation_payload() == {
+payload0 = cases[0].observation_payload()
+assert isinstance(payload0, ComparisonRuleObservationPayload)
+assert payload0.to_dict() == {
     "rule_kind": "all_exact_metric",
     "metric_key": "zero_step_rate_Hz",
     "entity_key": "cell_name",
     "left_group": "",
     "right_group": "",
     "operator": ">",
-    "groups": (),
+    "groups": [],
     "expected": 0.0,
     "tolerance": 1e-09,
     "max_difference": 0.0,
 }
-assert cases[2].observation_payload() == {
+payload2 = cases[2].observation_payload()
+assert isinstance(payload2, ComparisonRuleObservationPayload)
+assert payload2.to_dict() == {
     "rule_kind": "group_ordering",
     "metric_key": "FWHM_ms",
     "entity_key": "cell_name",
     "left_group": "MC",
     "right_group": "TC",
     "operator": "<",
-    "groups": (),
+    "groups": [],
     "expected": 0.0,
     "tolerance": 1e-09,
     "max_difference": 0.0,

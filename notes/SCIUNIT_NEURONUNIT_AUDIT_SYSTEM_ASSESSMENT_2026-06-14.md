@@ -2248,6 +2248,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `MetricValueMapPayload` instead of building fresh mutable dicts and then
     immediately re-coercing them again in the scalar comparison/exactness
     helper layer
+  - the migrated SciUnit observation seam is tighter too: maintained summary,
+    comparison, reference-band, and series cases now export their observation
+    payloads through named frozen payload types rather than building one more
+    anonymous dict at the `sciunit.Test(...)` boundary
   - the literature-row seam is tighter too: `_load_rows`, `_filter_rows`, and
     the `reference_band_rows` / `reference_curve_match` spec entrypoints now
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer

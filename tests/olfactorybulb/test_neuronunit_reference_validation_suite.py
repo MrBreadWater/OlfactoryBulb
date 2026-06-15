@@ -23,6 +23,7 @@ from olfactorybulb.audit.reference_validation_rules import (
     compile_rule_dispatches,
 )
 from olfactorybulb.neuronunit.reference_bands import (
+    ReferenceBandObservationPayload,
     ReferenceBandObservation,
     ReferenceBandPolicy,
     ValidationReview,
@@ -93,7 +94,9 @@ compiled = compile_reference_band_suite(
 )
 assert compiled.model.runtime_data.summary.get("MC", {}).get("input_resistance_MOhm") == 102.0
 assert compiled.model.summary.get("MC", {}).get("input_resistance_MOhm") == 102.0
-assert case.observation.observation_payload() == {
+reference_payload = case.observation.observation_payload()
+assert isinstance(reference_payload, ReferenceBandObservationPayload)
+assert reference_payload.to_dict() == {
     "property_name": "Input Resistance",
     "group": "MC",
     "metric_key": "input_resistance_MOhm",

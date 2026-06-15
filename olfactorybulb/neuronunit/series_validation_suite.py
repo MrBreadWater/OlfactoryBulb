@@ -22,6 +22,7 @@ from olfactorybulb.audit.reference_rows import ReferenceRowTable, coerce_referen
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceBundle,
 )
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
@@ -1192,8 +1193,8 @@ class SeriesDistributionObservation:
             model=self.model_dataset(prediction),
         )
 
-    def observation_payload(self) -> dict[str, Any]:
-        return {
+    def observation_payload(self) -> "SeriesComparisonObservationPayload":
+        return SeriesComparisonObservationPayload.from_mapping({
             "protocol_evidence_key": self.protocol_evidence_key,
             "reference_x_key": self.reference_x_key,
             "reference_y_key": self.reference_y_key,
@@ -1215,7 +1216,11 @@ class SeriesDistributionObservation:
             "distribution_kind": self.policy.distribution_kind,
             "score_family": self.policy.score_family,
             "pvalue_aggregation": self.policy.pvalue_aggregation,
-        }
+        })
+
+
+class SeriesComparisonObservationPayload(FrozenMappingPayload):
+    """Frozen observation payload for series-comparison SciUnit tests."""
 
 
 @dataclass(frozen=True)
@@ -2265,7 +2270,7 @@ class SeriesComparisonTest(sciunit.Test):
         self.case = case
         super().__init__(observation=case.observation.observation_payload(), name=case.title)
 
-    def validate_observation(self, observation: dict[str, Any]) -> None:
+    def validate_observation(self, observation: Mapping[str, Any]) -> None:
         required = {
             "protocol_evidence_key",
             "reference_x_key",
@@ -2301,7 +2306,7 @@ class SeriesComparisonTest(sciunit.Test):
             protocol_evidence=model.get_protocol_evidence_bundle(),
         )
 
-    def compute_score(self, observation: dict[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
+    def compute_score(self, observation: Mapping[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
         del observation
         obs = self.case.observation
         visual_contract = obs.visual_contract
@@ -2813,6 +2818,7 @@ __all__ = [
     "SERIES_RESAMPLING_GRID_SOURCES",
     "SeriesComparisonCase",
     "SeriesComparisonEvidencePayload",
+    "SeriesComparisonObservationPayload",
     "SeriesAlignedBin",
     "SeriesAlignmentSummary",
     "SeriesClusterMembers",
