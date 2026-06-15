@@ -15,7 +15,11 @@ from olfactorybulb.audit.reference_validation_rules import (
     build_rule_items,
     compile_rule_dispatches,
 )
-from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, SeriesProvenanceSummary
+from olfactorybulb.neuronunit.provenance import (
+    SeriesMemberProvenance,
+    SeriesObservationProvenance,
+    SeriesProvenanceSummary,
+)
 from olfactorybulb.neuronunit.series_payloads import SeriesContextPayload, SeriesRowTable
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
@@ -468,12 +472,68 @@ assert adapted_items[1].evidence["statistical_norm_score"] == 1.0
 assert adapted_items[1].evidence["overall_norm_score"] == 1.0
 assert adapted_items[1].evidence["series_provenance"]["reference"]["source_files"] == ["synthetic_curve.csv"]
 assert adapted_items[1].evidence["series_provenance"]["reference"]["note_ids"] == ["NOTE_A", "NOTE_B"]
+assert adapted_items[1].evidence["series_provenance"]["reference"]["series_members"] == [
+    {
+        "series_id": "RefA",
+        "row_count": 2,
+        "sources": ["Synthetic Reference Source"],
+        "source_files": ["synthetic_curve.csv"],
+        "source_locations": ["sheet1"],
+        "source_urls": ["https://example.org/reference"],
+        "protocol_ids": ["SYNTHETIC_PROTOCOL"],
+        "extraction_methods": ["source_spreadsheet"],
+        "sample_scopes": ["example_cell"],
+        "rate_definitions": ["median_inverse_isi"],
+        "note_ids": ["NOTE_A", "NOTE_B"],
+    },
+    {
+        "series_id": "RefB",
+        "row_count": 2,
+        "sources": ["Synthetic Reference Source"],
+        "source_files": ["synthetic_curve.csv"],
+        "source_locations": ["sheet1"],
+        "source_urls": ["https://example.org/reference"],
+        "protocol_ids": ["SYNTHETIC_PROTOCOL"],
+        "extraction_methods": ["source_spreadsheet"],
+        "sample_scopes": ["example_cell"],
+        "rate_definitions": ["median_inverse_isi"],
+        "note_ids": ["NOTE_B"],
+    },
+]
 assert adapted_items[1].evidence["series_provenance"]["model"]["sample_scopes"] == ["model_population"]
 assert adapted_items[1].evidence["series_provenance"]["model"]["protocol_context"]["cell_models"] == [
     "SyntheticModel1",
     "SyntheticModel2",
 ]
 assert adapted_items[1].evidence["series_provenance"]["model"]["protocol_context"]["step_duration_ms"] == 500.0
+assert adapted_items[1].evidence["series_provenance"]["model"]["series_members"] == [
+    {
+        "series_id": "Model1",
+        "row_count": 2,
+        "sources": [],
+        "source_files": [],
+        "source_locations": [],
+        "source_urls": [],
+        "protocol_ids": [],
+        "extraction_methods": [],
+        "sample_scopes": ["model_population"],
+        "rate_definitions": ["median_inverse_isi"],
+        "note_ids": [],
+    },
+    {
+        "series_id": "Model2",
+        "row_count": 2,
+        "sources": [],
+        "source_files": [],
+        "source_locations": [],
+        "source_urls": [],
+        "protocol_ids": [],
+        "extraction_methods": [],
+        "sample_scopes": ["model_population"],
+        "rate_definitions": ["median_inverse_isi"],
+        "note_ids": [],
+    },
+]
 assert adapted_items[1].evidence["series_provenance"] == SeriesObservationProvenance(
     reference=SeriesProvenanceSummary.from_rows(
         reference_rows,
@@ -613,6 +673,22 @@ assert equivalence_reference_dataset.provenance_summary() == SeriesProvenanceSum
     x_unit_text="pA",
     y_unit_text="Hz",
 )
+assert equivalence_reference_dataset.provenance_summary().series_members == tuple(
+    SeriesMemberProvenance(
+        series_id=f"EqRef{index}",
+        row_count=2,
+        sources=(),
+        source_files=(),
+        source_locations=(),
+        source_urls=(),
+        protocol_ids=(),
+        extraction_methods=(),
+        sample_scopes=(),
+        rate_definitions=(),
+        note_ids=(),
+    )
+    for index in range(1, 6)
+)
 equivalence_model_bundle = SeriesPredictionBundle(
     protocol_evidence_key="fi_curve_rows",
     protocol_evidence=ProtocolEvidenceBundle(
@@ -635,6 +711,22 @@ assert equivalence_model_dataset.provenance_summary().protocol_context.to_dict()
     "cell_models": ["EqModel1", "EqModel2"],
     "step_duration_ms": 500.0,
 }
+assert equivalence_model_dataset.provenance_summary().series_members == tuple(
+    SeriesMemberProvenance(
+        series_id=f"EqModel{index}",
+        row_count=2,
+        sources=(),
+        source_files=(),
+        source_locations=(),
+        source_urls=(),
+        protocol_ids=(),
+        extraction_methods=(),
+        sample_scopes=(),
+        rate_definitions=(),
+        note_ids=(),
+    )
+    for index in range(1, 6)
+)
 equivalence_bound_datasets = equivalence_observation.bound_datasets(equivalence_model_bundle)
 assert isinstance(equivalence_bound_datasets, SeriesObservedDatasetPair)
 assert equivalence_bound_datasets.reference == equivalence_reference_dataset

@@ -636,6 +636,9 @@ contract for future sessions.
     `intersection`, `reference`, and `model`.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
+    When a side has explicit series ids, keep per-series provenance summaries
+    nested there too rather than forcing future validations to reconstruct
+    example-cell/source identity from raw rows.
     Prefer unit-neutral residual/statistical evidence keys such as
     `mean_absolute_error`, `root_mean_square_error`, `reference_sd_values`,
     and `equivalence_margin`, with unit metadata carried separately in

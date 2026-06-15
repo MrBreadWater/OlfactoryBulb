@@ -1822,6 +1822,8 @@ Important details:
 - reference/model provenance summaries for series comparisons now come from a
   shared typed provenance contract rather than bespoke dict assembly in the
   rule bridge
+- when a series comparison has explicit series ids, the same provenance
+  payload now also includes per-series summaries under `series_members`
 
 ## Warning, caveat, math, and visualization features
 

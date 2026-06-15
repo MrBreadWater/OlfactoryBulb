@@ -78,6 +78,25 @@ def _series_id_values(rows: Sequence[Mapping[str, object]], *, series_id_key: st
     return _sorted_unique_text_values(rows, series_id_key)
 
 
+def _rows_grouped_by_series_id(
+    rows: Sequence[Mapping[str, object]],
+    *,
+    series_id_key: str,
+) -> tuple[tuple[str, tuple[Mapping[str, object], ...]], ...]:
+    if not series_id_key:
+        return ()
+    grouped: dict[str, list[Mapping[str, object]]] = {}
+    for row in rows:
+        series_id = str(row.get(series_id_key, "")).strip()
+        if not series_id:
+            continue
+        grouped.setdefault(series_id, []).append(row)
+    return tuple(
+        (series_id, tuple(grouped_rows))
+        for series_id, grouped_rows in sorted(grouped.items())
+    )
+
+
 @dataclass(frozen=True)
 class ProvenanceRecord:
     source: str = ""
@@ -142,10 +161,62 @@ class ProtocolContextSummary:
 
 
 @dataclass(frozen=True)
+class SeriesMemberProvenance:
+    series_id: str = ""
+    row_count: int = 0
+    sources: tuple[str, ...] = ()
+    source_files: tuple[str, ...] = ()
+    source_locations: tuple[str, ...] = ()
+    source_urls: tuple[str, ...] = ()
+    protocol_ids: tuple[str, ...] = ()
+    extraction_methods: tuple[str, ...] = ()
+    sample_scopes: tuple[str, ...] = ()
+    rate_definitions: tuple[str, ...] = ()
+    note_ids: tuple[str, ...] = ()
+
+    @classmethod
+    def from_rows(
+        cls,
+        rows: Sequence[Mapping[str, object]],
+        *,
+        series_id: str,
+    ) -> "SeriesMemberProvenance":
+        return cls(
+            series_id=str(series_id).strip(),
+            row_count=len(rows),
+            sources=_sorted_unique_text_values(rows, "source"),
+            source_files=_sorted_unique_text_values(rows, "source_file"),
+            source_locations=_sorted_unique_text_values(rows, "source_location"),
+            source_urls=_sorted_unique_text_values(rows, "source_url"),
+            protocol_ids=_sorted_unique_text_values(rows, "protocol_id"),
+            extraction_methods=_sorted_unique_text_values(rows, "extraction_method"),
+            sample_scopes=_sorted_unique_text_values(rows, "sample_scope"),
+            rate_definitions=_sorted_unique_text_values(rows, "rate_definition"),
+            note_ids=note_id_values(rows),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "series_id": self.series_id,
+            "row_count": int(self.row_count),
+            "sources": list(self.sources),
+            "source_files": list(self.source_files),
+            "source_locations": list(self.source_locations),
+            "source_urls": list(self.source_urls),
+            "protocol_ids": list(self.protocol_ids),
+            "extraction_methods": list(self.extraction_methods),
+            "sample_scopes": list(self.sample_scopes),
+            "rate_definitions": list(self.rate_definitions),
+            "note_ids": list(self.note_ids),
+        }
+
+
+@dataclass(frozen=True)
 class SeriesProvenanceSummary:
     row_count: int = 0
     series_count: int = 0
     series_ids: tuple[str, ...] = ()
+    series_members: tuple[SeriesMemberProvenance, ...] = ()
     x_key: str = ""
     y_key: str = ""
     x_unit_text: str = ""
@@ -174,11 +245,17 @@ class SeriesProvenanceSummary:
         context: Mapping[str, object] | None = None,
         exclude_context_keys: set[str] | None = None,
     ) -> "SeriesProvenanceSummary":
-        series_ids = _series_id_values(rows, series_id_key=series_id_key)
+        series_groups = _rows_grouped_by_series_id(rows, series_id_key=series_id_key)
+        series_members = tuple(
+            SeriesMemberProvenance.from_rows(group_rows, series_id=series_id)
+            for series_id, group_rows in series_groups
+        )
+        series_ids = tuple(member.series_id for member in series_members)
         return cls(
             row_count=len(rows),
             series_count=len(series_ids),
             series_ids=series_ids,
+            series_members=series_members,
             x_key=str(x_key),
             y_key=str(y_key),
             x_unit_text=str(x_unit_text),
@@ -203,6 +280,7 @@ class SeriesProvenanceSummary:
             "row_count": int(self.row_count),
             "series_count": int(self.series_count),
             "series_ids": list(self.series_ids),
+            "series_members": [member.to_dict() for member in self.series_members],
             "x_key": self.x_key,
             "y_key": self.y_key,
             "x_unit_text": self.x_unit_text,
@@ -238,6 +316,7 @@ class SeriesObservationProvenance:
 __all__ = [
     "ProvenanceRecord",
     "ProtocolContextSummary",
+    "SeriesMemberProvenance",
     "SeriesObservationProvenance",
     "SeriesProvenanceSummary",
     "ValidationReview",

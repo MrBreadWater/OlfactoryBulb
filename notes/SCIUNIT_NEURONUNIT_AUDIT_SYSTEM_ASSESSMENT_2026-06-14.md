@@ -2353,6 +2353,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     path now supports `resampling_grid_source = "uniform_step"` with explicit
     step size plus optional declared min/max bounds, while keeping the
     resolved bounds visible in emitted evidence when defaults are used
+  - series provenance is richer too: the shared typed provenance payload now
+    carries compact per-series summaries when explicit series ids are present,
+    so future example-cell validations can inspect source identity without
+    re-parsing raw row bundles
   - the suite-level statistical-support contract is now visible in the
     migrated presentation layer too: when a suite matrix has only partial
     statistical support or fails its declared support gate, the dashboard
@@ -2378,7 +2382,8 @@ The remaining open questions are now narrower:
   `linear`, `nearest`, `pchip`, `step_hold`; `allow_partial_support`,
   `intersection`, `reference`, `model`)
 - more explicit provenance-bearing series observation objects if future
-  validations need more than the current EPL-FSI example-cell path
+  validations need more than the current aggregate-plus-per-series source
+  summaries
 - how much NeuronUnit-native result presentation should grow before it starts
   competing with the maintained audit shell instead of feeding it
 

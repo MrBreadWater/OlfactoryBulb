@@ -685,6 +685,12 @@ now come from the shared typed layer in
 reference/model provenance payload, do it there first and let the suite bridge
 adapt the typed object back into audit evidence.
 
+When the reference or model side has explicit series ids, that shared
+provenance layer now also emits per-series summaries inside
+`series_provenance.reference.series_members` and
+`series_provenance.model.series_members`, so future validations can inspect
+example-cell/source identity without falling back to raw row bundles.
+
 Within the scorer itself, bound series rows plus transform/context metadata
 should now move through the shared `SeriesObservedDataset` layer in
 `olfactorybulb.neuronunit.series_validation_suite`. If a change affects how

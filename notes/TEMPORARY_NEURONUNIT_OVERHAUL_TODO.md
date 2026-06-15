@@ -690,3 +690,11 @@ Remove this file when the listed items are either:
         otherwise default from the observed x-range
       - the declarative parser, emitted evidence, HOWTO/tutorial, template,
         and direct/rule-level coverage now all expose the uniform-step form
+- [x] Deepen the shared series provenance contract beyond side-level
+      aggregates so future validations can inspect per-series identity and
+      source context without dropping back to raw rows.
+      - `SeriesProvenanceSummary` now emits typed `series_members`
+      - the maintained series evidence now carries those per-series summaries
+        for both reference and model sides when series ids are available
+      - HOWTO/tutorial and direct suite coverage now expose the richer
+        provenance contract
