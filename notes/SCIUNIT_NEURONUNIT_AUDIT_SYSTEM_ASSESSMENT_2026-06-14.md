@@ -2256,6 +2256,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     interpolation family (`linear`, `nearest`, `step_hold`) instead of
     treating straight-line interpolation as the only possible series
     resampling contract
+  - alignment support is now a first-class typed contract too: the
+    series-comparison policy can declare minimum reference/model coverage
+    fractions in addition to `minimum_point_count`, and the emitted evidence
+    now records the aligned-support counts, coverage fractions, coverage gate,
+    and alignment-support norm score instead of letting a thin overlap look
+    indistinguishable from a fully supported comparison
   - the typed suite-aggregation layer now supports a richer
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite

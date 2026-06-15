@@ -1165,6 +1165,18 @@ class _SeriesComparisonRuleParser:
         )
 
     def policy(self) -> SeriesComparisonPolicy:
+        minimum_point_count = int(self.rule.get("minimum_point_count", 1))
+        if minimum_point_count < 1:
+            raise ValueError("reference_curve_match requires 'minimum_point_count' >= 1")
+
+        def _optional_fraction(key: str) -> float | None:
+            if key not in self.rule or self.rule.get(key) is None:
+                return None
+            value = float(self.rule[key])
+            if not math.isfinite(value) or not (0.0 <= value <= 1.0):
+                raise ValueError(f"reference_curve_match {key!r} must be a finite fraction in [0, 1]")
+            return value
+
         score_family = self.required_choice("score_family")
         alignment_policy = self.required_choice("alignment_policy")
         if alignment_policy not in SERIES_ALIGNMENT_POLICIES:
@@ -1218,7 +1230,9 @@ class _SeriesComparisonRuleParser:
         else:
             equivalence_margin = None
         return SeriesComparisonPolicy(
-            minimum_point_count=int(self.rule.get("minimum_point_count", 1)),
+            minimum_point_count=minimum_point_count,
+            minimum_reference_coverage_fraction=_optional_fraction("minimum_reference_coverage_fraction"),
+            minimum_model_coverage_fraction=_optional_fraction("minimum_model_coverage_fraction"),
             maximum_mae=float(self.rule.get("maximum_mae", float("inf"))),
             maximum_rmse=float(self.rule.get("maximum_rmse", float("inf"))),
             minimum_median_welch_pvalue=(

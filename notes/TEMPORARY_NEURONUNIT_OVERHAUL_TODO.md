@@ -497,6 +497,17 @@ Remove this file when the listed items are either:
         generation, case weighting, and evidence export
       - the same slice also forced the rule/spec parsers to accept the
         tuple-backed sequence values produced by the frozen rule payload layer
+- [x] Keep alignment-support contracts explicit when a series comparison needs
+      more than a raw matched-bin count.
+      - `SeriesComparisonPolicy` now also supports
+        `minimum_reference_coverage_fraction` and
+        `minimum_model_coverage_fraction`
+      - the scorer emits aligned-support counts, coverage fractions,
+        `coverage_gate_passed`, `alignment_support_gate_passed`, and a
+        continuous `alignment_support_norm_score`
+      - residual/statistical gates no longer treat a thin overlap as fully
+        acceptable just because the surviving aligned bins happen to have low
+        residual error
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

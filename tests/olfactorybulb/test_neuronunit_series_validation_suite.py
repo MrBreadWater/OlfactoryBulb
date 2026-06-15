@@ -322,6 +322,9 @@ assert observation.observation_payload() == {
     "model_y_key": "firing_rate_Hz",
     "comparison_x_unit_text": "pA",
     "comparison_y_unit_text": "Hz",
+    "minimum_point_count": 2,
+    "minimum_reference_coverage_fraction": None,
+    "minimum_model_coverage_fraction": None,
     "equivalence_margin": None,
     "equivalence_alpha": 0.05,
     "alignment_policy": "exact_transformed_x",
@@ -1015,6 +1018,77 @@ assert nearest_resampled_items[1].evidence["currents_pA"] == [150.0, 250.0]
 assert nearest_resampled_items[1].evidence["mean_absolute_error"] == 1.25
 assert nearest_resampled_items[1].evidence["root_mean_square_error"] == 1.25
 
+coverage_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=4,
+        minimum_reference_coverage_fraction=0.9,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        alignment_policy="resampled_grid",
+        resampling_grid_source="explicit_grid",
+        resampling_grid_values=(100.0, 150.0, 200.0, 250.0, 300.0),
+        score_family="residual_only",
+    ),
+)
+
+coverage_case = SeriesComparisonCase(
+    check_id="synthetic_resampled_series_coverage_gate",
+    title="Synthetic resampled alignment can require explicit overlap coverage",
+    criterion="A resampled-grid comparison can require a minimum aligned-support fraction on the reference side.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic alignment-support coverage suite test.",
+    acceptable="The aligned support satisfies the configured overlap contract.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=coverage_observation,
+)
+
+coverage_compiled = compile_series_comparison_suite(
+    cases=[coverage_case],
+    summary={},
+    metrics=[],
+    protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+    suite_name="synthetic coverage-gated series suite",
+)
+coverage_items = audit_items_from_series_comparison_suite(coverage_compiled)
+assert coverage_items[1].status == "FAIL"
+assert coverage_items[1].evidence["reference_bin_count"] == 5
+assert coverage_items[1].evidence["model_bin_count"] == 4
+assert coverage_items[1].evidence["matched_point_count"] == 4
+assert coverage_items[1].evidence["reference_coverage_fraction"] == 0.8
+assert coverage_items[1].evidence["model_coverage_fraction"] == 1.0
+assert coverage_items[1].evidence["minimum_reference_coverage_fraction"] == 0.9
+assert coverage_items[1].evidence["minimum_model_coverage_fraction"] is None
+assert coverage_items[1].evidence["minimum_point_count_gate_passed"] is True
+assert coverage_items[1].evidence["coverage_gate_passed"] is False
+assert coverage_items[1].evidence["alignment_support_gate_passed"] is False
+assert abs(float(coverage_items[1].evidence["alignment_support_norm_score"]) - 0.889) < 1e-9
+assert coverage_items[1].evidence["overall_norm_score"] == coverage_items[1].evidence["alignment_support_norm_score"]
+assert coverage_items[1].evidence["residual_gate_passed"] is False
+assert coverage_items[0].evidence["suite_cases"][0]["case_score"]["prediction"]["minimum_reference_coverage_fraction"] == 0.9
+assert coverage_items[0].evidence["suite_cases"][0]["case_score"]["observation"]["reference_coverage_fraction"] == 0.8
+assert coverage_items[0].evidence["suite_cases"][0]["case_score"]["normalization"]["alignment_support_norm_score"] == 0.889
+
 rule = {
     "kind": "reference_curve_match",
     "check_id": "synthetic_series_match",
@@ -1371,6 +1445,37 @@ assert resampled_rule_items[1].evidence["declared_resampling_grid_values"] == [1
 assert resampled_rule_items[1].evidence["currents_pA"] == [150.0, 250.0]
 assert resampled_rule_items[1].evidence["matched_point_count"] == 2
 
+coverage_rule = dict(resampled_rule)
+coverage_rule["check_id"] = "synthetic_resampled_series_coverage_gate"
+coverage_rule["title"] = "Synthetic coverage-gated series rule"
+coverage_rule["criterion"] = "A declarative series rule can require minimum aligned-support coverage."
+coverage_rule["resampling_grid_values"] = [100.0, 150.0, 200.0, 250.0, 300.0]
+coverage_rule["minimum_point_count"] = 4
+coverage_rule["minimum_reference_coverage_fraction"] = 0.9
+coverage_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    coverage_rule_items = build_rule_items(compile_rule_dispatches([coverage_rule]), coverage_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert coverage_rule_items[1].status == "FAIL"
+assert coverage_rule_items[1].evidence["reference_coverage_fraction"] == 0.8
+assert coverage_rule_items[1].evidence["minimum_reference_coverage_fraction"] == 0.9
+assert coverage_rule_items[1].evidence["coverage_gate_passed"] is False
+assert coverage_rule_items[1].evidence["alignment_support_gate_passed"] is False
+assert SeriesComparisonRuleSpec.from_rule(coverage_rule).policy.minimum_reference_coverage_fraction == 0.9
+
 step_hold_rule = dict(resampled_rule)
 step_hold_rule["resampling_grid_values"] = [175.0]
 step_hold_rule["interpolation_method"] = "step_hold"
@@ -1504,6 +1609,22 @@ try:
         raise AssertionError("Expected resampled-grid alignment to reject unsupported interpolation methods")
     except ValueError as exc:
         assert "Unsupported interpolation method" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+invalid_coverage_fraction_rule = dict(resampled_rule)
+invalid_coverage_fraction_rule["minimum_reference_coverage_fraction"] = 1.2
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items(compile_rule_dispatches([invalid_coverage_fraction_rule]), resampled_context)
+        raise AssertionError("Expected series coverage fractions outside [0, 1] to be rejected")
+    except ValueError as exc:
+        assert "minimum_reference_coverage_fraction" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

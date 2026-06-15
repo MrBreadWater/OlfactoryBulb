@@ -398,6 +398,10 @@ validation_design_review_status = "pending"
 # maximum_mae = 20.0
 # maximum_rmse = 30.0
 # minimum_point_count = 5
+# Optional stricter overlap contract after the chosen transform/alignment path
+# has produced comparable bins:
+# minimum_reference_coverage_fraction = 0.8
+# minimum_model_coverage_fraction = 0.8
 # title = "Model curve stays near the extracted reference curve"
 # criterion = "Explain the accepted curve mismatch threshold."
 # description = "Use this when both the model protocol and the extracted reference bundle provide series point sets, and declare the axis units explicitly."

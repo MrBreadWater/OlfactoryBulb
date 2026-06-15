@@ -1738,6 +1738,13 @@ Important details:
 - `alignment_policy = "nearest_within_tolerance"` and
   `alignment_policy = "tolerance_clusters"` should also declare
   `x_match_tolerance` explicitly in the comparison x-axis units
+- `minimum_point_count` is the basic overlap gate; use it when the comparison
+  should fail unless at least that many aligned bins survive the chosen
+  transform/alignment path
+- `minimum_reference_coverage_fraction` and
+  `minimum_model_coverage_fraction` are optional stronger overlap gates; they
+  evaluate the aligned-bin coverage fraction on each side after the chosen
+  alignment policy has produced the comparable support
 - `alignment_policy = "resampled_grid"` defaults `resampling_grid_source` to
   `union_observed_x` and `interpolation_method` to `linear`; the emitted
   evidence records that resolved choice

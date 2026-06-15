@@ -678,6 +678,20 @@ series-rule contract from one place.
 When you use `alignment_policy = "nearest_within_tolerance"` or
 `alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
 explicitly in the comparison x-axis units.
+Use `minimum_point_count` when the comparison should fail unless at least that
+many aligned bins survive the transform/alignment path.
+When you need a stronger overlap contract than a raw matched-bin count, declare
+one or both of:
+
+- `minimum_reference_coverage_fraction`
+- `minimum_model_coverage_fraction`
+
+These fractions are evaluated after the chosen transform/alignment policy has
+produced the comparable x bins or resampled grid support for each side. For
+example, `minimum_reference_coverage_fraction = 0.8` means at least eighty
+percent of the reference-side comparable bins must participate in the final
+aligned comparison.
+
 When you use `alignment_policy = "resampled_grid"`, the maintained path now
 defaults `resampling_grid_source` to `union_observed_x` and
 `interpolation_method` to `linear`. Supported interpolation methods are:

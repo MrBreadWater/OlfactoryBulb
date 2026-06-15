@@ -320,19 +320,59 @@ def _series_statistical_norm_score(
     return None
 
 
+def _coverage_fraction(*, matched_point_count: int, total_point_count: int) -> float | None:
+    if total_point_count <= 0:
+        return None
+    return max(0.0, min(1.0, float(matched_point_count) / float(total_point_count)))
+
+
+def _series_alignment_support_norm_score(
+    *,
+    matched_point_count: int,
+    minimum_point_count: int,
+    reference_coverage_fraction: float | None,
+    minimum_reference_coverage_fraction: float | None,
+    model_coverage_fraction: float | None,
+    minimum_model_coverage_fraction: float | None,
+) -> float | None:
+    components = [
+        component
+        for component in (
+            _norm_ratio_at_least(matched_point_count, minimum_point_count),
+            _norm_ratio_at_least(reference_coverage_fraction, minimum_reference_coverage_fraction)
+            if minimum_reference_coverage_fraction is not None
+            else None,
+            _norm_ratio_at_least(model_coverage_fraction, minimum_model_coverage_fraction)
+            if minimum_model_coverage_fraction is not None
+            else None,
+        )
+        if component is not None
+    ]
+    if not components:
+        return None
+    return min(components)
+
+
 def _series_overall_norm_score(
     *,
     score_family: str,
+    alignment_support_norm_score: float | None,
     residual_norm_score: float | None,
     statistical_norm_score: float | None,
     fallback_status: str,
 ) -> float:
     if score_family == "residual_only":
-        candidate = residual_norm_score
+        components = [component for component in (alignment_support_norm_score, residual_norm_score) if component is not None]
+        candidate = min(components) if components else None
     elif score_family == "equivalence_only":
-        candidate = statistical_norm_score
+        components = [component for component in (alignment_support_norm_score, statistical_norm_score) if component is not None]
+        candidate = min(components) if components else None
     else:
-        components = [component for component in (residual_norm_score, statistical_norm_score) if component is not None]
+        components = [
+            component
+            for component in (alignment_support_norm_score, residual_norm_score, statistical_norm_score)
+            if component is not None
+        ]
         candidate = min(components) if components else None
     if candidate is None or not math.isfinite(float(candidate)):
         return 1.0 if str(fallback_status).upper() == "PASS" else 0.0
@@ -614,6 +654,8 @@ def _coerce_to_comparison_unit(
 @dataclass(frozen=True)
 class SeriesComparisonPolicy:
     minimum_point_count: int = 1
+    minimum_reference_coverage_fraction: float | None = None
+    minimum_model_coverage_fraction: float | None = None
     maximum_mae: float = float("inf")
     maximum_rmse: float = float("inf")
     minimum_median_welch_pvalue: float | None = None
@@ -902,6 +944,9 @@ class SeriesDistributionObservation:
             "model_y_key": self.model_y_key,
             "comparison_x_unit_text": self.comparison_x_unit_text,
             "comparison_y_unit_text": self.comparison_y_unit_text,
+            "minimum_point_count": self.policy.minimum_point_count,
+            "minimum_reference_coverage_fraction": self.policy.minimum_reference_coverage_fraction,
+            "minimum_model_coverage_fraction": self.policy.minimum_model_coverage_fraction,
             "equivalence_margin": self.policy.equivalence_margin,
             "equivalence_alpha": self.policy.equivalence_alpha,
             "alignment_policy": self.policy.alignment_policy,
@@ -1006,6 +1051,13 @@ class SeriesComparisonEvidencePayload:
     model_sd_values: tuple[float, ...] = ()
     reference_count_values: tuple[int, ...] = ()
     model_count_values: tuple[int, ...] = ()
+    reference_bin_count: int = 0
+    model_bin_count: int = 0
+    reference_coverage_fraction: float | None = None
+    model_coverage_fraction: float | None = None
+    minimum_point_count: int = 1
+    minimum_reference_coverage_fraction: float | None = None
+    minimum_model_coverage_fraction: float | None = None
     matched_point_count: int = 0
     mean_absolute_error: float | None = None
     root_mean_square_error: float | None = None
@@ -1031,9 +1083,13 @@ class SeriesComparisonEvidencePayload:
     unsupported_statistical_x_values: tuple[float, ...] = ()
     pvalue_aggregation: str = ""
     pvalue_aggregation_source: str = ""
+    minimum_point_count_gate_passed: bool = False
+    coverage_gate_passed: bool = False
+    alignment_support_gate_passed: bool = False
     residual_gate_passed: bool = False
     pvalue_gate_passed: bool = False
     statistical_gate_passed: bool = False
+    alignment_support_norm_score: float | None = None
     residual_norm_score: float | None = None
     statistical_norm_score: float | None = None
     overall_norm_score: float | None = None
@@ -1082,6 +1138,21 @@ class SeriesComparisonEvidencePayload:
         object.__setattr__(self, "model_sd_values", _coerced_float_sequence(self.model_sd_values))
         object.__setattr__(self, "reference_count_values", _coerced_int_sequence(self.reference_count_values))
         object.__setattr__(self, "model_count_values", _coerced_int_sequence(self.model_count_values))
+        object.__setattr__(self, "reference_bin_count", int(self.reference_bin_count))
+        object.__setattr__(self, "model_bin_count", int(self.model_bin_count))
+        object.__setattr__(self, "reference_coverage_fraction", _coerced_float(self.reference_coverage_fraction))
+        object.__setattr__(self, "model_coverage_fraction", _coerced_float(self.model_coverage_fraction))
+        object.__setattr__(self, "minimum_point_count", int(self.minimum_point_count))
+        object.__setattr__(
+            self,
+            "minimum_reference_coverage_fraction",
+            _coerced_float(self.minimum_reference_coverage_fraction),
+        )
+        object.__setattr__(
+            self,
+            "minimum_model_coverage_fraction",
+            _coerced_float(self.minimum_model_coverage_fraction),
+        )
         object.__setattr__(self, "matched_point_count", int(self.matched_point_count))
         object.__setattr__(self, "mean_absolute_error", _coerced_float(self.mean_absolute_error))
         object.__setattr__(self, "root_mean_square_error", _coerced_float(self.root_mean_square_error))
@@ -1111,9 +1182,13 @@ class SeriesComparisonEvidencePayload:
         object.__setattr__(self, "unsupported_statistical_x_values", _coerced_float_sequence(self.unsupported_statistical_x_values))
         object.__setattr__(self, "pvalue_aggregation", str(self.pvalue_aggregation).strip())
         object.__setattr__(self, "pvalue_aggregation_source", str(self.pvalue_aggregation_source).strip())
+        object.__setattr__(self, "minimum_point_count_gate_passed", bool(self.minimum_point_count_gate_passed))
+        object.__setattr__(self, "coverage_gate_passed", bool(self.coverage_gate_passed))
+        object.__setattr__(self, "alignment_support_gate_passed", bool(self.alignment_support_gate_passed))
         object.__setattr__(self, "residual_gate_passed", bool(self.residual_gate_passed))
         object.__setattr__(self, "pvalue_gate_passed", bool(self.pvalue_gate_passed))
         object.__setattr__(self, "statistical_gate_passed", bool(self.statistical_gate_passed))
+        object.__setattr__(self, "alignment_support_norm_score", _coerced_float(self.alignment_support_norm_score))
         object.__setattr__(self, "residual_norm_score", _coerced_float(self.residual_norm_score))
         object.__setattr__(self, "statistical_norm_score", _coerced_float(self.statistical_norm_score))
         object.__setattr__(self, "overall_norm_score", _coerced_float(self.overall_norm_score))
@@ -1229,12 +1304,19 @@ class SeriesComparisonEvidencePayload:
             ),
             observation={
                 "matched_point_count": self.matched_point_count,
+                "reference_bin_count": self.reference_bin_count,
+                "model_bin_count": self.model_bin_count,
+                "reference_coverage_fraction": _rounded_float_or_raw(self.reference_coverage_fraction),
+                "model_coverage_fraction": _rounded_float_or_raw(self.model_coverage_fraction),
                 "mean_absolute_error": _rounded_float_or_raw(self.mean_absolute_error),
                 "root_mean_square_error": _rounded_float_or_raw(self.root_mean_square_error),
                 "aggregate_statistical_pvalue": _rounded_float_or_raw(self.aggregate_statistical_pvalue),
                 "median_welch_pvalue": _rounded_float_or_raw(self.median_welch_pvalue),
             },
             prediction={
+                "minimum_point_count": self.minimum_point_count,
+                "minimum_reference_coverage_fraction": _rounded_float_or_raw(self.minimum_reference_coverage_fraction),
+                "minimum_model_coverage_fraction": _rounded_float_or_raw(self.minimum_model_coverage_fraction),
                 "score_family": self.score_family,
                 "statistical_test_family": self.statistical_test_family,
                 "maximum_mae": _rounded_float_or_raw(self.maximum_mae),
@@ -1246,6 +1328,7 @@ class SeriesComparisonEvidencePayload:
             },
             normalization={
                 "norm_score": self.norm_score,
+                "alignment_support_norm_score": _rounded_float_or_raw(self.alignment_support_norm_score),
                 "residual_norm_score": _rounded_float_or_raw(self.residual_norm_score),
                 "statistical_norm_score": _rounded_float_or_raw(self.statistical_norm_score),
                 "overall_norm_score": _rounded_float_or_raw(self.overall_norm_score),
@@ -1267,6 +1350,13 @@ class SeriesComparisonEvidencePayload:
             "model_sd_values": _rounded_list(list(self.model_sd_values)),
             "reference_count_values": list(self.reference_count_values),
             "model_count_values": list(self.model_count_values),
+            "reference_bin_count": self.reference_bin_count,
+            "model_bin_count": self.model_bin_count,
+            "reference_coverage_fraction": _rounded_float_or_raw(self.reference_coverage_fraction),
+            "model_coverage_fraction": _rounded_float_or_raw(self.model_coverage_fraction),
+            "minimum_point_count": self.minimum_point_count,
+            "minimum_reference_coverage_fraction": _rounded_float_or_raw(self.minimum_reference_coverage_fraction),
+            "minimum_model_coverage_fraction": _rounded_float_or_raw(self.minimum_model_coverage_fraction),
             "matched_point_count": self.matched_point_count,
             "mean_absolute_error": _rounded_float_or_raw(self.mean_absolute_error),
             "root_mean_square_error": _rounded_float_or_raw(self.root_mean_square_error),
@@ -1293,9 +1383,13 @@ class SeriesComparisonEvidencePayload:
             "unsupported_statistical_x_values": _rounded_list(list(self.unsupported_statistical_x_values)),
             "pvalue_aggregation": self.pvalue_aggregation,
             "pvalue_aggregation_source": self.pvalue_aggregation_source,
+            "minimum_point_count_gate_passed": self.minimum_point_count_gate_passed,
+            "coverage_gate_passed": self.coverage_gate_passed,
+            "alignment_support_gate_passed": self.alignment_support_gate_passed,
             "residual_gate_passed": self.residual_gate_passed,
             "pvalue_gate_passed": self.pvalue_gate_passed,
             "statistical_gate_passed": self.statistical_gate_passed,
+            "alignment_support_norm_score": _rounded_float_or_raw(self.alignment_support_norm_score),
             "residual_norm_score": _rounded_float_or_raw(self.residual_norm_score),
             "statistical_norm_score": _rounded_float_or_raw(self.statistical_norm_score),
             "overall_norm_score": _rounded_float_or_raw(self.overall_norm_score),
@@ -1712,6 +1806,9 @@ class SeriesComparisonTest(sciunit.Test):
             "model_y_key",
             "comparison_x_unit_text",
             "comparison_y_unit_text",
+            "minimum_point_count",
+            "minimum_reference_coverage_fraction",
+            "minimum_model_coverage_fraction",
             "equivalence_margin",
             "equivalence_alpha",
             "alignment_policy",
@@ -1768,6 +1865,18 @@ class SeriesComparisonTest(sciunit.Test):
                 "expected one of residual_only, equivalence_only, hybrid_residual_equivalence, "
                 "welch_only, hybrid_residual_welch"
             )
+        if int(obs.policy.minimum_point_count) < 1:
+            raise ValueError("Series comparison policy requires 'minimum_point_count' >= 1")
+        for fraction_value, fraction_name in (
+            (obs.policy.minimum_reference_coverage_fraction, "minimum_reference_coverage_fraction"),
+            (obs.policy.minimum_model_coverage_fraction, "minimum_model_coverage_fraction"),
+        ):
+            if fraction_value is None:
+                continue
+            if not _is_finite_number(fraction_value) or not (0.0 <= float(fraction_value) <= 1.0):
+                raise ValueError(
+                    f"Series comparison policy requires {fraction_name!r} in the closed interval [0, 1]"
+                )
         equivalence_family = obs.policy.score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES
         legacy_welch_family = obs.policy.score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES
         resolved_pvalue_aggregation, pvalue_aggregation_source = _resolved_pvalue_aggregation(
@@ -1869,6 +1978,32 @@ class SeriesComparisonTest(sciunit.Test):
             alignment_policy=obs.policy.alignment_policy,
             x_match_tolerance=obs.policy.x_match_tolerance,
         )
+        matched_point_count = len(aligned_pairs)
+        reference_bin_count = len(reference_bins)
+        model_bin_count = len(model_bins)
+        point_count_gate_passed = matched_point_count >= int(obs.policy.minimum_point_count)
+        reference_coverage_fraction = _coverage_fraction(
+            matched_point_count=matched_point_count,
+            total_point_count=reference_bin_count,
+        )
+        model_coverage_fraction = _coverage_fraction(
+            matched_point_count=matched_point_count,
+            total_point_count=model_bin_count,
+        )
+        coverage_gate_passed = True
+        if obs.policy.minimum_reference_coverage_fraction is not None:
+            coverage_gate_passed = (
+                coverage_gate_passed
+                and reference_coverage_fraction is not None
+                and reference_coverage_fraction >= float(obs.policy.minimum_reference_coverage_fraction)
+            )
+        if obs.policy.minimum_model_coverage_fraction is not None:
+            coverage_gate_passed = (
+                coverage_gate_passed
+                and model_coverage_fraction is not None
+                and model_coverage_fraction >= float(obs.policy.minimum_model_coverage_fraction)
+            )
+        alignment_support_gate_passed = point_count_gate_passed and coverage_gate_passed
         aligned_reference_keys = [reference_x for reference_x, _model_x in aligned_pairs]
         aligned_model_keys = [model_x for _reference_x, model_x in aligned_pairs]
         if cluster_metadata:
@@ -1911,7 +2046,7 @@ class SeriesComparisonTest(sciunit.Test):
         )
         max_abs = float(np.max(absolute_differences)) if absolute_differences else float("nan")
         residual_gate_passed = (
-            len(aligned_pairs) >= int(obs.policy.minimum_point_count)
+            alignment_support_gate_passed
             and _is_finite_number(mae)
             and mae <= float(obs.policy.maximum_mae)
             and _is_finite_number(rmse)
@@ -1932,7 +2067,7 @@ class SeriesComparisonTest(sciunit.Test):
                 method=resolved_pvalue_aggregation,
             ) if finite_welch_pvalues else float("nan")
             legacy_difference_gate_passed = (
-                len(aligned_pairs) >= int(obs.policy.minimum_point_count)
+                alignment_support_gate_passed
                 and _is_finite_number(median_welch_pvalue)
                 and obs.policy.minimum_median_welch_pvalue is not None
                 and median_welch_pvalue >= float(obs.policy.minimum_median_welch_pvalue)
@@ -1974,7 +2109,7 @@ class SeriesComparisonTest(sciunit.Test):
                     method=resolved_pvalue_aggregation,
                 )
             statistical_gate_passed = (
-                len(aligned_pairs) >= int(obs.policy.minimum_point_count)
+                alignment_support_gate_passed
                 and supported_statistical_bin_count == len(aligned_pairs)
                 and _is_finite_number(aggregate_statistical_pvalue)
                 and aggregate_statistical_pvalue <= float(obs.policy.equivalence_alpha)
@@ -1987,10 +2122,18 @@ class SeriesComparisonTest(sciunit.Test):
         elif obs.policy.score_family == "hybrid_residual_equivalence":
             passed = residual_gate_passed and statistical_gate_passed
         elif obs.policy.score_family == "welch_only":
-            passed = len(aligned_pairs) >= int(obs.policy.minimum_point_count) and legacy_difference_gate_passed
+            passed = alignment_support_gate_passed and legacy_difference_gate_passed
         else:
             passed = residual_gate_passed and legacy_difference_gate_passed
         status = self.case.pass_status if passed else self.case.fail_status
+        alignment_support_norm_score = _series_alignment_support_norm_score(
+            matched_point_count=matched_point_count,
+            minimum_point_count=int(obs.policy.minimum_point_count),
+            reference_coverage_fraction=reference_coverage_fraction,
+            minimum_reference_coverage_fraction=obs.policy.minimum_reference_coverage_fraction,
+            model_coverage_fraction=model_coverage_fraction,
+            minimum_model_coverage_fraction=obs.policy.minimum_model_coverage_fraction,
+        )
         residual_norm_score = _residual_norm_score(
             mae=mae,
             maximum_mae=obs.policy.maximum_mae,
@@ -2006,6 +2149,7 @@ class SeriesComparisonTest(sciunit.Test):
         )
         overall_norm_score = _series_overall_norm_score(
             score_family=obs.policy.score_family,
+            alignment_support_norm_score=alignment_support_norm_score,
             residual_norm_score=residual_norm_score,
             statistical_norm_score=statistical_norm_score,
             fallback_status=status,
@@ -2042,7 +2186,14 @@ class SeriesComparisonTest(sciunit.Test):
             model_sd_values=tuple(model_sd_values),
             reference_count_values=tuple(reference_count_values),
             model_count_values=tuple(model_count_values),
-            matched_point_count=len(aligned_pairs),
+            reference_bin_count=reference_bin_count,
+            model_bin_count=model_bin_count,
+            reference_coverage_fraction=reference_coverage_fraction,
+            model_coverage_fraction=model_coverage_fraction,
+            minimum_point_count=int(obs.policy.minimum_point_count),
+            minimum_reference_coverage_fraction=obs.policy.minimum_reference_coverage_fraction,
+            minimum_model_coverage_fraction=obs.policy.minimum_model_coverage_fraction,
+            matched_point_count=matched_point_count,
             mean_absolute_error=mae,
             root_mean_square_error=rmse,
             max_absolute_error=max_abs,
@@ -2075,9 +2226,13 @@ class SeriesComparisonTest(sciunit.Test):
             unsupported_statistical_x_values=tuple(unsupported_statistical_x_values),
             pvalue_aggregation=resolved_pvalue_aggregation,
             pvalue_aggregation_source=pvalue_aggregation_source,
+            minimum_point_count_gate_passed=point_count_gate_passed,
+            coverage_gate_passed=coverage_gate_passed,
+            alignment_support_gate_passed=alignment_support_gate_passed,
             residual_gate_passed=residual_gate_passed,
             pvalue_gate_passed=pvalue_gate_passed,
             statistical_gate_passed=(statistical_gate_passed if equivalence_family else legacy_difference_gate_passed),
+            alignment_support_norm_score=alignment_support_norm_score,
             residual_norm_score=residual_norm_score,
             statistical_norm_score=statistical_norm_score,
             overall_norm_score=overall_norm_score,

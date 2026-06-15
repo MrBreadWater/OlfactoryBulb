@@ -1013,6 +1013,11 @@ contract for future sessions.
       series diagnostics should live on one explicit payload object that owns
       score text, suite-case statistical summaries, and evidence export,
       instead of rebuilding a large ad hoc dict in `compute_score()`
+    - when a maintained series comparison needs more than a raw matched-bin
+      count, keep the overlap contract explicit too: use typed minimum
+      reference/model coverage-fraction fields and surface the resulting
+      support-gate evidence/norms, rather than letting a thin aligned overlap
+      masquerade as a fully supported residual/statistical pass
     - when a maintained SciUnit wrapper already has a typed case or
       observation object, make that object own the SciUnit observation payload
       via a small `observation_payload()` helper instead of rebuilding a
