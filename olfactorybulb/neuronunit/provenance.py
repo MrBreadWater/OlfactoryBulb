@@ -222,9 +222,22 @@ class SeriesProvenanceSummary:
         return payload
 
 
+@dataclass(frozen=True)
+class SeriesObservationProvenance:
+    reference: SeriesProvenanceSummary = field(default_factory=SeriesProvenanceSummary)
+    model: SeriesProvenanceSummary = field(default_factory=SeriesProvenanceSummary)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "reference": self.reference.to_dict(),
+            "model": self.model.to_dict(),
+        }
+
+
 __all__ = [
     "ProvenanceRecord",
     "ProtocolContextSummary",
+    "SeriesObservationProvenance",
     "SeriesProvenanceSummary",
     "ValidationReview",
     "compact_metadata_value",

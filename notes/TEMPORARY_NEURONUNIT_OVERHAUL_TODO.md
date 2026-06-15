@@ -407,6 +407,14 @@ Remove this file when the listed items are either:
       - `suite_presentation.audit_item_adapter_spec_from_case(...)` now
         consumes a structural `AuditItemCaseLike` protocol instead of
         `case: Any`
+- [x] Keep paired series provenance on one typed payload instead of scattering
+      separate reference/model provenance siblings across score evidence.
+      - added `SeriesObservationProvenance`
+      - series-comparison evidence now exposes one nested
+        `series_provenance = {reference: ..., model: ...}` payload
+      - removed the redundant top-level `reference_series_count` /
+        `model_series_count` and sibling provenance fields from the
+        maintained series evidence contract
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

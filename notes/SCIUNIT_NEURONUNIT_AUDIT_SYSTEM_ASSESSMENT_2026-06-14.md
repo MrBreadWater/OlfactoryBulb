@@ -2145,6 +2145,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     now consumes a structural case protocol instead of `case: Any`, and the
     protocol-evidence helper now consumes a structural carrier protocol
     instead of `result: Any`
+  - the series-comparison provenance layer is now more coherent too: a typed
+    `SeriesObservationProvenance` payload now carries the paired reference and
+    model provenance summaries together, so score evidence no longer has to
+    scatter separate `reference_provenance` / `model_provenance` siblings and
+    parallel top-level count fields
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

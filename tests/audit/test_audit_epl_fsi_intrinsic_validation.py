@@ -47,8 +47,8 @@ assert curve_item["evidence"]["model_x_key"] == "current_pA"
 assert curve_item["evidence"]["model_y_key"] == "firing_rate_Hz"
 assert curve_item["evidence"]["model_x_unit_text"] == "pA"
 assert curve_item["evidence"]["model_y_unit_text"] == "Hz"
-assert curve_item["evidence"]["reference_provenance"]["sources"] == ["Burton, Malyshko & Urban (2024)"]
-assert curve_item["evidence"]["model_provenance"]["protocol_context"]["cell_models"] == ["PVCRH_FSI1"]
+assert curve_item["evidence"]["series_provenance"]["reference"]["sources"] == ["Burton, Malyshko & Urban (2024)"]
+assert curve_item["evidence"]["series_provenance"]["model"]["protocol_context"]["cell_models"] == ["PVCRH_FSI1"]
 
 listed = subprocess.run([sys.executable, "tools/run_audit.py", "--list"], capture_output=True, text=True, check=False)
 assert listed.returncode == 0, listed

@@ -21,7 +21,7 @@ from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceRows,
 )
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
-from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
+from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
 from olfactorybulb.neuronunit.suite_presentation import (
@@ -1596,6 +1596,10 @@ class SeriesComparisonTest(sciunit.Test):
         )
         reference_provenance_summary = reference_dataset.provenance_summary()
         model_provenance_summary = model_dataset.provenance_summary()
+        series_provenance = SeriesObservationProvenance(
+            reference=reference_provenance_summary,
+            model=model_provenance_summary,
+        )
         evidence = {
             visual_contract.x_key: _rounded_list(visual_x_values),
             "reference_matched_x_values": _rounded_list(reference_x_values),
@@ -1718,12 +1722,9 @@ class SeriesComparisonTest(sciunit.Test):
             "model_x_unit_text": model_dataset.x_unit_text,
             "model_y_unit_text": model_dataset.y_unit_text,
             "model_series_id_key": model_dataset.series_id_key,
-            "reference_series_count": reference_provenance_summary.series_count,
-            "model_series_count": model_provenance_summary.series_count,
             "reference_x_transform": reference_dataset.x_transform.description(),
             "model_x_transform": model_dataset.x_transform.description(),
-            "reference_provenance": reference_provenance_summary.to_dict(),
-            "model_provenance": model_provenance_summary.to_dict(),
+            "series_provenance": series_provenance.to_dict(),
         }
         evidence = _with_legacy_hz_aliases(
             evidence,

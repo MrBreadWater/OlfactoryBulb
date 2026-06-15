@@ -979,6 +979,11 @@ contract for future sessions.
       `coerce_protocol_evidence_bundle(...)`, keep the public runtime/model
       seam on `ProtocolEvidenceBundle` instead of advertising raw dicts as a
       first-class protocol-evidence payload type
+    - when series-comparison evidence needs both reference and model
+      provenance, keep that on one nested typed payload rather than
+      scattering sibling keys like `reference_*` / `model_*` across the score
+      evidence map unless a renderer or CLI surface truly needs flattened
+      aliases
     - cache hits/misses should stay visible in emitted protocol evidence under
       `protocol_cache`; do not hide them behind silent control flow
 
