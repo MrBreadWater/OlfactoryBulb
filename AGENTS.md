@@ -606,6 +606,11 @@ contract for future sessions.
     the resolved choice.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
+    Prefer unit-neutral residual/statistical evidence keys such as
+    `mean_absolute_error`, `root_mean_square_error`, `reference_sd_values`,
+    and `equivalence_margin`, with unit metadata carried separately in
+    `comparison_y_unit_text` / `error_unit_text`; do not keep teaching the
+    NeuronUnit-side core that every series comparison is measured in hertz.
     Prefer explicit transform objects such as `affine` or `piecewise_linear`
     over one-off hardcoded x-axis conversion logic in protocol runners or rule
     handlers.

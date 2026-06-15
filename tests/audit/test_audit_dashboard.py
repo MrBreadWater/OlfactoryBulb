@@ -113,6 +113,30 @@ sample_report = AuditReport(
             group_title="Audit gamma",
         ),
         AuditItem(
+            check_id="audit_gamma.gamma_generic_curve",
+            status="PASS",
+            title="Gamma generic curve",
+            criterion="Generic series labels should respect explicit quantity and unit metadata.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "currents_pA": [0.0, 50.0, 100.0, 150.0],
+                "reference_values": [-62.0, -58.0, -54.0, -50.0],
+                "model_values": [-61.5, -57.5, -53.5, -49.5],
+                "x_quantity_name": "Injected current",
+                "y_quantity_name": "Membrane voltage",
+                "comparison_x_unit_text": "pA",
+                "comparison_y_unit_text": "mV",
+                "label": "Voltage response",
+            },
+            series_visuals=[
+                series_visual_spec(keys=["currents_pA", "reference_values", "model_values"]),
+            ],
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
             check_id="audit_delta.delta_formulae_only",
             status="PASS",
             title="Delta formulae only",
@@ -280,6 +304,8 @@ with TemporaryDirectory() as tmp:
     assert "data-visual-backend='matplotlib'" in html
     assert "Current (pA)" in html
     assert "Firing rate (Hz)" in html
+    assert "Injected current (pA)" in html
+    assert "Membrane voltage (mV)" in html
     assert html.count("series-graph-meta") >= 1
     assert html.count("<text") >= 8
     assert html.count("<path") >= 1

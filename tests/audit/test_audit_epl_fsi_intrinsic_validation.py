@@ -37,6 +37,8 @@ assert any(item["check_id"] == "epl_fsi_reference_curve_match" for item in paylo
 assert curve_item["evidence"]["score_family"] == "residual_only"
 assert curve_item["evidence"]["alignment_policy"] == "exact_transformed_x"
 assert curve_item["evidence"]["distribution_kind"] == "empirical_by_x"
+assert curve_item["evidence"]["error_unit_text"] == "Hz"
+assert curve_item["evidence"]["mean_absolute_error"] is not None
 assert curve_item["evidence"]["reference_provenance"]["sources"] == ["Burton, Malyshko & Urban (2024)"]
 assert curve_item["evidence"]["model_provenance"]["protocol_context"]["cell_models"] == ["PVCRH_FSI1"]
 

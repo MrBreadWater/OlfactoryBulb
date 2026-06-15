@@ -353,7 +353,39 @@ def _render_interval_value_labels(
 
 
 _SERIES_X_KEY_CANDIDATES = ("currents_pA", "step_currents_pA", "current_steps_pA", "current_pA")
-_SERIES_Y_KEY_CANDIDATES = ("firing_rates_by_step_Hz", "reference_values_Hz", "model_values_Hz", "firing_rate_Hz")
+_SERIES_Y_KEY_CANDIDATES = (
+    "firing_rates_by_step_Hz",
+    "reference_values_Hz",
+    "model_values_Hz",
+    "reference_values",
+    "model_values",
+    "series_values",
+    "firing_rate_Hz",
+)
+_SERIES_METADATA_KEYS = (
+    "series_kind",
+    "x_quantity_name",
+    "y_quantity_name",
+    "comparison_x_unit_text",
+    "comparison_y_unit_text",
+)
+
+
+def _axis_label_from_metadata(
+    evidence: dict[str, Any],
+    *,
+    axis: str,
+    fallback: str,
+) -> str:
+    quantity_name = str(evidence.get(f"{axis}_quantity_name", "")).strip()
+    unit_text = str(evidence.get(f"comparison_{axis}_unit_text", "")).strip()
+    if quantity_name and unit_text:
+        return f"{quantity_name} ({unit_text})"
+    if quantity_name:
+        return quantity_name
+    if unit_text and fallback == "Value":
+        return f"Value ({unit_text})"
+    return fallback
 
 
 def _float_list_or_none(value: Any) -> list[float] | None:
@@ -572,8 +604,16 @@ def _series_graph_payload(
     if not series_kind:
         series_kind = "f-i curve" if is_fi_curve else "series graph"
 
-    x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
-    y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
+    x_axis_label = _axis_label_from_metadata(
+        evidence,
+        axis="x",
+        fallback="Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key),
+    )
+    y_axis_label = _axis_label_from_metadata(
+        evidence,
+        axis="y",
+        fallback="Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value",
+    )
     return (
         {
             "series_kind": series_kind,
@@ -1021,8 +1061,16 @@ def _render_series_graph(
     if not series_kind:
         series_kind = "f-i curve" if is_fi_curve else "series graph"
 
-    x_axis_label = "Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key)
-    y_axis_label = "Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value"
+    x_axis_label = _axis_label_from_metadata(
+        evidence,
+        axis="x",
+        fallback="Current (pA)" if "current" in x_key.lower() else _evidence_label(x_key),
+    )
+    y_axis_label = _axis_label_from_metadata(
+        evidence,
+        axis="y",
+        fallback="Firing rate (Hz)" if is_fi_curve or has_rate_series else "Value",
+    )
     x_ticks = _series_tick_values(x_low, x_high, target_ticks=5)
     y_ticks = _series_tick_values(y_low, y_high, target_ticks=5)
     fallback_to_scatter = _series_entries_require_scatter(series_entries)
@@ -1687,6 +1735,9 @@ def _render_item_card(item_payload: dict[str, Any]) -> str:
             series_keys = _visual_keys(series_spec)
             if series_keys:
                 series_evidence = {key: evidence[key] for key in series_keys if key in evidence}
+                for metadata_key in _SERIES_METADATA_KEYS:
+                    if metadata_key in evidence:
+                        series_evidence[metadata_key] = evidence[metadata_key]
                 if str(series_spec.get("kind") or "").strip().lower() == "fi_curve":
                     series_evidence["series_kind"] = "f-i curve"
                 series_graph_html, series_graph_keys = _render_series_graph(item, series_evidence, spec=series_spec)

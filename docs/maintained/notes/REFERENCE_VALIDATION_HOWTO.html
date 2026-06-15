@@ -541,6 +541,18 @@ run per-bin TOST-style equivalence tests:</p>
 diagnostics, but a large two-sample Welch p-value is not evidence of
 equivalence. When <code>pvalue_aggregation</code> is omitted there, <code>auto</code> resolves to
 <code>median</code> and the emitted evidence records that resolved choice.</p>
+<p>The emitted residual/statistical evidence now uses unit-neutral keys such as:</p>
+<ul>
+<li><code>mean_absolute_error</code></li>
+<li><code>root_mean_square_error</code></li>
+<li><code>max_absolute_error</code></li>
+<li><code>reference_sd_values</code></li>
+<li><code>model_sd_values</code></li>
+<li><code>equivalence_margin</code></li>
+</ul>
+<p>and carries the unit separately in <code>error_unit_text</code> plus the existing
+<code>comparison_y_unit_text</code>. Legacy <code>_Hz</code> aliases remain only for backward
+compatibility with older current-rate consumers.</p>
 <p>When you use <code>alignment_policy = "nearest_within_tolerance"</code> or
 <code>alignment_policy = "tolerance_clusters"</code>, declare <code>x_match_tolerance</code>
 explicitly in the comparison x-axis units.

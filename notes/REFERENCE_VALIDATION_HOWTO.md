@@ -464,6 +464,19 @@ diagnostics, but a large two-sample Welch p-value is not evidence of
 equivalence. When `pvalue_aggregation` is omitted there, `auto` resolves to
 `median` and the emitted evidence records that resolved choice.
 
+The emitted residual/statistical evidence now uses unit-neutral keys such as:
+
+- `mean_absolute_error`
+- `root_mean_square_error`
+- `max_absolute_error`
+- `reference_sd_values`
+- `model_sd_values`
+- `equivalence_margin`
+
+and carries the unit separately in `error_unit_text` plus the existing
+`comparison_y_unit_text`. Legacy `_Hz` aliases remain only for backward
+compatibility with older current-rate consumers.
+
 When you use `alignment_policy = "nearest_within_tolerance"` or
 `alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
 explicitly in the comparison x-axis units.

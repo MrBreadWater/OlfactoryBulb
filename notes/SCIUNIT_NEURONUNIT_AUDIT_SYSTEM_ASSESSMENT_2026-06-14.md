@@ -2006,7 +2006,8 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - `hybrid_residual_welch` (legacy difference-test diagnostic)
 - emitted evidence:
   - aligned mean-series arrays for plotting
-  - residual diagnostics
+  - unit-aware residual diagnostics with unit-neutral keys plus separate unit
+    metadata
   - resolved statistical-policy defaults such as `pvalue_aggregation` and
     `equivalence_margin` when those were not declared explicitly
   - resolved alignment-policy defaults such as `resampling_grid_source` when a

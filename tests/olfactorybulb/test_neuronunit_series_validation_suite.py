@@ -295,6 +295,14 @@ assert adapted_items[1].evidence["reference_values_Hz"] == [6.0, 11.0]
 assert adapted_items[1].evidence["model_values_Hz"] == [7.0, 12.0]
 assert adapted_items[1].evidence["reference_count_values"] == [2, 2]
 assert adapted_items[1].evidence["model_count_values"] == [2, 2]
+assert adapted_items[1].evidence["reference_sd_values"] == [1.414, 1.414]
+assert adapted_items[1].evidence["model_sd_values"] == [1.414, 1.414]
+assert adapted_items[1].evidence["mean_absolute_error"] == 1.0
+assert adapted_items[1].evidence["root_mean_square_error"] == 1.0
+assert adapted_items[1].evidence["max_absolute_error"] == 1.0
+assert adapted_items[1].evidence["maximum_mae"] == 2.0
+assert adapted_items[1].evidence["maximum_rmse"] == 2.0
+assert adapted_items[1].evidence["error_unit_text"] == "Hz"
 assert adapted_items[1].evidence["mean_absolute_error_Hz"] == 1.0
 assert adapted_items[1].evidence["reference_series_count"] == 2
 assert adapted_items[1].evidence["model_series_count"] == 2
@@ -313,6 +321,68 @@ assert adapted_items[1].evidence["model_provenance"]["protocol_context"]["cell_m
 assert adapted_items[1].evidence["model_provenance"]["protocol_context"]["step_duration_ms"] == 500.0
 report = AuditReport(audit_id="synthetic_series_suite", title="Synthetic series suite", items=adapted_items)
 assert report.summary == {"PASS": 1, "WARN": 0, "FAIL": 0}
+
+voltage_reference_rows = [
+    {"cell_id": "VmRef1", "current_pA": 100.0, "response_mV": -60.0},
+    {"cell_id": "VmRef2", "current_pA": 100.0, "response_mV": -58.0},
+    {"cell_id": "VmRef1", "current_pA": 200.0, "response_mV": -55.0},
+    {"cell_id": "VmRef2", "current_pA": 200.0, "response_mV": -53.0},
+]
+voltage_model_rows = [
+    {"cell_name": "VmModel1", "current_pA": 100.0, "response_mV": -59.0},
+    {"cell_name": "VmModel2", "current_pA": 100.0, "response_mV": -57.0},
+    {"cell_name": "VmModel1", "current_pA": 200.0, "response_mV": -54.0},
+    {"cell_name": "VmModel2", "current_pA": 200.0, "response_mV": -52.0},
+]
+voltage_observation = SeriesDistributionObservation(
+    protocol_evidence_key="response_rows",
+    reference_rows=voltage_reference_rows,
+    reference_x_key="current_pA",
+    reference_y_key="response_mV",
+    model_x_key="current_pA",
+    model_y_key="response_mV",
+    reference_x_unit_text="pA",
+    reference_y_unit_text="mV",
+    model_x_unit_text="pA",
+    model_y_unit_text="mV",
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="mV",
+    visual_reference_y_key="reference_values_mV",
+    visual_model_y_key="model_values_mV",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=2,
+        maximum_mae=1.0,
+        maximum_rmse=1.0,
+        score_family="residual_only",
+    ),
+)
+voltage_case = SeriesComparisonCase(
+    check_id="synthetic_voltage_series_match",
+    title="Synthetic voltage-valued series comparison stays unit-aware",
+    criterion="The aligned voltage response series should stay within the configured residual tolerances.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic non-Hz series-comparison suite test.",
+    acceptable="The matched bins satisfy the configured MAE/RMSE tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=voltage_observation,
+)
+voltage_compiled = compile_series_comparison_suite(
+    cases=[voltage_case],
+    summary={},
+    metrics=[],
+    protocol_evidence={"response_rows": voltage_model_rows},
+    suite_name="synthetic voltage series suite",
+)
+voltage_items = audit_items_from_series_comparison_suite(voltage_compiled)
+assert voltage_items[0].evidence["suite_cases"][0]["score_text"] == "MAE 1 mV"
+assert voltage_items[1].evidence["error_unit_text"] == "mV"
+assert voltage_items[1].evidence["mean_absolute_error"] == 1.0
+assert voltage_items[1].evidence["reference_sd_values"] == [1.414, 1.414]
+assert voltage_items[1].evidence["model_sd_values"] == [1.414, 1.414]
+assert "mean_absolute_error_Hz" not in voltage_items[1].evidence
 
 equivalence_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -364,6 +434,8 @@ assert equivalence_items[1].evidence["statistical_test_family"] == "equivalence_
 assert equivalence_items[1].evidence["statistical_test_kinds"] == ["welch_tost", "welch_tost"]
 assert equivalence_items[1].evidence["pvalue_aggregation"] == "max"
 assert equivalence_items[1].evidence["pvalue_aggregation_source"] == "auto_default"
+assert equivalence_items[1].evidence["equivalence_margin"] == 0.2
+assert equivalence_items[1].evidence["declared_equivalence_margin"] is None
 assert equivalence_items[1].evidence["equivalence_margin_Hz"] == 0.2
 assert equivalence_items[1].evidence["declared_equivalence_margin_Hz"] is None
 assert equivalence_items[1].evidence["equivalence_margin_source"] == "maximum_mae_default"
@@ -582,6 +654,7 @@ assert resampled_items[1].evidence["currents_pA"] == [125.0, 200.0, 225.0, 300.0
 assert resampled_items[1].evidence["matched_point_count"] == 4
 assert resampled_items[1].evidence["reference_resampled_support_counts"] == [2, 2, 2, 2]
 assert resampled_items[1].evidence["model_resampled_support_counts"] == [2, 2, 2, 2]
+assert resampled_items[1].evidence["mean_absolute_error"] == 0.0
 assert resampled_items[1].evidence["mean_absolute_error_Hz"] == 0.0
 
 rule = {
@@ -696,6 +769,7 @@ assert equivalence_rule_items[1].status == "PASS"
 assert equivalence_rule_items[1].evidence["score_family"] == "hybrid_residual_equivalence"
 assert equivalence_rule_items[1].evidence["pvalue_aggregation"] == "max"
 assert equivalence_rule_items[1].evidence["pvalue_aggregation_source"] == "auto_default"
+assert equivalence_rule_items[1].evidence["equivalence_margin"] == 0.2
 assert equivalence_rule_items[1].evidence["equivalence_margin_Hz"] == 0.2
 assert equivalence_rule_items[1].evidence["equivalence_margin_source"] == "maximum_mae_default"
 assert equivalence_rule_items[1].evidence["statistical_test_family"] == "equivalence_tost"

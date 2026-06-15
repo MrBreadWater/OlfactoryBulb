@@ -860,6 +860,29 @@ def _protocol_context_summary(context: dict[str, Any], *, exclude_keys: set[str]
     return summary
 
 
+def _with_legacy_hz_aliases(
+    evidence: dict[str, Any],
+    *,
+    comparison_y_unit_text: str,
+) -> dict[str, Any]:
+    if str(comparison_y_unit_text or "").strip() != "Hz":
+        return evidence
+    alias_pairs = {
+        "reference_sd_values": "reference_sd_values_Hz",
+        "model_sd_values": "model_sd_values_Hz",
+        "mean_absolute_error": "mean_absolute_error_Hz",
+        "root_mean_square_error": "root_mean_square_error_Hz",
+        "max_absolute_error": "max_absolute_error_Hz",
+        "maximum_mae": "maximum_mae_Hz",
+        "maximum_rmse": "maximum_rmse_Hz",
+        "equivalence_margin": "equivalence_margin_Hz",
+        "declared_equivalence_margin": "declared_equivalence_margin_Hz",
+    }
+    for canonical_key, alias_key in alias_pairs.items():
+        evidence[alias_key] = evidence.get(canonical_key)
+    return evidence
+
+
 def _series_provenance_summary(
     rows: list[dict[str, Any]],
     *,
@@ -1274,20 +1297,21 @@ class SeriesComparisonTest(sciunit.Test):
             else [],
             obs.visual_reference_y_key: _rounded_list(reference_mean_values),
             obs.visual_model_y_key: _rounded_list(model_mean_values),
-            "reference_sd_values_Hz": _rounded_list(reference_sd_values),
-            "model_sd_values_Hz": _rounded_list(model_sd_values),
+            "reference_sd_values": _rounded_list(reference_sd_values),
+            "model_sd_values": _rounded_list(model_sd_values),
             "reference_count_values": list(reference_count_values),
             "model_count_values": list(model_count_values),
             "matched_point_count": len(aligned_pairs),
-            "mean_absolute_error_Hz": rounded(mae) if _is_finite_number(mae) else mae,
-            "root_mean_square_error_Hz": rounded(rmse) if _is_finite_number(rmse) else rmse,
-            "max_absolute_error_Hz": rounded(max_abs) if _is_finite_number(max_abs) else max_abs,
-            "maximum_mae_Hz": rounded(float(obs.policy.maximum_mae))
+            "mean_absolute_error": rounded(mae) if _is_finite_number(mae) else mae,
+            "root_mean_square_error": rounded(rmse) if _is_finite_number(rmse) else rmse,
+            "max_absolute_error": rounded(max_abs) if _is_finite_number(max_abs) else max_abs,
+            "maximum_mae": rounded(float(obs.policy.maximum_mae))
             if _is_finite_number(obs.policy.maximum_mae)
             else obs.policy.maximum_mae,
-            "maximum_rmse_Hz": rounded(float(obs.policy.maximum_rmse))
+            "maximum_rmse": rounded(float(obs.policy.maximum_rmse))
             if _is_finite_number(obs.policy.maximum_rmse)
             else obs.policy.maximum_rmse,
+            "error_unit_text": obs.comparison_y_unit_text,
             "score_family": obs.policy.score_family,
             "declared_pvalue_aggregation": str(obs.policy.pvalue_aggregation or "auto"),
             "welch_pvalues": _rounded_list(finite_welch_pvalues)
@@ -1300,10 +1324,10 @@ class SeriesComparisonTest(sciunit.Test):
             if _is_finite_number(obs.policy.minimum_median_welch_pvalue)
             else obs.policy.minimum_median_welch_pvalue,
             "finite_welch_pvalue_count": len(finite_welch_pvalues),
-            "equivalence_margin_Hz": rounded(float(resolved_equivalence_margin))
+            "equivalence_margin": rounded(float(resolved_equivalence_margin))
             if _is_finite_number(resolved_equivalence_margin)
             else resolved_equivalence_margin,
-            "declared_equivalence_margin_Hz": rounded(float(obs.policy.equivalence_margin))
+            "declared_equivalence_margin": rounded(float(obs.policy.equivalence_margin))
             if _is_finite_number(obs.policy.equivalence_margin)
             else obs.policy.equivalence_margin,
             "equivalence_margin_source": equivalence_margin_source,
@@ -1380,6 +1404,10 @@ class SeriesComparisonTest(sciunit.Test):
                 exclude_context_keys={obs.protocol_evidence_key},
             ),
         }
+        evidence = _with_legacy_hz_aliases(
+            evidence,
+            comparison_y_unit_text=obs.comparison_y_unit_text,
+        )
         status = self.case.pass_status if passed else self.case.fail_status
         if obs.policy.score_family == "equivalence_only":
             if _is_finite_number(aggregate_statistical_pvalue):
@@ -1431,9 +1459,10 @@ def compile_series_comparison_suite(
 
 
 def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore) -> str:
-    mae = score.evidence.get("mean_absolute_error_Hz")
+    mae = score.evidence.get("mean_absolute_error")
+    error_unit_text = str(score.evidence.get("error_unit_text", "")).strip()
     if _is_finite_number(mae):
-        return f"MAE {rounded(float(mae)):g} Hz"
+        return f"MAE {rounded(float(mae)):g}" + (f" {error_unit_text}" if error_unit_text else "")
     aggregate_pvalue = score.evidence.get("aggregate_statistical_pvalue")
     if _is_finite_number(aggregate_pvalue):
         return f"p {rounded(float(aggregate_pvalue), digits=4):g}"

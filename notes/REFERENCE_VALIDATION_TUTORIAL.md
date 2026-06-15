@@ -1684,6 +1684,12 @@ Important details:
 - the emitted evidence now carries both the aligned mean-series arrays used for
   dashboard plotting and compact provenance summaries for the reference and
   model row bundles
+- residual/statistical evidence uses unit-neutral keys such as
+  `mean_absolute_error`, `root_mean_square_error`, `reference_sd_values`, and
+  `equivalence_margin`, with the unit carried separately in `error_unit_text`
+  and `comparison_y_unit_text`
+- legacy `_Hz` aliases remain only for backward compatibility with older
+  current-rate consumers; new code should prefer the unit-neutral keys
 
 ## Warning, caveat, math, and visualization features
 
