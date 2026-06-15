@@ -372,6 +372,11 @@ validation_design_review_status = "pending"
 # not already expressed in the same unit or not the same physical quantity.
 # model_x_transform = { kind = "affine", scale = 1000.0, offset = 0.0, output_unit_text = "pA" }
 # model_x_transform = {
+#   kind = "affine_lookup",
+#   scale_lookup_key = "unit_conversions.flux_to_pA_scale",
+#   output_unit_text = "pA",
+# }
+# model_x_transform = {
 #   kind = "piecewise_linear",
 #   output_unit_text = "pA",
 #   points = [{ input = 0.10, output = 100.0 }, { input = 0.20, output = 210.0 }],

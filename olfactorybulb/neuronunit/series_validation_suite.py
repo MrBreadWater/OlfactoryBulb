@@ -379,6 +379,53 @@ def _piecewise_linear_value(
     )
 
 
+def _nested_mapping_value(mapping: dict[str, Any] | None, dotted_key: str) -> Any:
+    if not mapping:
+        return None
+    direct_key = str(dotted_key or "").strip()
+    if not direct_key:
+        return None
+    if direct_key in mapping:
+        return mapping.get(direct_key)
+    current: Any = mapping
+    for token in direct_key.split("."):
+        if not isinstance(current, dict) or token not in current:
+            return None
+        current = current[token]
+    return current
+
+
+def _lookup_transform_numeric_value(
+    lookup_key: str,
+    *,
+    row: dict[str, Any] | None,
+    context: dict[str, Any] | None,
+) -> float:
+    normalized_key = str(lookup_key or "").strip()
+    if not normalized_key:
+        raise ValueError("Transform lookup keys must be non-empty")
+    for mapping_name, mapping in (("row", row), ("context", context)):
+        candidate = _nested_mapping_value(mapping, normalized_key)
+        if candidate is None or isinstance(candidate, bool):
+            continue
+        try:
+            numeric = numeric_value(candidate) if isinstance(candidate, pq.Quantity) else float(candidate)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Transform lookup key {normalized_key!r} resolved from {mapping_name} metadata "
+                f"but did not contain a finite numeric value"
+            ) from None
+        if not math.isfinite(numeric):
+            raise ValueError(
+                f"Transform lookup key {normalized_key!r} resolved from {mapping_name} metadata "
+                "but did not contain a finite numeric value"
+            )
+        return float(numeric)
+    raise ValueError(
+        f"Transform lookup key {normalized_key!r} was not found in the available row/context metadata"
+    )
+
+
 @dataclass(frozen=True)
 class AxisTransform:
     kind: str = "identity"
@@ -388,8 +435,18 @@ class AxisTransform:
     output_unit_text: str = ""
     points: tuple[tuple[float, float], ...] = ()
     extrapolation_mode: str = "forbid"
+    scale_lookup_key: str = ""
+    offset_lookup_key: str = ""
 
-    def apply(self, raw_value: float, *, source_unit_text: str, comparison_unit_text: str) -> float | pq.Quantity:
+    def apply(
+        self,
+        raw_value: float,
+        *,
+        source_unit_text: str,
+        comparison_unit_text: str,
+        row: dict[str, Any] | None = None,
+        context: dict[str, Any] | None = None,
+    ) -> float | pq.Quantity:
         kind = str(self.kind or "identity").strip().lower()
         input_unit_text = str(self.input_unit_text or source_unit_text or "").strip()
         output_unit_text = str(self.output_unit_text or input_unit_text or "").strip()
@@ -418,6 +475,43 @@ class AxisTransform:
             else:
                 base_numeric = float(raw_value)
             transformed = float(self.scale) * base_numeric + float(self.offset)
+            measurement = measurement_with_unit(transformed, output_unit_text)
+            return _coerce_to_comparison_unit(
+                measurement,
+                fallback_unit_text=output_unit_text,
+                comparison_unit_text=comparison_unit_text,
+            )
+
+        if kind == "affine_lookup":
+            if input_unit_text and source_unit_text:
+                measurement = measurement_with_unit(float(raw_value), source_unit_text)
+                input_unit = quantity_unit_for_text(input_unit_text)
+                if isinstance(measurement, pq.Quantity) and input_unit is not None:
+                    try:
+                        base_numeric = float(measurement.rescale(input_unit).magnitude)
+                    except Exception as exc:  # pragma: no cover - defensive path
+                        raise ValueError(
+                            f"Cannot rescale source unit {source_unit_text!r} into affine-lookup input unit {input_unit_text!r}"
+                        ) from exc
+                else:
+                    base_numeric = float(raw_value)
+            else:
+                base_numeric = float(raw_value)
+            lookup_scale = 1.0
+            lookup_offset = 0.0
+            if str(self.scale_lookup_key or "").strip():
+                lookup_scale = _lookup_transform_numeric_value(
+                    self.scale_lookup_key,
+                    row=row,
+                    context=context,
+                )
+            if str(self.offset_lookup_key or "").strip():
+                lookup_offset = _lookup_transform_numeric_value(
+                    self.offset_lookup_key,
+                    row=row,
+                    context=context,
+                )
+            transformed = float(self.scale) * base_numeric * float(lookup_scale) + float(self.offset) + float(lookup_offset)
             measurement = measurement_with_unit(transformed, output_unit_text)
             return _coerce_to_comparison_unit(
                 measurement,
@@ -461,6 +555,12 @@ class AxisTransform:
         if kind == "affine":
             return (
                 f"affine(scale={float(self.scale):g}, offset={float(self.offset):g}, "
+                f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
+            )
+        if kind == "affine_lookup":
+            return (
+                f"affine_lookup(scale={float(self.scale):g}, offset={float(self.offset):g}, "
+                f"scale_lookup={self.scale_lookup_key or '-'}, offset_lookup={self.offset_lookup_key or '-'}, "
                 f"input_unit={self.input_unit_text or '-'}, output_unit={self.output_unit_text or '-'})"
             )
         if kind == "piecewise_linear":
@@ -540,6 +640,7 @@ class SeriesDataSpec:
         comparison_x_unit_text: str,
         comparison_y_unit_text: str,
         precision_digits: int,
+        context: dict[str, Any] | None = None,
     ) -> dict[float, list[float]]:
         return _series_bins(
             rows,
@@ -552,6 +653,7 @@ class SeriesDataSpec:
             x_transform=self.x_transform,
             y_transform=self.y_transform,
             precision_digits=precision_digits,
+            context=context,
         )
 
     def paths(
@@ -561,6 +663,7 @@ class SeriesDataSpec:
         comparison_x_unit_text: str,
         comparison_y_unit_text: str,
         precision_digits: int,
+        context: dict[str, Any] | None = None,
     ) -> dict[str, list[tuple[float, float]]]:
         return _series_paths(
             rows,
@@ -574,6 +677,7 @@ class SeriesDataSpec:
             x_transform=self.x_transform,
             y_transform=self.y_transform,
             precision_digits=precision_digits,
+            context=context,
         )
 
     def provenance_summary(
@@ -851,6 +955,7 @@ def _series_bins(
     x_transform: AxisTransform,
     y_transform: AxisTransform,
     precision_digits: int,
+    context: dict[str, Any] | None = None,
 ) -> dict[float, list[float]]:
     bins: dict[float, list[float]] = {}
     for row in rows:
@@ -862,11 +967,15 @@ def _series_bins(
             float(x_raw),
             source_unit_text=x_unit_text,
             comparison_unit_text=comparison_x_unit_text,
+            row=row,
+            context=context,
         )
         y_value = y_transform.apply(
             float(y_raw),
             source_unit_text=y_unit_text,
             comparison_unit_text=comparison_y_unit_text,
+            row=row,
+            context=context,
         )
         bucket_key = round(numeric_value(x_value), int(precision_digits))
         bins.setdefault(bucket_key, []).append(float(numeric_value(y_value)))
@@ -886,6 +995,7 @@ def _series_paths(
     x_transform: AxisTransform,
     y_transform: AxisTransform,
     precision_digits: int,
+    context: dict[str, Any] | None = None,
 ) -> dict[str, list[tuple[float, float]]]:
     grouped_points: dict[str, dict[float, list[float]]] = {}
     for row in rows:
@@ -900,11 +1010,15 @@ def _series_paths(
             float(x_raw),
             source_unit_text=x_unit_text,
             comparison_unit_text=comparison_x_unit_text,
+            row=row,
+            context=context,
         )
         y_value = y_transform.apply(
             float(y_raw),
             source_unit_text=y_unit_text,
             comparison_unit_text=comparison_y_unit_text,
+            row=row,
+            context=context,
         )
         bucket_key = round(numeric_value(x_value), int(precision_digits))
         grouped_points.setdefault(series_id, {}).setdefault(bucket_key, []).append(float(numeric_value(y_value)))
@@ -1180,6 +1294,7 @@ class SeriesComparisonTest(sciunit.Test):
             comparison_x_unit_text=obs.comparison_x_unit_text,
             comparison_y_unit_text=obs.comparison_y_unit_text,
             precision_digits=obs.policy.x_precision_digits,
+            context=prediction_context,
         )
         cluster_metadata: dict[float, dict[str, list[float]]] = {}
         resampling_metadata: dict[str, Any] = {}
@@ -1195,6 +1310,7 @@ class SeriesComparisonTest(sciunit.Test):
                 comparison_x_unit_text=obs.comparison_x_unit_text,
                 comparison_y_unit_text=obs.comparison_y_unit_text,
                 precision_digits=obs.policy.x_precision_digits,
+                context=prediction_context,
             )
             if not reference_paths:
                 raise ValueError(

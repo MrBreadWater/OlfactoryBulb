@@ -646,8 +646,16 @@ For transforms, start with:
   comparison quantity
 - `kind = "affine"` for simple scaling/offset conversions such as current flux
   to injected current under a fixed linear mapping
+- `kind = "affine_lookup"` when the mapping is still affine but the scale
+  and/or offset should come from explicit row or protocol metadata instead of
+  from a validation-local constant
 - `kind = "piecewise_linear"` when the literature/model x-axis relationship is
   monotone but not well described by one global scale/offset
+
+For `affine_lookup`, declare `scale_lookup_key` and/or `offset_lookup_key` as
+explicit metadata paths. The maintained path resolves dotted keys against the
+current row first and the protocol-evidence context second, so a conversion can
+stay declarative without hiding the source of the factor in ad hoc Python.
 
 For `piecewise_linear`, declare at least two control points and keep the mapping
 explicit in the validation config. The current transform object accepts

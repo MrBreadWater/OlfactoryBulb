@@ -1053,6 +1053,8 @@ class _SeriesComparisonRuleParser:
             output_unit_text=str(raw.get("output_unit_text", "")).strip(),
             points=points,
             extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
+            scale_lookup_key=str(raw.get("scale_lookup_key", "")).strip(),
+            offset_lookup_key=str(raw.get("offset_lookup_key", "")).strip(),
         )
 
     def _unit_text(self, key: str, *, fallback: str = "", explicit_required: bool = True) -> str:

@@ -629,9 +629,12 @@ contract for future sessions.
     equivalence p-values, hybrid families show both, and the suite overview
     should carry an aggregate norm-score summary when case-level normalized
     scores are available.
-    Prefer explicit transform objects such as `affine` or `piecewise_linear`
-    over one-off hardcoded x-axis conversion logic in protocol runners or rule
-    handlers.
+    Prefer explicit transform objects such as `affine`, `affine_lookup`, or
+    `piecewise_linear` over one-off hardcoded x-axis conversion logic in
+    protocol runners or rule handlers. Use `affine_lookup` when the scale or
+    offset belongs to explicit row/protocol metadata rather than to a
+    validation-local constant; keep the lookup key declarative instead of
+    burying the conversion in Python.
     Keep reusable provenance structure out of ad hoc evidence-dict assembly:
     when a series-comparison change affects reference/model provenance payloads
     or compact protocol-context summaries, extend the shared typed layer in

@@ -160,6 +160,15 @@ Remove this file when the listed items are either:
       - explicit-grid mode remains available through
         `resampling_grid_source = "explicit_grid"` plus
         `resampling_grid_values = [ ... ]`
+- [x] Add a declarative context-dependent affine transform for cases where the
+      model/reference axis conversion factor lives in explicit row or protocol
+      metadata rather than in a validation-local constant.
+      - implemented `kind = "affine_lookup"` with optional
+        `scale_lookup_key` and `offset_lookup_key`
+      - dotted lookup keys resolve against the current row first and the
+        protocol-evidence context second
+      - this keeps conversions like point current versus current flux explicit
+        in config instead of burying them in runner code
 - [x] Separate suite aggregation semantics from suite presentation so the
       overview cards stop computing aggregate status/norm rollups as loose dict
       math.

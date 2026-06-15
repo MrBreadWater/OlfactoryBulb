@@ -2031,6 +2031,7 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
 - transform policies:
   - identity
   - affine
+  - affine lookup from explicit row/protocol metadata
   - piecewise linear with explicit control points and explicit extrapolation
     mode
 - distribution policy: empirical per-x response distributions

@@ -1737,7 +1737,13 @@ Important details:
 - `model_x_transform` and `reference_x_transform` now support:
   - `kind = "identity"`
   - `kind = "affine"`
+  - `kind = "affine_lookup"`
   - `kind = "piecewise_linear"`
+- use `affine_lookup` when the mapping is affine but the scale and/or offset
+  should come from explicit row or protocol metadata rather than from a
+  validation-local constant; declare `scale_lookup_key` and/or
+  `offset_lookup_key`, and the maintained path resolves dotted metadata paths
+  against the current row first and the protocol-evidence context second
 - use `piecewise_linear` when the mapping is monotone but not globally affine;
   declare it with explicit control points such as
   `points = [{input = 0.10, output = 100.0}, {input = 0.20, output = 210.0}]`

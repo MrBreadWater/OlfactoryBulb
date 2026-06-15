@@ -223,6 +223,20 @@ piecewise_model_rows = [
     {"cell_name": "PwModel2", "drive_flux": 0.30, "firing_rate_Hz": 18.6},
 ]
 
+lookup_reference_rows = [
+    {"cell_id": "LkRef1", "current_pA": 100.0, "firing_rate_Hz": 5.0},
+    {"cell_id": "LkRef2", "current_pA": 100.0, "firing_rate_Hz": 7.0},
+    {"cell_id": "LkRef1", "current_pA": 200.0, "firing_rate_Hz": 10.0},
+    {"cell_id": "LkRef2", "current_pA": 200.0, "firing_rate_Hz": 12.0},
+]
+
+lookup_model_rows = [
+    {"cell_name": "LkModel1", "current_flux": 0.10, "firing_rate_Hz": 5.0},
+    {"cell_name": "LkModel2", "current_flux": 0.10, "firing_rate_Hz": 7.0},
+    {"cell_name": "LkModel1", "current_flux": 0.20, "firing_rate_Hz": 10.0},
+    {"cell_name": "LkModel2", "current_flux": 0.20, "firing_rate_Hz": 12.0},
+]
+
 cluster_reference_rows = [
     {"cell_id": "ClRef1", "current_pA": 100.0, "firing_rate_Hz": 5.0},
     {"cell_id": "ClRef2", "current_pA": 100.3, "firing_rate_Hz": 5.2},
@@ -677,6 +691,67 @@ assert piecewise_items[1].status == "PASS"
 assert piecewise_items[1].evidence["currents_pA"] == [100.0, 210.0, 330.0]
 assert piecewise_items[1].evidence["model_x_transform"].startswith("piecewise_linear(")
 
+lookup_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=lookup_reference_rows,
+    reference_spec=SeriesDataSpec(
+        x_key="current_pA",
+        y_key="firing_rate_Hz",
+        x_unit_text="pA",
+        y_unit_text="Hz",
+        series_id_key="cell_id",
+    ),
+    model_spec=SeriesDataSpec(
+        x_key="current_flux",
+        y_key="firing_rate_Hz",
+        x_unit_text="",
+        y_unit_text="Hz",
+        x_transform=AxisTransform(
+            kind="affine_lookup",
+            scale_lookup_key="unit_conversions.flux_to_pA_scale",
+            output_unit_text="pA",
+        ),
+        series_id_key="cell_name",
+    ),
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=2,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        score_family="residual_only",
+    ),
+)
+
+lookup_case = SeriesComparisonCase(
+    check_id="synthetic_lookup_series_match",
+    title="Synthetic affine-lookup transform resolves context-dependent x scaling",
+    criterion="The declared affine-lookup transform should use protocol metadata to align the model and reference x axes.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic affine-lookup suite test.",
+    acceptable="The transformed model bins satisfy the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=lookup_observation,
+)
+
+lookup_compiled = compile_series_comparison_suite(
+    cases=[lookup_case],
+    summary={},
+    metrics=[],
+    protocol_evidence={
+        "fi_curve_rows": lookup_model_rows,
+        "unit_conversions": {"flux_to_pA_scale": 1000.0},
+    },
+    suite_name="synthetic lookup series suite",
+)
+lookup_items = audit_items_from_series_comparison_suite(lookup_compiled)
+assert lookup_items[1].status == "PASS"
+assert lookup_items[1].evidence["currents_pA"] == [100.0, 200.0]
+assert lookup_items[1].evidence["model_x_transform"].startswith("affine_lookup(")
+
 cluster_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=cluster_reference_rows,
@@ -1003,6 +1078,43 @@ finally:
 
 assert piecewise_rule_items[1].status == "PASS"
 assert piecewise_rule_items[1].evidence["model_x_transform"].startswith("piecewise_linear(")
+
+lookup_rule = dict(residual_only_rule)
+lookup_rule["loader"] = "csv:/tmp/lookup.csv"
+lookup_rule["reference_current_key"] = "current_pA"
+lookup_rule["model_current_key"] = "current_flux"
+lookup_rule["model_x_unit_text"] = ""
+lookup_rule["maximum_mae"] = 0.01
+lookup_rule["maximum_rmse"] = 0.01
+lookup_rule["model_x_transform"] = {
+    "kind": "affine_lookup",
+    "scale_lookup_key": "unit_conversions.flux_to_pA_scale",
+    "output_unit_text": "pA",
+}
+lookup_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence={
+            "fi_curve_rows": lookup_model_rows,
+            "unit_conversions": {"flux_to_pA_scale": 1000.0},
+        }
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: lookup_reference_rows
+    if loader_spec == "csv:/tmp/lookup.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    lookup_rule_items = build_rule_items(compile_rule_dispatches([lookup_rule]), lookup_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+lookup_rule_spec = SeriesComparisonRuleSpec.from_rule(lookup_rule)
+assert lookup_rule_spec.model_spec.x_transform.scale_lookup_key == "unit_conversions.flux_to_pA_scale"
+assert lookup_rule_items[1].status == "PASS"
+assert lookup_rule_items[1].evidence["currents_pA"] == [100.0, 200.0]
+assert lookup_rule_items[1].evidence["model_x_transform"].startswith("affine_lookup(")
 
 cluster_rule = dict(residual_only_rule)
 cluster_rule["loader"] = "csv:/tmp/cluster.csv"
