@@ -457,6 +457,13 @@ Remove this file when the listed items are either:
         `observation` / `prediction` dicts
       - migrated the series suite and the dedicated suite-score coverage onto
         the typed statistical contract
+- [x] Keep the remaining non-statistical suite score payload sections typed
+      without making the suite builders noisy.
+      - added `SuiteCaseMappingPayload`
+      - `SuiteCaseScorePayload` now stores `observation`, `prediction`, and
+        `normalization` on that shared frozen payload wrapper
+      - plain mappings still coerce at the boundary so the builders can stay
+        concise while the public suite-score seam stops carrying raw dicts
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

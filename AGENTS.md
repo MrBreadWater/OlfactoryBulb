@@ -999,6 +999,11 @@ contract for future sessions.
       carry that on an explicit typed statistical payload attached to
       `SuiteCaseScorePayload` rather than reverse-engineering it from generic
       `observation` / `prediction` dict fragments
+    - keep the non-statistical `observation` / `prediction` /
+      `normalization` sections on `SuiteCaseScorePayload` typed too, but
+      preserve low-ceremony callers by coercing plain mappings into one shared
+      frozen payload wrapper at the score-boundary instead of forcing every
+      suite builder to instantiate verbose adapter classes by hand
     - keep grouped-suite default ids family-scoped (`summary_rules`,
       `comparison_rules`, `series_rules`, etc.) instead of reusing the bare
       validation id, so overview items stay mechanically distinct on the

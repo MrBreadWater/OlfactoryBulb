@@ -4,12 +4,41 @@ from __future__ import annotations
 
 from olfactorybulb.neuronunit.suite_scores import (
     SuiteAggregatePolicy,
+    SuiteCaseMappingPayload,
     SuiteCaseScorePayload,
     SuiteCaseStatisticalPayload,
     SuiteCaseSummary,
     SuiteStatisticalPolicy,
     build_suite_aggregate_score,
 )
+
+
+payload_source = {
+    "observed": 1.5,
+    "nested": {"alpha": 0.25},
+    "groups": ["MC", "TC"],
+}
+typed_payload = SuiteCaseScorePayload(
+    score_kind="synthetic_payload",
+    observation=payload_source,
+    prediction={"maximum": 2.0, "allowed_groups": ["MC", "TC"]},
+    normalization={"norm_score": 0.75, "status": "PASS"},
+)
+payload_source["nested"]["alpha"] = 9.9
+payload_source["groups"].append("GC")
+
+assert isinstance(typed_payload.observation, SuiteCaseMappingPayload)
+assert isinstance(typed_payload.prediction, SuiteCaseMappingPayload)
+assert isinstance(typed_payload.normalization, SuiteCaseMappingPayload)
+assert typed_payload.to_dict()["observation"] == {
+    "observed": 1.5,
+    "nested": {"alpha": 0.25},
+    "groups": ["MC", "TC"],
+}
+assert typed_payload.to_dict()["prediction"] == {
+    "maximum": 2.0,
+    "allowed_groups": ["MC", "TC"],
+}
 
 
 weighted_score = build_suite_aggregate_score(

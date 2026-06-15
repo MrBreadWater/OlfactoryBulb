@@ -2219,6 +2219,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `SuiteCaseStatisticalPayload` from case scores instead of inferring
     p-value meaning from generic `observation` / `prediction` dict fragments,
     so the statistical aggregation contract is explicit at the case level too
+  - the remaining non-statistical suite score sections now also sit on a
+    shared frozen `SuiteCaseMappingPayload`, but the builders still accept
+    plain mappings and coerce them at the boundary so the scientific-core
+    contract tightens without making the maintained rule adapters verbose
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +
