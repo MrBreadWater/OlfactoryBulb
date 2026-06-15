@@ -547,6 +547,12 @@ It also no longer permits a silent fallback. Every property listed in
 the validation fails immediately instead of quietly defaulting to a symmetric
 band.
 
+The maintained `reference_band_rows` parser now routes this per-property
+contract through typed `ReferenceBandRuleSpec` /
+`ReferenceBandPropertyRuleSpec` objects before building the SciUnit-backed
+cases. If you change bounds, quantile-field selection, or per-property review
+metadata, keep that parser path as the single declarative source of truth.
+
 Use these config knobs deliberately:
 
 - `property_band_modes`

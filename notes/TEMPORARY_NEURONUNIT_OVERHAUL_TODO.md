@@ -127,6 +127,9 @@ Remove this file when the listed items are either:
       series specs instead of assembling the flat observation bundle inline.
 - [x] Collapse the remaining declarative series-rule parsing into one typed
       `SeriesComparisonRuleSpec` path instead of a spread of small helpers.
+- [x] Collapse the declarative `reference_band_rows` parser into typed
+      `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` objects instead
+      of leaving per-property parsing sprawled through the handler.
 - [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

@@ -922,103 +922,196 @@ def _summary_metric_status_map(rule: dict[str, Any], context: ValidationRuleCont
     return _build_summary_rule_items([rule], context)
 
 
-@register_validation_rule("reference_band_rows")
-def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    loader = str(rule["loader"])
-    reference_source = str(rule.get("reference_source", "")).strip()
-    group_field = str(rule.get("group_field", "cell_type"))
-    property_metric_map = {str(key): str(value) for key, value in dict(rule.get("property_metric_map", {})).items()}
-    property_band_modes = _property_band_modes(rule, property_metric_map)
-    sigma_arg_name = str(rule.get("sigma_arg_name", "reference_sigma_multiplier"))
-    sigma_multiplier = float(getattr(context.args, sigma_arg_name, rule.get("sigma_multiplier", 2.0)))
-    sigma_phrase = _sigma_phrase(sigma_multiplier)
-    default_lower_bound = _optional_float(rule.get("default_lower_bound"))
-    default_upper_bound = _optional_float(rule.get("default_upper_bound"))
-    rows = _filter_rows(_load_rows(loader), rule, args=context.args)
-    cases: list[ReferenceBandCase] = []
-    for row in rows:
-        if reference_source and str(row.get("Source", "")).strip() != reference_source:
-            continue
-        property_name = str(row.get("Property", "")).strip()
-        metric_key = property_metric_map.get(property_name)
-        if not metric_key:
-            continue
-        group = str(row.get(group_field, "")).strip()
-        if not group:
-            continue
-        observed_value = _group_mean(context.summary, group, metric_key)
-        if not (_is_finite_number(row.get("mean")) and _is_finite_number(row.get("sd"))):
-            continue
-        reference_mean = float(row["mean"])
-        reference_sd = float(row["sd"])
-        band_mode = property_band_modes[property_name]
-        lower_bound = _optional_float(
-            _property_override(rule, "property_lower_bounds", property_name, default_lower_bound)
-        )
-        upper_bound = _optional_float(
-            _property_override(rule, "property_upper_bounds", property_name, default_upper_bound)
-        )
-        quantile_low = None
-        quantile_high = None
-        quantile_low_label = None
-        quantile_high_label = None
-        if band_mode == "quantile_interval":
-            low_field = _row_field_name(
+@dataclass(frozen=True)
+class ReferenceBandPropertyRuleSpec:
+    property_name: str
+    metric_key: str
+    band_mode: str
+    lower_bound: float | None
+    upper_bound: float | None
+    quantile_low_field: str
+    quantile_high_field: str
+    quantile_low_label_field: str
+    quantile_high_label_field: str
+    note: str
+    review_status: str
+    review_note: str
+    review_reviewer: str
+    review_required_expertise: str
+    review_focus: str
+
+    @classmethod
+    def from_rule(
+        cls,
+        rule: dict[str, Any],
+        context: ValidationRuleContext,
+        *,
+        property_name: str,
+        metric_key: str,
+        band_mode: str,
+        default_lower_bound: float | None,
+        default_upper_bound: float | None,
+    ) -> "ReferenceBandPropertyRuleSpec":
+        review_metadata = _property_review_metadata(rule, context, property_name)
+        return cls(
+            property_name=property_name,
+            metric_key=metric_key,
+            band_mode=band_mode,
+            lower_bound=_optional_float(
+                _property_override(rule, "property_lower_bounds", property_name, default_lower_bound)
+            ),
+            upper_bound=_optional_float(
+                _property_override(rule, "property_upper_bounds", property_name, default_upper_bound)
+            ),
+            quantile_low_field=_row_field_name(
                 rule,
                 property_name,
                 field_override_key="property_quantile_low_fields",
                 default_field_key="default_quantile_low_field",
                 default="q_low",
-            )
-            high_field = _row_field_name(
+            ),
+            quantile_high_field=_row_field_name(
                 rule,
                 property_name,
                 field_override_key="property_quantile_high_fields",
                 default_field_key="default_quantile_high_field",
                 default="q_high",
-            )
-            low_label_field = _row_field_name(
+            ),
+            quantile_low_label_field=_row_field_name(
                 rule,
                 property_name,
                 field_override_key="property_quantile_low_label_fields",
                 default_field_key="default_quantile_low_label_field",
                 default="q_low_label",
-            )
-            high_label_field = _row_field_name(
+            ),
+            quantile_high_label_field=_row_field_name(
                 rule,
                 property_name,
                 field_override_key="property_quantile_high_label_fields",
                 default_field_key="default_quantile_high_label_field",
                 default="q_high_label",
+            ),
+            note=str(_property_override(rule, "property_notes", property_name, "")),
+            review_status=review_metadata["status"],
+            review_note=review_metadata["note"],
+            review_reviewer=review_metadata["reviewer"],
+            review_required_expertise=review_metadata["required_expertise"],
+            review_focus=review_metadata["focus"],
+        )
+
+    def quantile_interval_from_row(self, row: dict[str, Any]) -> tuple[float | None, float | None, str | None, str | None]:
+        quantile_low = _optional_float(row.get(self.quantile_low_field))
+        quantile_high = _optional_float(row.get(self.quantile_high_field))
+        quantile_low_label = str(row.get(self.quantile_low_label_field, "")).strip() or self.quantile_low_field
+        quantile_high_label = str(row.get(self.quantile_high_label_field, "")).strip() or self.quantile_high_field
+        return quantile_low, quantile_high, quantile_low_label, quantile_high_label
+
+
+@dataclass(frozen=True)
+class ReferenceBandRuleSpec:
+    loader: str
+    reference_source: str
+    group_field: str
+    sigma_arg_name: str
+    sigma_multiplier: float
+    sigma_phrase: str
+    suite_name: str
+    pass_status: str
+    fail_status: str
+    properties: dict[str, ReferenceBandPropertyRuleSpec]
+
+    @classmethod
+    def from_rule(
+        cls,
+        rule: dict[str, Any],
+        context: ValidationRuleContext,
+    ) -> "ReferenceBandRuleSpec":
+        property_metric_map = {
+            str(key): str(value)
+            for key, value in dict(rule.get("property_metric_map", {})).items()
+        }
+        property_band_modes = _property_band_modes(rule, property_metric_map)
+        sigma_arg_name = str(rule.get("sigma_arg_name", "reference_sigma_multiplier"))
+        sigma_multiplier = float(getattr(context.args, sigma_arg_name, rule.get("sigma_multiplier", 2.0)))
+        default_lower_bound = _optional_float(rule.get("default_lower_bound"))
+        default_upper_bound = _optional_float(rule.get("default_upper_bound"))
+        properties = {
+            property_name: ReferenceBandPropertyRuleSpec.from_rule(
+                rule,
+                context,
+                property_name=property_name,
+                metric_key=metric_key,
+                band_mode=property_band_modes[property_name],
+                default_lower_bound=default_lower_bound,
+                default_upper_bound=default_upper_bound,
             )
-            quantile_low = _optional_float(row.get(low_field))
-            quantile_high = _optional_float(row.get(high_field))
-            quantile_low_label = str(row.get(low_label_field, "")).strip() or low_field
-            quantile_high_label = str(row.get(high_label_field, "")).strip() or high_field
+            for property_name, metric_key in property_metric_map.items()
+        }
+        return cls(
+            loader=str(rule["loader"]),
+            reference_source=str(rule.get("reference_source", "")).strip(),
+            group_field=str(rule.get("group_field", "cell_type")),
+            sigma_arg_name=sigma_arg_name,
+            sigma_multiplier=sigma_multiplier,
+            sigma_phrase=_sigma_phrase(sigma_multiplier),
+            suite_name=str(rule.get("suite_name", rule.get("title", "reference-band-suite"))),
+            pass_status=str(rule.get("pass_status", "PASS")),
+            fail_status=str(rule.get("fail_status", "FAIL")),
+            properties=properties,
+        )
+
+
+@register_validation_rule("reference_band_rows")
+def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    spec = ReferenceBandRuleSpec.from_rule(rule, context)
+    rows = _filter_rows(_load_rows(spec.loader), rule, args=context.args)
+    cases: list[ReferenceBandCase] = []
+    for row in rows:
+        if spec.reference_source and str(row.get("Source", "")).strip() != spec.reference_source:
+            continue
+        property_name = str(row.get("Property", "")).strip()
+        property_spec = spec.properties.get(property_name)
+        if property_spec is None:
+            continue
+        group = str(row.get(spec.group_field, "")).strip()
+        if not group:
+            continue
+        observed_value = _group_mean(context.summary, group, property_spec.metric_key)
+        if not (_is_finite_number(row.get("mean")) and _is_finite_number(row.get("sd"))):
+            continue
+        reference_mean = float(row["mean"])
+        reference_sd = float(row["sd"])
+        quantile_low = None
+        quantile_high = None
+        quantile_low_label = None
+        quantile_high_label = None
+        if property_spec.band_mode == "quantile_interval":
+            quantile_low, quantile_high, quantile_low_label, quantile_high_label = property_spec.quantile_interval_from_row(
+                row
+            )
         band = compute_reference_acceptance_band(
             reference_mean=reference_mean,
             reference_sd=reference_sd,
-            sigma_multiplier=sigma_multiplier,
-            band_mode=band_mode,
-            lower_bound=lower_bound,
-            upper_bound=upper_bound,
+            sigma_multiplier=spec.sigma_multiplier,
+            band_mode=property_spec.band_mode,
+            lower_bound=property_spec.lower_bound,
+            upper_bound=property_spec.upper_bound,
             quantile_low=quantile_low,
             quantile_high=quantile_high,
             quantile_low_label=quantile_low_label,
             quantile_high_label=quantile_high_label,
         )
-        item_id = f"{group.lower()}_{metric_key.lower()}_within_uploaded_reference_band".replace(".", "_")
+        item_id = f"{group.lower()}_{property_spec.metric_key.lower()}_within_uploaded_reference_band".replace(".", "_")
         unit_text = str(row.get("unit", "")).strip()
         range_text = f"between {rounded(band.low)} and {rounded(band.high)}"
         if unit_text:
             range_text = f"{range_text} {unit_text}"
-        review_metadata = _property_review_metadata(rule, context, property_name)
         criterion_math = criterion_math_for_reference_band(group, property_name, band)
         cases.append(
             ReferenceBandCase(
                 check_id=item_id,
                 title=_title_text_for_band(group, property_name, band),
-                criterion=_criterion_text_for_band(group, property_name, band, sigma_phrase),
+                criterion=_criterion_text_for_band(group, property_name, band, spec.sigma_phrase),
                 criterion_latex=criterion_math.latex,
                 criterion_formulae=criterion_math.formulae,
                 criterion_definitions=criterion_math.definitions,
@@ -1033,21 +1126,21 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                 acceptable_basis=(
                     f"Derived from the uploaded literature row for {property_name} using the configured "
                     f"{band.standard_label}: {band.description}. "
-                    f"The sigma multiplier comes from '{sigma_arg_name}' when that standard needs one."
+                    f"The sigma multiplier comes from '{spec.sigma_arg_name}' when that standard needs one."
                 ),
-                note=str(_property_override(rule, "property_notes", property_name, "")),
+                note=property_spec.note,
                 observation=ReferenceBandObservation(
                     property_name=property_name,
                     group=group,
-                    metric_key=metric_key,
+                    metric_key=property_spec.metric_key,
                     reference_mean=reference_mean,
                     reference_sd=reference_sd,
                     unit_text=unit_text,
                     policy=ReferenceBandPolicy(
-                        mode=band_mode,
-                        sigma_multiplier=sigma_multiplier,
-                        lower_bound=lower_bound,
-                        upper_bound=upper_bound,
+                        mode=property_spec.band_mode,
+                        sigma_multiplier=spec.sigma_multiplier,
+                        lower_bound=property_spec.lower_bound,
+                        upper_bound=property_spec.upper_bound,
                         quantile_low=quantile_low,
                         quantile_high=quantile_high,
                         quantile_low_label=quantile_low_label,
@@ -1055,22 +1148,22 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
                     ),
                     provenance=ProvenanceRecord.from_row(row),
                     review=ValidationReview(
-                        status=review_metadata["status"],
-                        note=review_metadata["note"],
-                        reviewer=review_metadata["reviewer"],
-                        required_expertise=review_metadata["required_expertise"],
-                        focus=review_metadata["focus"],
+                        status=property_spec.review_status,
+                        note=property_spec.review_note,
+                        reviewer=property_spec.review_reviewer,
+                        required_expertise=property_spec.review_required_expertise,
+                        focus=property_spec.review_focus,
                     ),
                 ),
                 reference_annotation=_reference_annotation(row),
-                pass_status=str(rule.get("pass_status", "PASS")),
-                fail_status=str(rule.get("fail_status", "FAIL")),
+                pass_status=spec.pass_status,
+                fail_status=spec.fail_status,
             )
         )
     compiled = compile_reference_band_suite(
         cases=cases,
         summary=context.summary,
-        suite_name=str(rule.get("suite_name", rule.get("title", "reference-band-suite"))),
+        suite_name=spec.suite_name,
     )
     return audit_items_from_reference_band_suite(compiled)
 

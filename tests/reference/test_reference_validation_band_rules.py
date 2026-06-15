@@ -13,6 +13,16 @@ from olfactorybulb.audit.reference_validation_rules import (
 )
 
 
+def _detail_item(items):
+    if items and getattr(items[0], "summary_rollup_exempt", False):
+        return items[1]
+    return items[0]
+
+
+def _detail_items(items):
+    return [item for item in items if not getattr(item, "summary_rollup_exempt", False)]
+
+
 log_band = compute_reference_acceptance_band(
     reference_mean=0.45,
     reference_sd=0.29,
@@ -108,7 +118,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "acceptable": "placeholder",
         "acceptable_basis": "placeholder",
     }
-    log_item = build_rule_items([log_rule], context)[0]
+    log_item = _detail_item(build_rule_items([log_rule], context))
     assert log_item.evidence["accepted_interval_mode"] == "lognormal_sd"
     assert log_item.evidence["accepted_interval_standard"] == "lognormal reference interval"
     assert log_item.evidence["accepted_low"] > 0.0
@@ -154,7 +164,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         config={},
         protocol_result=None,
     )
-    symmetric_item = build_rule_items([symmetric_rule], symmetric_context)[0]
+    symmetric_item = _detail_item(build_rule_items([symmetric_rule], symmetric_context))
     assert symmetric_item.criterion_latex == r"\left|\bar{V}_{\mathrm{rest}} - \mu_{\mathrm{ref}}\right| \leq 2\sigma_{\mathrm{ref}}"
     assert [definition["symbol"] for definition in symmetric_item.criterion_definitions] == [
         r"\bar{V}_{\mathrm{rest}}",
@@ -178,7 +188,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         "acceptable": "placeholder",
         "acceptable_basis": "placeholder",
     }
-    beta_item = build_rule_items([beta_rule], context)[0]
+    beta_item = _detail_item(build_rule_items([beta_rule], context))
     assert beta_item.evidence["accepted_interval_mode"] == "beta_sd"
     assert beta_item.evidence["accepted_interval_standard"] == "beta-reconstructed probability interval"
     assert 0.0 < beta_item.evidence["accepted_low"] < beta_item.evidence["accepted_high"] < 1.0
@@ -206,7 +216,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         config={},
         protocol_result=None,
     )
-    quantile_item = build_rule_items([quantile_rule], quantile_context)[0]
+    quantile_item = _detail_item(build_rule_items([quantile_rule], quantile_context))
     assert quantile_item.evidence["accepted_interval_mode"] == "quantile_interval"
     assert quantile_item.evidence["accepted_interval_standard"] == "reported quantile interval"
     assert quantile_item.evidence["accepted_low"] == 7.0
@@ -245,7 +255,7 @@ with tempfile.TemporaryDirectory() as tmpdir:
         )
     )
     binary_rule["loader"] = f"csv:{binary_csv_path}"
-    binary_item = build_rule_items([binary_rule], binary_context)[0]
+    binary_item = _detail_item(build_rule_items([binary_rule], binary_context))
     assert binary_item.evidence["accepted_interval_mode"] == "binary_indicator"
     assert binary_item.evidence["accepted_interval_standard"] == "binary reference indicator"
     assert "binary reference indicator exactly" in binary_item.criterion
@@ -351,12 +361,13 @@ with tempfile.TemporaryDirectory() as tmpdir:
         },
     ]
     comparison_items = build_rule_items(comparison_rules, comparison_context)
-    assert comparison_items[0].criterion_latex == r"\bar{x}_{\mathrm{MC}} \geq -60"
-    assert comparison_items[1].criterion_latex == r"1 \leq \bar{x}_{\mathrm{MC}} \leq 2"
-    assert comparison_items[2].criterion_latex == r"\bar{x}_{\mathrm{TC}} < \bar{x}_{\mathrm{MC}}"
-    assert comparison_items[3].criterion_latex == r"\left|\bar{x}_{\mathrm{TC}} - \bar{x}_{\mathrm{MC}}\right| \leq 5"
-    assert comparison_items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
-    assert comparison_items[5].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
+    comparison_detail_items = _detail_items(comparison_items)
+    assert comparison_detail_items[0].criterion_latex == r"\bar{x}_{\mathrm{MC}} \geq -60"
+    assert comparison_detail_items[1].criterion_latex == r"1 \leq \bar{x}_{\mathrm{MC}} \leq 2"
+    assert comparison_detail_items[2].criterion_latex == r"\bar{x}_{\mathrm{TC}} < \bar{x}_{\mathrm{MC}}"
+    assert comparison_detail_items[3].criterion_latex == r"\left|\bar{x}_{\mathrm{TC}} - \bar{x}_{\mathrm{MC}}\right| \leq 5"
+    assert comparison_detail_items[4].criterion_latex == r"\bar{x}_{\mathrm{MC}} > 0 \wedge \bar{x}_{\mathrm{TC}} > 0"
+    assert comparison_detail_items[5].criterion_latex == r"\forall i,\ \left|x_i - c\right| \leq \epsilon"
 
     missing_mode_rule = {
         "kind": "reference_band_rows",

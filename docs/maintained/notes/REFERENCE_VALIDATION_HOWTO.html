@@ -614,6 +614,11 @@ arithmetic <code>mean +/- sigma * sd</code> interval.</p>
 <code>property_metric_map</code> must appear in <code>property_band_modes</code>. If one is missing,
 the validation fails immediately instead of quietly defaulting to a symmetric
 band.</p>
+<p>The maintained <code>reference_band_rows</code> parser now routes this per-property
+contract through typed <code>ReferenceBandRuleSpec</code> /
+<code>ReferenceBandPropertyRuleSpec</code> objects before building the SciUnit-backed
+cases. If you change bounds, quantile-field selection, or per-property review
+metadata, keep that parser path as the single declarative source of truth.</p>
 <p>Use these config knobs deliberately:</p>
 <ul>
 <li><code>property_band_modes</code></li>

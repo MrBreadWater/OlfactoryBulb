@@ -2026,6 +2026,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - the declarative parser for that rule now lives in one typed
     `SeriesComparisonRuleSpec` path instead of a growing pile of unrelated
     helper calls
+  - the declarative `reference_band_rows` path now also compiles through typed
+    `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` objects instead
+    of keeping bounds, quantile-field selection, and review parsing sprawled
+    across the handler body
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

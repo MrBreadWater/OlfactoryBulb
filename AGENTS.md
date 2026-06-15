@@ -801,6 +801,10 @@ contract for future sessions.
 - `reference_band_rows` requires an explicit band mode for every property in
   `property_metric_map`.
   - No silent fallback is allowed.
+  - Keep the declarative parsing centralized in the typed
+    `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` path rather than
+    scattering per-property bounds, quantile-field selection, and review-state
+    parsing across the handler body.
 
 - Supported band modes currently include:
   - `symmetric_sd`

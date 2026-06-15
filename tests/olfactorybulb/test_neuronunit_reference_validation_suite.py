@@ -9,7 +9,11 @@ from types import SimpleNamespace
 import quantities as pq
 
 from olfactorybulb.audit.core import AuditReport
-from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
+from olfactorybulb.audit.reference_validation_rules import (
+    ReferenceBandRuleSpec,
+    ValidationRuleContext,
+    build_rule_items,
+)
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceBandObservation,
     ReferenceBandPolicy,
@@ -123,6 +127,16 @@ with tempfile.TemporaryDirectory() as tmpdir:
         config={},
         protocol_result=None,
     )
+    parsed_rule_spec = ReferenceBandRuleSpec.from_rule(rule, context)
+    assert parsed_rule_spec.loader == f"csv:{csv_path}"
+    assert parsed_rule_spec.reference_source == "Synthetic Study"
+    assert parsed_rule_spec.group_field == "cell_type"
+    assert parsed_rule_spec.sigma_arg_name == "reference_sigma_multiplier"
+    assert parsed_rule_spec.sigma_multiplier == 2.0
+    assert parsed_rule_spec.properties["Input Resistance"].metric_key == "input_resistance_MOhm"
+    assert parsed_rule_spec.properties["Input Resistance"].band_mode == "symmetric_sd"
+    assert parsed_rule_spec.properties["Input Resistance"].note == "Synthetic note."
+    assert parsed_rule_spec.properties["Input Resistance"].review_status == "approved"
     items = build_rule_items([rule], context)
     assert len(items) == 2
     assert items[0].detail_level == "summary"
