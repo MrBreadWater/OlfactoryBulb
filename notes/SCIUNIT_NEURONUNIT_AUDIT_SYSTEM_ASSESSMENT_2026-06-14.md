@@ -2039,6 +2039,13 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - the grouped summary/comparison rule families now also compile through
     typed `SummaryRuleSpec` / `ComparisonRuleSpec` parser objects before the
     SciUnit-backed cases are built, from that same dedicated compiler module
+  - the remaining reference-band and series case assembly now also lives in
+    that typed compiler layer: `ReferenceBandRuleSpec.build_cases(...)` owns
+    the per-row reference-band case construction, and
+    `SeriesComparisonRuleSpec.to_case(...)` owns the
+    `SeriesComparisonCase` construction, so
+    `reference_validation_rules.py` stays closer to orchestration and suite
+    compilation instead of rebuilding flat case payloads inline
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

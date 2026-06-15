@@ -162,6 +162,30 @@ with tempfile.TemporaryDirectory() as tmpdir:
     assert parsed_rule_spec.properties["Input Resistance"].band_mode == "symmetric_sd"
     assert parsed_rule_spec.properties["Input Resistance"].note == "Synthetic note."
     assert parsed_rule_spec.properties["Input Resistance"].review_status == "approved"
+    built_cases = parsed_rule_spec.build_cases(
+        rows=[
+            {
+                "Property": "Input Resistance",
+                "mean": 100.0,
+                "sd": 10.0,
+                "Source": "Synthetic Study",
+                "cell_type": "MC",
+                "unit": "MOhm",
+                "n": 12,
+                "source_file": "synthetic.csv",
+                "source_location": "Table 1",
+                "source_url": "https://example.com",
+                "extraction_method": "curated",
+                "note_ids": "N_SYNTHETIC",
+                "reported_value_raw": "100 +/- 10 MOhm",
+            }
+        ]
+    )
+    assert len(built_cases) == 1
+    assert built_cases[0].check_id == "mc_input_resistance_mohm_within_uploaded_reference_band"
+    assert built_cases[0].observation.policy.mode == "symmetric_sd"
+    assert built_cases[0].observation.review.status == "approved"
+    assert built_cases[0].reference_annotation == "reference: 100.0 +/- 10.0 MOhm from Synthetic Study (n=12)"
     items = build_rule_items([rule], context)
     assert len(items) == 2
     assert items[0].detail_level == "summary"

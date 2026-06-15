@@ -10,10 +10,6 @@ import math
 import numpy as np
 
 from olfactorybulb.audit import AuditItem, series_visual_spec
-from olfactorybulb.audit.criterion_math import (
-    criterion_math_for_reference_band,
-)
-from olfactorybulb.audit.core import rounded
 from olfactorybulb.audit.protocol_evidence import protocol_series_spec_map
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
@@ -30,23 +26,12 @@ from olfactorybulb.audit.reference_validation_specs import (
     SeriesComparisonRuleSpec,
     SummaryRuleSpec,
     grouped_suite_descriptor as _grouped_suite_descriptor,
-    optional_float as _optional_float,
-    property_band_modes as _property_band_modes,
-    property_override as _property_override,
-    property_review_metadata as _property_review_metadata,
-    row_field_name as _row_field_name,
-    summary_group as _summary_group,
 )
 from olfactorybulb.neuronunit.reference_bands import (
-    ProvenanceRecord,
     ReferenceAcceptanceBand,
-    ReferenceBandObservation,
-    ReferenceBandPolicy,
-    ValidationReview,
     compute_reference_acceptance_band,
 )
 from olfactorybulb.neuronunit.reference_validation_suite import (
-    ReferenceBandCase,
     audit_items_from_reference_band_suite,
     compile_reference_band_suite,
 )
@@ -55,8 +40,6 @@ from olfactorybulb.neuronunit.comparison_validation_suite import (
     compile_comparison_rule_suite,
 )
 from olfactorybulb.neuronunit.series_validation_suite import (
-    SeriesComparisonCase,
-    SeriesDistributionObservation,
     audit_items_from_series_comparison_suite,
     compile_series_comparison_suite,
 )
@@ -454,49 +437,8 @@ def _filter_rows(rows: list[dict[str, Any]], spec: dict[str, Any], *, args: Any 
     return filtered
 
 
-def _criterion_text_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand, sigma_phrase: str) -> str:
-    if band.mode == "quantile_interval":
-        return (
-            f"The {group} mean {property_name.lower()} should remain within the uploaded reported quantile interval."
-        )
-    if band.mode == "beta_sd":
-        return (
-            f"The {group} mean {property_name.lower()} should remain within the uploaded beta-reconstructed bounded probability interval."
-        )
-    if band.mode == "binary_indicator":
-        return (
-            f"The {group} mean {property_name.lower()} should match the uploaded binary reference indicator exactly."
-        )
-    if band.mode == "lognormal_sd":
-        return (
-            f"The {group} mean {property_name.lower()} should remain within {sigma_phrase} of the uploaded reference value "
-            f"under a lognormal reconstruction."
-        )
-    return (
-        f"The {group} mean {property_name.lower()} should remain within {sigma_phrase} of the uploaded reference value."
-    )
-
-
-def _title_text_for_band(group: str, property_name: str, band: ReferenceAcceptanceBand) -> str:
-    if band.mode == "binary_indicator":
-        return f"{group} {property_name.lower()} matches the uploaded binary reference indicator"
-    return f"{group} {property_name.lower()} stays within the uploaded reference band"
-
-
 def _group_mean(summary: dict[str, dict[str, float]], group: str, metric_key: str) -> float:
     return float(summary.get(group, {}).get(metric_key, float("nan")))
-
-
-def _reference_annotation(row: dict[str, Any]) -> str:
-    mean = row.get("mean")
-    sd = row.get("sd")
-    units = str(row.get("unit", "")).strip()
-    source = str(row.get("Source", "") or row.get("source", "")).strip()
-    n_value = row.get("n")
-    return (
-        f"reference: {rounded(float(mean))} +/- {rounded(float(sd))} "
-        f"{units} from {source} (n={n_value})"
-    )
 
 
 def _summary_evidence(
@@ -566,12 +508,15 @@ def _build_series_rule_items(
     for rule in rules:
         loader = str(rule["loader"])
         reference_rows = _filter_rows(_load_rows(loader), rule, args=context.args)
+        protocol_series_spec = None
+        if evidence_series_specs:
+            protocol_evidence_key = str(rule.get("protocol_evidence_key", "fi_curve_rows")).strip()
+            protocol_series_spec = evidence_series_specs.get(protocol_evidence_key)
         cases.append(
-            _series_comparison_case(
+            SeriesComparisonRuleSpec.from_rule(
                 rule,
-                reference_rows,
-                evidence_series_specs=evidence_series_specs,
-            )
+                protocol_series_spec=protocol_series_spec,
+            ).to_case(reference_rows=reference_rows)
         )
     raw_candidate_ids = protocol_evidence.get("cell_models", [])
     if not isinstance(raw_candidate_ids, list):
@@ -682,101 +627,7 @@ def _summary_metric_status_map(rule: dict[str, Any], context: ValidationRuleCont
 def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     spec = ReferenceBandRuleSpec.from_rule(rule, context)
     rows = _filter_rows(_load_rows(spec.loader), rule, args=context.args)
-    cases: list[ReferenceBandCase] = []
-    for row in rows:
-        if spec.reference_source and str(row.get("Source", "")).strip() != spec.reference_source:
-            continue
-        property_name = str(row.get("Property", "")).strip()
-        property_spec = spec.properties.get(property_name)
-        if property_spec is None:
-            continue
-        group = str(row.get(spec.group_field, "")).strip()
-        if not group:
-            continue
-        observed_value = _group_mean(context.summary, group, property_spec.metric_key)
-        if not (_is_finite_number(row.get("mean")) and _is_finite_number(row.get("sd"))):
-            continue
-        reference_mean = float(row["mean"])
-        reference_sd = float(row["sd"])
-        quantile_low = None
-        quantile_high = None
-        quantile_low_label = None
-        quantile_high_label = None
-        if property_spec.band_mode == "quantile_interval":
-            quantile_low, quantile_high, quantile_low_label, quantile_high_label = property_spec.quantile_interval_from_row(
-                row
-            )
-        band = compute_reference_acceptance_band(
-            reference_mean=reference_mean,
-            reference_sd=reference_sd,
-            sigma_multiplier=spec.sigma_multiplier,
-            band_mode=property_spec.band_mode,
-            lower_bound=property_spec.lower_bound,
-            upper_bound=property_spec.upper_bound,
-            quantile_low=quantile_low,
-            quantile_high=quantile_high,
-            quantile_low_label=quantile_low_label,
-            quantile_high_label=quantile_high_label,
-        )
-        item_id = f"{group.lower()}_{property_spec.metric_key.lower()}_within_uploaded_reference_band".replace(".", "_")
-        unit_text = str(row.get("unit", "")).strip()
-        range_text = f"between {rounded(band.low)} and {rounded(band.high)}"
-        if unit_text:
-            range_text = f"{range_text} {unit_text}"
-        criterion_math = criterion_math_for_reference_band(group, property_name, band)
-        cases.append(
-            ReferenceBandCase(
-                check_id=item_id,
-                title=_title_text_for_band(group, property_name, band),
-                criterion=_criterion_text_for_band(group, property_name, band, spec.sigma_phrase),
-                criterion_latex=criterion_math.latex,
-                criterion_formulae=criterion_math.formulae,
-                criterion_definitions=criterion_math.definitions,
-                description=(
-                    f"This is the direct single-cell-type reference check derived from uploaded literature rows for "
-                    f"{property_name} rather than from a cross-group ordering heuristic."
-                ),
-                acceptable=(
-                    f"The observed {group} mean must lie {range_text}, using the configured "
-                    f"{band.standard_label}."
-                ),
-                acceptable_basis=(
-                    f"Derived from the uploaded literature row for {property_name} using the configured "
-                    f"{band.standard_label}: {band.description}. "
-                    f"The sigma multiplier comes from '{spec.sigma_arg_name}' when that standard needs one."
-                ),
-                note=property_spec.note,
-                observation=ReferenceBandObservation(
-                    property_name=property_name,
-                    group=group,
-                    metric_key=property_spec.metric_key,
-                    reference_mean=reference_mean,
-                    reference_sd=reference_sd,
-                    unit_text=unit_text,
-                    policy=ReferenceBandPolicy(
-                        mode=property_spec.band_mode,
-                        sigma_multiplier=spec.sigma_multiplier,
-                        lower_bound=property_spec.lower_bound,
-                        upper_bound=property_spec.upper_bound,
-                        quantile_low=quantile_low,
-                        quantile_high=quantile_high,
-                        quantile_low_label=quantile_low_label,
-                        quantile_high_label=quantile_high_label,
-                    ),
-                    provenance=ProvenanceRecord.from_row(row),
-                    review=ValidationReview(
-                        status=property_spec.review_status,
-                        note=property_spec.review_note,
-                        reviewer=property_spec.review_reviewer,
-                        required_expertise=property_spec.review_required_expertise,
-                        focus=property_spec.review_focus,
-                    ),
-                ),
-                reference_annotation=_reference_annotation(row),
-                pass_status=spec.pass_status,
-                fail_status=spec.fail_status,
-            )
-        )
+    cases = spec.build_cases(rows=rows)
     compiled = compile_reference_band_suite(
         cases=cases,
         summary=context.summary,
@@ -831,46 +682,6 @@ def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list
 @register_validation_rule("reference_curve_match")
 def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_series_rule_items([rule], context)
-
-
-def _series_comparison_case(
-    rule: dict[str, Any],
-    reference_rows: list[dict[str, Any]],
-    *,
-    evidence_series_specs: dict[str, Any] | None = None,
-) -> SeriesComparisonCase:
-    protocol_series_spec = None
-    if evidence_series_specs:
-        protocol_evidence_key = str(rule.get("protocol_evidence_key", "fi_curve_rows")).strip()
-        protocol_series_spec = evidence_series_specs.get(protocol_evidence_key)
-    spec = SeriesComparisonRuleSpec.from_rule(rule, protocol_series_spec=protocol_series_spec)
-    observation = SeriesDistributionObservation(
-        protocol_evidence_key=spec.protocol_evidence_key,
-        reference_rows=reference_rows,
-        reference_spec=spec.reference_spec,
-        model_spec=spec.model_spec,
-        comparison_x_unit_text=spec.comparison_x_unit_text,
-        comparison_y_unit_text=spec.comparison_y_unit_text,
-        x_quantity_name=spec.x_quantity_name,
-        y_quantity_name=spec.y_quantity_name,
-        visual_contract=spec.visual_contract,
-        policy=spec.policy,
-    )
-    return SeriesComparisonCase(
-        check_id=str(rule["check_id"]),
-        title=str(rule["title"]),
-        criterion=str(rule["criterion"]),
-        criterion_latex=str(rule.get("criterion_latex", "")),
-        criterion_formulae=list(rule.get("criterion_formulae", [])),
-        criterion_definitions=list(rule.get("criterion_definitions", [])),
-        description=str(rule["description"]),
-        acceptable=str(rule["acceptable"]),
-        acceptable_basis=str(rule["acceptable_basis"]),
-        note=str(rule.get("note", "")),
-        observation=observation,
-        pass_status=str(rule.get("pass_status", "PASS")),
-        fail_status=str(rule.get("fail_status", "FAIL")),
-    )
 
 
 __all__ = [

@@ -834,13 +834,20 @@ contract for future sessions.
     scattering per-property bounds, quantile-field selection, and review-state
     parsing across the handler body. Those typed compiler specs now live in
     `olfactorybulb.audit.reference_validation_specs`; keep the rule handler
-    focused on orchestration and case assembly.
+    focused on orchestration and suite compilation rather than raw per-row case
+    construction.
 
 - For the grouped summary/comparison rule families, keep the declarative
   parsing centralized in the typed `SummaryRuleSpec` / `ComparisonRuleSpec`
   path before the SciUnit-backed suite cases are built. Those parser objects
   also live in `olfactorybulb.audit.reference_validation_specs`. Do not let
   the handler body regress into a second pile of raw rule-dict lookups.
+
+- Apply the same rule to `reference_curve_match`: keep both its declarative
+  parsing and its `SeriesComparisonCase` construction in the typed
+  `SeriesComparisonRuleSpec` path. The shell-side handler should load rows,
+  resolve protocol evidence specs, and hand the typed case to the SciUnit
+  bridge rather than rebuilding the flat observation bundle inline.
 
 - Supported band modes currently include:
   - `symmetric_sd`

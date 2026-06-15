@@ -802,12 +802,19 @@ rule = {
 
 parsed_rule_spec = SeriesComparisonRuleSpec.from_rule(rule)
 assert parsed_rule_spec.protocol_evidence_key == "fi_curve_rows"
+assert parsed_rule_spec.check_id == "synthetic_series_match"
+assert parsed_rule_spec.title == "Synthetic series comparison stays within distribution-aware tolerances"
 assert parsed_rule_spec.reference_spec.x_key == "current_pA"
 assert parsed_rule_spec.model_spec.x_key == "current_flux"
 assert parsed_rule_spec.model_spec.x_transform.description().startswith("affine(")
 assert parsed_rule_spec.visual_contract.kind == "fi_curve"
 assert parsed_rule_spec.policy.score_family == "hybrid_residual_welch"
 assert parsed_rule_spec.policy.alignment_policy == "exact_transformed_x"
+parsed_case = parsed_rule_spec.to_case(reference_rows=reference_rows)
+assert parsed_case.check_id == "synthetic_series_match"
+assert parsed_case.observation.protocol_evidence_key == "fi_curve_rows"
+assert parsed_case.observation.reference_rows == reference_rows
+assert parsed_case.observation.model_spec.x_key == "current_flux"
 
 fallback_rule = dict(rule)
 del fallback_rule["model_current_key"]

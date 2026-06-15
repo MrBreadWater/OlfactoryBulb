@@ -182,3 +182,11 @@ Remove this file when the listed items are either:
       plumbing without pulling those rules into the NeuronUnit core.
       - added typed parser specs for `protocol_executed` and `note_presence`
       - kept those rules in the audit shell as intended
+- [x] Move the remaining reference-band and series case construction off the
+      handler body and into the typed compiler/spec layer.
+      - `ReferenceBandRuleSpec.build_cases(...)` now owns the per-row
+        reference-band case assembly
+      - `SeriesComparisonRuleSpec.to_case(...)` now owns the
+        `SeriesComparisonCase` construction
+      - `reference_validation_rules.py` now stays closer to orchestration plus
+        suite compilation instead of rebuilding flat case payloads inline
