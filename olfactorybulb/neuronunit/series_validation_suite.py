@@ -183,6 +183,72 @@ def _resolved_resampling_domain_policy(policy: "SeriesComparisonPolicy") -> tupl
     return "allow_partial_support", "default_allow_partial_support"
 
 
+@dataclass(frozen=True)
+class SeriesEquivalenceTestResult:
+    supported: bool
+    test_kind: str
+    pvalue: float | None = None
+
+
+@dataclass(frozen=True)
+class SeriesClusterMembers:
+    reference_x_values: tuple[float, ...] = ()
+    model_x_values: tuple[float, ...] = ()
+
+
+@dataclass(frozen=True)
+class SeriesResamplingMetadata:
+    policy: str = ""
+    target_grid: tuple[float, ...] = ()
+    reference_support_ids: tuple[tuple[float, tuple[str, ...]], ...] = ()
+    model_support_ids: tuple[tuple[float, tuple[str, ...]], ...] = ()
+    reference_min_x: float | None = None
+    reference_max_x: float | None = None
+    model_min_x: float | None = None
+    model_max_x: float | None = None
+    excluded_grid: tuple[float, ...] = ()
+
+    @classmethod
+    def from_support_maps(
+        cls,
+        *,
+        policy: str,
+        target_grid: Sequence[float],
+        reference_support_ids: Mapping[float, Sequence[str]],
+        model_support_ids: Mapping[float, Sequence[str]],
+        reference_min_x: float | None,
+        reference_max_x: float | None,
+        model_min_x: float | None,
+        model_max_x: float | None,
+        excluded_grid: Sequence[float],
+    ) -> "SeriesResamplingMetadata":
+        return cls(
+            policy=str(policy or ""),
+            target_grid=tuple(float(value) for value in target_grid),
+            reference_support_ids=tuple(
+                (float(target_x), tuple(str(series_id) for series_id in series_ids))
+                for target_x, series_ids in sorted(reference_support_ids.items())
+            ),
+            model_support_ids=tuple(
+                (float(target_x), tuple(str(series_id) for series_id in series_ids))
+                for target_x, series_ids in sorted(model_support_ids.items())
+            ),
+            reference_min_x=reference_min_x,
+            reference_max_x=reference_max_x,
+            model_min_x=model_min_x,
+            model_max_x=model_max_x,
+            excluded_grid=tuple(float(value) for value in excluded_grid),
+        )
+
+    def support_count(self, target_x: float, *, side: str) -> int:
+        support_entries = self.reference_support_ids if side == "reference" else self.model_support_ids
+        target_value = float(target_x)
+        for entry_x, series_ids in support_entries:
+            if np.isclose(float(entry_x), target_value):
+                return len(series_ids)
+        return 0
+
+
 def _deterministic_equivalence_pvalue(mean_difference: float, *, equivalence_margin: float) -> float:
     if abs(mean_difference) < float(equivalence_margin):
         return 0.0
@@ -263,38 +329,42 @@ def _equivalence_test_result(
     model_values: list[float],
     *,
     equivalence_margin: float,
-) -> dict[str, Any]:
+) -> SeriesEquivalenceTestResult:
     if len(reference_values) >= 2 and len(model_values) >= 2:
-        return {
-            "supported": True,
-            "test_kind": "welch_tost",
-            "pvalue": _two_sample_welch_tost_pvalue(
+        return SeriesEquivalenceTestResult(
+            supported=True,
+            test_kind="welch_tost",
+            pvalue=_two_sample_welch_tost_pvalue(
                 reference_values,
                 model_values,
                 equivalence_margin=equivalence_margin,
             ),
-        }
+        )
     if len(reference_values) >= 2 and len(model_values) >= 1:
-        return {
-            "supported": True,
-            "test_kind": "one_sample_reference_tost",
-            "pvalue": _one_sample_tost_pvalue(
+        return SeriesEquivalenceTestResult(
+            supported=True,
+            test_kind="one_sample_reference_tost",
+            pvalue=_one_sample_tost_pvalue(
                 reference_values,
                 float(np.mean(np.asarray(model_values, dtype=float))),
                 equivalence_margin=equivalence_margin,
             ),
-        }
+        )
     if len(model_values) >= 2 and len(reference_values) >= 1:
-        return {
-            "supported": True,
-            "test_kind": "one_sample_model_tost",
-            "pvalue": _one_sample_tost_pvalue(
+        return SeriesEquivalenceTestResult(
+            supported=True,
+            test_kind="one_sample_model_tost",
+            pvalue=_one_sample_tost_pvalue(
                 model_values,
                 float(np.mean(np.asarray(reference_values, dtype=float))),
                 equivalence_margin=equivalence_margin,
             ),
-        }
-    return {"supported": False, "test_kind": "unsupported", "pvalue": float("nan")}
+        )
+    return SeriesEquivalenceTestResult(
+        supported=False,
+        test_kind="unsupported",
+        pvalue=None,
+    )
 
 
 def _norm_ratio_at_most(observed: Any, threshold: Any) -> float | None:
@@ -1603,7 +1673,7 @@ def _tolerance_cluster_bins(
     *,
     x_match_tolerance: float | None,
     precision_digits: int,
-) -> tuple[dict[float, list[float]], dict[float, list[float]], dict[float, dict[str, list[float]]]]:
+) -> tuple[dict[float, list[float]], dict[float, list[float]], dict[float, SeriesClusterMembers]]:
     if not _is_finite_number(x_match_tolerance) or float(x_match_tolerance) < 0.0:
         raise ValueError(
             "Alignment policy 'tolerance_clusters' requires a finite non-negative "
@@ -1628,7 +1698,7 @@ def _tolerance_cluster_bins(
 
     clustered_reference_bins: dict[float, list[float]] = {}
     clustered_model_bins: dict[float, list[float]] = {}
-    cluster_metadata: dict[float, dict[str, list[float]]] = {}
+    cluster_metadata: dict[float, SeriesClusterMembers] = {}
     for cluster_x_values in clusters:
         reference_x_values = [float(x_value) for x_value in cluster_x_values if x_value in reference_bins]
         model_x_values = [float(x_value) for x_value in cluster_x_values if x_value in model_bins]
@@ -1643,10 +1713,10 @@ def _tolerance_cluster_bins(
             model_values.extend(float(value) for value in model_bins[model_x])
         clustered_reference_bins[cluster_center] = reference_values
         clustered_model_bins[cluster_center] = model_values
-        cluster_metadata[cluster_center] = {
-            "reference_x_values": reference_x_values,
-            "model_x_values": model_x_values,
-        }
+        cluster_metadata[cluster_center] = SeriesClusterMembers(
+            reference_x_values=tuple(reference_x_values),
+            model_x_values=tuple(model_x_values),
+        )
     return clustered_reference_bins, clustered_model_bins, cluster_metadata
 
 
@@ -1793,7 +1863,7 @@ def _filter_resampling_grid_by_domain_policy(
     reference_paths: dict[str, list[tuple[float, float]]],
     model_paths: dict[str, list[tuple[float, float]]],
     domain_policy: str,
-) -> tuple[list[float], dict[str, Any]]:
+) -> tuple[list[float], SeriesResamplingMetadata]:
     normalized_policy = str(domain_policy or "allow_partial_support").strip().lower()
     if normalized_policy not in SERIES_RESAMPLING_DOMAIN_POLICIES:
         raise ValueError(
@@ -1834,14 +1904,14 @@ def _filter_resampling_grid_by_domain_policy(
         for target_x in target_grid
         if float(target_x) not in filtered_grid_set
     ]
-    return filtered_grid, {
-        "policy": normalized_policy,
-        "reference_min_x": reference_min_x,
-        "reference_max_x": reference_max_x,
-        "model_min_x": model_min_x,
-        "model_max_x": model_max_x,
-        "excluded_grid": excluded_grid,
-    }
+    return filtered_grid, SeriesResamplingMetadata(
+        policy=normalized_policy,
+        reference_min_x=reference_min_x,
+        reference_max_x=reference_max_x,
+        model_min_x=model_min_x,
+        model_max_x=model_max_x,
+        excluded_grid=tuple(excluded_grid),
+    )
 
 
 def _interpolated_series_value(
@@ -2095,8 +2165,8 @@ class SeriesComparisonTest(sciunit.Test):
             )
         reference_bins = reference_dataset.bins(precision_digits=obs.policy.x_precision_digits)
         model_bins = model_dataset.bins(precision_digits=obs.policy.x_precision_digits)
-        cluster_metadata: dict[float, dict[str, list[float]]] = {}
-        resampling_metadata: dict[str, Any] = {}
+        cluster_metadata: dict[float, SeriesClusterMembers] = {}
+        resampling_metadata = SeriesResamplingMetadata()
         if obs.policy.alignment_policy == "resampled_grid":
             reference_paths = reference_dataset.paths(precision_digits=obs.policy.x_precision_digits)
             model_paths = model_dataset.paths(precision_digits=obs.policy.x_precision_digits)
@@ -2133,22 +2203,17 @@ class SeriesComparisonTest(sciunit.Test):
                 target_grid=target_grid,
                 interpolation_method=obs.policy.interpolation_method,
             )
-            resampling_metadata = {
-                "target_grid": list(target_grid),
-                "reference_support_ids": {
-                    float(target_x): list(series_ids)
-                    for target_x, series_ids in reference_support_ids.items()
-                },
-                "model_support_ids": {
-                    float(target_x): list(series_ids)
-                    for target_x, series_ids in model_support_ids.items()
-                },
-                "reference_min_x": domain_metadata["reference_min_x"],
-                "reference_max_x": domain_metadata["reference_max_x"],
-                "model_min_x": domain_metadata["model_min_x"],
-                "model_max_x": domain_metadata["model_max_x"],
-                "excluded_grid": list(domain_metadata["excluded_grid"]),
-            }
+            resampling_metadata = SeriesResamplingMetadata.from_support_maps(
+                policy=domain_metadata.policy,
+                target_grid=target_grid,
+                reference_support_ids=reference_support_ids,
+                model_support_ids=model_support_ids,
+                reference_min_x=domain_metadata.reference_min_x,
+                reference_max_x=domain_metadata.reference_max_x,
+                model_min_x=domain_metadata.model_min_x,
+                model_max_x=domain_metadata.model_max_x,
+                excluded_grid=domain_metadata.excluded_grid,
+            )
         if obs.policy.alignment_policy == "tolerance_clusters":
             reference_bins, model_bins, cluster_metadata = _tolerance_cluster_bins(
                 reference_bins,
@@ -2192,11 +2257,11 @@ class SeriesComparisonTest(sciunit.Test):
         aligned_model_keys = [model_x for _reference_x, model_x in aligned_pairs]
         if cluster_metadata:
             reference_x_values = [
-                float(np.mean(np.asarray(cluster_metadata[cluster_center]["reference_x_values"], dtype=float)))
+                float(np.mean(np.asarray(cluster_metadata[cluster_center].reference_x_values, dtype=float)))
                 for cluster_center in aligned_reference_keys
             ]
             model_x_values = [
-                float(np.mean(np.asarray(cluster_metadata[cluster_center]["model_x_values"], dtype=float)))
+                float(np.mean(np.asarray(cluster_metadata[cluster_center].model_x_values, dtype=float)))
                 for cluster_center in aligned_reference_keys
             ]
             visual_x_values = [cluster_center for cluster_center in aligned_reference_keys]
@@ -2271,21 +2336,21 @@ class SeriesComparisonTest(sciunit.Test):
                 )
                 for reference_x, model_x in aligned_pairs
             ]
-            statistical_test_kinds = [str(result["test_kind"]) for result in equivalence_results]
+            statistical_test_kinds = [str(result.test_kind) for result in equivalence_results]
             statistical_pvalues = [
-                rounded(float(result["pvalue"])) if _is_finite_number(result["pvalue"]) else None
+                rounded(float(result.pvalue)) if _is_finite_number(result.pvalue) else None
                 for result in equivalence_results
             ]
             finite_statistical_pvalues = [
-                float(result["pvalue"])
+                float(result.pvalue)
                 for result in equivalence_results
-                if bool(result["supported"]) and _is_finite_number(result["pvalue"])
+                if bool(result.supported) and _is_finite_number(result.pvalue)
             ]
             supported_statistical_bin_count = len(finite_statistical_pvalues)
             unsupported_statistical_x_values = [
                 float(reference_x)
                 for (reference_x, _model_x), result in zip(aligned_pairs, equivalence_results, strict=False)
-                if not bool(result["supported"]) or not _is_finite_number(result["pvalue"])
+                if not bool(result.supported) or not _is_finite_number(result.pvalue)
             ]
             if supported_statistical_bin_count == len(aligned_pairs) and finite_statistical_pvalues:
                 aggregate_statistical_pvalue = _aggregate_pvalues(
@@ -2348,13 +2413,13 @@ class SeriesComparisonTest(sciunit.Test):
             model_matched_x_values=tuple(model_x_values),
             matched_x_differences=tuple(matched_x_differences),
             reference_cluster_x_groups=tuple(
-                tuple(cluster_metadata[cluster_center]["reference_x_values"])
+                tuple(cluster_metadata[cluster_center].reference_x_values)
                 for cluster_center in aligned_reference_keys
             )
             if cluster_metadata
             else (),
             model_cluster_x_groups=tuple(
-                tuple(cluster_metadata[cluster_center]["model_x_values"])
+                tuple(cluster_metadata[cluster_center].model_x_values)
                 for cluster_center in aligned_reference_keys
             )
             if cluster_metadata
@@ -2424,24 +2489,24 @@ class SeriesComparisonTest(sciunit.Test):
             resampling_domain_policy=resolved_resampling_domain_policy,
             resampling_domain_policy_origin=resampling_domain_policy_origin,
             declared_resampling_grid_values=tuple(obs.policy.resampling_grid_values),
-            resampling_grid_values=tuple(resampling_metadata.get("target_grid", [])),
-            resampling_excluded_x_values=tuple(resampling_metadata.get("excluded_grid", [])),
-            reference_resampling_domain_min_x=resampling_metadata.get("reference_min_x"),
-            reference_resampling_domain_max_x=resampling_metadata.get("reference_max_x"),
-            model_resampling_domain_min_x=resampling_metadata.get("model_min_x"),
-            model_resampling_domain_max_x=resampling_metadata.get("model_max_x"),
+            resampling_grid_values=tuple(resampling_metadata.target_grid),
+            resampling_excluded_x_values=tuple(resampling_metadata.excluded_grid),
+            reference_resampling_domain_min_x=resampling_metadata.reference_min_x,
+            reference_resampling_domain_max_x=resampling_metadata.reference_max_x,
+            model_resampling_domain_min_x=resampling_metadata.model_min_x,
+            model_resampling_domain_max_x=resampling_metadata.model_max_x,
             interpolation_method=obs.policy.interpolation_method,
             reference_resampled_support_counts=tuple(
-                len(resampling_metadata["reference_support_ids"].get(float(target_x), []))
+                resampling_metadata.support_count(float(target_x), side="reference")
                 for target_x in aligned_reference_keys
             )
-            if resampling_metadata
+            if resampling_metadata.target_grid
             else (),
             model_resampled_support_counts=tuple(
-                len(resampling_metadata["model_support_ids"].get(float(target_x), []))
+                resampling_metadata.support_count(float(target_x), side="model")
                 for target_x in aligned_reference_keys
             )
-            if resampling_metadata
+            if resampling_metadata.target_grid
             else (),
             distribution_kind=obs.policy.distribution_kind,
             x_quantity_name=obs.x_quantity_name,
@@ -2593,13 +2658,16 @@ __all__ = [
     "SERIES_RESAMPLING_GRID_SOURCES",
     "SeriesComparisonCase",
     "SeriesComparisonEvidencePayload",
+    "SeriesClusterMembers",
     "SeriesDataSpec",
+    "SeriesEquivalenceTestResult",
     "SeriesComparisonPolicy",
     "SeriesComparisonScore",
     "SeriesComparisonTest",
     "SeriesObservedDataset",
     "SeriesObservedDatasetPair",
     "SeriesPredictionBundle",
+    "SeriesResamplingMetadata",
     "SeriesDistributionObservation",
     "SeriesVisualContract",
     "audit_items_from_series_comparison_suite",

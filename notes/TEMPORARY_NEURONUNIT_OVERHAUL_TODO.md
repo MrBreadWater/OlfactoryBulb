@@ -581,6 +581,14 @@ Remove this file when the listed items are either:
         typed reference and model datasets together before scoring
       - series provenance now travels through that pair object, giving future
         work a single typed place to extend richer bound-series metadata
+- [x] Keep the remaining internal series alignment/statistical support payloads
+      typed instead of carrying them as nested ad hoc dicts through the scorer.
+      - added typed cluster-members, resampling-metadata, and equivalence-test
+        result objects inside `series_validation_suite.py`
+      - `compute_score()` now consumes those typed objects when deriving
+        matched-x metadata, resampling support counts, and equivalence gates
+      - this gives future transform/alignment work a real contract instead of
+        one more round of dict plumbing
 - [x] Keep the migrated suite compiler/model seam on one shared typed runtime
       bundle instead of passing parallel summary/metrics/protocol-evidence
       arguments into each `ReferenceValidationModel`.

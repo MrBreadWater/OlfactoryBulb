@@ -2254,6 +2254,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     datasets together before scoring, so paired provenance moves through one
     typed object instead of being reconstructed from separate locals late in
     the score path
+  - the same series scorer now keeps its remaining internal scientific support
+    metadata typed too: cluster membership, resampling-domain/support
+    metadata, and per-bin equivalence-test results no longer have to move
+    through anonymous nested dicts once the comparison has entered the
+    NeuronUnit-side scoring layer
   - the migrated suite compiler/model seam is tighter too: the
     reference-band, summary, comparison, and series suite compilers now all
     construct `ReferenceValidationModel` through one shared typed

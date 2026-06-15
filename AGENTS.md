@@ -671,6 +671,10 @@ contract for future sessions.
     expose a shared `SeriesObservedDatasetPair` so provenance, transformed
     rows, and protocol context move together instead of being recomputed from
     separate reference/model locals deeper in `compute_score()`.
+    Keep alignment/statistical metadata typed too. Cluster membership,
+    resampling-domain/support metadata, and per-bin equivalence test results
+    should move through shared series-core objects rather than anonymous dicts
+    once the comparison has entered the NeuronUnit-side scorer.
     Likewise, keep protocol evidence bundled through the typed
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple
