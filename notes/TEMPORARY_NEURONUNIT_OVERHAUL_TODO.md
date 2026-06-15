@@ -190,3 +190,11 @@ Remove this file when the listed items are either:
         `SeriesComparisonCase` construction
       - `reference_validation_rules.py` now stays closer to orchestration plus
         suite compilation instead of rebuilding flat case payloads inline
+- [x] Move the top-level runtime path off loose validation-config dict access
+      and onto one compiled validation plan object.
+      - added `olfactorybulb.audit.reference_validation_plan`
+      - `ReferenceValidationPlan` now owns resolved protocol spec, defaults,
+        skip-item construction, design-review defaults, and runtime rule
+        context metadata
+      - the engine, maintained wrappers, and generic CLI now consume that
+        typed plan instead of passing raw config dicts around at runtime

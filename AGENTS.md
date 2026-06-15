@@ -849,6 +849,15 @@ contract for future sessions.
   resolve protocol evidence specs, and hand the typed case to the SciUnit
   bridge rather than rebuilding the flat observation bundle inline.
 
+- Keep the top-level runtime path on the same side of that boundary.
+  - Raw TOML loading belongs in `olfactorybulb.audit.reference_validation_config`.
+  - The maintained runtime should compile that raw config into the typed
+    `ReferenceValidationPlan` in `olfactorybulb.audit.reference_validation_plan`
+    before the engine, CLI, or maintained audit wrappers consume it.
+  - Do not let `reference_validation_engine.py` or the maintained wrapper
+    modules drift back toward passing loose config dicts and parallel accessor
+    calls around at runtime.
+
 - Supported band modes currently include:
   - `symmetric_sd`
   - `lognormal_sd`

@@ -6,20 +6,10 @@ import argparse
 from typing import Any, Iterable
 
 from olfactorybulb.audit import AuditItem, AuditReport
-from olfactorybulb.audit.reference_validation_config import (
-    load_validation_extensions,
-    load_reference_validation_config,
-    validation_defaults,
-    validation_design_review_defaults,
-    validation_protocol_defaults,
-    validation_protocol_runner_id,
-    validation_rule_specs,
-    validation_skip_item,
-    validation_skip_neuron_mode,
-    validation_title,
+from olfactorybulb.audit.reference_validation_plan import (
+    ReferenceValidationPlan,
+    load_reference_validation_plan,
 )
-from olfactorybulb.audit.reference_validation_protocols import get_validation_protocol_spec
-from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items, summarize_numeric_metrics
 
 
 def add_reference_validation_common_args(parser: argparse.ArgumentParser) -> None:
@@ -35,129 +25,72 @@ def add_reference_validation_common_args(parser: argparse.ArgumentParser) -> Non
 def add_reference_validation_protocol_args(
     parser: argparse.ArgumentParser,
     *,
-    config: dict[str, Any],
+    validation: ReferenceValidationPlan,
 ) -> None:
-    load_validation_extensions(config)
-    protocol_id = validation_protocol_runner_id(config)
-    if not protocol_id:
-        return
-    spec = get_validation_protocol_spec(protocol_id)
-    if spec.add_cli_args is not None:
-        spec.add_cli_args(parser)
+    validation.add_protocol_args(parser)
 
 
-def apply_validation_defaults(args: argparse.Namespace, *, config: dict[str, Any]) -> argparse.Namespace:
-    defaults = validation_defaults(config)
-    for key, value in defaults.items():
-        if not hasattr(args, key):
-            setattr(args, key, value)
-            continue
-        current = getattr(args, key)
-        if current is None:
-            setattr(args, key, value)
-    return args
+def apply_validation_defaults(args: argparse.Namespace, *, validation: ReferenceValidationPlan) -> argparse.Namespace:
+    return validation.apply_defaults(args)
 
 
 def build_reference_validation_items(
     *,
     metrics: list[dict[str, Any]],
     args: argparse.Namespace,
-    config: dict[str, Any],
+    validation: ReferenceValidationPlan,
     protocol_result: Any | None,
 ) -> list:
-    group_field = str(config.get("metric_group_field", getattr(protocol_result, "group_field", "cell_type")))
-    summary = summarize_numeric_metrics(metrics, group_field=group_field)
-    context = ValidationRuleContext(
+    return validation.build_rule_items(
         metrics=metrics,
-        summary=summary,
         args=args,
-        config=config,
         protocol_result=protocol_result,
     )
-    return build_rule_items(validation_rule_specs(config), context)
 
 
 def build_configured_skip_item(
     *,
     args: argparse.Namespace,
-    config: dict[str, Any],
+    validation: ReferenceValidationPlan,
 ) -> AuditItem | None:
-    spec = validation_skip_item(config)
-    if not spec:
-        return None
-    evidence = dict(spec.get("evidence", {}))
-    for key in list(spec.get("evidence_arg_keys", [])):
-        evidence[str(key)] = getattr(args, str(key), None)
-    review_defaults = validation_design_review_defaults(config)
-    return AuditItem(
-        check_id=str(spec["check_id"]),
-        status=str(spec.get("status", "WARN")),
-        title=str(spec["title"]),
-        criterion=str(spec["criterion"]),
-        criterion_latex=str(spec.get("criterion_latex", "")),
-        criterion_formulae=spec.get("criterion_formulae", []),
-        criterion_definitions=spec.get("criterion_definitions", []),
-        description=str(spec.get("description", "")),
-        acceptable=str(spec.get("acceptable", "")),
-        acceptable_basis=str(spec.get("acceptable_basis", "")),
-        evidence=evidence,
-        note=str(spec.get("note", "")),
-        validation_design_review_status=str(spec.get("validation_design_review_status", review_defaults.get("default_status", ""))),
-        validation_design_review_note=str(spec.get("validation_design_review_note", review_defaults.get("default_note", ""))),
-        validation_design_review_reviewer=str(spec.get("validation_design_review_reviewer", review_defaults.get("default_reviewer", ""))),
-        validation_design_review_required_expertise=str(
-            spec.get(
-                "validation_design_review_required_expertise",
-                review_defaults.get("default_required_expertise", ""),
-            )
-        ),
-        validation_design_review_focus=str(
-            spec.get(
-                "validation_design_review_focus",
-                review_defaults.get("default_focus", ""),
-            )
-        ),
-    )
+    return validation.build_skip_item(args=args)
 
 
 def run_reference_validation(
     *,
     args: argparse.Namespace,
-    config: dict[str, Any],
+    validation: ReferenceValidationPlan,
     audit_id: str,
     title: str | None = None,
     pre_items: Iterable | None = None,
     skip_item=None,
 ) -> AuditReport:
-    args = apply_validation_defaults(args, config=config)
+    args = apply_validation_defaults(args, validation=validation)
     items = list(pre_items or [])
-    if bool(getattr(args, "skip_neuron", False)) and validation_skip_neuron_mode(config) != "protocol_handles_skip":
-        configured_skip_item = build_configured_skip_item(args=args, config=config)
+    if bool(getattr(args, "skip_neuron", False)) and validation.skip_neuron_mode != "protocol_handles_skip":
+        configured_skip_item = build_configured_skip_item(args=args, validation=validation)
         if skip_item is not None:
             items.append(skip_item)
         elif configured_skip_item is not None:
             items.append(configured_skip_item)
         return AuditReport(
             audit_id=audit_id,
-            title=title or validation_title(config),
+            title=title or validation.title,
             items=items,
         )
 
-    load_validation_extensions(config)
-    protocol_id = validation_protocol_runner_id(config)
-    protocol_spec = get_validation_protocol_spec(protocol_id)
-    protocol_result = protocol_spec.run(args, validation_protocol_defaults(config))
+    protocol_result = validation.protocol_spec.run(args, dict(validation.protocol_defaults))
     items.extend(
         build_reference_validation_items(
             metrics=protocol_result.metrics,
             args=args,
-            config=config,
+            validation=validation,
             protocol_result=protocol_result,
         )
     )
     return AuditReport(
         audit_id=audit_id,
-        title=title or validation_title(config),
+        title=title or validation.title,
         items=items,
     )
 
@@ -166,11 +99,9 @@ def load_validation_and_protocol(
     *,
     validation_id: str | None = None,
     config_path=None,
-) -> tuple[dict[str, Any], Any]:
-    config = load_reference_validation_config(validation_id=validation_id, path=config_path)
-    load_validation_extensions(config)
-    protocol_spec = get_validation_protocol_spec(validation_protocol_runner_id(config))
-    return config, protocol_spec
+) -> tuple[ReferenceValidationPlan, Any]:
+    validation = load_reference_validation_plan(validation_id=validation_id, path=config_path)
+    return validation, validation.protocol_spec
 
 
 __all__ = [
@@ -179,7 +110,7 @@ __all__ = [
     "apply_validation_defaults",
     "build_configured_skip_item",
     "build_reference_validation_items",
-    "load_reference_validation_config",
+    "load_reference_validation_plan",
     "load_validation_and_protocol",
     "run_reference_validation",
 ]

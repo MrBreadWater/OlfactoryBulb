@@ -23,7 +23,9 @@ THIRD_PARTY_IMPORTS = [
 
 REPO_IMPORTS = [
     "olfactorybulb.audit.protocol_evidence",
+    "olfactorybulb.audit.reference_validation_plan",
     "olfactorybulb.audit.reference_validation_specs",
+    "olfactorybulb.audit.reference_validation_engine",
     "olfactorybulb.neuronunit.capabilities",
     "olfactorybulb.neuronunit.provenance",
     "olfactorybulb.neuronunit.tests.publications",

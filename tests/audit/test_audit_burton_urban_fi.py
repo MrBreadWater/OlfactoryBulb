@@ -7,6 +7,7 @@ Run with:
 from __future__ import annotations
 
 import contextlib
+from dataclasses import replace
 import json
 from pathlib import Path
 import subprocess
@@ -89,7 +90,7 @@ assert summary["TC"]["peak_rate_Hz"] == 120.0
 
 @contextlib.contextmanager
 def _burton_note_fixture():
-    original_loader = burton_urban_fi_module.load_reference_validation_config
+    original_loader = burton_urban_fi_module.load_reference_validation_plan
     with tempfile.TemporaryDirectory() as tmpdir:
         notes_path = Path(tmpdir) / "validation_notes.csv"
         notes_path.write_text(
@@ -107,15 +108,16 @@ def _burton_note_fixture():
         )
 
         def _patched_loader(*, validation_id=None, path=None):
-            config = original_loader(validation_id=validation_id, path=path)
-            config["notes_path"] = str(notes_path)
-            return config
+            validation = original_loader(validation_id=validation_id, path=path)
+            updated_context = dict(validation.rule_context_config)
+            updated_context["notes_path"] = str(notes_path)
+            return replace(validation, rule_context_config=updated_context)
 
-        burton_urban_fi_module.load_reference_validation_config = _patched_loader
+        burton_urban_fi_module.load_reference_validation_plan = _patched_loader
         try:
             yield
         finally:
-            burton_urban_fi_module.load_reference_validation_config = original_loader
+            burton_urban_fi_module.load_reference_validation_plan = original_loader
 
 
 with _burton_note_fixture():

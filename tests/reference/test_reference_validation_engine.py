@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,7 @@ from olfactorybulb.audit.reference_validation_config import (
     validation_protocol_runner_id,
     validation_title,
 )
+from olfactorybulb.audit.reference_validation_plan import load_reference_validation_plan
 from olfactorybulb.audit.reference_validation_specs import (
     NotePresenceRuleSpec,
     ProtocolExecutedRuleSpec,
@@ -35,6 +37,16 @@ load_validation_extensions(burton_config)
 assert validation_title(burton_config) == "Burton & Urban f-I validation audit"
 assert validation_protocol_runner_id(burton_config) == "burton_urban_mctc_current_clamp"
 assert get_validation_protocol_spec("burton_urban_mctc_current_clamp").title.startswith("Burton and Urban 2014")
+burton_plan = load_reference_validation_plan(validation_id="burton_urban_fi")
+assert burton_plan.validation_id == "burton_urban_fi"
+assert burton_plan.title == "Burton & Urban f-I validation audit"
+assert burton_plan.protocol_runner_id == "burton_urban_mctc_current_clamp"
+assert burton_plan.protocol_spec.title.startswith("Burton and Urban 2014")
+assert burton_plan.skip_neuron_mode == "short_circuit"
+assert burton_plan.design_review_defaults.status == "pending"
+assert burton_plan.skip_item is not None
+assert burton_plan.skip_item.check_id == "burton_urban_fi_skipped"
+assert burton_plan.rules[0]["kind"] == "note_presence"
 
 listed_validations = subprocess.run(
     [sys.executable, "tools/run_reference_validation.py", "--list-validations"],
@@ -244,6 +256,15 @@ with tempfile.TemporaryDirectory() as tmpdir:
         load_validation_extensions(temp_config)
         temp_spec = get_validation_protocol_spec("temp_custom_protocol")
         assert temp_spec.title == "Temporary custom protocol"
+        temp_plan = load_reference_validation_plan(path=config_path)
+        assert temp_plan.title == "Temporary validation"
+        assert temp_plan.protocol_spec.title == "Temporary custom protocol"
+        assert temp_plan.skip_item is not None
+        skip_item = temp_plan.build_skip_item(args=argparse.Namespace(custom_score=4.5, reference_sigma_multiplier=2.0))
+        assert skip_item is not None
+        assert skip_item.check_id == "temp_validation_skipped"
+        assert skip_item.evidence["custom_score"] == 4.5
+        assert skip_item.evidence["reference_sigma_multiplier"] == 2.0
 
         env = os.environ.copy()
         env["PYTHONPATH"] = tmpdir if not env.get("PYTHONPATH") else f"{tmpdir}:{env['PYTHONPATH']}"

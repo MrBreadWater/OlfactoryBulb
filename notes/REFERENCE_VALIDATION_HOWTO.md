@@ -77,6 +77,8 @@ The same framework now also drives:
   - [epli_correctness.validation.toml](/home/michael/OlfactoryBulb/research_context/reference_validations/epli_correctness.validation.toml)
 - Validation config loader:
   [olfactorybulb/audit/reference_validation_config.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_config.py)
+- Typed runtime validation plan:
+  [olfactorybulb/audit/reference_validation_plan.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_plan.py)
 - Validation engine:
   [olfactorybulb/audit/reference_validation_engine.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_engine.py)
 - Built-in protocol registry:
@@ -89,6 +91,15 @@ The same framework now also drives:
   [olfactorybulb/audit/dashboard.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/dashboard.py)
 - Unified dashboard shell HOWTO:
   [DASHBOARD_SHELL_HOWTO.md](/home/michael/OlfactoryBulb/notes/DASHBOARD_SHELL_HOWTO.md)
+
+At runtime, keep those layers distinct:
+
+- `reference_validation_config.py` loads raw TOML plus extension declarations
+- `reference_validation_plan.py` compiles that raw config into one typed
+  `ReferenceValidationPlan`
+- `reference_validation_engine.py` and the maintained audit/CLI entrypoints
+  should consume the typed plan rather than passing loose config dicts and
+  parallel accessor calls around at runtime
 
 ## Quick start
 

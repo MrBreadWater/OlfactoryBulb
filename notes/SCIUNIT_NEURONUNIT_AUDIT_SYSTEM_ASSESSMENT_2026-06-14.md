@@ -2046,6 +2046,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `SeriesComparisonCase` construction, so
     `reference_validation_rules.py` stays closer to orchestration and suite
     compilation instead of rebuilding flat case payloads inline
+  - the top-level runtime path now also compiles through a typed
+    `ReferenceValidationPlan` in
+    `olfactorybulb.audit.reference_validation_plan`, so the engine, generic
+    CLI, and maintained audit wrappers no longer pass a loose validation-config
+    dict plus parallel accessor calls around at runtime
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

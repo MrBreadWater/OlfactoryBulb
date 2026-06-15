@@ -15,13 +15,13 @@ from olfactorybulb.audit import format_report  # noqa: E402
 from olfactorybulb.audit.reference_validation_config import (  # noqa: E402
     DEFAULT_REFERENCE_VALIDATION_ID,
     list_reference_validation_ids,
-    load_validation_extensions,
     load_reference_validation_config,
     validation_title,
 )
 from olfactorybulb.audit.reference_validation_engine import (  # noqa: E402
     add_reference_validation_common_args,
     add_reference_validation_protocol_args,
+    load_reference_validation_plan,
     run_reference_validation,
 )
 from olfactorybulb.audit.reference_validation_protocols import iter_validation_protocol_specs  # noqa: E402
@@ -49,8 +49,7 @@ def _list_validations() -> int:
 
 def _list_protocols(root_args: argparse.Namespace) -> int:
     if root_args.config_path is not None or root_args.validation_id:
-        config = load_reference_validation_config(validation_id=root_args.validation_id, path=root_args.config_path)
-        load_validation_extensions(config)
+        load_reference_validation_plan(validation_id=root_args.validation_id, path=root_args.config_path)
     print("Registered validation protocols")
     print("==============================")
     for spec in iter_validation_protocol_specs():
@@ -67,17 +66,19 @@ def main(argv: list[str] | None = None) -> int:
     if root_args.list_protocols:
         return _list_protocols(root_args)
 
-    config = load_reference_validation_config(validation_id=root_args.validation_id, path=root_args.config_path)
-    load_validation_extensions(config)
-    parser = argparse.ArgumentParser(description=validation_title(config))
+    validation = load_reference_validation_plan(
+        validation_id=root_args.validation_id,
+        path=root_args.config_path,
+    )
+    parser = argparse.ArgumentParser(description=validation.title)
     add_reference_validation_common_args(parser)
-    add_reference_validation_protocol_args(parser, config=config)
+    add_reference_validation_protocol_args(parser, validation=validation)
     args = parser.parse_args(remainder)
     report = run_reference_validation(
         args=args,
-        config=config,
-        audit_id=str(config.get("validation_id")),
-        title=validation_title(config),
+        validation=validation,
+        audit_id=validation.validation_id,
+        title=validation.title,
     )
     if root_args.json:
         print(report.to_json())

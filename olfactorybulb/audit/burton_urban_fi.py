@@ -23,11 +23,11 @@ from olfactorybulb.audit.reference_data import (
     load_pv_crh_epl_fsi_protocol_rows,
 )
 from olfactorybulb.audit.reference_notes import notes_for_rows
-from olfactorybulb.audit.reference_validation_config import load_reference_validation_config
 from olfactorybulb.audit.reference_validation_engine import (
     add_reference_validation_common_args,
     add_reference_validation_protocol_args,
     build_reference_validation_items,
+    load_reference_validation_plan,
     run_reference_validation,
 )
 from olfactorybulb.audit.reference_validation_protocols import (
@@ -1547,26 +1547,26 @@ def build_validation_items(
     reference_sigma_multiplier: float = 2.0,
 ) -> list[AuditItem]:
     del protocol
-    config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
+    validation = load_reference_validation_plan(validation_id=BURTON_VALIDATION_ID)
     args = argparse.Namespace(reference_sigma_multiplier=reference_sigma_multiplier)
     protocol_result = ProtocolRunResult(metrics=metrics, protocol_evidence={}, group_field="cell_type")
     return [_build_uploaded_reference_coverage_item()] + build_reference_validation_items(
         metrics=metrics,
         args=args,
-        config=config,
+        validation=validation,
         protocol_result=protocol_result,
     )
 
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
-    config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
+    validation = load_reference_validation_plan(validation_id=BURTON_VALIDATION_ID)
     add_reference_validation_common_args(parser)
-    add_reference_validation_protocol_args(parser, config=config)
+    add_reference_validation_protocol_args(parser, validation=validation)
     parser.add_argument("--candidate-slice", default=None, help="Optional exported slice name or path to check for MC/TC/GC context alongside the physiology audit.")
 
 
 def run(args: argparse.Namespace) -> AuditReport:
-    config = load_reference_validation_config(validation_id=BURTON_VALIDATION_ID)
+    validation = load_reference_validation_plan(validation_id=BURTON_VALIDATION_ID)
     cell_types = [
         cell_type.strip().upper()
         for cell_type in str(getattr(args, "cell_types", "MC,TC")).split(",")
@@ -1605,7 +1605,7 @@ def run(args: argparse.Namespace) -> AuditReport:
         )
     return run_reference_validation(
         args=args,
-        config=config,
+        validation=validation,
         audit_id=BURTON_VALIDATION_ID,
         title="Burton & Urban f-I validation audit",
         pre_items=items,
