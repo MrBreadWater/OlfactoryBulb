@@ -988,6 +988,11 @@ contract for future sessions.
       `ReferenceValidationDocument.protocol_defaults`, skip-item evidence, and
       `ProtocolExecutionCacheInfo` payload maps should not drift back to loose
       mutable dicts once they have crossed the load/cache boundary
+    - keep declarative validation-rule payloads on the same frozen-wrapper
+      pattern too: `ValidationRuleRecord.raw_rule` should stay on a typed
+      frozen mapping payload, and the rule/spec parsing layer should accept
+      mapping-like payloads instead of advertising mutable raw dicts as the
+      primary maintained contract
     - if a migrated SciUnit suite needs the full protocol-evidence payload,
       expose that through an explicit capability such as
       `ProvidesProtocolEvidenceBundle` and consume the bundle directly rather

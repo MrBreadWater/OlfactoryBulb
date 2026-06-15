@@ -2233,6 +2233,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     protocol defaults, skip-item evidence, and protocol-cache arg/config
     payloads no longer fall back to loose mutable dicts once they have
     crossed the load/cache boundary
+  - the declarative rule/spec boundary now follows that same contract too:
+    `ValidationRuleRecord.raw_rule` stores a typed frozen
+    `ValidationRulePayload`, and the rule/spec parsers now accept
+    mapping-like payloads instead of treating mutable raw dicts as the
+    primary maintained contract
   - the bound reference/model series data now also live on a typed
     `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
     and provenance summaries no longer have to rediscover `rows + spec +

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping as MappingABC
 from dataclasses import dataclass
 import math
-from typing import Any
+from typing import Any, Mapping
 
 from olfactorybulb.audit.criterion_math import (
     criterion_math_for_absolute_difference,
@@ -66,13 +67,13 @@ def optional_float(value: Any) -> float | None:
 
 
 def property_override(
-    rule: dict[str, Any],
+    rule: Mapping[str, object],
     mapping_key: str,
     property_name: str,
     default: Any,
 ) -> Any:
     mapping = rule.get(mapping_key, {})
-    if not isinstance(mapping, dict):
+    if not isinstance(mapping, MappingABC):
         return default
     for key, value in mapping.items():
         if str(key).strip() == property_name:
@@ -81,7 +82,7 @@ def property_override(
 
 
 def property_review_metadata(
-    rule: dict[str, Any],
+    rule: Mapping[str, object],
     context: ValidationRuleContextLike,
     property_name: str,
 ) -> dict[str, str]:
@@ -131,14 +132,14 @@ def property_review_metadata(
     }
 
 
-def property_band_modes(rule: dict[str, Any], property_metric_map: dict[str, str]) -> dict[str, str]:
+def property_band_modes(rule: Mapping[str, object], property_metric_map: dict[str, str]) -> dict[str, str]:
     if "default_band_mode" in rule:
         raise ValueError(
             "reference_band_rows no longer supports 'default_band_mode'; "
             "choose 'property_band_modes' explicitly for every property"
         )
     raw_modes = rule.get("property_band_modes", {})
-    if not isinstance(raw_modes, dict):
+    if not isinstance(raw_modes, MappingABC):
         raise ValueError(
             "reference_band_rows requires a 'property_band_modes' table that selects a band mode for every property"
         )
@@ -165,7 +166,7 @@ def property_band_modes(rule: dict[str, Any], property_metric_map: dict[str, str
 
 
 def row_field_name(
-    rule: dict[str, Any],
+    rule: Mapping[str, object],
     property_name: str,
     *,
     field_override_key: str,
@@ -178,7 +179,7 @@ def row_field_name(
     return str(rule.get(default_field_key, default) or default).strip()
 
 
-def summary_group(rule: dict[str, Any], context: ValidationRuleContextLike) -> str:
+def summary_group(rule: Mapping[str, object], context: ValidationRuleContextLike) -> str:
     explicit = str(rule.get("group", "") or "").strip()
     if explicit:
         return explicit
@@ -187,11 +188,11 @@ def summary_group(rule: dict[str, Any], context: ValidationRuleContextLike) -> s
     return str(context.default_group or "ungrouped")
 
 
-def suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAggregatePolicy:
+def suite_aggregate_policy_from_rule(rule: Mapping[str, object]) -> SuiteAggregatePolicy:
     raw_policy = rule.get("suite_aggregate_policy")
     if raw_policy in (None, ""):
         return DEFAULT_SUITE_AGGREGATE_POLICY
-    if not isinstance(raw_policy, dict):
+    if not isinstance(raw_policy, MappingABC):
         raise ValueError("suite_aggregate_policy must be a table when provided")
     status_rollup = str(raw_policy.get("status_rollup", DEFAULT_SUITE_AGGREGATE_POLICY.status_rollup)).strip()
     norm_rollup = str(raw_policy.get("norm_rollup", DEFAULT_SUITE_AGGREGATE_POLICY.norm_rollup)).strip()
@@ -201,18 +202,18 @@ def suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAggregatePoli
     )
 
 
-def _explicit_suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAggregatePolicy | None:
+def _explicit_suite_aggregate_policy_from_rule(rule: Mapping[str, object]) -> SuiteAggregatePolicy | None:
     raw_policy = rule.get("suite_aggregate_policy")
     if raw_policy in (None, ""):
         return None
     return suite_aggregate_policy_from_rule(rule)
 
 
-def suite_statistical_policy_from_rule(rule: dict[str, Any]) -> SuiteStatisticalPolicy:
+def suite_statistical_policy_from_rule(rule: Mapping[str, object]) -> SuiteStatisticalPolicy:
     raw_policy = rule.get("suite_statistical_policy")
     if raw_policy in (None, ""):
         return DEFAULT_SUITE_STATISTICAL_POLICY
-    if not isinstance(raw_policy, dict):
+    if not isinstance(raw_policy, MappingABC):
         raise ValueError("suite_statistical_policy must be a table when provided")
     rollup_method = str(raw_policy.get("rollup_method", DEFAULT_SUITE_STATISTICAL_POLICY.rollup_method)).strip()
     return SuiteStatisticalPolicy(
@@ -220,7 +221,7 @@ def suite_statistical_policy_from_rule(rule: dict[str, Any]) -> SuiteStatistical
     )
 
 
-def _explicit_suite_statistical_policy_from_rule(rule: dict[str, Any]) -> SuiteStatisticalPolicy | None:
+def _explicit_suite_statistical_policy_from_rule(rule: Mapping[str, object]) -> SuiteStatisticalPolicy | None:
     raw_policy = rule.get("suite_statistical_policy")
     if raw_policy in (None, ""):
         return None
@@ -228,7 +229,7 @@ def _explicit_suite_statistical_policy_from_rule(rule: dict[str, Any]) -> SuiteS
 
 
 def grouped_suite_descriptor(
-    rules: list[dict[str, Any]],
+    rules: list[Mapping[str, object]],
     *,
     default_suite_id: str,
     suite_kind_label: str,
@@ -344,7 +345,7 @@ class SummaryRuleSpec:
     maximum: float | None = None
 
     @classmethod
-    def from_rule(cls, rule: dict[str, Any], context: ValidationRuleContextLike) -> "SummaryRuleSpec":
+    def from_rule(cls, rule: Mapping[str, object], context: ValidationRuleContextLike) -> "SummaryRuleSpec":
         return cls(
             rule_kind=str(rule["kind"]),
             check_id=str(rule["check_id"]),
@@ -458,7 +459,7 @@ class ProtocolExecutedRuleSpec:
     fallback_series_key: str = "fi_curve_rows"
 
     @classmethod
-    def from_rule(cls, rule: dict[str, Any]) -> "ProtocolExecutedRuleSpec":
+    def from_rule(cls, rule: Mapping[str, object]) -> "ProtocolExecutedRuleSpec":
         return cls(
             fallback_series_key=str(rule.get("fallback_series_key", "fi_curve_rows")).strip() or "fi_curve_rows",
         )
@@ -477,7 +478,7 @@ class NotePresenceRowContextSpec:
     filters: tuple[dict[str, Any], ...] = ()
 
     @classmethod
-    def from_rule(cls, raw: dict[str, Any]) -> "NotePresenceRowContextSpec":
+    def from_rule(cls, raw: Mapping[str, object]) -> "NotePresenceRowContextSpec":
         return cls(
             loader=str(raw["loader"]),
             as_protocol_context=bool(raw.get("as_protocol_context")),
@@ -487,7 +488,7 @@ class NotePresenceRowContextSpec:
             filter_values=tuple(raw.get("filter_values", []) or ()),
             filter_value_arg=str(raw.get("filter_value_arg", "")).strip(),
             filter_values_arg=str(raw.get("filter_values_arg", "")).strip(),
-            filters=tuple(dict(item) for item in raw.get("filters", []) if isinstance(item, dict)),
+            filters=tuple(dict(item) for item in raw.get("filters", []) if isinstance(item, MappingABC)),
         )
 
     def to_filter_spec(self) -> dict[str, Any]:
@@ -514,19 +515,19 @@ class NotePresenceRuleSpec:
     synthetic_contexts: tuple[dict[str, Any], ...]
 
     @classmethod
-    def from_rule(cls, rule: dict[str, Any]) -> "NotePresenceRuleSpec":
+    def from_rule(cls, rule: Mapping[str, object]) -> "NotePresenceRuleSpec":
         scope_text = str(rule.get("scope", "")).strip()
         return cls(
             scope=scope_text or None,
             row_contexts=tuple(
                 NotePresenceRowContextSpec.from_rule(raw)
                 for raw in rule.get("row_contexts", [])
-                if isinstance(raw, dict)
+                if isinstance(raw, MappingABC)
             ),
             synthetic_contexts=tuple(
                 dict(raw)
                 for raw in rule.get("synthetic_contexts", [])
-                if isinstance(raw, dict)
+                if isinstance(raw, MappingABC)
             ),
         )
 
@@ -558,7 +559,7 @@ class ComparisonRuleSpec:
     groups: tuple[str, ...] = ()
 
     @classmethod
-    def from_rule(cls, rule: dict[str, Any]) -> "ComparisonRuleSpec":
+    def from_rule(cls, rule: Mapping[str, object]) -> "ComparisonRuleSpec":
         return cls(
             rule_kind=str(rule["kind"]),
             check_id=str(rule["check_id"]),
@@ -703,7 +704,7 @@ class ReferenceBandPropertyRuleSpec:
     @classmethod
     def from_rule(
         cls,
-        rule: dict[str, Any],
+        rule: Mapping[str, object],
         context: ValidationRuleContextLike,
         *,
         property_name: str,
@@ -783,7 +784,7 @@ class ReferenceBandRuleSpec:
     @classmethod
     def from_rule(
         cls,
-        rule: dict[str, Any],
+        rule: Mapping[str, object],
         context: ValidationRuleContextLike,
     ) -> "ReferenceBandRuleSpec":
         property_metric_map = {
@@ -953,7 +954,7 @@ class SeriesComparisonRuleSpec:
     @classmethod
     def from_rule(
         cls,
-        rule: dict[str, Any],
+        rule: Mapping[str, object],
         *,
         protocol_series_spec: ProtocolEvidenceSeriesSpec | None = None,
     ) -> "SeriesComparisonRuleSpec":
@@ -1022,7 +1023,7 @@ class SeriesComparisonRuleSpec:
 
 @dataclass(frozen=True)
 class _SeriesComparisonRuleParser:
-    rule: dict[str, Any]
+    rule: Mapping[str, object]
     protocol_series_spec: ProtocolEvidenceSeriesSpec | None = None
 
     def string(self, key: str, default: str) -> str:
@@ -1062,7 +1063,7 @@ class _SeriesComparisonRuleParser:
         raw = self.rule.get(key, {})
         if raw in (None, "", {}):
             return AxisTransform()
-        if not isinstance(raw, dict):
+        if not isinstance(raw, MappingABC):
             raise ValueError(f"{key} must be a table/dict when provided")
         raw_points = raw.get("points", [])
         points: tuple[tuple[float, float], ...] = ()
@@ -1071,7 +1072,7 @@ class _SeriesComparisonRuleParser:
                 raise ValueError(f"{key}.points must be a list when provided")
             normalized_points: list[tuple[float, float]] = []
             for index, point in enumerate(raw_points, start=1):
-                if isinstance(point, dict):
+                if isinstance(point, MappingABC):
                     if "input" not in point or "output" not in point:
                         raise ValueError(f"{key}.points[{index}] must provide both 'input' and 'output'")
                     normalized_points.append((float(point["input"]), float(point["output"])))

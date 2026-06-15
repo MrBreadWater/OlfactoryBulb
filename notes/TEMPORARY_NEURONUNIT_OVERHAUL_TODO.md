@@ -481,6 +481,14 @@ Remove this file when the listed items are either:
       - `ProtocolExecutionCacheInfo.arg_values` and `protocol_config` now do
         the same, so emitted protocol-cache evidence still stays inspectable
         without the stored runtime/cache contract falling back to loose dicts
+- [x] Keep declarative validation-rule payloads on the same frozen-wrapper
+      pattern instead of switching back to mutable raw dicts at the rule/spec
+      boundary.
+      - `ValidationRuleRecord.raw_rule` now stores a typed
+        `ValidationRulePayload`
+      - the declarative parser / grouped-rule plumbing now accepts
+        mapping-like rule payloads instead of advertising mutable raw dicts
+        as the maintained contract
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

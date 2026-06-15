@@ -16,6 +16,7 @@ from olfactorybulb.audit.reference_validation_config import (
     list_reference_validation_ids,
     load_validation_extensions,
 )
+from olfactorybulb.audit.reference_validation_rule_records import ValidationRulePayload
 from olfactorybulb.audit.reference_validation_document import load_reference_validation_document
 from olfactorybulb.audit.reference_validation_document import (
     ReferenceValidationDefaultsMap,
@@ -64,6 +65,7 @@ assert burton_document.skip_item is not None
 assert burton_document.skip_item.check_id == "burton_urban_fi_skipped"
 assert isinstance(burton_document.skip_item.evidence, ReferenceValidationSkipEvidenceMap)
 assert burton_document.rule_records[0].kind == "note_presence"
+assert isinstance(burton_document.rule_records[0].raw_rule, ValidationRulePayload)
 assert burton_document.extension_specs == ()
 assert get_validation_protocol_spec("burton_urban_mctc_current_clamp").title.startswith("Burton and Urban 2014")
 burton_plan = load_reference_validation_plan(validation_id="burton_urban_fi")
@@ -126,6 +128,17 @@ assert note_rule_spec.row_contexts[0].to_filter_spec() == {
     "filters": [{"field": "sample_scope", "value": "example_cell"}],
 }
 assert note_rule_spec.synthetic_contexts == ({"protocol_id": "SYNTH", "Property": "Synthetic Protocol"},)
+
+frozen_note_rule_spec = NotePresenceRuleSpec.from_rule(
+    ValidationRulePayload.from_mapping(
+        {
+            "scope": "gc",
+            "row_contexts": [{"loader": "csv:synthetic.csv"}],
+        }
+    )
+)
+assert frozen_note_rule_spec.scope == "gc"
+assert frozen_note_rule_spec.row_contexts[0].loader == "csv:synthetic.csv"
 
 listed_protocols = subprocess.run(
     [sys.executable, "tools/run_reference_validation.py", "--validation-id", "burton_urban_fi", "--list-protocols"],

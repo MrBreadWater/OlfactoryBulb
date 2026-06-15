@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, Mapping
 import math
 
 from olfactorybulb.audit import AuditItem, series_visual_spec
@@ -80,7 +80,7 @@ class ValidationRuleContext:
         object.__setattr__(self, "summary", coerce_metric_summary_table(self.summary))
 
 
-RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
+RuleHandler = Callable[[Mapping[str, object], ValidationRuleContext], list[AuditItem]]
 
 
 @dataclass(frozen=True)
@@ -230,7 +230,7 @@ def build_rule_items(
 
 
 def compile_rule_dispatches(
-    rules: list[ValidationRuleRecord | dict[str, Any]] | tuple[ValidationRuleRecord | dict[str, Any], ...],
+    rules: list[ValidationRuleRecord | Mapping[str, object]] | tuple[ValidationRuleRecord | Mapping[str, object], ...],
 ) -> tuple[ValidationRuleDispatch, ...]:
     dispatches: list[ValidationRuleDispatch] = []
     pending_family: _GroupedRuleFamily | None = None
@@ -302,7 +302,7 @@ def _append_grouped_suite_items(
 
 
 def _resolved_rule_validation_design_review(
-    rule: ValidationRuleRecord | dict[str, Any],
+    rule: ValidationRuleRecord | Mapping[str, object],
     context: ValidationRuleContext,
 ) -> dict[str, str]:
     if isinstance(rule, ValidationRuleRecord):
@@ -328,7 +328,7 @@ def _resolved_rule_validation_design_review(
 
 def _apply_rule_level_validation_design_review(
     items: list[AuditItem],
-    rule: ValidationRuleRecord | dict[str, Any],
+    rule: ValidationRuleRecord | Mapping[str, object],
     context: ValidationRuleContext,
 ) -> None:
     metadata = _resolved_rule_validation_design_review(rule, context)
@@ -355,7 +355,7 @@ def _apply_rule_level_validation_design_review(
 
 
 def _rule_item(
-    rule: ValidationRuleRecord | dict[str, Any],
+    rule: ValidationRuleRecord | Mapping[str, object],
     *,
     status: str,
     evidence: dict[str, Any] | None = None,
@@ -373,7 +373,7 @@ def _rule_item(
     series_visuals: list[dict[str, Any]] | None = None,
     companion_visuals: list[dict[str, Any]] | None = None,
 ) -> AuditItem:
-    rule_dict = rule.raw_rule if isinstance(rule, ValidationRuleRecord) else rule
+    rule_dict: Mapping[str, object] = rule.raw_rule if isinstance(rule, ValidationRuleRecord) else rule
     return AuditItem(
         check_id=str(check_id or rule_dict["check_id"]),
         status=status,
@@ -397,7 +397,7 @@ def _rule_item(
     )
 
 
-def _rule_status(rule: dict[str, Any], passed: bool) -> str:
+def _rule_status(rule: Mapping[str, object], passed: bool) -> str:
     return str(rule.get("pass_status", "PASS") if passed else rule.get("fail_status", "FAIL"))
 
 
@@ -423,7 +423,7 @@ def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _rule_enabled(rule: dict[str, Any] | ValidationRuleRecord, args: Any) -> bool:
+def _rule_enabled(rule: Mapping[str, object] | ValidationRuleRecord, args: Any) -> bool:
     if isinstance(rule, ValidationRuleRecord):
         return rule.is_enabled(args)
     truthy_arg = str(rule.get("enabled_when_arg_truthy", "") or "").strip()
@@ -476,7 +476,12 @@ def _load_rows(loader_spec: str) -> list[dict[str, Any]]:
     return loader()
 
 
-def _filter_rows(rows: list[dict[str, Any]], spec: dict[str, Any], *, args: Any | None = None) -> list[dict[str, Any]]:
+def _filter_rows(
+    rows: list[dict[str, Any]],
+    spec: Mapping[str, object],
+    *,
+    args: Any | None = None,
+) -> list[dict[str, Any]]:
     filtered = list(rows)
     filters = list(spec.get("filters", []))
     if spec.get("filter_field") and spec.get("filter_value") is not None:
@@ -513,7 +518,7 @@ def _group_mean(summary: dict[str, dict[str, float]], group: str, metric_key: st
 
 
 def _summary_evidence(
-    rule: dict[str, Any],
+    rule: Mapping[str, object],
     context: ValidationRuleContext,
     *,
     group: str,
@@ -635,8 +640,8 @@ def _grouped_rule_family_for_kind(kind: str) -> _GroupedRuleFamily | None:
     return GROUPED_RULE_FAMILIES_BY_KIND.get(kind)
 
 
-def _notes_path(rule: ValidationRuleRecord | dict[str, Any], context: ValidationRuleContext) -> Path | None:
-    rule_dict = rule.raw_rule if isinstance(rule, ValidationRuleRecord) else rule
+def _notes_path(rule: ValidationRuleRecord | Mapping[str, object], context: ValidationRuleContext) -> Path | None:
+    rule_dict: Mapping[str, object] = rule.raw_rule if isinstance(rule, ValidationRuleRecord) else rule
     path_text = str(rule_dict.get("notes_path") or context.notes_path or "").strip()
     if not path_text:
         return None
@@ -740,69 +745,69 @@ def _build_note_presence_items(
 
 
 @register_validation_rule("protocol_executed")
-def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _protocol_executed(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     record = ValidationRuleRecord.from_rule(rule)
     return _build_protocol_executed_items(record, ProtocolExecutedRuleSpec.from_rule(record.raw_rule), context)
 
 
 @register_validation_rule("all_finite_metric")
-def _all_finite_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _all_finite_metric(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("all_exact_metric")
-def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _all_exact_metric(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("group_ordering")
-def _group_ordering(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _group_ordering(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("group_abs_diff_max")
-def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _group_abs_diff_max(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("group_positive")
-def _group_positive(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _group_positive(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("summary_metric_min")
-def _summary_metric_min(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _summary_metric_min(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("summary_metric_max")
-def _summary_metric_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _summary_metric_max(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("summary_metric_range")
-def _summary_metric_range(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _summary_metric_range(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("summary_metric_status_map")
-def _summary_metric_status_map(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _summary_metric_status_map(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 @register_validation_rule("reference_band_rows")
-def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _reference_band_rows(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_reference_band_items(ValidationRuleRecord.from_rule(rule), context)
 
 
 @register_validation_rule("note_presence")
-def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _note_presence(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     record = ValidationRuleRecord.from_rule(rule)
     return _build_note_presence_items(record, NotePresenceRuleSpec.from_rule(record.raw_rule), context)
 
 
 @register_validation_rule("reference_curve_match")
-def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+def _reference_curve_match(rule: Mapping[str, object], context: ValidationRuleContext) -> list[AuditItem]:
     return _build_series_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 

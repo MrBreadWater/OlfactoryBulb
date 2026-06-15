@@ -3,14 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from olfactorybulb.audit.reference_validation_contracts import ValidationRuleContextLike
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload
+
+
+class ValidationRulePayload(FrozenMappingPayload):
+    """Frozen mapping wrapper for declarative validation-rule payloads."""
 
 
 @dataclass(frozen=True)
 class ValidationRuleRecord:
-    raw_rule: dict[str, Any]
+    raw_rule: ValidationRulePayload | Mapping[str, object]
     kind: str
     enabled_when_arg_truthy: str = ""
     enabled_when_arg_falsey: str = ""
@@ -22,9 +27,12 @@ class ValidationRuleRecord:
     review_required_expertise: str = ""
     review_focus: str = ""
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "raw_rule", ValidationRulePayload.from_mapping(self.raw_rule))
+
     @classmethod
-    def from_rule(cls, rule: dict[str, Any]) -> "ValidationRuleRecord":
-        raw_rule = dict(rule)
+    def from_rule(cls, rule: Mapping[str, object]) -> "ValidationRuleRecord":
+        raw_rule = ValidationRulePayload.from_mapping(rule)
         kind = str(raw_rule.get("kind") or "").strip()
         if not kind:
             raise ValueError("Validation rule is missing required 'kind'")
@@ -74,7 +82,7 @@ class ValidationRuleRecord:
 
 
 def coerce_validation_rule_records(
-    rules: Iterable[ValidationRuleRecord | dict[str, Any]],
+    rules: Iterable[ValidationRuleRecord | Mapping[str, object]],
 ) -> tuple[ValidationRuleRecord, ...]:
     records: list[ValidationRuleRecord] = []
     for rule in rules:
@@ -97,6 +105,7 @@ def _arg_values(value: Any) -> tuple[str, ...]:
 
 
 __all__ = [
+    "ValidationRulePayload",
     "ValidationRuleRecord",
     "coerce_validation_rule_records",
 ]
