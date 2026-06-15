@@ -24,7 +24,10 @@ from olfactorybulb.neuronunit.capabilities import (
 from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
-from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.reference_validation_suite import (
+    ReferenceValidationModel,
+    ReferenceValidationRuntimeData,
+)
 from olfactorybulb.neuronunit.suite_presentation import (
     audit_item_adapter_spec_from_case,
     suite_case_result_from_spec,
@@ -2479,9 +2482,11 @@ def compile_series_comparison_suite(
     tests = [SeriesComparisonTest(case) for case in cases]
     suite = sciunit.TestSuite(tests, name=suite_name)
     model = ReferenceValidationModel(
-        summary=summary,
-        metrics=metrics,
-        protocol_evidence=protocol_evidence,
+        runtime_data=ReferenceValidationRuntimeData(
+            summary=summary,
+            metrics=metrics,
+            protocol_evidence=protocol_evidence,
+        ),
         name=f"{suite_name}-model",
     )
     return CompiledSeriesComparisonSuite(suite=suite, model=model, cases=cases, tests=tests)

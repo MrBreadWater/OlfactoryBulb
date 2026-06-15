@@ -366,6 +366,9 @@ compiled = compile_series_comparison_suite(
     }),
     suite_name="synthetic series suite",
 )
+assert compiled.model.runtime_data.summary is compiled.model.summary
+assert compiled.model.runtime_data.metrics is compiled.model.metrics
+assert compiled.model.runtime_data.protocol_evidence is compiled.model.protocol_evidence
 assert compiled.model.get_protocol_evidence_bundle().to_dict()["cell_models"] == [
     "SyntheticModel1",
     "SyntheticModel2",

@@ -17,6 +17,7 @@ from olfactorybulb.neuronunit.metric_quantities import (
 )
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationRuntimeData
 from olfactorybulb.neuronunit.scalar_observations import (
     ScalarMetricValue,
     ScalarStatusMapPolicy,
@@ -183,12 +184,15 @@ class CompiledSummaryRuleSuite:
 def compile_summary_rule_suite(
     *,
     cases: list[SummaryRuleCase],
-    summary: MetricSummaryTable | dict[str, dict[str, float]],
+    summary: MetricSummaryTable,
     suite_name: str,
 ) -> CompiledSummaryRuleSuite:
     tests = [SummaryRuleTest(case) for case in cases]
     suite = sciunit.TestSuite(tests, name=suite_name)
-    model = ReferenceValidationModel(summary=summary, name=f"{suite_name}-model")
+    model = ReferenceValidationModel(
+        runtime_data=ReferenceValidationRuntimeData(summary=summary),
+        name=f"{suite_name}-model",
+    )
     return CompiledSummaryRuleSuite(suite=suite, model=model, cases=cases, tests=tests)
 
 

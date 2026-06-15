@@ -108,6 +108,9 @@ summary = {
 }
 
 compiled = compile_summary_rule_suite(cases=cases, summary=summary, suite_name="synthetic summary suite")
+assert compiled.model.runtime_data.summary is compiled.model.summary
+assert compiled.model.runtime_data.metrics.rows == ()
+assert compiled.model.runtime_data.protocol_evidence.to_dict() == {}
 assert cases[0].observation_payload() == {
     "rule_kind": "summary_metric_min",
     "metric_key": "baseline_population_min_count",

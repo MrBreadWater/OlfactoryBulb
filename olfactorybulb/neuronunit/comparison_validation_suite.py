@@ -14,6 +14,7 @@ from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTab
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
+from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationRuntimeData
 from olfactorybulb.neuronunit.scalar_observations import (
     ScalarGroupPair,
     ScalarGroupValueSet,
@@ -267,13 +268,16 @@ class CompiledComparisonRuleSuite:
 def compile_comparison_rule_suite(
     *,
     cases: list[ComparisonRuleCase],
-    summary: MetricSummaryTable | dict[str, dict[str, float]],
-    metrics: MetricTable | list[dict[str, Any]],
+    summary: MetricSummaryTable,
+    metrics: MetricTable,
     suite_name: str,
 ) -> CompiledComparisonRuleSuite:
     tests = [ComparisonRuleTest(case) for case in cases]
     suite = sciunit.TestSuite(tests, name=suite_name)
-    model = ReferenceValidationModel(summary=summary, metrics=metrics, name=f"{suite_name}-model")
+    model = ReferenceValidationModel(
+        runtime_data=ReferenceValidationRuntimeData(summary=summary, metrics=metrics),
+        name=f"{suite_name}-model",
+    )
     return CompiledComparisonRuleSuite(suite=suite, model=model, cases=cases, tests=tests)
 
 

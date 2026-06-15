@@ -170,6 +170,9 @@ compiled = compile_comparison_rule_suite(
     metrics=metrics,
     suite_name="synthetic comparison suite",
 )
+assert compiled.model.runtime_data.summary is compiled.model.summary
+assert compiled.model.runtime_data.metrics is compiled.model.metrics
+assert len(compiled.model.runtime_data.metrics.rows) == 2
 assert cases[0].observation_payload() == {
     "rule_kind": "all_exact_metric",
     "metric_key": "zero_step_rate_Hz",

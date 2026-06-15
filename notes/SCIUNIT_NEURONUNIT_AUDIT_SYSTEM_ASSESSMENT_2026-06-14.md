@@ -2243,6 +2243,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer
     instead of teaching each rule/spec helper to expect fresh CSV-style dict
     rows directly
+  - the migrated suite compiler/model seam is tighter too: the
+    reference-band, summary, comparison, and series suite compilers now all
+    construct `ReferenceValidationModel` through one shared typed
+    `ReferenceValidationRuntimeData` bundle, so summary metrics, row metrics,
+    and protocol evidence are coerced once at suite-compilation time instead
+    of being passed as parallel mutable runtime tables into each suite family
   - the central protocol-evidence seam now follows the same pattern through a
     shared `FrozenMappingPayload` layer, so `ProtocolEvidenceBundle.values`
     and `ProtocolEvidenceSeriesSpec.style` stop carrying mutable raw maps

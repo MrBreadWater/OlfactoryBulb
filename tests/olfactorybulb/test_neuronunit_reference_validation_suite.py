@@ -85,6 +85,8 @@ compiled = compile_reference_band_suite(
     summary={"MC": {"input_resistance_MOhm": 102.0}},
     suite_name="Synthetic reference-band suite",
 )
+assert compiled.model.runtime_data.summary.get("MC", {}).get("input_resistance_MOhm") == 102.0
+assert compiled.model.summary.get("MC", {}).get("input_resistance_MOhm") == 102.0
 assert case.observation.observation_payload() == {
     "property_name": "Input Resistance",
     "group": "MC",
@@ -110,11 +112,14 @@ assert round(numeric_value(unit_conversion_score.observed), 6) == 100.0
 bundle_model = compile_reference_band_suite(
     cases=[case],
     summary={"MC": {"input_resistance_MOhm": 102.0}},
+    protocol_evidence=ProtocolEvidenceBundle(
+        values={"fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]}
+    ),
     suite_name="Synthetic reference-band bundle suite",
 )
-bundle_model.model.protocol_evidence = ProtocolEvidenceBundle(
-    values={"fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]}
-)
+assert bundle_model.model.runtime_data.protocol_evidence.to_dict() == {
+    "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
+}
 assert bundle_model.model.get_protocol_evidence_bundle().to_dict() == {
     "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
 }

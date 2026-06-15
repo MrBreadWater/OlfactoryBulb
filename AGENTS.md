@@ -665,6 +665,12 @@ contract for future sessions.
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple
     through protocol results and rule consumers.
+    Likewise, keep the migrated suite compiler/model seam on the shared
+    `ReferenceValidationRuntimeData` bundle instead of teaching each suite
+    compiler to pass parallel `summary`, `metrics`, and `protocol_evidence`
+    arguments into `ReferenceValidationModel`. Coerce those three runtime
+    tables once at suite-compilation time, then let the model expose them
+    read-only through the shared typed bundle.
     Likewise, when a maintained literature bundle still arrives as a committed
     local summary CSV, move it under `research_context/source_data/<dataset>/`
     and route it through a declarative reference-dataset config rather than

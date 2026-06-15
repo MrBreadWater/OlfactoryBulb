@@ -557,6 +557,16 @@ Remove this file when the listed items are either:
         `reference_curve_match` spec entrypoints now use that typed layer
       - tests still may hand raw rows to the coercion boundary, but the
         maintained rule/spec runtime no longer advertises fresh raw row lists
+- [x] Keep the migrated suite compiler/model seam on one shared typed runtime
+      bundle instead of passing parallel summary/metrics/protocol-evidence
+      arguments into each `ReferenceValidationModel`.
+      - added `ReferenceValidationRuntimeData` as the shared suite-runtime
+        coercion boundary
+      - the reference-band, summary, comparison, and series suite compilers
+        now all construct the model through that bundle
+      - `ReferenceValidationModel` now reads `summary`, `metrics`, and
+        `protocol_evidence` from the shared typed bundle instead of keeping a
+        second mutable copy of those runtime tables
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

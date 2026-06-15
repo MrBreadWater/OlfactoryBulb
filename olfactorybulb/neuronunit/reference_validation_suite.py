@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 import quantities as pq
@@ -19,6 +19,8 @@ from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceRows,
 )
 from olfactorybulb.neuronunit.metric_tables import (
+    MetricRowRecord,
+    MetricSummaryRecord,
     MetricSummaryTable,
     MetricTable,
     coerce_metric_summary_table,
@@ -56,6 +58,20 @@ class ReferenceBandCase:
     fail_status: str = "FAIL"
 
 
+@dataclass(frozen=True)
+class ReferenceValidationRuntimeData:
+    """Typed runtime bundle shared across migrated NeuronUnit validation suites."""
+
+    summary: MetricSummaryTable | Mapping[str, MetricSummaryRecord | Mapping[str, float]]
+    metrics: MetricTable | Sequence[MetricRowRecord | Mapping[str, Any]] = ()
+    protocol_evidence: ProtocolEvidenceBundle | Mapping[str, object] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "summary", coerce_metric_summary_table(self.summary))
+        object.__setattr__(self, "metrics", coerce_metric_table(self.metrics or ()))
+        object.__setattr__(self, "protocol_evidence", coerce_protocol_evidence_bundle(self.protocol_evidence))
+
+
 class ReferenceValidationModel(
     sciunit.Model,
     ProvidesMetricSummary,
@@ -69,15 +85,23 @@ class ReferenceValidationModel(
     def __init__(
         self,
         *,
-        summary: MetricSummaryTable | dict[str, dict[str, float]],
-        metrics: MetricTable | list[dict[str, Any]] | None = None,
-        protocol_evidence: ProtocolEvidenceBundle | None = None,
+        runtime_data: ReferenceValidationRuntimeData,
         name: str = "reference-validation-summary-model",
     ) -> None:
         super().__init__(name=name)
-        self.summary = coerce_metric_summary_table(summary)
-        self.metrics = coerce_metric_table(metrics or [])
-        self.protocol_evidence = coerce_protocol_evidence_bundle(protocol_evidence)
+        self.runtime_data = runtime_data
+
+    @property
+    def summary(self) -> MetricSummaryTable:
+        return self.runtime_data.summary
+
+    @property
+    def metrics(self) -> MetricTable:
+        return self.runtime_data.metrics
+
+    @property
+    def protocol_evidence(self) -> ProtocolEvidenceBundle:
+        return self.runtime_data.protocol_evidence
 
     def get_metric_summary(self, group: str, metric_key: str, *, unit_text: str = "") -> float | pq.Quantity:
         value = self.summary.metric_value(group, metric_key)
@@ -225,12 +249,18 @@ class CompiledReferenceBandSuite:
 def compile_reference_band_suite(
     *,
     cases: list[ReferenceBandCase],
-    summary: MetricSummaryTable | dict[str, dict[str, float]],
+    summary: MetricSummaryTable | Mapping[str, MetricSummaryRecord | Mapping[str, float]],
+    protocol_evidence: ProtocolEvidenceBundle | Mapping[str, object] | None = None,
     suite_name: str,
 ) -> CompiledReferenceBandSuite:
     tests = [ReferenceBandTest(case) for case in cases]
     suite = sciunit.TestSuite(tests, name=suite_name)
-    model = ReferenceValidationModel(summary=summary)
+    model = ReferenceValidationModel(
+        runtime_data=ReferenceValidationRuntimeData(
+            summary=summary,
+            protocol_evidence=protocol_evidence,
+        ),
+    )
     return CompiledReferenceBandSuite(suite=suite, model=model, cases=cases, tests=tests)
 
 
@@ -330,6 +360,7 @@ __all__ = [
     "ReferenceBandScore",
     "ReferenceBandTest",
     "ReferenceValidationModel",
+    "ReferenceValidationRuntimeData",
     "audit_items_from_reference_band_suite",
     "compile_reference_band_suite",
 ]
