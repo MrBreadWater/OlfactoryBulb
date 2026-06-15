@@ -49,6 +49,7 @@ from olfactorybulb.neuronunit.comparison_validation_suite import (
 )
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
+    SERIES_ALIGNMENT_POLICIES,
     SeriesComparisonCase,
     SeriesComparisonPolicy,
     SeriesDistributionObservation,
@@ -1140,12 +1141,14 @@ def _axis_transform(rule: dict[str, Any], key: str) -> AxisTransform:
     )
 
 
-def _series_comparison_case(
-    rule: dict[str, Any],
-    reference_rows: list[dict[str, Any]],
-) -> SeriesComparisonCase:
+def _series_policy_from_rule(rule: dict[str, Any]) -> SeriesComparisonPolicy:
     score_family = _required_rule_choice(rule, "score_family")
     alignment_policy = _required_rule_choice(rule, "alignment_policy")
+    if alignment_policy not in SERIES_ALIGNMENT_POLICIES:
+        raise ValueError(
+            f"reference_curve_match alignment policy {alignment_policy!r} is unsupported; "
+            f"expected one of {', '.join(sorted(SERIES_ALIGNMENT_POLICIES))}"
+        )
     if alignment_policy in {"nearest_within_tolerance", "tolerance_clusters"}:
         if "x_match_tolerance" not in rule or rule.get("x_match_tolerance") is None:
             raise ValueError(
@@ -1191,6 +1194,34 @@ def _series_comparison_case(
                 )
     else:
         equivalence_margin = None
+    return SeriesComparisonPolicy(
+        minimum_point_count=int(rule.get("minimum_point_count", 1)),
+        maximum_mae=float(rule.get("maximum_mae", float("inf"))),
+        maximum_rmse=float(rule.get("maximum_rmse", float("inf"))),
+        minimum_median_welch_pvalue=(
+            float(rule["minimum_median_welch_pvalue"])
+            if "minimum_median_welch_pvalue" in rule and rule.get("minimum_median_welch_pvalue") is not None
+            else None
+        ),
+        equivalence_margin=equivalence_margin,
+        equivalence_alpha=float(rule.get("equivalence_alpha", 0.05)),
+        x_precision_digits=int(rule.get("current_precision_digits", 6)),
+        alignment_policy=alignment_policy,
+        x_match_tolerance=x_match_tolerance,
+        resampling_grid_source=resampling_grid_source,
+        resampling_grid_values=resampling_grid_values,
+        interpolation_method=interpolation_method,
+        distribution_kind=_required_rule_choice(rule, "distribution_kind"),
+        score_family=score_family,
+        pvalue_aggregation=pvalue_aggregation,
+    )
+
+
+def _series_comparison_case(
+    rule: dict[str, Any],
+    reference_rows: list[dict[str, Any]],
+) -> SeriesComparisonCase:
+    policy = _series_policy_from_rule(rule)
     observation = SeriesDistributionObservation(
         protocol_evidence_key=str(rule.get("protocol_evidence_key", "fi_curve_rows")),
         reference_rows=reference_rows,
@@ -1216,27 +1247,7 @@ def _series_comparison_case(
         visual_reference_y_key=str(rule.get("visual_reference_y_key", "reference_values_Hz")),
         visual_model_y_key=str(rule.get("visual_model_y_key", "model_values_Hz")),
         visual_kind=str(rule.get("visual_kind", "fi_curve")),
-        policy=SeriesComparisonPolicy(
-            minimum_point_count=int(rule.get("minimum_point_count", 1)),
-            maximum_mae=float(rule.get("maximum_mae", float("inf"))),
-            maximum_rmse=float(rule.get("maximum_rmse", float("inf"))),
-            minimum_median_welch_pvalue=(
-                float(rule["minimum_median_welch_pvalue"])
-                if "minimum_median_welch_pvalue" in rule and rule.get("minimum_median_welch_pvalue") is not None
-                else None
-            ),
-            equivalence_margin=equivalence_margin,
-            equivalence_alpha=float(rule.get("equivalence_alpha", 0.05)),
-            x_precision_digits=int(rule.get("current_precision_digits", 6)),
-            alignment_policy=alignment_policy,
-            x_match_tolerance=x_match_tolerance,
-            resampling_grid_source=resampling_grid_source,
-            resampling_grid_values=resampling_grid_values,
-            interpolation_method=interpolation_method,
-            distribution_kind=_required_rule_choice(rule, "distribution_kind"),
-            score_family=score_family,
-            pvalue_aggregation=pvalue_aggregation,
-        ),
+        policy=policy,
     )
     return SeriesComparisonCase(
         check_id=str(rule["check_id"]),

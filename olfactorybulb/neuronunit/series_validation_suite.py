@@ -80,6 +80,24 @@ SERIES_SCORE_FAMILIES = {
     "hybrid_residual_welch",
 }
 
+SERIES_ALIGNMENT_POLICIES = {
+    "exact_transformed_x",
+    "nearest_within_tolerance",
+    "tolerance_clusters",
+    "resampled_grid",
+}
+
+SERIES_RESAMPLING_GRID_SOURCES = {
+    "reference_observed_x",
+    "model_observed_x",
+    "union_observed_x",
+    "explicit_grid",
+}
+
+SERIES_INTERPOLATION_METHODS = {
+    "linear",
+}
+
 EQUIVALENCE_SERIES_SCORE_FAMILIES = {
     "equivalence_only",
     "hybrid_residual_equivalence",
@@ -522,7 +540,7 @@ def _aligned_x_pairs(
     if alignment_policy != "nearest_within_tolerance":
         raise ValueError(
             f"Unsupported series alignment policy {alignment_policy!r}; "
-            "expected one of exact_transformed_x, nearest_within_tolerance, tolerance_clusters, or resampled_grid"
+            f"expected one of {', '.join(sorted(SERIES_ALIGNMENT_POLICIES))}"
         )
 
     if not _is_finite_number(x_match_tolerance) or float(x_match_tolerance) < 0.0:
@@ -713,7 +731,7 @@ def _resolved_resampling_grid(
         return sorted(set(values))
     raise ValueError(
         f"Unsupported resampling grid source {grid_source!r}; expected one of "
-        "reference_observed_x, model_observed_x, union_observed_x, explicit_grid"
+        f"{', '.join(sorted(SERIES_RESAMPLING_GRID_SOURCES))}"
     )
 
 
@@ -725,9 +743,11 @@ def _interpolated_series_value(
 ) -> float | None:
     if len(path) < 2:
         return None
-    if str(interpolation_method or "linear").strip().lower() != "linear":
+    normalized_method = str(interpolation_method or "linear").strip().lower()
+    if normalized_method not in SERIES_INTERPOLATION_METHODS:
         raise ValueError(
-            f"Unsupported interpolation method {interpolation_method!r}; the current bridge only supports linear interpolation"
+            f"Unsupported interpolation method {interpolation_method!r}; the current bridge only supports "
+            f"{', '.join(sorted(SERIES_INTERPOLATION_METHODS))}"
         )
     x_values = [point[0] for point in path]
     y_values = [point[1] for point in path]
@@ -940,12 +960,11 @@ class SeriesComparisonTest(sciunit.Test):
         obs = self.case.observation
         prediction_rows = list(prediction.rows)
         prediction_context = dict(prediction.context)
-        if obs.policy.alignment_policy not in {"exact_transformed_x", "nearest_within_tolerance", "tolerance_clusters", "resampled_grid"}:
+        if obs.policy.alignment_policy not in SERIES_ALIGNMENT_POLICIES:
             raise ValueError(
                 f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
-                "the current bridge only supports exact shared transformed x bins, "
-                "nearest monotone matches within tolerance, shared tolerance clusters, "
-                "or empirical distributions built on a resampled grid"
+                "the current bridge only supports: "
+                + ", ".join(sorted(SERIES_ALIGNMENT_POLICIES))
             )
         if obs.policy.alignment_policy == "exact_transformed_x" and obs.policy.x_match_tolerance is not None:
             raise ValueError(
@@ -1467,6 +1486,9 @@ def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonS
 __all__ = [
     "AxisTransform",
     "CompiledSeriesComparisonSuite",
+    "SERIES_ALIGNMENT_POLICIES",
+    "SERIES_INTERPOLATION_METHODS",
+    "SERIES_RESAMPLING_GRID_SOURCES",
     "SeriesComparisonCase",
     "SeriesComparisonPolicy",
     "SeriesComparisonScore",
