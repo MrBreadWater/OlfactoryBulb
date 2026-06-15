@@ -466,12 +466,15 @@ suite_summary_report = AuditReport(
                     "rollup_pvalue": 0.03,
                     "available_case_count": 1,
                     "total_case_count": 2,
+                    "available_case_fraction": 0.5,
                     "score_text": "max TOST p 0.03",
                     "score_interpretation": "Synthetic suite statistical summary.",
                     "threshold": 0.05,
                     "threshold_key": "equivalence_alpha",
                     "threshold_direction": "le",
-                    "gate_passed": True,
+                    "support_gate_passed": False,
+                    "threshold_gate_passed": True,
+                    "gate_passed": False,
                     "case_pvalues": [0.03],
                     "case_check_ids": ["suite_summary_demo.warn_detail"],
                 },
@@ -557,5 +560,6 @@ with TemporaryDirectory() as tmp:
     assert "2 cases, 2 candidates" in html
     assert "worst WARN, min norm 0.5" in html
     assert "max TOST p 0.03" in html
+    assert "support 1/2 cases (gate fail)" in html
 
 print("audit_dashboard: OK")

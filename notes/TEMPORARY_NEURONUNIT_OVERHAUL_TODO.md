@@ -532,6 +532,13 @@ Remove this file when the listed items are either:
       - `suite_statistical_summary` now records available-case coverage plus
         separate support and threshold gates
       - docs/template/tests now expose the supported-case contract
+- [x] Surface suite-level statistical support shortfalls in the migrated
+      status-matrix presentation instead of leaving them visible only in raw
+      evidence payloads.
+      - the dashboard status-matrix header now appends support coverage text
+        such as `support 1/2 cases` and marks failed support gates explicitly
+      - direct dashboard coverage now exercises a partial-support suite
+        summary with a failed support gate
 - [x] Keep the remaining scalar/reference-band detailed evidence seams on one
       shared typed payload layer instead of hand-assembling the same dicts in
       each suite adapter.

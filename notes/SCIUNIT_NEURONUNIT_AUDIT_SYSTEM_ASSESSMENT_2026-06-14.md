@@ -2297,6 +2297,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite
     currently does this via matched-point count
+  - the suite-level statistical-support contract is now visible in the
+    migrated presentation layer too: when a suite matrix has only partial
+    statistical support or fails its declared support gate, the dashboard
+    header now surfaces that support shortfall instead of hiding it only in
+    raw `suite_statistical_summary` evidence
   - the remaining shell-side meta checks such as `protocol_executed` and
     `note_presence` now parse through typed config specs too, while still
     remaining outside the NeuronUnit scientific-core layer

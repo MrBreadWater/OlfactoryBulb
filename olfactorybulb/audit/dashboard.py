@@ -1470,12 +1470,40 @@ def _render_companion_visuals(
                 if min_norm is not None and not math.isclose(min_norm, mean_norm):
                     default_right_meta += f", min {_format_numeric(min_norm)}"
         if isinstance(suite_statistical_summary, dict):
+            statistical_parts: list[str] = []
             statistical_text = str(suite_statistical_summary.get("score_text") or "").strip()
             if statistical_text:
+                statistical_parts.append(statistical_text)
+            available_case_count = _float_or_none(suite_statistical_summary.get("available_case_count"))
+            total_case_count = _float_or_none(suite_statistical_summary.get("total_case_count"))
+            support_gate_passed = suite_statistical_summary.get("support_gate_passed")
+            threshold_gate_passed = suite_statistical_summary.get("threshold_gate_passed")
+            if (
+                available_case_count is not None
+                and total_case_count is not None
+                and total_case_count > 0.0
+                and (
+                    bool(support_gate_passed) is False
+                    or not math.isclose(available_case_count, total_case_count)
+                )
+            ):
+                support_text = (
+                    f"support {_format_numeric(available_case_count)}/"
+                    f"{_format_numeric(total_case_count)} cases"
+                )
+                if support_gate_passed is False:
+                    support_text += " (gate fail)"
+                statistical_parts.append(support_text)
+            elif support_gate_passed is False:
+                statistical_parts.append("support gate fail")
+            if threshold_gate_passed is False:
+                statistical_parts.append("threshold fail")
+            if statistical_parts:
+                statistical_meta = " | ".join(statistical_parts)
                 default_right_meta = (
-                    f"{default_right_meta} | {statistical_text}"
+                    f"{default_right_meta} | {statistical_meta}"
                     if default_right_meta and default_right_meta != "suite rollup"
-                    else statistical_text
+                    else statistical_meta
                 )
         block_title = str(spec.get("title") or "Suite case summary")
         default_left_meta = f"{len(entries)} cases"

@@ -724,7 +724,10 @@ contract for future sessions.
     of inferring that support requirement from the rolled-up p-value alone.
     Keep the resulting `available_case_count`, `available_case_fraction`,
     `support_gate_passed`, `threshold_gate_passed`, and combined
-    `gate_passed` visible in `suite_statistical_summary`. Keep the migrated
+    `gate_passed` visible in `suite_statistical_summary`. When the dashboard
+    renders a suite status matrix, surface partial statistical support or a
+    failed support gate in the matrix header instead of leaving that support
+    shortfall buried only in raw JSON evidence. Keep the migrated
     NeuronUnit-to-`AuditItem` adapter
     centralized in `olfactorybulb.neuronunit.suite_presentation`; use the
     shared `AuditItemAdapterSpec` path instead of hand-constructing the same
