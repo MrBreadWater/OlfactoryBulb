@@ -2253,7 +2253,7 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     and provenance summaries no longer have to rediscover `rows + spec +
     context` tuples at each scoring step
   - the resampled-grid alignment path now also supports an explicit small
-    interpolation family (`linear`, `nearest`, `step_hold`) instead of
+    interpolation family (`linear`, `nearest`, `pchip`, `step_hold`) instead of
     treating straight-line interpolation as the only possible series
     resampling contract
   - alignment support is now a first-class typed contract too: the

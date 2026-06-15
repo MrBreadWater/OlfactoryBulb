@@ -24,6 +24,7 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     SeriesDistributionObservation,
     SeriesPredictionBundle,
     SeriesVisualContract,
+    _interpolated_series_value,
     audit_items_from_series_comparison_suite,
     compile_series_comparison_suite,
 )
@@ -1018,6 +1019,12 @@ assert nearest_resampled_items[1].evidence["currents_pA"] == [150.0, 250.0]
 assert nearest_resampled_items[1].evidence["mean_absolute_error"] == 1.25
 assert nearest_resampled_items[1].evidence["root_mean_square_error"] == 1.25
 
+assert _interpolated_series_value(
+    [(0.0, 0.0), (1.0, 1.0), (2.0, 0.0)],
+    0.5,
+    interpolation_method="pchip",
+) == 0.75
+
 coverage_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=resampled_reference_rows,
@@ -1475,6 +1482,31 @@ assert coverage_rule_items[1].evidence["minimum_reference_coverage_fraction"] ==
 assert coverage_rule_items[1].evidence["coverage_gate_passed"] is False
 assert coverage_rule_items[1].evidence["alignment_support_gate_passed"] is False
 assert SeriesComparisonRuleSpec.from_rule(coverage_rule).policy.minimum_reference_coverage_fraction == 0.9
+
+pchip_rule = dict(resampled_rule)
+pchip_rule["resampling_grid_values"] = [150.0, 250.0]
+pchip_rule["interpolation_method"] = "pchip"
+pchip_context = _rule_context(
+    args=Namespace(),
+    protocol_result=SimpleNamespace(
+        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": resampled_model_rows}),
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    pchip_rule_items = build_rule_items(compile_rule_dispatches([pchip_rule]), pchip_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert pchip_rule_items[1].status == "PASS"
+assert pchip_rule_items[1].evidence["alignment_policy"] == "resampled_grid"
+assert pchip_rule_items[1].evidence["interpolation_method"] == "pchip"
+assert pchip_rule_items[1].evidence["currents_pA"] == [150.0, 250.0]
 
 step_hold_rule = dict(resampled_rule)
 step_hold_rule["resampling_grid_values"] = [175.0]

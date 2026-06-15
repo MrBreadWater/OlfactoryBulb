@@ -508,6 +508,13 @@ Remove this file when the listed items are either:
       - residual/statistical gates no longer treat a thin overlap as fully
         acceptable just because the surviving aligned bins happen to have low
         residual error
+- [x] Extend the resampled-grid interpolation family with one standard
+      shape-preserving cubic option instead of freezing the maintained path at
+      only linear/nearest/step-hold interpolation.
+      - added `interpolation_method = "pchip"`
+      - the series scorer now routes that through SciPy's monotone
+        `PchipInterpolator`
+      - docs/template/tests now expose `pchip` as a maintained option
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

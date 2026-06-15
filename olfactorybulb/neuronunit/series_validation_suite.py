@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import quantities as pq
+from scipy.interpolate import PchipInterpolator
 from scipy.stats import t as student_t
 from scipy.stats import ttest_ind
 import sciunit
@@ -108,6 +109,7 @@ SERIES_RESAMPLING_GRID_SOURCES = {
 SERIES_INTERPOLATION_METHODS = {
     "linear",
     "nearest",
+    "pchip",
     "step_hold",
 }
 
@@ -1729,6 +1731,16 @@ def _interpolated_series_value(
         if insert_at < 0 or insert_at >= len(path):
             return None
         return float(path[insert_at][1])
+    if normalized_method == "pchip":
+        interpolator = PchipInterpolator(
+            np.asarray(x_values, dtype=float),
+            np.asarray(y_values, dtype=float),
+            extrapolate=False,
+        )
+        value = interpolator(float(target_x))
+        if not _is_finite_number(value):
+            return None
+        return float(value)
     insert_at = int(np.searchsorted(np.asarray(x_values, dtype=float), float(target_x), side="left"))
     if insert_at <= 0 or insert_at >= len(path):
         return None

@@ -1018,6 +1018,10 @@ contract for future sessions.
       reference/model coverage-fraction fields and surface the resulting
       support-gate evidence/norms, rather than letting a thin aligned overlap
       masquerade as a fully supported residual/statistical pass
+    - the maintained resampled-grid interpolation family currently includes
+      `linear`, `nearest`, `pchip`, and `step_hold`; extend that explicit
+      family deliberately rather than smuggling a new interpolation behavior
+      in behind the same label
     - when a maintained SciUnit wrapper already has a typed case or
       observation object, make that object own the SciUnit observation payload
       via a small `observation_payload()` helper instead of rebuilding a

@@ -700,6 +700,9 @@ defaults `resampling_grid_source` to `union_observed_x` and
   neighboring support points
 - `interpolation_method = "nearest"` for nearest-neighbor lookup on the
   resampling grid
+- `interpolation_method = "pchip"` for shape-preserving cubic interpolation
+  via SciPy's monotone PCHIP interpolator when a smoother monotone curve is
+  more appropriate than straight-line segments
 - `interpolation_method = "step_hold"` for zero-order hold from the most
   recent support point
 
