@@ -116,6 +116,15 @@ Remove this file when the listed items are either:
       - added `olfactorybulb.neuronunit.suite_presentation`
       - suite matrices can now carry compact per-case score labels in addition
         to status
-- [ ] Decide whether the next alignment generalization should be interpolation /
+- [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.
+      - implemented `resampled_grid` as a distribution-preserving interpolation
+        policy
+      - it interpolates each per-series path onto a shared comparison grid
+      - the current ergonomic defaults are:
+        - `resampling_grid_source = "union_observed_x"`
+        - `interpolation_method = "linear"`
+      - explicit-grid mode remains available through
+        `resampling_grid_source = "explicit_grid"` plus
+        `resampling_grid_values = [ ... ]`

@@ -299,6 +299,16 @@ validation_design_review_status = "pending"
 # For pooled shared x-clusters rather than one-to-one matching:
 # alignment_policy = "tolerance_clusters"
 # x_match_tolerance = 0.5
+# For interpolation onto a shared comparison grid:
+# alignment_policy = "resampled_grid"
+# Optional ergonomic default:
+# resampling_grid_source = "union_observed_x"
+# Alternative explicit choices:
+# resampling_grid_source = "reference_observed_x"
+# resampling_grid_source = "model_observed_x"
+# resampling_grid_source = "explicit_grid"
+# resampling_grid_values = [150.0, 250.0]
+# interpolation_method = "linear"
 # distribution_kind = "empirical_by_x"
 # score_family = "hybrid_residual_equivalence"
 # Optional for equivalence score families; if omitted, the maintained path falls

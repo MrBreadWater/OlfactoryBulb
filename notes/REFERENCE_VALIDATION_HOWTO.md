@@ -412,7 +412,10 @@ For `reference_curve_match`, treat axis metadata as part of the rule contract:
 - use an explicit transform when the model and reference axes are not already
   the same physical quantity
 - declare `alignment_policy`, `distribution_kind`, and `score_family`
-  explicitly; there is no silent policy fallback
+  explicitly; there is no silent policy fallback for the core comparison
+  semantics
+- secondary knobs may still use stable ergonomic defaults when the emitted
+  evidence records the resolved choice
 
 Current maintained series-comparison policy choices are:
 
@@ -426,6 +429,9 @@ Current maintained series-comparison policy choices are:
   - pool transformed x bins from both sides into shared monotone clusters whose
     span does not exceed `x_match_tolerance`, then compare the pooled empirical
     y distributions per cluster
+- `alignment_policy = "resampled_grid"`
+  - interpolate each per-series path onto a shared comparison grid, then
+    compare the resulting empirical y distributions per grid point
 - `distribution_kind = "empirical_by_x"`
   - treat duplicate x values as an empirical response distribution at each x
 - `score_family`
@@ -461,6 +467,17 @@ equivalence. When `pvalue_aggregation` is omitted there, `auto` resolves to
 When you use `alignment_policy = "nearest_within_tolerance"` or
 `alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
 explicitly in the comparison x-axis units.
+When you use `alignment_policy = "resampled_grid"`, the maintained path now
+defaults `resampling_grid_source` to `union_observed_x` and
+`interpolation_method` to `linear`. If you need a different grid, declare one
+of:
+
+- `resampling_grid_source = "reference_observed_x"`
+- `resampling_grid_source = "model_observed_x"`
+- `resampling_grid_source = "union_observed_x"`
+- `resampling_grid_source = "explicit_grid"`
+  - and then also declare `resampling_grid_values = [ ... ]`
+
 For transforms, start with:
 
 - `kind = "identity"` when the source axis is already expressed in the desired

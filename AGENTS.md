@@ -599,6 +599,11 @@ contract for future sessions.
     `x_match_tolerance` explicitly too.
     Secondary statistical knobs may use documented ergonomic defaults when the
     default is stable and the emitted evidence records the resolved choice.
+    The same applies to secondary resampling knobs: for
+    `alignment_policy = "resampled_grid"`, the maintained path may default
+    `resampling_grid_source` to `union_observed_x` and
+    `interpolation_method` to `linear`, but the emitted evidence must record
+    the resolved choice.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
     Prefer explicit transform objects such as `affine` or `piecewise_linear`

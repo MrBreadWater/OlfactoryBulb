@@ -490,7 +490,10 @@ python tools/run_audit.py validation_design_review_status
 <li>use an explicit transform when the model and reference axes are not already
   the same physical quantity</li>
 <li>declare <code>alignment_policy</code>, <code>distribution_kind</code>, and <code>score_family</code>
-  explicitly; there is no silent policy fallback</li>
+  explicitly; there is no silent policy fallback for the core comparison
+  semantics</li>
+<li>secondary knobs may still use stable ergonomic defaults when the emitted
+  evidence records the resolved choice</li>
 </ul>
 <p>Current maintained series-comparison policy choices are:</p>
 <ul>
@@ -504,6 +507,9 @@ python tools/run_audit.py validation_design_review_status
 <li>pool transformed x bins from both sides into shared monotone clusters whose
     span does not exceed <code>x_match_tolerance</code>, then compare the pooled empirical
     y distributions per cluster</li>
+<li><code>alignment_policy = "resampled_grid"</code></li>
+<li>interpolate each per-series path onto a shared comparison grid, then
+    compare the resulting empirical y distributions per grid point</li>
 <li><code>distribution_kind = "empirical_by_x"</code></li>
 <li>treat duplicate x values as an empirical response distribution at each x</li>
 <li><code>score_family</code></li>
@@ -538,7 +544,18 @@ equivalence. When <code>pvalue_aggregation</code> is omitted there, <code>auto</
 <p>When you use <code>alignment_policy = "nearest_within_tolerance"</code> or
 <code>alignment_policy = "tolerance_clusters"</code>, declare <code>x_match_tolerance</code>
 explicitly in the comparison x-axis units.
-For transforms, start with:</p>
+When you use <code>alignment_policy = "resampled_grid"</code>, the maintained path now
+defaults <code>resampling_grid_source</code> to <code>union_observed_x</code> and
+<code>interpolation_method</code> to <code>linear</code>. If you need a different grid, declare one
+of:</p>
+<ul>
+<li><code>resampling_grid_source = "reference_observed_x"</code></li>
+<li><code>resampling_grid_source = "model_observed_x"</code></li>
+<li><code>resampling_grid_source = "union_observed_x"</code></li>
+<li><code>resampling_grid_source = "explicit_grid"</code></li>
+<li>and then also declare <code>resampling_grid_values = [ ... ]</code></li>
+</ul>
+<p>For transforms, start with:</p>
 <ul>
 <li><code>kind = "identity"</code> when the source axis is already expressed in the desired
   comparison quantity</li>

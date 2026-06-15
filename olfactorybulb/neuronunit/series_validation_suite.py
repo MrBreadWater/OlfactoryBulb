@@ -117,6 +117,13 @@ def _resolved_equivalence_margin(
     return None, None
 
 
+def _resolved_resampling_grid_source(policy: "SeriesComparisonPolicy") -> tuple[str, str]:
+    declared = str(policy.resampling_grid_source or "").strip().lower()
+    if declared:
+        return declared, "explicit"
+    return "union_observed_x", "default_union_observed_x"
+
+
 def _deterministic_equivalence_pvalue(mean_difference: float, *, equivalence_margin: float) -> float:
     if abs(mean_difference) < float(equivalence_margin):
         return 0.0
@@ -414,6 +421,9 @@ class SeriesComparisonPolicy:
     x_precision_digits: int = 6
     alignment_policy: str = "exact_transformed_x"
     x_match_tolerance: float | None = None
+    resampling_grid_source: str = ""
+    resampling_grid_values: tuple[float, ...] = ()
+    interpolation_method: str = "linear"
     distribution_kind: str = "empirical_by_x"
     score_family: str = "residual_only"
     pvalue_aggregation: str = "auto"
@@ -506,11 +516,13 @@ def _aligned_x_pairs(
         return [(x_value, x_value) for x_value in sorted(set(reference_bins).intersection(model_bins))]
     if alignment_policy == "tolerance_clusters":
         return [(x_value, x_value) for x_value in sorted(set(reference_bins).intersection(model_bins))]
+    if alignment_policy == "resampled_grid":
+        return [(x_value, x_value) for x_value in sorted(set(reference_bins).intersection(model_bins))]
 
     if alignment_policy != "nearest_within_tolerance":
         raise ValueError(
             f"Unsupported series alignment policy {alignment_policy!r}; "
-            "expected one of exact_transformed_x, nearest_within_tolerance, or tolerance_clusters"
+            "expected one of exact_transformed_x, nearest_within_tolerance, tolerance_clusters, or resampled_grid"
         )
 
     if not _is_finite_number(x_match_tolerance) or float(x_match_tolerance) < 0.0:
@@ -625,6 +637,141 @@ def _series_bins(
         bucket_key = round(numeric_value(x_value), int(precision_digits))
         bins.setdefault(bucket_key, []).append(float(numeric_value(y_value)))
     return {x_value: list(values) for x_value, values in sorted(bins.items())}
+
+
+def _series_paths(
+    rows: list[dict[str, Any]],
+    *,
+    series_id_key: str,
+    x_key: str,
+    y_key: str,
+    x_unit_text: str,
+    y_unit_text: str,
+    comparison_x_unit_text: str,
+    comparison_y_unit_text: str,
+    x_transform: AxisTransform,
+    y_transform: AxisTransform,
+    precision_digits: int,
+) -> dict[str, list[tuple[float, float]]]:
+    grouped_points: dict[str, dict[float, list[float]]] = {}
+    for row in rows:
+        series_id = str(row.get(series_id_key, "")).strip()
+        if not series_id:
+            continue
+        x_raw = row.get(x_key)
+        y_raw = row.get(y_key)
+        if not (_is_finite_number(x_raw) and _is_finite_number(y_raw)):
+            continue
+        x_value = x_transform.apply(
+            float(x_raw),
+            source_unit_text=x_unit_text,
+            comparison_unit_text=comparison_x_unit_text,
+        )
+        y_value = y_transform.apply(
+            float(y_raw),
+            source_unit_text=y_unit_text,
+            comparison_unit_text=comparison_y_unit_text,
+        )
+        bucket_key = round(numeric_value(x_value), int(precision_digits))
+        grouped_points.setdefault(series_id, {}).setdefault(bucket_key, []).append(float(numeric_value(y_value)))
+
+    paths: dict[str, list[tuple[float, float]]] = {}
+    for series_id, bucket_map in grouped_points.items():
+        paths[series_id] = [
+            (x_value, float(np.mean(np.asarray(values, dtype=float))))
+            for x_value, values in sorted(bucket_map.items())
+        ]
+    return paths
+
+
+def _resolved_resampling_grid(
+    reference_bins: dict[float, list[float]],
+    model_bins: dict[float, list[float]],
+    *,
+    grid_source: str,
+    grid_values: tuple[float, ...],
+    precision_digits: int,
+) -> list[float]:
+    normalized_source = str(grid_source or "").strip().lower()
+    if normalized_source == "reference_observed_x":
+        return sorted(reference_bins)
+    if normalized_source == "model_observed_x":
+        return sorted(model_bins)
+    if normalized_source == "union_observed_x":
+        return sorted(set(reference_bins).union(model_bins))
+    if normalized_source == "explicit_grid":
+        values = [
+            round(float(value), int(precision_digits))
+            for value in grid_values
+            if _is_finite_number(value)
+        ]
+        if not values:
+            raise ValueError(
+                "Alignment policy 'resampled_grid' with resampling_grid_source='explicit_grid' "
+                "requires non-empty finite 'resampling_grid_values'"
+            )
+        return sorted(set(values))
+    raise ValueError(
+        f"Unsupported resampling grid source {grid_source!r}; expected one of "
+        "reference_observed_x, model_observed_x, union_observed_x, explicit_grid"
+    )
+
+
+def _interpolated_series_value(
+    path: list[tuple[float, float]],
+    target_x: float,
+    *,
+    interpolation_method: str,
+) -> float | None:
+    if len(path) < 2:
+        return None
+    if str(interpolation_method or "linear").strip().lower() != "linear":
+        raise ValueError(
+            f"Unsupported interpolation method {interpolation_method!r}; the current bridge only supports linear interpolation"
+        )
+    x_values = [point[0] for point in path]
+    y_values = [point[1] for point in path]
+    if target_x < x_values[0] or target_x > x_values[-1]:
+        return None
+    for x_value, y_value in path:
+        if np.isclose(x_value, target_x):
+            return float(y_value)
+    insert_at = int(np.searchsorted(np.asarray(x_values, dtype=float), float(target_x), side="left"))
+    if insert_at <= 0 or insert_at >= len(path):
+        return None
+    x0, y0 = path[insert_at - 1]
+    x1, y1 = path[insert_at]
+    if np.isclose(x1, x0):
+        return float(y0)
+    fraction = (float(target_x) - float(x0)) / float(x1 - x0)
+    return float(y0) + fraction * (float(y1) - float(y0))
+
+
+def _resampled_bins_from_paths(
+    series_paths: dict[str, list[tuple[float, float]]],
+    *,
+    target_grid: list[float],
+    interpolation_method: str,
+) -> tuple[dict[float, list[float]], dict[float, list[str]]]:
+    bins: dict[float, list[float]] = {}
+    support_ids: dict[float, list[str]] = {}
+    for target_x in target_grid:
+        values: list[float] = []
+        ids: list[str] = []
+        for series_id, path in series_paths.items():
+            value = _interpolated_series_value(
+                path,
+                float(target_x),
+                interpolation_method=interpolation_method,
+            )
+            if not _is_finite_number(value):
+                continue
+            values.append(float(value))
+            ids.append(series_id)
+        if values:
+            bins[float(target_x)] = values
+            support_ids[float(target_x)] = ids
+    return bins, support_ids
 
 
 def _series_id_count(rows: list[dict[str, Any]], *, series_id_key: str) -> int:
@@ -747,6 +894,9 @@ class SeriesComparisonTest(sciunit.Test):
             "equivalence_alpha": case.observation.policy.equivalence_alpha,
             "alignment_policy": case.observation.policy.alignment_policy,
             "x_match_tolerance": case.observation.policy.x_match_tolerance,
+            "resampling_grid_source": case.observation.policy.resampling_grid_source,
+            "resampling_grid_values": case.observation.policy.resampling_grid_values,
+            "interpolation_method": case.observation.policy.interpolation_method,
             "distribution_kind": case.observation.policy.distribution_kind,
             "score_family": case.observation.policy.score_family,
             "pvalue_aggregation": case.observation.policy.pvalue_aggregation,
@@ -766,6 +916,9 @@ class SeriesComparisonTest(sciunit.Test):
             "equivalence_alpha",
             "alignment_policy",
             "x_match_tolerance",
+            "resampling_grid_source",
+            "resampling_grid_values",
+            "interpolation_method",
             "distribution_kind",
             "score_family",
             "pvalue_aggregation",
@@ -787,16 +940,22 @@ class SeriesComparisonTest(sciunit.Test):
         obs = self.case.observation
         prediction_rows = list(prediction.rows)
         prediction_context = dict(prediction.context)
-        if obs.policy.alignment_policy not in {"exact_transformed_x", "nearest_within_tolerance", "tolerance_clusters"}:
+        if obs.policy.alignment_policy not in {"exact_transformed_x", "nearest_within_tolerance", "tolerance_clusters", "resampled_grid"}:
             raise ValueError(
                 f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
                 "the current bridge only supports exact shared transformed x bins, "
-                "nearest monotone matches within tolerance, or shared tolerance clusters"
+                "nearest monotone matches within tolerance, shared tolerance clusters, "
+                "or empirical distributions built on a resampled grid"
             )
         if obs.policy.alignment_policy == "exact_transformed_x" and obs.policy.x_match_tolerance is not None:
             raise ValueError(
                 "Series alignment policy 'exact_transformed_x' should not also declare "
                 "'x_match_tolerance'; use 'nearest_within_tolerance' or 'tolerance_clusters' instead"
+            )
+        if obs.policy.alignment_policy == "resampled_grid" and obs.policy.x_match_tolerance is not None:
+            raise ValueError(
+                "Series alignment policy 'resampled_grid' should not also declare "
+                "'x_match_tolerance'; declare a resampling grid source instead"
             )
         if obs.policy.distribution_kind != "empirical_by_x":
             raise ValueError(
@@ -819,6 +978,10 @@ class SeriesComparisonTest(sciunit.Test):
             obs.policy,
             equivalence_family=equivalence_family,
         )
+        if obs.policy.alignment_policy == "resampled_grid":
+            resolved_resampling_grid_source, resampling_grid_source_origin = _resolved_resampling_grid_source(obs.policy)
+        else:
+            resolved_resampling_grid_source, resampling_grid_source_origin = "", ""
         if legacy_welch_family and (
             obs.policy.minimum_median_welch_pvalue is None
         ):
@@ -873,6 +1036,72 @@ class SeriesComparisonTest(sciunit.Test):
             precision_digits=obs.policy.x_precision_digits,
         )
         cluster_metadata: dict[float, dict[str, list[float]]] = {}
+        resampling_metadata: dict[str, Any] = {}
+        if obs.policy.alignment_policy == "resampled_grid":
+            reference_paths = _series_paths(
+                obs.reference_rows,
+                series_id_key=obs.reference_series_id_key,
+                x_key=obs.reference_x_key,
+                y_key=obs.reference_y_key,
+                x_unit_text=obs.reference_x_unit_text,
+                y_unit_text=obs.reference_y_unit_text,
+                comparison_x_unit_text=obs.comparison_x_unit_text,
+                comparison_y_unit_text=obs.comparison_y_unit_text,
+                x_transform=obs.reference_x_transform,
+                y_transform=obs.reference_y_transform,
+                precision_digits=obs.policy.x_precision_digits,
+            )
+            model_paths = _series_paths(
+                prediction_rows,
+                series_id_key=obs.model_series_id_key,
+                x_key=obs.model_x_key,
+                y_key=obs.model_y_key,
+                x_unit_text=obs.model_x_unit_text,
+                y_unit_text=obs.model_y_unit_text,
+                comparison_x_unit_text=obs.comparison_x_unit_text,
+                comparison_y_unit_text=obs.comparison_y_unit_text,
+                x_transform=obs.model_x_transform,
+                y_transform=obs.model_y_transform,
+                precision_digits=obs.policy.x_precision_digits,
+            )
+            if not reference_paths:
+                raise ValueError(
+                    "Alignment policy 'resampled_grid' requires non-empty reference series ids; "
+                    "the current bridge cannot interpolate a distribution from rows without per-series identity"
+                )
+            if not model_paths:
+                raise ValueError(
+                    "Alignment policy 'resampled_grid' requires non-empty model series ids; "
+                    "the current bridge cannot interpolate a distribution from rows without per-series identity"
+                )
+            target_grid = _resolved_resampling_grid(
+                reference_bins,
+                model_bins,
+                grid_source=resolved_resampling_grid_source,
+                grid_values=obs.policy.resampling_grid_values,
+                precision_digits=obs.policy.x_precision_digits,
+            )
+            reference_bins, reference_support_ids = _resampled_bins_from_paths(
+                reference_paths,
+                target_grid=target_grid,
+                interpolation_method=obs.policy.interpolation_method,
+            )
+            model_bins, model_support_ids = _resampled_bins_from_paths(
+                model_paths,
+                target_grid=target_grid,
+                interpolation_method=obs.policy.interpolation_method,
+            )
+            resampling_metadata = {
+                "target_grid": list(target_grid),
+                "reference_support_ids": {
+                    float(target_x): list(series_ids)
+                    for target_x, series_ids in reference_support_ids.items()
+                },
+                "model_support_ids": {
+                    float(target_x): list(series_ids)
+                    for target_x, series_ids in model_support_ids.items()
+                },
+            }
         if obs.policy.alignment_policy == "tolerance_clusters":
             reference_bins, model_bins, cluster_metadata = _tolerance_cluster_bins(
                 reference_bins,
@@ -1084,6 +1313,26 @@ class SeriesComparisonTest(sciunit.Test):
             "x_match_tolerance": rounded(float(obs.policy.x_match_tolerance))
             if _is_finite_number(obs.policy.x_match_tolerance)
             else obs.policy.x_match_tolerance,
+            "declared_resampling_grid_source": obs.policy.resampling_grid_source,
+            "resampling_grid_source": resolved_resampling_grid_source,
+            "resampling_grid_source_origin": resampling_grid_source_origin,
+            "declared_resampling_grid_values": _rounded_list(list(obs.policy.resampling_grid_values))
+            if obs.policy.resampling_grid_values
+            else [],
+            "resampling_grid_values": _rounded_list(list(resampling_metadata.get("target_grid", []))),
+            "interpolation_method": obs.policy.interpolation_method,
+            "reference_resampled_support_counts": [
+                len(resampling_metadata["reference_support_ids"].get(float(target_x), []))
+                for target_x in aligned_reference_keys
+            ]
+            if resampling_metadata
+            else [],
+            "model_resampled_support_counts": [
+                len(resampling_metadata["model_support_ids"].get(float(target_x), []))
+                for target_x in aligned_reference_keys
+            ]
+            if resampling_metadata
+            else [],
             "distribution_kind": obs.policy.distribution_kind,
             "x_quantity_name": obs.x_quantity_name,
             "y_quantity_name": obs.y_quantity_name,

@@ -1991,6 +1991,7 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - exact shared transformed x bins
   - monotone nearest transformed x bins within explicit tolerance
   - pooled shared tolerance clusters with bounded x-span
+  - resampled shared comparison grids built from per-series interpolation
 - transform policies:
   - identity
   - affine
@@ -2008,6 +2009,8 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - residual diagnostics
   - resolved statistical-policy defaults such as `pvalue_aggregation` and
     `equivalence_margin` when those were not declared explicitly
+  - resolved alignment-policy defaults such as `resampling_grid_source` when a
+    stable default was used for ergonomics
   - equivalence-test diagnostics
   - optional legacy Welch-test diagnostics
   - compact reference/model provenance summaries
@@ -2020,8 +2023,9 @@ The remaining open questions are now narrower:
   plus residual diagnostics or grow into richer suite-level score composition
 - whether transform generalization should stop at explicit piecewise-linear
   mappings or later grow into context-dependent transforms
-- whether alignment generalization should stop at shared tolerance clusters or
-  later grow into interpolation / resampling policies
+- whether alignment generalization should stop at the current
+  distribution-preserving resampled-grid contract or later grow into broader
+  interpolation / resampling families
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path
 - how much NeuronUnit-native result presentation should grow before it starts

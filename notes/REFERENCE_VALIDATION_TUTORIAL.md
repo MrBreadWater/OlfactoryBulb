@@ -1625,7 +1625,8 @@ Important details:
   `model_y_unit_text`, `comparison_x_unit_text`, and
   `comparison_y_unit_text` are mandatory
 - `alignment_policy`, `distribution_kind`, and `score_family` are also
-  mandatory; the maintained path does not silently choose them for you
+  mandatory; the maintained path does not silently choose the core comparison
+  semantics for you
 - the current implementation aligns bins using exact shared transformed x
   values after unit conversion and optional explicit affine transforms
 - alternatively, `alignment_policy = "nearest_within_tolerance"` matches
@@ -1635,6 +1636,9 @@ Important details:
   both sides into shared monotone clusters whose span does not exceed
   `x_match_tolerance`, then compares the pooled empirical y distributions per
   cluster
+- `alignment_policy = "resampled_grid"` interpolates each per-series path onto
+  a shared comparison grid, then compares the resulting empirical y
+  distributions per grid point
 - the current maintained distribution policy is `empirical_by_x`, which keeps
   duplicate x values as a response distribution instead of collapsing them
   before comparison
@@ -1661,6 +1665,11 @@ Important details:
 - `alignment_policy = "nearest_within_tolerance"` and
   `alignment_policy = "tolerance_clusters"` should also declare
   `x_match_tolerance` explicitly in the comparison x-axis units
+- `alignment_policy = "resampled_grid"` defaults `resampling_grid_source` to
+  `union_observed_x` and `interpolation_method` to `linear`; the emitted
+  evidence records that resolved choice
+- if `resampling_grid_source = "explicit_grid"`, also declare
+  `resampling_grid_values = [ ... ]`
 - if the model x-axis is not expressed in the same physical quantity as the
   reference, declare the mapping explicitly with `model_x_transform` instead of
   pretending the field names are already comparable

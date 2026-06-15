@@ -209,6 +209,24 @@ cluster_model_rows = [
     {"cell_name": "ClModel2", "current_pA": 200.4, "firing_rate_Hz": 10.3},
 ]
 
+resampled_reference_rows = [
+    {"cell_id": "RsRef1", "current_pA": 100.0, "firing_rate_Hz": 5.0},
+    {"cell_id": "RsRef2", "current_pA": 100.0, "firing_rate_Hz": 6.0},
+    {"cell_id": "RsRef1", "current_pA": 200.0, "firing_rate_Hz": 10.0},
+    {"cell_id": "RsRef2", "current_pA": 200.0, "firing_rate_Hz": 11.0},
+    {"cell_id": "RsRef1", "current_pA": 300.0, "firing_rate_Hz": 15.0},
+    {"cell_id": "RsRef2", "current_pA": 300.0, "firing_rate_Hz": 16.0},
+]
+
+resampled_model_rows = [
+    {"cell_name": "RsModel1", "current_pA": 125.0, "firing_rate_Hz": 6.25},
+    {"cell_name": "RsModel2", "current_pA": 125.0, "firing_rate_Hz": 7.25},
+    {"cell_name": "RsModel1", "current_pA": 225.0, "firing_rate_Hz": 11.25},
+    {"cell_name": "RsModel2", "current_pA": 225.0, "firing_rate_Hz": 12.25},
+    {"cell_name": "RsModel1", "current_pA": 325.0, "firing_rate_Hz": 16.25},
+    {"cell_name": "RsModel2", "current_pA": 325.0, "firing_rate_Hz": 17.25},
+]
+
 observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
     reference_rows=reference_rows,
@@ -511,6 +529,61 @@ assert cluster_items[1].evidence["model_cluster_x_groups"] == [[100.1, 100.4], [
 assert cluster_items[1].evidence["reference_count_values"] == [2, 2]
 assert cluster_items[1].evidence["model_count_values"] == [2, 2]
 
+resampled_observation = SeriesDistributionObservation(
+    protocol_evidence_key="fi_curve_rows",
+    reference_rows=resampled_reference_rows,
+    reference_x_key="current_pA",
+    reference_y_key="firing_rate_Hz",
+    model_x_key="current_pA",
+    model_y_key="firing_rate_Hz",
+    reference_x_unit_text="pA",
+    reference_y_unit_text="Hz",
+    model_x_unit_text="pA",
+    model_y_unit_text="Hz",
+    comparison_x_unit_text="pA",
+    comparison_y_unit_text="Hz",
+    policy=SeriesComparisonPolicy(
+        minimum_point_count=4,
+        maximum_mae=0.01,
+        maximum_rmse=0.01,
+        alignment_policy="resampled_grid",
+        score_family="residual_only",
+    ),
+)
+
+resampled_case = SeriesComparisonCase(
+    check_id="synthetic_resampled_series_match",
+    title="Synthetic resampled alignment interpolates series onto a shared comparison grid",
+    criterion="A shared resampling grid should align offset series before residual comparison.",
+    criterion_latex="",
+    criterion_formulae=[],
+    criterion_definitions=[],
+    description="Synthetic resampled-grid suite test.",
+    acceptable="The interpolated comparison grid satisfies the configured residual tolerances.",
+    acceptable_basis="Synthetic basis.",
+    note="",
+    observation=resampled_observation,
+)
+
+resampled_compiled = compile_series_comparison_suite(
+    cases=[resampled_case],
+    summary={},
+    metrics=[],
+    protocol_evidence={"fi_curve_rows": resampled_model_rows},
+    suite_name="synthetic resampled series suite",
+)
+resampled_items = audit_items_from_series_comparison_suite(resampled_compiled)
+assert resampled_items[1].status == "PASS"
+assert resampled_items[1].evidence["alignment_policy"] == "resampled_grid"
+assert resampled_items[1].evidence["declared_resampling_grid_source"] == ""
+assert resampled_items[1].evidence["resampling_grid_source"] == "union_observed_x"
+assert resampled_items[1].evidence["resampling_grid_source_origin"] == "default_union_observed_x"
+assert resampled_items[1].evidence["currents_pA"] == [125.0, 200.0, 225.0, 300.0]
+assert resampled_items[1].evidence["matched_point_count"] == 4
+assert resampled_items[1].evidence["reference_resampled_support_counts"] == [2, 2, 2, 2]
+assert resampled_items[1].evidence["model_resampled_support_counts"] == [2, 2, 2, 2]
+assert resampled_items[1].evidence["mean_absolute_error_Hz"] == 0.0
+
 rule = {
     "kind": "reference_curve_match",
     "check_id": "synthetic_series_match",
@@ -726,6 +799,41 @@ assert nearest_items[1].evidence["reference_matched_x_values"] == [100.0, 200.0]
 assert nearest_items[1].evidence["model_matched_x_values"] == [100.4, 200.4]
 assert nearest_items[1].evidence["matched_x_differences"] == [0.4, 0.4]
 
+resampled_rule = dict(residual_only_rule)
+resampled_rule["loader"] = "csv:/tmp/resampled.csv"
+resampled_rule["model_current_key"] = "current_pA"
+resampled_rule["model_x_unit_text"] = "pA"
+resampled_rule["alignment_policy"] = "resampled_grid"
+resampled_rule["maximum_mae"] = 0.01
+resampled_rule["maximum_rmse"] = 0.01
+resampled_rule["minimum_point_count"] = 2
+del resampled_rule["model_x_transform"]
+resampled_rule["resampling_grid_source"] = "explicit_grid"
+resampled_rule["resampling_grid_values"] = [150.0, 250.0]
+resampled_context = ValidationRuleContext(
+    metrics=[],
+    summary={},
+    args=Namespace(),
+    config={"validation_id": "synthetic_series_validation"},
+    protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": resampled_model_rows}),
+)
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    resampled_rule_items = build_rule_items([resampled_rule], resampled_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert resampled_rule_items[1].status == "PASS"
+assert resampled_rule_items[1].evidence["alignment_policy"] == "resampled_grid"
+assert resampled_rule_items[1].evidence["resampling_grid_source"] == "explicit_grid"
+assert resampled_rule_items[1].evidence["declared_resampling_grid_values"] == [150.0, 250.0]
+assert resampled_rule_items[1].evidence["currents_pA"] == [150.0, 250.0]
+assert resampled_rule_items[1].evidence["matched_point_count"] == 2
+
 missing_units_rule = dict(rule)
 del missing_units_rule["reference_x_unit_text"]
 rules_module._load_rows = lambda loader_spec: reference_rows if loader_spec == "csv:/tmp/unused.csv" else original_load_rows(loader_spec)
@@ -771,6 +879,22 @@ try:
         raise AssertionError("Expected tolerance-cluster alignment to require an explicit x-match tolerance")
     except ValueError as exc:
         assert "requires explicit 'x_match_tolerance'" in str(exc)
+finally:
+    rules_module._load_rows = original_load_rows
+
+missing_explicit_resampling_grid_rule = dict(resampled_rule)
+del missing_explicit_resampling_grid_rule["resampling_grid_values"]
+rules_module._load_rows = (
+    lambda loader_spec: resampled_reference_rows
+    if loader_spec == "csv:/tmp/resampled.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    try:
+        build_rule_items([missing_explicit_resampling_grid_rule], resampled_context)
+        raise AssertionError("Expected explicit-grid resampling to require explicit grid values")
+    except ValueError as exc:
+        assert "requires explicit 'resampling_grid_values'" in str(exc)
 finally:
     rules_module._load_rows = original_load_rows
 

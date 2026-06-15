@@ -1154,6 +1154,25 @@ def _series_comparison_case(
         x_match_tolerance = float(rule["x_match_tolerance"])
     else:
         x_match_tolerance = None
+    if alignment_policy == "resampled_grid":
+        resampling_grid_source = str(rule.get("resampling_grid_source", "")).strip()
+        interpolation_method = str(rule.get("interpolation_method", "linear")).strip() or "linear"
+        raw_resampling_grid_values = rule.get("resampling_grid_values", [])
+        if raw_resampling_grid_values in (None, ""):
+            resampling_grid_values = ()
+        else:
+            if not isinstance(raw_resampling_grid_values, list):
+                raise ValueError("reference_curve_match 'resampling_grid_values' must be a list when provided")
+            resampling_grid_values = tuple(float(value) for value in raw_resampling_grid_values)
+        if resampling_grid_source == "explicit_grid" and not resampling_grid_values:
+            raise ValueError(
+                "reference_curve_match resampled-grid alignment with "
+                "resampling_grid_source='explicit_grid' requires explicit 'resampling_grid_values'"
+            )
+    else:
+        resampling_grid_source = ""
+        resampling_grid_values = ()
+        interpolation_method = "linear"
     pvalue_aggregation = str(rule.get("pvalue_aggregation", "auto")).strip()
     if score_family in {"welch_only", "hybrid_residual_welch"}:
         equivalence_margin = None
@@ -1211,6 +1230,9 @@ def _series_comparison_case(
             x_precision_digits=int(rule.get("current_precision_digits", 6)),
             alignment_policy=alignment_policy,
             x_match_tolerance=x_match_tolerance,
+            resampling_grid_source=resampling_grid_source,
+            resampling_grid_values=resampling_grid_values,
+            interpolation_method=interpolation_method,
             distribution_kind=_required_rule_choice(rule, "distribution_kind"),
             score_family=score_family,
             pvalue_aggregation=pvalue_aggregation,
