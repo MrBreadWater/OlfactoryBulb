@@ -1124,192 +1124,212 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
     return _build_series_rule_items([rule], context)
 
 
-def _required_unit_text(rule: dict[str, Any], key: str) -> str:
-    if key not in rule:
-        raise ValueError(
-            f"reference_curve_match requires explicit {key!r}; do not infer series-comparison units from field names"
+@dataclass(frozen=True)
+class SeriesComparisonRuleSpec:
+    protocol_evidence_key: str
+    reference_spec: SeriesDataSpec
+    model_spec: SeriesDataSpec
+    comparison_x_unit_text: str
+    comparison_y_unit_text: str
+    x_quantity_name: str
+    y_quantity_name: str
+    visual_contract: SeriesVisualContract
+    policy: SeriesComparisonPolicy
+
+    @classmethod
+    def from_rule(cls, rule: dict[str, Any]) -> "SeriesComparisonRuleSpec":
+        parser = _SeriesComparisonRuleParser(rule)
+        return cls(
+            protocol_evidence_key=parser.string("protocol_evidence_key", "fi_curve_rows"),
+            reference_spec=parser.data_spec("reference"),
+            model_spec=parser.data_spec("model"),
+            comparison_x_unit_text=parser.required_unit_text("comparison_x_unit_text"),
+            comparison_y_unit_text=parser.required_unit_text("comparison_y_unit_text"),
+            x_quantity_name=parser.string("x_quantity_name", "Injected current"),
+            y_quantity_name=parser.string("y_quantity_name", "Firing rate"),
+            visual_contract=parser.visual_contract(),
+            policy=parser.policy(),
         )
-    return str(rule.get(key, "")).strip()
 
 
-def _required_rule_choice(rule: dict[str, Any], key: str) -> str:
-    if key not in rule:
-        raise ValueError(
-            f"reference_curve_match requires explicit {key!r}; do not let series-comparison policy fall back silently"
-        )
-    value = str(rule.get(key, "")).strip()
-    if not value:
-        raise ValueError(f"reference_curve_match requires non-empty {key!r}")
-    return value
+@dataclass(frozen=True)
+class _SeriesComparisonRuleParser:
+    rule: dict[str, Any]
 
+    def string(self, key: str, default: str) -> str:
+        return str(self.rule.get(key, default))
 
-def _axis_transform(rule: dict[str, Any], key: str) -> AxisTransform:
-    raw = rule.get(key, {})
-    if raw in (None, "", {}):
-        return AxisTransform()
-    if not isinstance(raw, dict):
-        raise ValueError(f"{key} must be a table/dict when provided")
-    raw_points = raw.get("points", [])
-    points: tuple[tuple[float, float], ...] = ()
-    if raw_points not in (None, "", []):
-        if not isinstance(raw_points, list):
-            raise ValueError(f"{key}.points must be a list when provided")
-        normalized_points: list[tuple[float, float]] = []
-        for index, point in enumerate(raw_points, start=1):
-            if isinstance(point, dict):
-                if "input" not in point or "output" not in point:
-                    raise ValueError(f"{key}.points[{index}] must provide both 'input' and 'output'")
-                normalized_points.append((float(point["input"]), float(point["output"])))
-                continue
-            if isinstance(point, (list, tuple)) and len(point) == 2:
-                normalized_points.append((float(point[0]), float(point[1])))
-                continue
+    def required_unit_text(self, key: str) -> str:
+        if key not in self.rule:
             raise ValueError(
-                f"{key}.points[{index}] must be either a dict with input/output or a two-item list"
+                f"reference_curve_match requires explicit {key!r}; do not infer series-comparison units from field names"
             )
-        points = tuple(normalized_points)
-    return AxisTransform(
-        kind=str(raw.get("kind", "identity")),
-        scale=float(raw.get("scale", 1.0)),
-        offset=float(raw.get("offset", 0.0)),
-        input_unit_text=str(raw.get("input_unit_text", "")).strip(),
-        output_unit_text=str(raw.get("output_unit_text", "")).strip(),
-        points=points,
-        extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
-    )
+        return str(self.rule.get(key, "")).strip()
 
-
-def _series_data_spec_from_rule(
-    rule: dict[str, Any],
-    *,
-    side: str,
-) -> SeriesDataSpec:
-    side_prefix = str(side).strip().lower()
-    if side_prefix not in {"reference", "model"}:
-        raise ValueError(f"Unsupported series-data side {side!r}")
-    if side_prefix == "reference":
-        default_x_key = "current_pA"
-        default_y_key = "firing_rate_Hz"
-        default_series_id_key = "cell_id"
-    else:
-        default_x_key = "current_pA"
-        default_y_key = "firing_rate_Hz"
-        default_series_id_key = "cell_name"
-    return SeriesDataSpec(
-        x_key=str(rule.get(f"{side_prefix}_current_key", default_x_key)),
-        y_key=str(rule.get(f"{side_prefix}_value_key", default_y_key)),
-        x_unit_text=_required_unit_text(rule, f"{side_prefix}_x_unit_text"),
-        y_unit_text=_required_unit_text(rule, f"{side_prefix}_y_unit_text"),
-        x_transform=_axis_transform(rule, f"{side_prefix}_x_transform"),
-        y_transform=_axis_transform(rule, f"{side_prefix}_y_transform"),
-        series_id_key=str(rule.get(f"{side_prefix}_series_id_key", default_series_id_key)),
-    )
-
-
-def _series_visual_contract_from_rule(rule: dict[str, Any]) -> SeriesVisualContract:
-    return SeriesVisualContract(
-        x_key=str(rule.get("visual_x_key", "currents_pA")),
-        reference_y_key=str(rule.get("visual_reference_y_key", "reference_values_Hz")),
-        model_y_key=str(rule.get("visual_model_y_key", "model_values_Hz")),
-        kind=str(rule.get("visual_kind", "fi_curve")),
-    )
-
-
-def _series_policy_from_rule(rule: dict[str, Any]) -> SeriesComparisonPolicy:
-    score_family = _required_rule_choice(rule, "score_family")
-    alignment_policy = _required_rule_choice(rule, "alignment_policy")
-    if alignment_policy not in SERIES_ALIGNMENT_POLICIES:
-        raise ValueError(
-            f"reference_curve_match alignment policy {alignment_policy!r} is unsupported; "
-            f"expected one of {', '.join(sorted(SERIES_ALIGNMENT_POLICIES))}"
-        )
-    if alignment_policy in {"nearest_within_tolerance", "tolerance_clusters"}:
-        if "x_match_tolerance" not in rule or rule.get("x_match_tolerance") is None:
+    def required_choice(self, key: str) -> str:
+        if key not in self.rule:
             raise ValueError(
-                f"reference_curve_match alignment policy {alignment_policy!r} requires explicit 'x_match_tolerance'"
+                f"reference_curve_match requires explicit {key!r}; do not let series-comparison policy fall back silently"
             )
-        x_match_tolerance = float(rule["x_match_tolerance"])
-    else:
-        x_match_tolerance = None
-    if alignment_policy == "resampled_grid":
-        resampling_grid_source = str(rule.get("resampling_grid_source", "")).strip()
-        interpolation_method = str(rule.get("interpolation_method", "linear")).strip() or "linear"
-        raw_resampling_grid_values = rule.get("resampling_grid_values", [])
-        if raw_resampling_grid_values in (None, ""):
-            resampling_grid_values = ()
+        value = str(self.rule.get(key, "")).strip()
+        if not value:
+            raise ValueError(f"reference_curve_match requires non-empty {key!r}")
+        return value
+
+    def axis_transform(self, key: str) -> AxisTransform:
+        raw = self.rule.get(key, {})
+        if raw in (None, "", {}):
+            return AxisTransform()
+        if not isinstance(raw, dict):
+            raise ValueError(f"{key} must be a table/dict when provided")
+        raw_points = raw.get("points", [])
+        points: tuple[tuple[float, float], ...] = ()
+        if raw_points not in (None, "", []):
+            if not isinstance(raw_points, list):
+                raise ValueError(f"{key}.points must be a list when provided")
+            normalized_points: list[tuple[float, float]] = []
+            for index, point in enumerate(raw_points, start=1):
+                if isinstance(point, dict):
+                    if "input" not in point or "output" not in point:
+                        raise ValueError(f"{key}.points[{index}] must provide both 'input' and 'output'")
+                    normalized_points.append((float(point["input"]), float(point["output"])))
+                    continue
+                if isinstance(point, (list, tuple)) and len(point) == 2:
+                    normalized_points.append((float(point[0]), float(point[1])))
+                    continue
+                raise ValueError(
+                    f"{key}.points[{index}] must be either a dict with input/output or a two-item list"
+                )
+            points = tuple(normalized_points)
+        return AxisTransform(
+            kind=str(raw.get("kind", "identity")),
+            scale=float(raw.get("scale", 1.0)),
+            offset=float(raw.get("offset", 0.0)),
+            input_unit_text=str(raw.get("input_unit_text", "")).strip(),
+            output_unit_text=str(raw.get("output_unit_text", "")).strip(),
+            points=points,
+            extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
+        )
+
+    def data_spec(self, side: str) -> SeriesDataSpec:
+        side_prefix = str(side).strip().lower()
+        if side_prefix not in {"reference", "model"}:
+            raise ValueError(f"Unsupported series-data side {side!r}")
+        defaults = {
+            "reference": ("current_pA", "firing_rate_Hz", "cell_id"),
+            "model": ("current_pA", "firing_rate_Hz", "cell_name"),
+        }
+        default_x_key, default_y_key, default_series_id_key = defaults[side_prefix]
+        return SeriesDataSpec(
+            x_key=self.string(f"{side_prefix}_current_key", default_x_key),
+            y_key=self.string(f"{side_prefix}_value_key", default_y_key),
+            x_unit_text=self.required_unit_text(f"{side_prefix}_x_unit_text"),
+            y_unit_text=self.required_unit_text(f"{side_prefix}_y_unit_text"),
+            x_transform=self.axis_transform(f"{side_prefix}_x_transform"),
+            y_transform=self.axis_transform(f"{side_prefix}_y_transform"),
+            series_id_key=self.string(f"{side_prefix}_series_id_key", default_series_id_key),
+        )
+
+    def visual_contract(self) -> SeriesVisualContract:
+        return SeriesVisualContract(
+            x_key=self.string("visual_x_key", "currents_pA"),
+            reference_y_key=self.string("visual_reference_y_key", "reference_values_Hz"),
+            model_y_key=self.string("visual_model_y_key", "model_values_Hz"),
+            kind=self.string("visual_kind", "fi_curve"),
+        )
+
+    def policy(self) -> SeriesComparisonPolicy:
+        score_family = self.required_choice("score_family")
+        alignment_policy = self.required_choice("alignment_policy")
+        if alignment_policy not in SERIES_ALIGNMENT_POLICIES:
+            raise ValueError(
+                f"reference_curve_match alignment policy {alignment_policy!r} is unsupported; "
+                f"expected one of {', '.join(sorted(SERIES_ALIGNMENT_POLICIES))}"
+            )
+        if alignment_policy in {"nearest_within_tolerance", "tolerance_clusters"}:
+            if "x_match_tolerance" not in self.rule or self.rule.get("x_match_tolerance") is None:
+                raise ValueError(
+                    f"reference_curve_match alignment policy {alignment_policy!r} requires explicit 'x_match_tolerance'"
+                )
+            x_match_tolerance = float(self.rule["x_match_tolerance"])
         else:
-            if not isinstance(raw_resampling_grid_values, list):
-                raise ValueError("reference_curve_match 'resampling_grid_values' must be a list when provided")
-            resampling_grid_values = tuple(float(value) for value in raw_resampling_grid_values)
-        if resampling_grid_source == "explicit_grid" and not resampling_grid_values:
-            raise ValueError(
-                "reference_curve_match resampled-grid alignment with "
-                "resampling_grid_source='explicit_grid' requires explicit 'resampling_grid_values'"
-            )
-    else:
-        resampling_grid_source = ""
-        resampling_grid_values = ()
-        interpolation_method = "linear"
-    pvalue_aggregation = str(rule.get("pvalue_aggregation", "auto")).strip()
-    if score_family in {"welch_only", "hybrid_residual_welch"}:
-        equivalence_margin = None
-    elif score_family in {"equivalence_only", "hybrid_residual_equivalence"}:
-        if "equivalence_margin" in rule and rule.get("equivalence_margin") is not None:
-            equivalence_margin = float(rule["equivalence_margin"])
+            x_match_tolerance = None
+        if alignment_policy == "resampled_grid":
+            resampling_grid_source = str(self.rule.get("resampling_grid_source", "")).strip()
+            interpolation_method = str(self.rule.get("interpolation_method", "linear")).strip() or "linear"
+            raw_resampling_grid_values = self.rule.get("resampling_grid_values", [])
+            if raw_resampling_grid_values in (None, ""):
+                resampling_grid_values = ()
+            else:
+                if not isinstance(raw_resampling_grid_values, list):
+                    raise ValueError("reference_curve_match 'resampling_grid_values' must be a list when provided")
+                resampling_grid_values = tuple(float(value) for value in raw_resampling_grid_values)
+            if resampling_grid_source == "explicit_grid" and not resampling_grid_values:
+                raise ValueError(
+                    "reference_curve_match resampled-grid alignment with "
+                    "resampling_grid_source='explicit_grid' requires explicit 'resampling_grid_values'"
+                )
+        else:
+            resampling_grid_source = ""
+            resampling_grid_values = ()
+            interpolation_method = "linear"
+        pvalue_aggregation = str(self.rule.get("pvalue_aggregation", "auto")).strip()
+        if score_family in {"welch_only", "hybrid_residual_welch"}:
+            equivalence_margin = None
+        elif score_family in {"equivalence_only", "hybrid_residual_equivalence"}:
+            if "equivalence_margin" in self.rule and self.rule.get("equivalence_margin") is not None:
+                equivalence_margin = float(self.rule["equivalence_margin"])
+            else:
+                equivalence_margin = None
+                if not (
+                    isinstance(self.rule.get("maximum_mae"), (int, float))
+                    and math.isfinite(float(self.rule["maximum_mae"]))
+                ):
+                    raise ValueError(
+                        f"reference_curve_match score family {score_family!r} requires explicit 'equivalence_margin' "
+                        "or a finite 'maximum_mae' fallback"
+                    )
         else:
             equivalence_margin = None
-            if not (
-                isinstance(rule.get("maximum_mae"), (int, float))
-                and math.isfinite(float(rule["maximum_mae"]))
-            ):
-                raise ValueError(
-                    f"reference_curve_match score family {score_family!r} requires explicit 'equivalence_margin' "
-                    "or a finite 'maximum_mae' fallback"
-                )
-    else:
-        equivalence_margin = None
-    return SeriesComparisonPolicy(
-        minimum_point_count=int(rule.get("minimum_point_count", 1)),
-        maximum_mae=float(rule.get("maximum_mae", float("inf"))),
-        maximum_rmse=float(rule.get("maximum_rmse", float("inf"))),
-        minimum_median_welch_pvalue=(
-            float(rule["minimum_median_welch_pvalue"])
-            if "minimum_median_welch_pvalue" in rule and rule.get("minimum_median_welch_pvalue") is not None
-            else None
-        ),
-        equivalence_margin=equivalence_margin,
-        equivalence_alpha=float(rule.get("equivalence_alpha", 0.05)),
-        x_precision_digits=int(rule.get("current_precision_digits", 6)),
-        alignment_policy=alignment_policy,
-        x_match_tolerance=x_match_tolerance,
-        resampling_grid_source=resampling_grid_source,
-        resampling_grid_values=resampling_grid_values,
-        interpolation_method=interpolation_method,
-        distribution_kind=_required_rule_choice(rule, "distribution_kind"),
-        score_family=score_family,
-        pvalue_aggregation=pvalue_aggregation,
-    )
+        return SeriesComparisonPolicy(
+            minimum_point_count=int(self.rule.get("minimum_point_count", 1)),
+            maximum_mae=float(self.rule.get("maximum_mae", float("inf"))),
+            maximum_rmse=float(self.rule.get("maximum_rmse", float("inf"))),
+            minimum_median_welch_pvalue=(
+                float(self.rule["minimum_median_welch_pvalue"])
+                if "minimum_median_welch_pvalue" in self.rule and self.rule.get("minimum_median_welch_pvalue") is not None
+                else None
+            ),
+            equivalence_margin=equivalence_margin,
+            equivalence_alpha=float(self.rule.get("equivalence_alpha", 0.05)),
+            x_precision_digits=int(self.rule.get("current_precision_digits", 6)),
+            alignment_policy=alignment_policy,
+            x_match_tolerance=x_match_tolerance,
+            resampling_grid_source=resampling_grid_source,
+            resampling_grid_values=resampling_grid_values,
+            interpolation_method=interpolation_method,
+            distribution_kind=self.required_choice("distribution_kind"),
+            score_family=score_family,
+            pvalue_aggregation=pvalue_aggregation,
+        )
 
 
 def _series_comparison_case(
     rule: dict[str, Any],
     reference_rows: list[dict[str, Any]],
 ) -> SeriesComparisonCase:
-    policy = _series_policy_from_rule(rule)
-    reference_spec = _series_data_spec_from_rule(rule, side="reference")
-    model_spec = _series_data_spec_from_rule(rule, side="model")
-    visual_contract = _series_visual_contract_from_rule(rule)
+    spec = SeriesComparisonRuleSpec.from_rule(rule)
     observation = SeriesDistributionObservation(
-        protocol_evidence_key=str(rule.get("protocol_evidence_key", "fi_curve_rows")),
+        protocol_evidence_key=spec.protocol_evidence_key,
         reference_rows=reference_rows,
-        reference_spec=reference_spec,
-        model_spec=model_spec,
-        comparison_x_unit_text=_required_unit_text(rule, "comparison_x_unit_text"),
-        comparison_y_unit_text=_required_unit_text(rule, "comparison_y_unit_text"),
-        x_quantity_name=str(rule.get("x_quantity_name", "Injected current")),
-        y_quantity_name=str(rule.get("y_quantity_name", "Firing rate")),
-        visual_contract=visual_contract,
-        policy=policy,
+        reference_spec=spec.reference_spec,
+        model_spec=spec.model_spec,
+        comparison_x_unit_text=spec.comparison_x_unit_text,
+        comparison_y_unit_text=spec.comparison_y_unit_text,
+        x_quantity_name=spec.x_quantity_name,
+        y_quantity_name=spec.y_quantity_name,
+        visual_contract=spec.visual_contract,
+        policy=spec.policy,
     )
     return SeriesComparisonCase(
         check_id=str(rule["check_id"]),

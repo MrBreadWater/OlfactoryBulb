@@ -125,6 +125,8 @@ Remove this file when the listed items are either:
       instead of re-plumbing raw keys and units through every helper call.
 - [x] Route the declarative `reference_curve_match` builder through those typed
       series specs instead of assembling the flat observation bundle inline.
+- [x] Collapse the remaining declarative series-rule parsing into one typed
+      `SeriesComparisonRuleSpec` path instead of a spread of small helpers.
 - [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

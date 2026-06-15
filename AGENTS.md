@@ -637,7 +637,9 @@ contract for future sessions.
     In the declarative `reference_curve_match` rule layer, build those typed
     series specs directly from TOML/config fields before constructing the
     observation object; do not keep spelling the same flat series-field bundle
-    inline at the rule-builder callsite.
+    inline at the rule-builder callsite. Keep the declarative parsing itself
+    centralized in the typed `SeriesComparisonRuleSpec` path rather than
+    scattering axis/policy/visual parsing across several unrelated helpers.
   - When a maintained validation rule family compiles into a SciUnit-backed
     suite and also emits per-case `AuditItem`s, add one shared suite-overview
     item through `olfactorybulb.neuronunit.suite_presentation` rather than

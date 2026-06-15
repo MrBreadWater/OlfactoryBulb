@@ -2023,6 +2023,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     plumbing across bins, paths, provenance, and visual payload assembly
   - the declarative `reference_curve_match` builder now targets those typed
     specs directly instead of spelling the flat series-field bundle inline
+  - the declarative parser for that rule now lives in one typed
+    `SeriesComparisonRuleSpec` path instead of a growing pile of unrelated
+    helper calls
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

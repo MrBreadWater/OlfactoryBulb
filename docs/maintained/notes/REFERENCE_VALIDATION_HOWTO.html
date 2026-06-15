@@ -573,7 +573,9 @@ reference/model axis bundles into typed <code>SeriesDataSpec</code> plus
 <code>SeriesVisualContract</code> objects before it constructs the observation. If you
 change how series axes, units, transforms, or visual payload keys are declared,
 extend those typed specs rather than reintroducing a long flat field bundle at
-the rule-builder callsite.</p>
+the rule-builder callsite. Keep the declarative parsing centralized in the
+typed <code>SeriesComparisonRuleSpec</code> path so one reader can recover the full
+series-rule contract from one place.</p>
 <p>When you use <code>alignment_policy = "nearest_within_tolerance"</code> or
 <code>alignment_policy = "tolerance_clusters"</code>, declare <code>x_match_tolerance</code>
 explicitly in the comparison x-axis units.

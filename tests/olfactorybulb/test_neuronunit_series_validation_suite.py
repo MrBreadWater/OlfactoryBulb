@@ -6,7 +6,11 @@ from argparse import Namespace
 from types import SimpleNamespace
 
 from olfactorybulb.audit.core import AuditReport
-from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
+from olfactorybulb.audit.reference_validation_rules import (
+    SeriesComparisonRuleSpec,
+    ValidationRuleContext,
+    build_rule_items,
+)
 from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
@@ -784,6 +788,15 @@ rule = {
     "acceptable": "The matched bins satisfy the configured MAE/RMSE tolerances.",
     "acceptable_basis": "Synthetic basis.",
 }
+
+parsed_rule_spec = SeriesComparisonRuleSpec.from_rule(rule)
+assert parsed_rule_spec.protocol_evidence_key == "fi_curve_rows"
+assert parsed_rule_spec.reference_spec.x_key == "current_pA"
+assert parsed_rule_spec.model_spec.x_key == "current_flux"
+assert parsed_rule_spec.model_spec.x_transform.description().startswith("affine(")
+assert parsed_rule_spec.visual_contract.kind == "fi_curve"
+assert parsed_rule_spec.policy.score_family == "hybrid_residual_welch"
+assert parsed_rule_spec.policy.alignment_policy == "exact_transformed_x"
 
 context = ValidationRuleContext(
     metrics=[],
