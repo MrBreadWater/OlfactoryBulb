@@ -359,6 +359,15 @@ Remove this file when the listed items are either:
         layer
       - added focused regression coverage for mapping compatibility,
         grouped-summary generation, and protocol/context boundary coercion
+- [x] Move the maintained built-in runtime rule-dispatch layer off loose raw
+      dict execution and onto typed dispatch records/specs.
+      - `compile_rule_dispatches(...)` now emits typed dispatch objects for
+        maintained built-in rule kinds
+      - `build_rule_items(...)` now executes those typed dispatch objects
+        directly instead of re-discovering built-in handler semantics from raw
+        dicts
+      - the raw `register_validation_rule(...)` hook remains only as the
+        compatibility surface for extension-defined custom rules
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

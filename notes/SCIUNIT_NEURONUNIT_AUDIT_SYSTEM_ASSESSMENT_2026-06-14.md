@@ -2111,6 +2111,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     explicit runtime fields such as validation id, notes path, default group,
     and typed validation-design-review defaults instead of one generic config
     dict leaking through the rule engine
+  - the maintained built-in rule-dispatch layer now also compiles into typed
+    dispatch records/specs before runtime execution, so the internal engine no
+    longer has to keep reparsing loose raw dicts all the way down to
+    `protocol_executed`, `note_presence`, and the grouped suite families;
+    the raw `register_validation_rule(...)` surface remains only as the
+    compatibility hook for extension-defined custom rules
   - `ReferenceValidationPlan` now also carries a precompiled rule-dispatch
     sequence, so the runtime no longer has to rediscover contiguous grouped
     suite families from raw rule dicts after the plan has already been built;

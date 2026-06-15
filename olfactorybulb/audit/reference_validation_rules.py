@@ -77,23 +77,112 @@ RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
 
 
 @dataclass(frozen=True)
-class _GroupedRuleFamily:
-    family_id: str
-    build_items: Callable[[list[dict[str, Any]], ValidationRuleContext], list[AuditItem]]
+class ValidationRuleRecord:
+    raw_rule: dict[str, Any]
+    kind: str
+    enabled_when_arg_truthy: str = ""
+    enabled_when_arg_falsey: str = ""
+    enabled_when_arg_in: str = ""
+    enabled_values: tuple[str, ...] = ()
+    review_status: str = ""
+    review_note: str = ""
+    review_reviewer: str = ""
+    review_required_expertise: str = ""
+    review_focus: str = ""
+
+    @classmethod
+    def from_rule(cls, rule: dict[str, Any]) -> "ValidationRuleRecord":
+        raw_rule = dict(rule)
+        kind = str(raw_rule.get("kind") or "").strip()
+        if not kind:
+            raise ValueError("Validation rule is missing required 'kind'")
+        return cls(
+            raw_rule=raw_rule,
+            kind=kind,
+            enabled_when_arg_truthy=str(raw_rule.get("enabled_when_arg_truthy", "") or "").strip(),
+            enabled_when_arg_falsey=str(raw_rule.get("enabled_when_arg_falsey", "") or "").strip(),
+            enabled_when_arg_in=str(raw_rule.get("enabled_when_arg_in", "") or "").strip(),
+            enabled_values=tuple(
+                str(value).strip()
+                for value in raw_rule.get("enabled_values", [])
+                if str(value).strip()
+            ),
+            review_status=str(raw_rule.get("validation_design_review_status", "") or "").strip(),
+            review_note=str(raw_rule.get("validation_design_review_note", "") or "").strip(),
+            review_reviewer=str(raw_rule.get("validation_design_review_reviewer", "") or "").strip(),
+            review_required_expertise=str(
+                raw_rule.get("validation_design_review_required_expertise", "") or ""
+            ).strip(),
+            review_focus=str(raw_rule.get("validation_design_review_focus", "") or "").strip(),
+        )
+
+    def is_enabled(self, args: Any) -> bool:
+        truthy_arg = self.enabled_when_arg_truthy
+        if truthy_arg and not bool(getattr(args, truthy_arg, None)):
+            return False
+        falsey_arg = self.enabled_when_arg_falsey
+        if falsey_arg and bool(getattr(args, falsey_arg, None)):
+            return False
+        enabled_arg = self.enabled_when_arg_in
+        if enabled_arg:
+            current = set(_arg_values(getattr(args, enabled_arg, None)))
+            if self.enabled_values and not current.intersection(self.enabled_values):
+                return False
+        return True
+
+    def resolved_review_metadata(self, context: ValidationRuleContext) -> dict[str, str]:
+        return {
+            "status": self.review_status or context.design_review_defaults.status,
+            "note": self.review_note or context.design_review_defaults.note,
+            "reviewer": self.review_reviewer or context.design_review_defaults.reviewer,
+            "required_expertise": (
+                self.review_required_expertise or context.design_review_defaults.required_expertise
+            ),
+            "focus": self.review_focus or context.design_review_defaults.focus,
+        }
 
 
 @dataclass(frozen=True)
-class SingleRuleDispatch:
-    rule: dict[str, Any]
+class _GroupedRuleFamily:
+    family_id: str
+    build_items: Callable[[list[ValidationRuleRecord], ValidationRuleContext], list[AuditItem]]
+
+
+@dataclass(frozen=True)
+class CustomSingleRuleDispatch:
+    record: ValidationRuleRecord
 
 
 @dataclass(frozen=True)
 class GroupedRuleDispatch:
     family_id: str
-    rules: tuple[dict[str, Any], ...]
+    records: tuple[ValidationRuleRecord, ...]
 
 
-ValidationRuleDispatch = SingleRuleDispatch | GroupedRuleDispatch
+@dataclass(frozen=True)
+class ProtocolExecutedRuleDispatch:
+    record: ValidationRuleRecord
+    spec: ProtocolExecutedRuleSpec
+
+
+@dataclass(frozen=True)
+class ReferenceBandRuleDispatch:
+    record: ValidationRuleRecord
+
+
+@dataclass(frozen=True)
+class NotePresenceRuleDispatch:
+    record: ValidationRuleRecord
+    spec: NotePresenceRuleSpec
+
+
+ValidationRuleDispatch = (
+    CustomSingleRuleDispatch
+    | GroupedRuleDispatch
+    | ProtocolExecutedRuleDispatch
+    | ReferenceBandRuleDispatch
+    | NotePresenceRuleDispatch
+)
 
 
 RULE_HANDLERS: dict[str, RuleHandler] = {}
@@ -157,26 +246,44 @@ def build_rule_items(
     items: list[AuditItem] = []
     for dispatch in dispatches:
         if isinstance(dispatch, GroupedRuleDispatch):
-            grouped_rules = [dict(rule) for rule in dispatch.rules if _rule_enabled(rule, context.args)]
-            if not grouped_rules:
+            grouped_records = [record for record in dispatch.records if record.is_enabled(context.args)]
+            if not grouped_records:
                 continue
             family = GROUPED_RULE_FAMILIES_BY_ID[dispatch.family_id]
-            generated_items = family.build_items(grouped_rules, context)
-            _append_grouped_suite_items(items, generated_items, grouped_rules, context)
+            generated_items = family.build_items(grouped_records, context)
+            _append_grouped_suite_items(items, generated_items, grouped_records, context)
             continue
-        rule = dict(dispatch.rule)
-        if not _rule_enabled(rule, context.args):
+        if isinstance(dispatch, ProtocolExecutedRuleDispatch):
+            if not dispatch.record.is_enabled(context.args):
+                continue
+            rule_items = _build_protocol_executed_items(dispatch.record, dispatch.spec, context)
+            _apply_rule_level_validation_design_review(rule_items, dispatch.record, context)
+            items.extend(rule_items)
             continue
-        kind = str(rule.get("kind") or "").strip()
-        if not kind:
-            raise ValueError("Validation rule is missing required 'kind'")
+        if isinstance(dispatch, ReferenceBandRuleDispatch):
+            if not dispatch.record.is_enabled(context.args):
+                continue
+            rule_items = _build_reference_band_items(dispatch.record, context)
+            _apply_rule_level_validation_design_review(rule_items, dispatch.record, context)
+            items.extend(rule_items)
+            continue
+        if isinstance(dispatch, NotePresenceRuleDispatch):
+            if not dispatch.record.is_enabled(context.args):
+                continue
+            rule_items = _build_note_presence_items(dispatch.record, dispatch.spec, context)
+            _apply_rule_level_validation_design_review(rule_items, dispatch.record, context)
+            items.extend(rule_items)
+            continue
+        record = dispatch.record
+        if not record.is_enabled(context.args):
+            continue
         try:
-            handler = RULE_HANDLERS[kind]
+            handler = RULE_HANDLERS[record.kind]
         except KeyError as exc:
             known = ", ".join(sorted(RULE_HANDLERS))
-            raise KeyError(f"Unknown validation rule kind {kind!r}. Known rule kinds: {known}") from exc
-        rule_items = handler(rule, context)
-        _apply_rule_level_validation_design_review(rule_items, rule, context)
+            raise KeyError(f"Unknown validation rule kind {record.kind!r}. Known rule kinds: {known}") from exc
+        rule_items = handler(record.raw_rule, context)
+        _apply_rule_level_validation_design_review(rule_items, record, context)
         items.extend(rule_items)
     return items
 
@@ -186,35 +293,51 @@ def compile_rule_dispatches(
 ) -> tuple[ValidationRuleDispatch, ...]:
     dispatches: list[ValidationRuleDispatch] = []
     pending_family: _GroupedRuleFamily | None = None
-    pending_rules: list[dict[str, Any]] = []
+    pending_records: list[ValidationRuleRecord] = []
 
     def flush_pending_rules() -> None:
-        nonlocal pending_family, pending_rules
-        if pending_family is None or not pending_rules:
+        nonlocal pending_family, pending_records
+        if pending_family is None or not pending_records:
             return
         dispatches.append(
             GroupedRuleDispatch(
                 family_id=pending_family.family_id,
-                rules=tuple(dict(rule) for rule in pending_rules),
+                records=tuple(pending_records),
             )
         )
         pending_family = None
-        pending_rules = []
+        pending_records = []
 
     for raw_rule in rules:
-        rule = dict(raw_rule)
-        kind = str(rule.get("kind") or "").strip()
-        if not kind:
-            raise ValueError("Validation rule is missing required 'kind'")
-        grouped_family = _grouped_rule_family_for_kind(kind)
+        record = ValidationRuleRecord.from_rule(raw_rule)
+        grouped_family = _grouped_rule_family_for_kind(record.kind)
         if grouped_family is not None:
             if pending_family is not None and pending_family != grouped_family:
                 flush_pending_rules()
             pending_family = grouped_family
-            pending_rules.append(rule)
+            pending_records.append(record)
             continue
         flush_pending_rules()
-        dispatches.append(SingleRuleDispatch(rule=rule))
+        if record.kind == "protocol_executed":
+            dispatches.append(
+                ProtocolExecutedRuleDispatch(
+                    record=record,
+                    spec=ProtocolExecutedRuleSpec.from_rule(record.raw_rule),
+                )
+            )
+            continue
+        if record.kind == "reference_band_rows":
+            dispatches.append(ReferenceBandRuleDispatch(record=record))
+            continue
+        if record.kind == "note_presence":
+            dispatches.append(
+                NotePresenceRuleDispatch(
+                    record=record,
+                    spec=NotePresenceRuleSpec.from_rule(record.raw_rule),
+                )
+            )
+            continue
+        dispatches.append(CustomSingleRuleDispatch(record=record))
     flush_pending_rules()
     return tuple(dispatches)
 
@@ -222,7 +345,7 @@ def compile_rule_dispatches(
 def _append_grouped_suite_items(
     items: list[AuditItem],
     generated_items: list[AuditItem],
-    source_rules: list[dict[str, Any]],
+    source_rules: list[ValidationRuleRecord],
     context: ValidationRuleContext,
 ) -> None:
     if not generated_items:
@@ -231,17 +354,19 @@ def _append_grouped_suite_items(
     if bool(detail_items[0].summary_rollup_exempt) and str(detail_items[0].detail_level or "detail") != "detail":
         items.append(detail_items[0])
         detail_items = detail_items[1:]
-    for rule, item in zip(source_rules, detail_items, strict=False):
-        _apply_rule_level_validation_design_review([item], rule, context)
+    for record, item in zip(source_rules, detail_items, strict=False):
+        _apply_rule_level_validation_design_review([item], record, context)
         items.append(item)
     if len(detail_items) > len(source_rules):
         items.extend(detail_items[len(source_rules):])
 
 
 def _resolved_rule_validation_design_review(
-    rule: dict[str, Any],
+    rule: ValidationRuleRecord | dict[str, Any],
     context: ValidationRuleContext,
 ) -> dict[str, str]:
+    if isinstance(rule, ValidationRuleRecord):
+        return rule.resolved_review_metadata(context)
     return {
         "status": str(rule.get("validation_design_review_status", context.design_review_defaults.status)).strip(),
         "note": str(rule.get("validation_design_review_note", context.design_review_defaults.note)).strip(),
@@ -263,7 +388,7 @@ def _resolved_rule_validation_design_review(
 
 def _apply_rule_level_validation_design_review(
     items: list[AuditItem],
-    rule: dict[str, Any],
+    rule: ValidationRuleRecord | dict[str, Any],
     context: ValidationRuleContext,
 ) -> None:
     metadata = _resolved_rule_validation_design_review(rule, context)
@@ -290,7 +415,7 @@ def _apply_rule_level_validation_design_review(
 
 
 def _rule_item(
-    rule: dict[str, Any],
+    rule: ValidationRuleRecord | dict[str, Any],
     *,
     status: str,
     evidence: dict[str, Any] | None = None,
@@ -308,21 +433,22 @@ def _rule_item(
     series_visuals: list[dict[str, Any]] | None = None,
     companion_visuals: list[dict[str, Any]] | None = None,
 ) -> AuditItem:
+    rule_dict = rule.raw_rule if isinstance(rule, ValidationRuleRecord) else rule
     return AuditItem(
-        check_id=str(check_id or rule["check_id"]),
+        check_id=str(check_id or rule_dict["check_id"]),
         status=status,
-        title=str(title or rule["title"]),
-        criterion=str(criterion or rule["criterion"]),
-        criterion_latex=str(criterion_latex if criterion_latex is not None else rule.get("criterion_latex", "")),
+        title=str(title or rule_dict["title"]),
+        criterion=str(criterion or rule_dict["criterion"]),
+        criterion_latex=str(criterion_latex if criterion_latex is not None else rule_dict.get("criterion_latex", "")),
         criterion_formulae=(
-            criterion_formulae if criterion_formulae is not None else rule.get("criterion_formulae", [])
+            criterion_formulae if criterion_formulae is not None else rule_dict.get("criterion_formulae", [])
         ),
         criterion_definitions=(
-            criterion_definitions if criterion_definitions is not None else rule.get("criterion_definitions", [])
+            criterion_definitions if criterion_definitions is not None else rule_dict.get("criterion_definitions", [])
         ),
-        description=str(description or rule["description"]),
-        acceptable=str(acceptable or rule["acceptable"]),
-        acceptable_basis=str(acceptable_basis or rule["acceptable_basis"]),
+        description=str(description or rule_dict["description"]),
+        acceptable=str(acceptable or rule_dict["acceptable"]),
+        acceptable_basis=str(acceptable_basis or rule_dict["acceptable_basis"]),
         evidence=evidence or {},
         series_visuals=list(series_visuals or []),
         companion_visuals=list(companion_visuals or []),
@@ -357,7 +483,9 @@ def _rounded_dict(payload: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _rule_enabled(rule: dict[str, Any], args: Any) -> bool:
+def _rule_enabled(rule: dict[str, Any] | ValidationRuleRecord, args: Any) -> bool:
+    if isinstance(rule, ValidationRuleRecord):
+        return rule.is_enabled(args)
     truthy_arg = str(rule.get("enabled_when_arg_truthy", "") or "").strip()
     if truthy_arg and not bool(getattr(args, truthy_arg, None)):
         return False
@@ -461,14 +589,14 @@ def _summary_evidence(
 
 
 def _build_summary_rule_items(
-    rules: list[dict[str, Any]],
+    rules: list[ValidationRuleRecord],
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
     if not rules:
         return []
-    cases = [SummaryRuleSpec.from_rule(rule, context).to_case() for rule in rules]
+    cases = [SummaryRuleSpec.from_rule(rule.raw_rule, context).to_case() for rule in rules]
     descriptor = _grouped_suite_descriptor(
-        rules,
+        [rule.raw_rule for rule in rules],
         default_suite_id=f"{context.validation_id or 'validation'}.summary_rules",
         suite_kind_label="Summary-rule suite",
     )
@@ -477,14 +605,14 @@ def _build_summary_rule_items(
 
 
 def _build_comparison_rule_items(
-    rules: list[dict[str, Any]],
+    rules: list[ValidationRuleRecord],
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
     if not rules:
         return []
-    cases = [ComparisonRuleSpec.from_rule(rule).to_case() for rule in rules]
+    cases = [ComparisonRuleSpec.from_rule(rule.raw_rule).to_case() for rule in rules]
     descriptor = _grouped_suite_descriptor(
-        rules,
+        [rule.raw_rule for rule in rules],
         default_suite_id=f"{context.validation_id or 'validation'}.comparison_rules",
         suite_kind_label="Comparison-rule suite",
     )
@@ -498,7 +626,7 @@ def _build_comparison_rule_items(
 
 
 def _build_series_rule_items(
-    rules: list[dict[str, Any]],
+    rules: list[ValidationRuleRecord],
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
     if not rules:
@@ -507,7 +635,8 @@ def _build_series_rule_items(
     protocol_evidence = evidence_bundle.to_dict()
     evidence_series_specs = evidence_bundle.series_spec_map()
     cases = []
-    for rule in rules:
+    for record in rules:
+        rule = record.raw_rule
         loader = str(rule["loader"])
         reference_rows = _filter_rows(_load_rows(loader), rule, args=context.args)
         protocol_series_spec = None
@@ -524,7 +653,7 @@ def _build_series_rule_items(
     if not isinstance(raw_candidate_ids, list):
         raw_candidate_ids = []
     descriptor = _grouped_suite_descriptor(
-        rules,
+        [rule.raw_rule for rule in rules],
         default_suite_id=context.validation_id or "validation",
         suite_kind_label="Series-comparison suite",
         candidate_ids=[str(candidate_id) for candidate_id in raw_candidate_ids if str(candidate_id).strip()],
@@ -567,8 +696,9 @@ def _grouped_rule_family_for_kind(kind: str) -> _GroupedRuleFamily | None:
     return GROUPED_RULE_FAMILIES_BY_KIND.get(kind)
 
 
-def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:
-    path_text = str(rule.get("notes_path") or context.notes_path or "").strip()
+def _notes_path(rule: ValidationRuleRecord | dict[str, Any], context: ValidationRuleContext) -> Path | None:
+    rule_dict = rule.raw_rule if isinstance(rule, ValidationRuleRecord) else rule
+    path_text = str(rule_dict.get("notes_path") or context.notes_path or "").strip()
     if not path_text:
         return None
     path = Path(path_text)
@@ -577,20 +707,22 @@ def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | 
     return path
 
 
-@register_validation_rule("protocol_executed")
-def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    parsed_spec = ProtocolExecutedRuleSpec.from_rule(rule)
+def _build_protocol_executed_items(
+    rule: ValidationRuleRecord,
+    spec: ProtocolExecutedRuleSpec,
+    context: ValidationRuleContext,
+) -> list[AuditItem]:
     evidence_bundle = protocol_evidence_bundle_from_resultish(context.protocol_result)
     protocol_evidence = evidence_bundle.to_dict()
     series_visuals: list[dict[str, Any]] = []
     for evidence_spec in evidence_bundle.series_specs:
         series_visuals.append(evidence_spec.to_visual_spec())
     if not series_visuals:
-        fallback_rows = protocol_evidence.get(parsed_spec.fallback_series_key)
+        fallback_rows = protocol_evidence.get(spec.fallback_series_key)
         if isinstance(fallback_rows, list) and fallback_rows:
             series_visuals.append(
                 series_visual_spec(
-                    keys=[parsed_spec.fallback_series_key],
+                    keys=[spec.fallback_series_key],
                     style={
                         "line_width": 1.8,
                         "marker_size": 3.2,
@@ -601,62 +733,19 @@ def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> 
     return [
         _rule_item(
             rule,
-            status=_rule_status(rule, bool(context.metrics)),
+            status=_rule_status(rule.raw_rule, bool(context.metrics)),
             evidence=protocol_evidence,
             series_visuals=series_visuals,
         )
     ]
 
 
-@register_validation_rule("all_finite_metric")
-def _all_finite_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_comparison_rule_items([rule], context)
-
-
-@register_validation_rule("all_exact_metric")
-def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_comparison_rule_items([rule], context)
-
-
-@register_validation_rule("group_ordering")
-def _group_ordering(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_comparison_rule_items([rule], context)
-
-
-@register_validation_rule("group_abs_diff_max")
-def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_comparison_rule_items([rule], context)
-
-
-@register_validation_rule("group_positive")
-def _group_positive(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_comparison_rule_items([rule], context)
-
-
-@register_validation_rule("summary_metric_min")
-def _summary_metric_min(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_summary_rule_items([rule], context)
-
-
-@register_validation_rule("summary_metric_max")
-def _summary_metric_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_summary_rule_items([rule], context)
-
-
-@register_validation_rule("summary_metric_range")
-def _summary_metric_range(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_summary_rule_items([rule], context)
-
-
-@register_validation_rule("summary_metric_status_map")
-def _summary_metric_status_map(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_summary_rule_items([rule], context)
-
-
-@register_validation_rule("reference_band_rows")
-def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    spec = ReferenceBandRuleSpec.from_rule(rule, context)
-    rows = _filter_rows(_load_rows(spec.loader), rule, args=context.args)
+def _build_reference_band_items(
+    rule: ValidationRuleRecord,
+    context: ValidationRuleContext,
+) -> list[AuditItem]:
+    spec = ReferenceBandRuleSpec.from_rule(rule.raw_rule, context)
+    rows = _filter_rows(_load_rows(spec.loader), rule.raw_rule, args=context.args)
     cases = spec.build_cases(rows=rows)
     compiled = compile_reference_band_suite(
         cases=cases,
@@ -666,9 +755,11 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
     return audit_items_from_reference_band_suite(compiled, descriptor=spec.suite_descriptor)
 
 
-@register_validation_rule("note_presence")
-def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    spec = NotePresenceRuleSpec.from_rule(rule)
+def _build_note_presence_items(
+    rule: ValidationRuleRecord,
+    spec: NotePresenceRuleSpec,
+    context: ValidationRuleContext,
+) -> list[AuditItem]:
     rows: list[dict[str, Any]] = []
     for row_context in spec.row_contexts:
         context_rows = _filter_rows(_load_rows(row_context.loader), row_context.to_filter_spec(), args=context.args)
@@ -709,18 +800,84 @@ def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list
     return [_rule_item(rule, status=status, evidence=evidence, status_reason=status_reason)]
 
 
+@register_validation_rule("protocol_executed")
+def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    record = ValidationRuleRecord.from_rule(rule)
+    return _build_protocol_executed_items(record, ProtocolExecutedRuleSpec.from_rule(record.raw_rule), context)
+
+
+@register_validation_rule("all_finite_metric")
+def _all_finite_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("all_exact_metric")
+def _all_exact_metric(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("group_ordering")
+def _group_ordering(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("group_abs_diff_max")
+def _group_abs_diff_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("group_positive")
+def _group_positive(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_comparison_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("summary_metric_min")
+def _summary_metric_min(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("summary_metric_max")
+def _summary_metric_max(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("summary_metric_range")
+def _summary_metric_range(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("summary_metric_status_map")
+def _summary_metric_status_map(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_summary_rule_items([ValidationRuleRecord.from_rule(rule)], context)
+
+
+@register_validation_rule("reference_band_rows")
+def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    return _build_reference_band_items(ValidationRuleRecord.from_rule(rule), context)
+
+
+@register_validation_rule("note_presence")
+def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    record = ValidationRuleRecord.from_rule(rule)
+    return _build_note_presence_items(record, NotePresenceRuleSpec.from_rule(record.raw_rule), context)
+
+
 @register_validation_rule("reference_curve_match")
 def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    return _build_series_rule_items([rule], context)
+    return _build_series_rule_items([ValidationRuleRecord.from_rule(rule)], context)
 
 
 __all__ = [
+    "CustomSingleRuleDispatch",
     "GroupedRuleDispatch",
+    "NotePresenceRuleDispatch",
+    "ProtocolExecutedRuleDispatch",
     "REFERENCE_ROW_LOADERS",
     "RULE_HANDLERS",
+    "ReferenceBandRuleDispatch",
     "ReferenceAcceptanceBand",
-    "SingleRuleDispatch",
     "ValidationRuleContext",
+    "ValidationRuleRecord",
     "build_rule_items",
     "compile_rule_dispatches",
     "compute_reference_acceptance_band",

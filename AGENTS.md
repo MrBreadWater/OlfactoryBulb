@@ -946,6 +946,12 @@ contract for future sessions.
     carrying explicit fields such as `validation_id`, `notes_path`,
     `default_group`, and typed review defaults; do not reintroduce a generic
     `context.config` dict just to tunnel those values through the rule engine.
+  - Inside `olfactorybulb.audit.reference_validation_rules`, built-in
+    maintained rule kinds should compile into typed dispatch records/specs
+    before runtime execution instead of carrying loose raw rule dicts all the
+    way to the handler edge. Keep the raw `register_validation_rule(...)`
+    hook as the compatibility surface for extension-defined custom rule kinds,
+    not as the internal execution model for the maintained built-in rules.
   - Static config-inspection surfaces such as validation-design-review audits
     should consume the typed document rather than hand-walking loose config
     dicts and parallel accessor calls.

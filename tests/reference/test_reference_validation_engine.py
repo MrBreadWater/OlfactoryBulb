@@ -29,7 +29,12 @@ from olfactorybulb.audit.reference_validation_specs import (
     NotePresenceRuleSpec,
     ProtocolExecutedRuleSpec,
 )
-from olfactorybulb.audit.reference_validation_rules import GroupedRuleDispatch, SingleRuleDispatch
+from olfactorybulb.audit.reference_validation_rules import (
+    CustomSingleRuleDispatch,
+    GroupedRuleDispatch,
+    NotePresenceRuleDispatch,
+    ProtocolExecutedRuleDispatch,
+)
 
 
 assert "burton_urban_fi" in list_reference_validation_ids()
@@ -58,7 +63,7 @@ assert burton_plan.skip_neuron_mode == "short_circuit"
 assert burton_plan.design_review_defaults.status == "pending"
 assert burton_plan.skip_item is not None
 assert burton_plan.skip_item.check_id == "burton_urban_fi_skipped"
-assert isinstance(burton_plan.rule_dispatches[0], SingleRuleDispatch)
+assert isinstance(burton_plan.rule_dispatches[0], NotePresenceRuleDispatch)
 assert any(isinstance(entry, GroupedRuleDispatch) for entry in burton_plan.rule_dispatches)
 
 listed_validations = subprocess.run(
@@ -290,8 +295,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
         assert temp_document.extension_specs == ("temp_validation_extension:register",)
         assert temp_plan.title == "Temporary validation"
         assert temp_plan.protocol_spec.title == "Temporary custom protocol"
-        assert isinstance(temp_plan.rule_dispatches[0], SingleRuleDispatch)
-        assert isinstance(temp_plan.rule_dispatches[1], SingleRuleDispatch)
+        assert isinstance(temp_plan.rule_dispatches[0], ProtocolExecutedRuleDispatch)
+        assert isinstance(temp_plan.rule_dispatches[1], CustomSingleRuleDispatch)
         assert temp_plan.skip_item is not None
         first_protocol_result = temp_plan.run_protocol(argparse.Namespace(custom_score=4.5))
         assert isinstance(first_protocol_result.protocol_evidence, ProtocolEvidenceBundle)
