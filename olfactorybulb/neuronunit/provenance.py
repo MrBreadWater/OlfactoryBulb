@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 import math
 from typing import Any
@@ -34,7 +35,7 @@ def compact_metadata_value(value: Any) -> Any:
         if isinstance(value, float) and math.isfinite(value):
             return rounded(float(value))
         return value
-    if isinstance(value, list) and all(_is_scalar_metadata(item) for item in value):
+    if isinstance(value, list | tuple) and all(_is_scalar_metadata(item) for item in value):
         compact_items: list[Any] = []
         for item in value:
             if isinstance(item, float) and math.isfinite(item):
@@ -45,7 +46,7 @@ def compact_metadata_value(value: Any) -> Any:
     return None
 
 
-def _sorted_unique_text_values(rows: list[dict[str, Any]], *keys: str) -> tuple[str, ...]:
+def _sorted_unique_text_values(rows: Sequence[Mapping[str, object]], *keys: str) -> tuple[str, ...]:
     values: set[str] = set()
     for row in rows:
         for key in keys:
@@ -64,14 +65,14 @@ def _parsed_note_ids(raw_text: str) -> tuple[str, ...]:
     return tuple(sorted(note_ids))
 
 
-def note_id_values(rows: list[dict[str, Any]]) -> tuple[str, ...]:
+def note_id_values(rows: Sequence[Mapping[str, object]]) -> tuple[str, ...]:
     note_ids: set[str] = set()
     for row in rows:
         note_ids.update(_parsed_note_ids(row.get("note_ids", "")))
     return tuple(sorted(note_ids))
 
 
-def _series_id_values(rows: list[dict[str, Any]], *, series_id_key: str) -> tuple[str, ...]:
+def _series_id_values(rows: Sequence[Mapping[str, object]], *, series_id_key: str) -> tuple[str, ...]:
     if not series_id_key:
         return ()
     return _sorted_unique_text_values(rows, series_id_key)
@@ -88,7 +89,7 @@ class ProvenanceRecord:
     reported_value_raw: str = ""
 
     @classmethod
-    def from_row(cls, row: dict[str, Any]) -> "ProvenanceRecord":
+    def from_row(cls, row: Mapping[str, object]) -> "ProvenanceRecord":
         return cls(
             source=str(row.get("Source", "") or row.get("source", "")).strip(),
             source_file=str(row.get("source_file", "")).strip(),
@@ -116,7 +117,7 @@ class ProtocolContextSummary:
     @classmethod
     def from_context(
         cls,
-        context: dict[str, Any] | None,
+        context: Mapping[str, object] | None,
         *,
         exclude_keys: set[str] | None = None,
     ) -> "ProtocolContextSummary":
@@ -163,14 +164,14 @@ class SeriesProvenanceSummary:
     @classmethod
     def from_rows(
         cls,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, object]],
         *,
         series_id_key: str,
         x_key: str,
         y_key: str,
         x_unit_text: str,
         y_unit_text: str,
-        context: dict[str, Any] | None = None,
+        context: Mapping[str, object] | None = None,
         exclude_context_keys: set[str] | None = None,
     ) -> "SeriesProvenanceSummary":
         series_ids = _series_id_values(rows, series_id_key=series_id_key)

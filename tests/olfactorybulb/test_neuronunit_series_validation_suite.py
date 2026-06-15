@@ -16,6 +16,7 @@ from olfactorybulb.audit.reference_validation_rules import (
     compile_rule_dispatches,
 )
 from olfactorybulb.neuronunit.provenance import SeriesObservationProvenance, SeriesProvenanceSummary
+from olfactorybulb.neuronunit.series_payloads import SeriesContextPayload, SeriesRowTable
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SeriesComparisonCase,
@@ -587,6 +588,7 @@ equivalence_observation = SeriesDistributionObservation(
 equivalence_reference_dataset = equivalence_observation.reference_dataset()
 assert equivalence_reference_dataset.x_key == "current_pA"
 assert equivalence_reference_dataset.y_key == "firing_rate_Hz"
+assert isinstance(equivalence_reference_dataset.rows, SeriesRowTable)
 assert equivalence_reference_dataset.provenance_summary() == SeriesProvenanceSummary.from_rows(
     equivalence_reference_rows,
     series_id_key="cell_id",
@@ -595,14 +597,28 @@ assert equivalence_reference_dataset.provenance_summary() == SeriesProvenanceSum
     x_unit_text="pA",
     y_unit_text="Hz",
 )
-equivalence_model_dataset = equivalence_observation.model_dataset(
-    SeriesPredictionBundle(
-        protocol_evidence_key="fi_curve_rows",
-        protocol_evidence=ProtocolEvidenceBundle(values={"fi_curve_rows": equivalence_model_rows}),
+equivalence_model_bundle = SeriesPredictionBundle(
+    protocol_evidence_key="fi_curve_rows",
+    protocol_evidence=ProtocolEvidenceBundle(
+        values={
+            "fi_curve_rows": equivalence_model_rows,
+            "cell_models": ["EqModel1", "EqModel2"],
+            "step_duration_ms": 500.0,
+        }
     ),
 )
+assert isinstance(equivalence_model_bundle.rows, SeriesRowTable)
+assert isinstance(equivalence_model_bundle.context, SeriesContextPayload)
+assert equivalence_model_bundle.context.to_dict()["cell_models"] == ["EqModel1", "EqModel2"]
+equivalence_model_dataset = equivalence_observation.model_dataset(equivalence_model_bundle)
 assert equivalence_model_dataset.series_id_key == "cell_name"
 assert equivalence_model_dataset.exclude_provenance_context_keys == ("fi_curve_rows",)
+assert isinstance(equivalence_model_dataset.rows, SeriesRowTable)
+assert isinstance(equivalence_model_dataset.context, SeriesContextPayload)
+assert equivalence_model_dataset.provenance_summary().protocol_context.to_dict() == {
+    "cell_models": ["EqModel1", "EqModel2"],
+    "step_duration_ms": 500.0,
+}
 
 equivalence_case = SeriesComparisonCase(
     check_id="synthetic_series_equivalence",

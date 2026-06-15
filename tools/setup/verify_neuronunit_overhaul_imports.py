@@ -34,6 +34,7 @@ REPO_IMPORTS = [
     "olfactorybulb.neuronunit.capabilities",
     "olfactorybulb.neuronunit.provenance",
     "olfactorybulb.neuronunit.frozen_payloads",
+    "olfactorybulb.neuronunit.series_payloads",
     "olfactorybulb.neuronunit.metric_tables",
     "olfactorybulb.neuronunit.metric_quantities",
     "olfactorybulb.neuronunit.scalar_observations",

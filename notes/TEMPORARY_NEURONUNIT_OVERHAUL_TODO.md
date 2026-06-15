@@ -563,7 +563,16 @@ Remove this file when the listed items are either:
       - `_load_rows`, `_filter_rows`, and the `reference_band_rows` /
         `reference_curve_match` spec entrypoints now use that typed layer
       - tests still may hand raw rows to the coercion boundary, but the
-        maintained rule/spec runtime no longer advertises fresh raw row lists
+      maintained rule/spec runtime no longer advertises fresh raw row lists
+- [x] Keep the series row/context seam on the same typed-wrapper pattern
+      instead of letting transforms, bins, interpolated paths, or provenance
+      summaries rediscover mutable raw row/context payloads late in scoring.
+      - added `olfactorybulb.neuronunit.series_payloads`
+      - `SeriesObservedDataset` now coerces its `rows` and `context` onto
+        `SeriesRowTable` / `SeriesContextPayload`
+      - model-side `SeriesPredictionBundle` exposes those same typed payloads,
+        and the direct series-suite coverage now asserts that provenance keeps
+        the typed protocol context intact
 - [x] Keep the migrated suite compiler/model seam on one shared typed runtime
       bundle instead of passing parallel summary/metrics/protocol-evidence
       arguments into each `ReferenceValidationModel`.

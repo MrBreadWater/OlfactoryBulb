@@ -661,6 +661,11 @@ contract for future sessions.
     score path. `SeriesDistributionObservation` should produce those typed
     datasets for the reference and model sides before bins, paths, or
     provenance are computed.
+    Keep the concrete row/context payloads typed too: once series rows or
+    protocol-context maps have crossed into the scientific-core layer, keep
+    them on `SeriesRowTable` / `SeriesContextPayload` instead of letting
+    transforms, interpolation helpers, or provenance summaries fall back to
+    fresh raw `list[dict]` / `dict` seams.
     Likewise, keep protocol evidence bundled through the typed
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple

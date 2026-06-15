@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import math
 import warnings
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 import numpy as np
@@ -27,6 +28,13 @@ from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, nume
 from olfactorybulb.neuronunit.reference_validation_suite import (
     ReferenceValidationModel,
     ReferenceValidationRuntimeData,
+)
+from olfactorybulb.neuronunit.series_payloads import (
+    SeriesContextPayload,
+    SeriesRowPayload,
+    SeriesRowTable,
+    coerce_series_context_payload,
+    coerce_series_row_table,
 )
 from olfactorybulb.neuronunit.suite_presentation import (
     audit_item_adapter_spec_from_case,
@@ -446,7 +454,7 @@ def _piecewise_linear_value(
     )
 
 
-def _nested_mapping_value(mapping: dict[str, Any] | None, dotted_key: str) -> Any:
+def _nested_mapping_value(mapping: Mapping[str, object] | None, dotted_key: str) -> Any:
     if not mapping:
         return None
     direct_key = str(dotted_key or "").strip()
@@ -456,7 +464,7 @@ def _nested_mapping_value(mapping: dict[str, Any] | None, dotted_key: str) -> An
         return mapping.get(direct_key)
     current: Any = mapping
     for token in direct_key.split("."):
-        if not isinstance(current, dict) or token not in current:
+        if not isinstance(current, Mapping) or token not in current:
             return None
         current = current[token]
     return current
@@ -465,8 +473,8 @@ def _nested_mapping_value(mapping: dict[str, Any] | None, dotted_key: str) -> An
 def _lookup_transform_numeric_value(
     lookup_key: str,
     *,
-    row: dict[str, Any] | None,
-    context: dict[str, Any] | None,
+    row: Mapping[str, object] | None,
+    context: Mapping[str, object] | None,
 ) -> float:
     normalized_key = str(lookup_key or "").strip()
     if not normalized_key:
@@ -511,8 +519,8 @@ class AxisTransform:
         *,
         source_unit_text: str,
         comparison_unit_text: str,
-        row: dict[str, Any] | None = None,
-        context: dict[str, Any] | None = None,
+        row: Mapping[str, object] | None = None,
+        context: Mapping[str, object] | None = None,
     ) -> float | pq.Quantity:
         kind = str(self.kind or "identity").strip().lower()
         input_unit_text = str(self.input_unit_text or source_unit_text or "").strip()
@@ -705,12 +713,12 @@ class SeriesDataSpec:
 
     def bins(
         self,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, object]],
         *,
         comparison_x_unit_text: str,
         comparison_y_unit_text: str,
         precision_digits: int,
-        context: dict[str, Any] | None = None,
+        context: Mapping[str, object] | None = None,
     ) -> dict[float, list[float]]:
         return _series_bins(
             rows,
@@ -728,12 +736,12 @@ class SeriesDataSpec:
 
     def paths(
         self,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, object]],
         *,
         comparison_x_unit_text: str,
         comparison_y_unit_text: str,
         precision_digits: int,
-        context: dict[str, Any] | None = None,
+        context: Mapping[str, object] | None = None,
     ) -> dict[str, list[tuple[float, float]]]:
         return _series_paths(
             rows,
@@ -752,9 +760,9 @@ class SeriesDataSpec:
 
     def provenance_summary(
         self,
-        rows: list[dict[str, Any]],
+        rows: Sequence[Mapping[str, object]],
         *,
-        context: dict[str, Any] | None = None,
+        context: Mapping[str, object] | None = None,
         exclude_context_keys: set[str] | None = None,
     ) -> SeriesProvenanceSummary:
         return SeriesProvenanceSummary.from_rows(
@@ -779,16 +787,20 @@ class SeriesVisualContract:
 
 @dataclass(frozen=True)
 class SeriesObservedDataset:
-    rows: list[dict[str, Any]]
+    rows: SeriesRowTable | Sequence[SeriesRowPayload | Mapping[str, object]]
     spec: SeriesDataSpec
     comparison_x_unit_text: str
     comparison_y_unit_text: str
-    context: dict[str, Any] = field(default_factory=dict)
+    context: SeriesContextPayload | Mapping[str, object] = field(default_factory=dict)
     exclude_provenance_context_keys: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "rows", list(self.rows))
-        object.__setattr__(self, "context", dict(self.context))
+        object.__setattr__(self, "rows", coerce_series_row_table(self.rows))
+        object.__setattr__(
+            self,
+            "context",
+            coerce_series_context_payload(self.context) or SeriesContextPayload(entries=()),
+        )
         object.__setattr__(
             self,
             "exclude_provenance_context_keys",
@@ -1512,12 +1524,12 @@ class SeriesPredictionBundle:
     protocol_evidence: ProtocolEvidenceBundle = field(default_factory=ProtocolEvidenceBundle)
 
     @property
-    def rows(self) -> list[dict[str, Any]]:
-        return self.protocol_evidence.rows(self.protocol_evidence_key)
+    def rows(self) -> SeriesRowTable:
+        return coerce_series_row_table(self.protocol_evidence.rows(self.protocol_evidence_key))
 
     @property
-    def context(self) -> dict[str, Any]:
-        return self.protocol_evidence.to_dict()
+    def context(self) -> SeriesContextPayload:
+        return coerce_series_context_payload(self.protocol_evidence.to_dict()) or SeriesContextPayload(entries=())
 
 
 def _aligned_x_pairs(
@@ -1621,7 +1633,7 @@ def _tolerance_cluster_bins(
 
 
 def _series_bins(
-    rows: list[dict[str, Any]],
+    rows: Sequence[Mapping[str, object]],
     *,
     x_key: str,
     y_key: str,
@@ -1632,7 +1644,7 @@ def _series_bins(
     x_transform: AxisTransform,
     y_transform: AxisTransform,
     precision_digits: int,
-    context: dict[str, Any] | None = None,
+    context: Mapping[str, object] | None = None,
 ) -> dict[float, list[float]]:
     bins: dict[float, list[float]] = {}
     for row in rows:
@@ -1660,7 +1672,7 @@ def _series_bins(
 
 
 def _series_paths(
-    rows: list[dict[str, Any]],
+    rows: Sequence[Mapping[str, object]],
     *,
     series_id_key: str,
     x_key: str,
@@ -1672,7 +1684,7 @@ def _series_paths(
     x_transform: AxisTransform,
     y_transform: AxisTransform,
     precision_digits: int,
-    context: dict[str, Any] | None = None,
+    context: Mapping[str, object] | None = None,
 ) -> dict[str, list[tuple[float, float]]]:
     grouped_points: dict[str, dict[float, list[float]]] = {}
     for row in rows:

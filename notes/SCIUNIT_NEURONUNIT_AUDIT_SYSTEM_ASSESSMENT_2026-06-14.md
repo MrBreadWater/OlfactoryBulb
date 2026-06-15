@@ -2243,6 +2243,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer
     instead of teaching each rule/spec helper to expect fresh CSV-style dict
     rows directly
+  - the series row/context seam is tighter too: bound series datasets now keep
+    their concrete rows and protocol context on shared typed
+    `SeriesRowTable` / `SeriesContextPayload` payloads, so transforms,
+    interpolated paths, and provenance summaries no longer have to accept new
+    mutable `list[dict]` / `dict` seams once the data has crossed into the
+    NeuronUnit-side scientific core
   - the migrated suite compiler/model seam is tighter too: the
     reference-band, summary, comparison, and series suite compilers now all
     construct `ReferenceValidationModel` through one shared typed
