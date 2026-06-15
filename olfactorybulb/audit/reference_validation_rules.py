@@ -52,7 +52,9 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     SERIES_ALIGNMENT_POLICIES,
     SeriesComparisonCase,
     SeriesComparisonPolicy,
+    SeriesDataSpec,
     SeriesDistributionObservation,
+    SeriesVisualContract,
     audit_items_from_series_comparison_suite,
     compile_series_comparison_suite,
 )
@@ -1177,6 +1179,42 @@ def _axis_transform(rule: dict[str, Any], key: str) -> AxisTransform:
     )
 
 
+def _series_data_spec_from_rule(
+    rule: dict[str, Any],
+    *,
+    side: str,
+) -> SeriesDataSpec:
+    side_prefix = str(side).strip().lower()
+    if side_prefix not in {"reference", "model"}:
+        raise ValueError(f"Unsupported series-data side {side!r}")
+    if side_prefix == "reference":
+        default_x_key = "current_pA"
+        default_y_key = "firing_rate_Hz"
+        default_series_id_key = "cell_id"
+    else:
+        default_x_key = "current_pA"
+        default_y_key = "firing_rate_Hz"
+        default_series_id_key = "cell_name"
+    return SeriesDataSpec(
+        x_key=str(rule.get(f"{side_prefix}_current_key", default_x_key)),
+        y_key=str(rule.get(f"{side_prefix}_value_key", default_y_key)),
+        x_unit_text=_required_unit_text(rule, f"{side_prefix}_x_unit_text"),
+        y_unit_text=_required_unit_text(rule, f"{side_prefix}_y_unit_text"),
+        x_transform=_axis_transform(rule, f"{side_prefix}_x_transform"),
+        y_transform=_axis_transform(rule, f"{side_prefix}_y_transform"),
+        series_id_key=str(rule.get(f"{side_prefix}_series_id_key", default_series_id_key)),
+    )
+
+
+def _series_visual_contract_from_rule(rule: dict[str, Any]) -> SeriesVisualContract:
+    return SeriesVisualContract(
+        x_key=str(rule.get("visual_x_key", "currents_pA")),
+        reference_y_key=str(rule.get("visual_reference_y_key", "reference_values_Hz")),
+        model_y_key=str(rule.get("visual_model_y_key", "model_values_Hz")),
+        kind=str(rule.get("visual_kind", "fi_curve")),
+    )
+
+
 def _series_policy_from_rule(rule: dict[str, Any]) -> SeriesComparisonPolicy:
     score_family = _required_rule_choice(rule, "score_family")
     alignment_policy = _required_rule_choice(rule, "alignment_policy")
@@ -1258,31 +1296,19 @@ def _series_comparison_case(
     reference_rows: list[dict[str, Any]],
 ) -> SeriesComparisonCase:
     policy = _series_policy_from_rule(rule)
+    reference_spec = _series_data_spec_from_rule(rule, side="reference")
+    model_spec = _series_data_spec_from_rule(rule, side="model")
+    visual_contract = _series_visual_contract_from_rule(rule)
     observation = SeriesDistributionObservation(
         protocol_evidence_key=str(rule.get("protocol_evidence_key", "fi_curve_rows")),
         reference_rows=reference_rows,
-        reference_x_key=str(rule.get("reference_current_key", "current_pA")),
-        reference_y_key=str(rule.get("reference_value_key", "firing_rate_Hz")),
-        model_x_key=str(rule.get("model_current_key", "current_pA")),
-        model_y_key=str(rule.get("model_value_key", "firing_rate_Hz")),
-        reference_x_unit_text=_required_unit_text(rule, "reference_x_unit_text"),
-        reference_y_unit_text=_required_unit_text(rule, "reference_y_unit_text"),
-        model_x_unit_text=_required_unit_text(rule, "model_x_unit_text"),
-        model_y_unit_text=_required_unit_text(rule, "model_y_unit_text"),
+        reference_spec=reference_spec,
+        model_spec=model_spec,
         comparison_x_unit_text=_required_unit_text(rule, "comparison_x_unit_text"),
         comparison_y_unit_text=_required_unit_text(rule, "comparison_y_unit_text"),
-        reference_x_transform=_axis_transform(rule, "reference_x_transform"),
-        reference_y_transform=_axis_transform(rule, "reference_y_transform"),
-        model_x_transform=_axis_transform(rule, "model_x_transform"),
-        model_y_transform=_axis_transform(rule, "model_y_transform"),
-        reference_series_id_key=str(rule.get("reference_series_id_key", "cell_id")),
-        model_series_id_key=str(rule.get("model_series_id_key", "cell_name")),
         x_quantity_name=str(rule.get("x_quantity_name", "Injected current")),
         y_quantity_name=str(rule.get("y_quantity_name", "Firing rate")),
-        visual_x_key=str(rule.get("visual_x_key", "currents_pA")),
-        visual_reference_y_key=str(rule.get("visual_reference_y_key", "reference_values_Hz")),
-        visual_model_y_key=str(rule.get("visual_model_y_key", "model_values_Hz")),
-        visual_kind=str(rule.get("visual_kind", "fi_curve")),
+        visual_contract=visual_contract,
         policy=policy,
     )
     return SeriesComparisonCase(

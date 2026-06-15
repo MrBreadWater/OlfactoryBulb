@@ -634,6 +634,10 @@ contract for future sessions.
     `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
     x-key/y-key/unit/transform parameter bundles across bins, paths,
     provenance, and renderer-facing evidence assembly.
+    In the declarative `reference_curve_match` rule layer, build those typed
+    series specs directly from TOML/config fields before constructing the
+    observation object; do not keep spelling the same flat series-field bundle
+    inline at the rule-builder callsite.
   - When a maintained validation rule family compiles into a SciUnit-backed
     suite and also emits per-case `AuditItem`s, add one shared suite-overview
     item through `olfactorybulb.neuronunit.suite_presentation` rather than

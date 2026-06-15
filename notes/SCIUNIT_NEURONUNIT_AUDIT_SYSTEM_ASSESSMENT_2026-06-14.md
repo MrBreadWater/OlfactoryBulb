@@ -2021,6 +2021,8 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - typed `SeriesDataSpec` / `SeriesVisualContract` structure inside the core
     so the series bridge no longer has to repeat the same axis/unit/transform
     plumbing across bins, paths, provenance, and visual payload assembly
+  - the declarative `reference_curve_match` builder now targets those typed
+    specs directly instead of spelling the flat series-field bundle inline
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

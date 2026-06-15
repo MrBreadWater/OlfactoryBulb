@@ -602,62 +602,86 @@ class SeriesVisualContract:
 class SeriesDistributionObservation:
     protocol_evidence_key: str
     reference_rows: list[dict[str, Any]]
-    reference_x_key: str
-    reference_y_key: str
-    model_x_key: str
-    model_y_key: str
-    reference_x_unit_text: str
-    reference_y_unit_text: str
-    model_x_unit_text: str
-    model_y_unit_text: str
+    reference_spec: SeriesDataSpec
+    model_spec: SeriesDataSpec
     comparison_x_unit_text: str
     comparison_y_unit_text: str
-    reference_x_transform: AxisTransform = field(default_factory=AxisTransform)
-    reference_y_transform: AxisTransform = field(default_factory=AxisTransform)
-    model_x_transform: AxisTransform = field(default_factory=AxisTransform)
-    model_y_transform: AxisTransform = field(default_factory=AxisTransform)
-    reference_series_id_key: str = "cell_id"
-    model_series_id_key: str = "cell_name"
     x_quantity_name: str = "series x-value"
     y_quantity_name: str = "series y-value"
-    visual_x_key: str = "currents_pA"
-    visual_reference_y_key: str = "reference_values_Hz"
-    visual_model_y_key: str = "model_values_Hz"
-    visual_kind: str = "fi_curve"
+    visual_contract: SeriesVisualContract = field(default_factory=SeriesVisualContract)
     policy: SeriesComparisonPolicy = field(default_factory=SeriesComparisonPolicy)
 
     @property
-    def reference_spec(self) -> SeriesDataSpec:
-        return SeriesDataSpec(
-            x_key=self.reference_x_key,
-            y_key=self.reference_y_key,
-            x_unit_text=self.reference_x_unit_text,
-            y_unit_text=self.reference_y_unit_text,
-            x_transform=self.reference_x_transform,
-            y_transform=self.reference_y_transform,
-            series_id_key=self.reference_series_id_key,
-        )
+    def reference_x_key(self) -> str:
+        return self.reference_spec.x_key
 
     @property
-    def model_spec(self) -> SeriesDataSpec:
-        return SeriesDataSpec(
-            x_key=self.model_x_key,
-            y_key=self.model_y_key,
-            x_unit_text=self.model_x_unit_text,
-            y_unit_text=self.model_y_unit_text,
-            x_transform=self.model_x_transform,
-            y_transform=self.model_y_transform,
-            series_id_key=self.model_series_id_key,
-        )
+    def reference_y_key(self) -> str:
+        return self.reference_spec.y_key
 
     @property
-    def visual_contract(self) -> SeriesVisualContract:
-        return SeriesVisualContract(
-            x_key=self.visual_x_key,
-            reference_y_key=self.visual_reference_y_key,
-            model_y_key=self.visual_model_y_key,
-            kind=self.visual_kind,
-        )
+    def model_x_key(self) -> str:
+        return self.model_spec.x_key
+
+    @property
+    def model_y_key(self) -> str:
+        return self.model_spec.y_key
+
+    @property
+    def reference_x_unit_text(self) -> str:
+        return self.reference_spec.x_unit_text
+
+    @property
+    def reference_y_unit_text(self) -> str:
+        return self.reference_spec.y_unit_text
+
+    @property
+    def model_x_unit_text(self) -> str:
+        return self.model_spec.x_unit_text
+
+    @property
+    def model_y_unit_text(self) -> str:
+        return self.model_spec.y_unit_text
+
+    @property
+    def reference_x_transform(self) -> AxisTransform:
+        return self.reference_spec.x_transform
+
+    @property
+    def reference_y_transform(self) -> AxisTransform:
+        return self.reference_spec.y_transform
+
+    @property
+    def model_x_transform(self) -> AxisTransform:
+        return self.model_spec.x_transform
+
+    @property
+    def model_y_transform(self) -> AxisTransform:
+        return self.model_spec.y_transform
+
+    @property
+    def reference_series_id_key(self) -> str:
+        return self.reference_spec.series_id_key
+
+    @property
+    def model_series_id_key(self) -> str:
+        return self.model_spec.series_id_key
+
+    @property
+    def visual_x_key(self) -> str:
+        return self.visual_contract.x_key
+
+    @property
+    def visual_reference_y_key(self) -> str:
+        return self.visual_contract.reference_y_key
+
+    @property
+    def visual_model_y_key(self) -> str:
+        return self.visual_contract.model_y_key
+
+    @property
+    def visual_kind(self) -> str:
+        return self.visual_contract.kind
 
 
 @dataclass(frozen=True)

@@ -496,6 +496,13 @@ now come from the shared typed layer in
 reference/model provenance payload, do it there first and let the suite bridge
 adapt the typed object back into audit evidence.
 
+Likewise, the declarative `reference_curve_match` builder now compiles the
+reference/model axis bundles into typed `SeriesDataSpec` plus
+`SeriesVisualContract` objects before it constructs the observation. If you
+change how series axes, units, transforms, or visual payload keys are declared,
+extend those typed specs rather than reintroducing a long flat field bundle at
+the rule-builder callsite.
+
 When you use `alignment_policy = "nearest_within_tolerance"` or
 `alignment_policy = "tolerance_clusters"`, declare `x_match_tolerance`
 explicitly in the comparison x-axis units.
