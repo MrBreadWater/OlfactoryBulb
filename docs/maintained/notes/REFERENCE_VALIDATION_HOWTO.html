@@ -213,6 +213,8 @@ validation that uses one registered protocol runner:</p>
   <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_config.py">olfactorybulb/audit/reference_validation_config.py</a></li>
 <li>Typed raw validation document:
   <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_document.py">olfactorybulb/audit/reference_validation_document.py</a></li>
+<li>Typed protocol contract / execution-cache core:
+  <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_protocol_core.py">olfactorybulb/audit/reference_validation_protocol_core.py</a></li>
 <li>Typed runtime validation plan:
   <a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_plan.py">olfactorybulb/audit/reference_validation_plan.py</a></li>
 <li>Validation engine:
@@ -234,6 +236,8 @@ validation that uses one registered protocol runner:</p>
   list available validation ids, and register declared extension modules</li>
 <li><code>reference_validation_document.py</code> compiles that raw config into one typed
   <code>ReferenceValidationDocument</code></li>
+<li><code>reference_validation_protocol_core.py</code> owns the typed protocol spec,
+  registry lookup, protocol execution cache, and cache-key normalization</li>
 <li><code>reference_validation_plan.py</code> compiles that typed document into one typed
   <code>ReferenceValidationPlan</code></li>
 <li>the plan also precompiles the grouped/single rule-dispatch sequence, so the
@@ -873,6 +877,8 @@ def register() -&gt; None:
             description=&quot;Example protocol registration for a literature-backed validation.&quot;,
             add_cli_args=_add_cli_args,
             run=_run_protocol,
+            cache_enabled=True,
+            cache_arg_names=(&quot;cell_count&quot;, &quot;dt_ms&quot;),
         )
     )
 </code></pre>
@@ -882,6 +888,21 @@ def register() -&gt; None:
 <li>those keys become available to rule checks</li>
 <li>protocol runners are not limited to current clamp</li>
 </ul>
+<p>If the same protocol execution can satisfy multiple checks, enable the shared
+process-local protocol cache on the <code>ValidationProtocolSpec</code> and declare the
+semantic CLI arguments that define cache equivalence:</p>
+<ul>
+<li><code>cache_enabled = True</code></li>
+<li><code>cache_arg_names = ("cell_count", "dt_ms")</code></li>
+</ul>
+<p>That cache contract lives in
+<a href="/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_protocol_core.py">reference_validation_protocol_core.py</a>,
+not in the CLI wrapper. Keep the cache key surface narrow and deliberate. Do
+not treat "every parsed CLI arg" as part of the cache identity unless that is
+actually the scientific/runtime contract.</p>
+<p>Cache behavior stays inspectable in emitted protocol evidence under
+<code>protocol_cache</code>, including the resolved arg/config values and whether the run
+was a cache hit or miss.</p>
 <p>They can just as easily emit:</p>
 <ul>
 <li>slice export counts</li>

@@ -1110,6 +1110,20 @@ Current maintained example:
 
 These are the maintained built-in protocol runners.
 
+At the implementation boundary, keep two files distinct:
+
+- `olfactorybulb.audit.reference_validation_protocol_core`
+  - typed `ValidationProtocolSpec`
+  - protocol registry lookup
+  - protocol execution cache policy
+  - cache-key normalization
+- `olfactorybulb.audit.reference_validation_protocols`
+  - concrete maintained protocol implementations and registrations
+
+If a maintained protocol enables caching, it should declare the semantic
+`cache_arg_names` explicitly on its `ValidationProtocolSpec`. Cache hits and
+misses stay visible in emitted protocol evidence under `protocol_cache`.
+
 ### `burton_urban_mctc_current_clamp`
 
 Definition:

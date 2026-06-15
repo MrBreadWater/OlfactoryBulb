@@ -17,6 +17,7 @@ from olfactorybulb.audit.reference_validation_document import (
 )
 from olfactorybulb.audit.reference_validation_protocols import (
     ValidationProtocolSpec,
+    execute_validation_protocol,
     get_validation_protocol_spec,
 )
 from olfactorybulb.audit.reference_validation_rules import (
@@ -116,6 +117,13 @@ class ReferenceValidationPlan:
         if self.metric_group_field:
             return self.metric_group_field
         return str(getattr(protocol_result, "group_field", "cell_type"))
+
+    def run_protocol(self, args: argparse.Namespace) -> Any:
+        return execute_validation_protocol(
+            self.protocol_spec,
+            args=args,
+            protocol_config=dict(self.protocol_defaults),
+        )
 
     def build_rule_items(
         self,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib
 import json
 import os
 from pathlib import Path
@@ -16,12 +17,17 @@ from olfactorybulb.audit.reference_validation_config import (
     load_validation_extensions,
 )
 from olfactorybulb.audit.reference_validation_document import load_reference_validation_document
+from olfactorybulb.audit.reference_validation_engine import run_reference_validation
 from olfactorybulb.audit.reference_validation_plan import load_reference_validation_plan
+from olfactorybulb.audit.reference_validation_protocols import (
+    clear_protocol_execution_cache,
+    get_validation_protocol_spec,
+    protocol_execution_cache_size,
+)
 from olfactorybulb.audit.reference_validation_specs import (
     NotePresenceRuleSpec,
     ProtocolExecutedRuleSpec,
 )
-from olfactorybulb.audit.reference_validation_protocols import get_validation_protocol_spec
 from olfactorybulb.audit.reference_validation_rules import GroupedRuleDispatch, SingleRuleDispatch
 
 
@@ -147,12 +153,16 @@ with tempfile.TemporaryDirectory() as tmpdir:
             )
             from olfactorybulb.audit.reference_validation_rules import register_validation_rule
 
+            RUN_COUNT = 0
+
 
             def _add_cli_args(parser: argparse.ArgumentParser) -> None:
                 parser.add_argument("--custom-score", type=float, default=3.5)
 
 
             def _run_protocol(args: argparse.Namespace, protocol_config: dict[str, object]) -> ProtocolRunResult:
+                global RUN_COUNT
+                RUN_COUNT += 1
                 return ProtocolRunResult(
                     metrics=[
                         {
@@ -200,6 +210,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
                         description="Extension-registered protocol used by the validation-engine smoke test.",
                         add_cli_args=_add_cli_args,
                         run=_run_protocol,
+                        cache_enabled=True,
+                        cache_arg_names=("custom_score",),
                     )
                 )
             """
@@ -260,8 +272,11 @@ with tempfile.TemporaryDirectory() as tmpdir:
     try:
         temp_document = load_reference_validation_document(path=config_path)
         load_validation_extensions(temp_document.extension_specs)
+        temp_module = importlib.import_module("temp_validation_extension")
         temp_spec = get_validation_protocol_spec("temp_custom_protocol")
         assert temp_spec.title == "Temporary custom protocol"
+        assert temp_spec.cache_enabled is True
+        assert temp_spec.cache_arg_names == ("custom_score",)
         temp_plan = load_reference_validation_plan(path=config_path)
         assert temp_document.title == "Temporary validation"
         assert temp_document.protocol_runner_id == "temp_custom_protocol"
@@ -278,6 +293,44 @@ with tempfile.TemporaryDirectory() as tmpdir:
         assert skip_item.check_id == "temp_validation_skipped"
         assert skip_item.evidence["custom_score"] == 4.5
         assert skip_item.evidence["reference_sigma_multiplier"] == 2.0
+        clear_protocol_execution_cache()
+        assert protocol_execution_cache_size() == 0
+        assert temp_module.RUN_COUNT == 0
+
+        same_process_report = run_reference_validation(
+            args=argparse.Namespace(skip_neuron=False, custom_score=4.5, reference_sigma_multiplier=2.0),
+            validation=temp_plan,
+            audit_id=temp_plan.validation_id,
+            title=temp_plan.title,
+        )
+        same_process_items = {item.check_id: item for item in same_process_report.items}
+        assert temp_module.RUN_COUNT == 1
+        assert protocol_execution_cache_size() == 1
+        assert same_process_items["temp_protocol_executed"].evidence["protocol_cache"]["status"] == "miss"
+        assert same_process_items["temp_protocol_executed"].evidence["protocol_cache"]["arg_values"]["custom_score"] == 4.5
+
+        cached_report = run_reference_validation(
+            args=argparse.Namespace(skip_neuron=False, custom_score=4.5, reference_sigma_multiplier=2.0),
+            validation=temp_plan,
+            audit_id=temp_plan.validation_id,
+            title=temp_plan.title,
+        )
+        cached_items = {item.check_id: item for item in cached_report.items}
+        assert temp_module.RUN_COUNT == 1
+        assert protocol_execution_cache_size() == 1
+        assert cached_items["temp_protocol_executed"].evidence["protocol_cache"]["status"] == "hit"
+
+        changed_arg_report = run_reference_validation(
+            args=argparse.Namespace(skip_neuron=False, custom_score=6.5, reference_sigma_multiplier=2.0),
+            validation=temp_plan,
+            audit_id=temp_plan.validation_id,
+            title=temp_plan.title,
+        )
+        changed_arg_items = {item.check_id: item for item in changed_arg_report.items}
+        assert temp_module.RUN_COUNT == 2
+        assert protocol_execution_cache_size() == 2
+        assert changed_arg_items["temp_protocol_executed"].evidence["protocol_cache"]["status"] == "miss"
+        assert changed_arg_items["custom_score_high_enough"].evidence["observed"] == 6.5
 
         env = os.environ.copy()
         env["PYTHONPATH"] = tmpdir if not env.get("PYTHONPATH") else f"{tmpdir}:{env['PYTHONPATH']}"

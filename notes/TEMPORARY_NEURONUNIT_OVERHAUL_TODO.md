@@ -236,3 +236,14 @@ Remove this file when the listed items are either:
         list
       - `ReferenceValidationPlan` now carries the compiled dispatch sequence
         instead of both dispatches and a second raw-rule tuple
+- [x] Extract the typed protocol contract into its own core layer and formalize
+      process-local protocol-result caching.
+      - added `olfactorybulb.audit.reference_validation_protocol_core`
+      - moved typed `ValidationProtocolSpec`, registry lookup, execution-cache
+        policy, and cache-key normalization there
+      - `ReferenceValidationPlan.run_protocol(...)` now executes through that
+        shared contract instead of calling the raw protocol function directly
+      - cacheable maintained protocols declare explicit semantic
+        `cache_arg_names`
+      - the engine smoke test now asserts same-process cache miss/hit behavior
+        and argument-sensitive invalidation

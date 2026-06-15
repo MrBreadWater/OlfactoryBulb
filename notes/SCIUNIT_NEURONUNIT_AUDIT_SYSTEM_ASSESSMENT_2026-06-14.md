@@ -1505,6 +1505,16 @@ Concrete steps:
 3. preserve or improve the old dependent-prediction cache behavior
 4. measure runtime before and after for each migrated family
 
+Current overhaul-branch status:
+
+- implemented a formal process-local protocol-result cache in
+  `olfactorybulb.audit.reference_validation_protocol_core`
+- moved protocol spec/registry/cache ownership into that typed contract layer
+- cacheable maintained protocols now declare explicit semantic
+  `cache_arg_names`
+- cache hits/misses and resolved cache inputs are emitted in `protocol_cache`
+  evidence instead of staying hidden
+
 Required gate before using migrated suites in optimization or dashboard reruns:
 
 - repeated tests do not rerun the same expensive simulation unnecessarily
@@ -1800,9 +1810,17 @@ The clean internal shape would be:
 
 Already present in current protocol runners.
 
-Possible improvement:
+Implemented on the overhaul branch:
 
-- formal protocol-result cache
+- formal process-local protocol-result cache
+- explicit per-protocol cache-identity contract through
+  `ValidationProtocolSpec.cache_arg_names`
+- cache visibility surfaced in protocol evidence through `protocol_cache`
+
+Current limitation:
+
+- cache scope is still one Python process; broader shared-cache policy remains
+  future work if optimization-scale measurements show it is needed
 
 ### Layer B: scoring
 

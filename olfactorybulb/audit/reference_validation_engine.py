@@ -79,7 +79,7 @@ def run_reference_validation(
             items=items,
         )
 
-    protocol_result = validation.protocol_spec.run(args, dict(validation.protocol_defaults))
+    protocol_result = validation.run_protocol(args)
     items.extend(
         build_reference_validation_items(
             metrics=protocol_result.metrics,

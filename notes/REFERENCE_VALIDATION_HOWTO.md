@@ -79,6 +79,8 @@ The same framework now also drives:
   [olfactorybulb/audit/reference_validation_config.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_config.py)
 - Typed raw validation document:
   [olfactorybulb/audit/reference_validation_document.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_document.py)
+- Typed protocol contract / execution-cache core:
+  [olfactorybulb/audit/reference_validation_protocol_core.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_protocol_core.py)
 - Typed runtime validation plan:
   [olfactorybulb/audit/reference_validation_plan.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_plan.py)
 - Validation engine:
@@ -100,6 +102,8 @@ At runtime, keep those layers distinct:
   list available validation ids, and register declared extension modules
 - `reference_validation_document.py` compiles that raw config into one typed
   `ReferenceValidationDocument`
+- `reference_validation_protocol_core.py` owns the typed protocol spec,
+  registry lookup, protocol execution cache, and cache-key normalization
 - `reference_validation_plan.py` compiles that typed document into one typed
   `ReferenceValidationPlan`
 - the plan also precompiles the grouped/single rule-dispatch sequence, so the
@@ -824,6 +828,8 @@ def register() -> None:
             description="Example protocol registration for a literature-backed validation.",
             add_cli_args=_add_cli_args,
             run=_run_protocol,
+            cache_enabled=True,
+            cache_arg_names=("cell_count", "dt_ms"),
         )
     )
 ```
@@ -833,6 +839,23 @@ Key point:
 - the protocol runner can emit any measurement keys you want
 - those keys become available to rule checks
 - protocol runners are not limited to current clamp
+
+If the same protocol execution can satisfy multiple checks, enable the shared
+process-local protocol cache on the `ValidationProtocolSpec` and declare the
+semantic CLI arguments that define cache equivalence:
+
+- `cache_enabled = True`
+- `cache_arg_names = ("cell_count", "dt_ms")`
+
+That cache contract lives in
+[reference_validation_protocol_core.py](/home/michael/OlfactoryBulb/olfactorybulb/audit/reference_validation_protocol_core.py),
+not in the CLI wrapper. Keep the cache key surface narrow and deliberate. Do
+not treat "every parsed CLI arg" as part of the cache identity unless that is
+actually the scientific/runtime contract.
+
+Cache behavior stays inspectable in emitted protocol evidence under
+`protocol_cache`, including the resolved arg/config values and whether the run
+was a cache hit or miss.
 
 They can just as easily emit:
 

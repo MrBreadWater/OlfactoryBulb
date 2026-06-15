@@ -9,53 +9,26 @@ from itertools import repeat
 import multiprocessing as mp
 import os
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 
 from fi_curve_utils import find_spike_times_milliseconds
 from olfactorybulb.audit.protocol_evidence import (
-    ProtocolEvidenceSeriesSpec,
     intrinsic_fi_curve_series_spec,
 )
+from olfactorybulb.audit.reference_validation_protocol_core import (
+    PROTOCOL_SPECS,
+    ProtocolRunResult,
+    ValidationProtocolSpec,
+    clear_protocol_execution_cache,
+    execute_validation_protocol,
+    get_validation_protocol_spec,
+    iter_validation_protocol_specs,
+    protocol_execution_cache_size,
+    register_validation_protocol,
+)
 from prev_ob_models.cell_registry import get_cell_model_spec, load_cell_class
-
-
-@dataclass(frozen=True)
-class ProtocolRunResult:
-    metrics: list[dict[str, Any]]
-    protocol_evidence: dict[str, Any]
-    group_field: str = "cell_type"
-    evidence_series_specs: tuple[ProtocolEvidenceSeriesSpec, ...] = ()
-
-
-@dataclass(frozen=True)
-class ValidationProtocolSpec:
-    protocol_id: str
-    title: str
-    description: str
-    add_cli_args: Callable[[argparse.ArgumentParser], None] | None
-    run: Callable[[argparse.Namespace, dict[str, Any]], ProtocolRunResult]
-
-
-PROTOCOL_SPECS: dict[str, ValidationProtocolSpec] = {}
-
-
-def register_validation_protocol(spec: ValidationProtocolSpec) -> ValidationProtocolSpec:
-    PROTOCOL_SPECS[spec.protocol_id] = spec
-    return spec
-
-
-def get_validation_protocol_spec(protocol_id: str) -> ValidationProtocolSpec:
-    try:
-        return PROTOCOL_SPECS[protocol_id]
-    except KeyError as exc:
-        known = ", ".join(sorted(PROTOCOL_SPECS))
-        raise KeyError(f"Unknown reference validation protocol {protocol_id!r}. Known protocols: {known}") from exc
-
-
-def iter_validation_protocol_specs() -> list[ValidationProtocolSpec]:
-    return [PROTOCOL_SPECS[key] for key in sorted(PROTOCOL_SPECS)]
 
 
 def _configure_parent_cache_dirs() -> None:
@@ -1096,6 +1069,8 @@ register_validation_protocol(
         description="Run the maintained MC/TC isolated cells through the Burton and Urban 2014 current-clamp protocol.",
         add_cli_args=_burton_protocol_cli_args,
         run=_run_registered_burton_protocol,
+        cache_enabled=True,
+        cache_arg_names=("cell_types", "cell_count", "use_coreneuron", "use_gpu", "dt_ms", "bias_max_iterations"),
     )
 )
 
@@ -1364,6 +1339,15 @@ register_validation_protocol(
         description="Run maintained granule-cell models through the configured intrinsic current-clamp protocol and compare them against reference GC summaries.",
         add_cli_args=_gc_protocol_cli_args,
         run=_run_registered_gc_protocol,
+        cache_enabled=True,
+        cache_arg_names=(
+            "cell_models",
+            "reference_gc_subtypes",
+            "use_coreneuron",
+            "use_gpu",
+            "dt_ms",
+            "bias_max_iterations",
+        ),
     )
 )
 
@@ -1375,6 +1359,8 @@ register_validation_protocol(
         description="Run the maintained synthetic EPL fast-spiking interneuron surrogate through the Burton, Malyshko, and Urban 2024 protocol family.",
         add_cli_args=_epl_fsi_protocol_cli_args,
         run=_run_registered_epl_fsi_protocol,
+        cache_enabled=True,
+        cache_arg_names=("cell_models", "use_coreneuron", "use_gpu", "dt_ms", "bias_max_iterations"),
     )
 )
 
@@ -1386,6 +1372,8 @@ register_validation_protocol(
         description="Collect slice-readiness, source-code default, morphology, and fast-spiking scaffold metrics for the provisional EPLI path.",
         add_cli_args=_epli_correctness_cli_args,
         run=_run_registered_epli_correctness_protocol,
+        cache_enabled=True,
+        cache_arg_names=("candidate_slice", "skip_neuron"),
     )
 )
 
@@ -1396,9 +1384,12 @@ __all__ = [
     "PROTOCOL_SPECS",
     "ValidationProtocolSpec",
     "_resolved_jobs",
+    "clear_protocol_execution_cache",
+    "execute_validation_protocol",
     "find_spike_times_milliseconds",
     "get_validation_protocol_spec",
     "iter_validation_protocol_specs",
+    "protocol_execution_cache_size",
     "register_validation_protocol",
     "run_burton_urban_protocol",
 ]

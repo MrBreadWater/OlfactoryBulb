@@ -853,6 +853,10 @@ contract for future sessions.
   - `olfactorybulb.audit.reference_validation_config` should stay the boring
     raw-I/O layer: load raw TOML, list validation ids, and register declared
     extension modules.
+  - `olfactorybulb.audit.reference_validation_protocol_core` is the typed
+    protocol contract layer: keep protocol specs, registry lookup, execution
+    cache policy, and cache-key normalization there instead of scattering
+    those concerns across the concrete protocol implementations or CLI glue.
   - The first structured layer above that is the typed
     `ReferenceValidationDocument` in
     `olfactorybulb.audit.reference_validation_document`.
@@ -875,6 +879,14 @@ contract for future sessions.
   - Do not let `reference_validation_engine.py` or the maintained wrapper
     modules drift back toward passing loose config dicts and parallel accessor
     calls around at runtime.
+  - Keep protocol-result caching explicit and inspectable:
+    - concrete maintained protocol implementations belong in
+      `olfactorybulb.audit.reference_validation_protocols`
+    - cacheable protocols should declare semantic `cache_arg_names`
+      explicitly on `ValidationProtocolSpec` rather than inheriting an
+      implicit "all CLI args" cache surface
+    - cache hits/misses should stay visible in emitted protocol evidence under
+      `protocol_cache`; do not hide them behind silent control flow
 
 - Supported band modes currently include:
   - `symmetric_sd`
