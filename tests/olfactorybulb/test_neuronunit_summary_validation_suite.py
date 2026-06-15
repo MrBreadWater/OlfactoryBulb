@@ -17,6 +17,7 @@ from olfactorybulb.neuronunit.summary_validation_suite import (
     audit_items_from_summary_rule_suite,
     compile_summary_rule_suite,
 )
+from olfactorybulb.neuronunit.scalar_observations import ScalarStatusMapPolicy
 
 
 def _rule_context(
@@ -70,9 +71,11 @@ cases = [
         note="",
         metric_key="epli_target_pattern_specificity_code",
         group="ungrouped",
-        pass_values=(2.0,),
-        warn_values=(1.0,),
-        fail_values=(0.0,),
+        status_map_policy=ScalarStatusMapPolicy(
+            pass_values=(2.0,),
+            warn_values=(1.0,),
+            fail_values=(0.0,),
+        ),
     ),
     SummaryRuleCase(
         rule_kind="summary_metric_range",
@@ -122,6 +125,7 @@ assert adapted_items[0].evidence["suite_cases"][2]["score_text"] == "observed 9.
 assert adapted_items[0].evidence["suite_cases"][2]["case_score"]["score_units"] == "um"
 assert adapted_items[1].evidence["baseline_MCs_count"] == 12.0
 assert adapted_items[2].evidence["warn_values"] == [1.0]
+assert adapted_items[2].evidence["default_status"] == "FAIL"
 assert adapted_items[3].evidence["minimum"] == 8.9
 assert adapted_items[3].evidence["maximum"] == 10.3
 assert adapted_items[3].evidence["metric_unit"] == "um"
@@ -189,6 +193,7 @@ assert items[0].detail_level == "summary"
 assert items[0].evidence["suite_aggregate_score"]["score_text"] == "worst WARN, mean norm 0.75"
 assert items[1].criterion_latex == r"\bar{x}_{\mathrm{ungrouped}} \geq 1"
 assert items[2].evidence["warn_values"] == [1.0]
+assert items[2].evidence["default_status"] == "FAIL"
 
 non_skip_context = _rule_context(
     summary=summary,

@@ -34,6 +34,7 @@ from olfactorybulb.neuronunit.metric_quantities import (
     resolve_metric_quantity,
 )
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceBandCase
+from olfactorybulb.neuronunit.scalar_observations import ScalarStatusMapPolicy
 from olfactorybulb.neuronunit.series_validation_suite import (
     AxisTransform,
     SERIES_ALIGNMENT_POLICIES,
@@ -337,12 +338,9 @@ class SummaryRuleSpec:
     evidence_metric_keys: list[str]
     pass_status: str
     fail_status: str
-    default_status: str
+    status_map_policy: ScalarStatusMapPolicy | None = None
     minimum: float | None = None
     maximum: float | None = None
-    pass_values: tuple[float, ...] = ()
-    warn_values: tuple[float, ...] = ()
-    fail_values: tuple[float, ...] = ()
 
     @classmethod
     def from_rule(cls, rule: dict[str, Any], context: Any) -> "SummaryRuleSpec":
@@ -369,7 +367,11 @@ class SummaryRuleSpec:
             evidence_metric_keys=[str(metric).strip() for metric in rule.get("evidence_metric_keys", []) if str(metric).strip()],
             pass_status=str(rule.get("pass_status", "PASS")),
             fail_status=str(rule.get("fail_status", "FAIL")),
-            default_status=str(rule.get("default_status", "FAIL")),
+            status_map_policy=(
+                ScalarStatusMapPolicy.from_mapping(rule)
+                if str(rule["kind"]) == "summary_metric_status_map"
+                else None
+            ),
             minimum=(
                 float(rule["minimum"])
                 if "minimum" in rule and rule.get("minimum") is not None
@@ -380,9 +382,6 @@ class SummaryRuleSpec:
                 if "maximum" in rule and rule.get("maximum") is not None
                 else None
             ),
-            pass_values=tuple(float(value) for value in rule.get("pass_values", [])),
-            warn_values=tuple(float(value) for value in rule.get("warn_values", [])),
-            fail_values=tuple(float(value) for value in rule.get("fail_values", [])),
         )
 
     def to_case(self) -> SummaryRuleCase:
@@ -407,7 +406,6 @@ class SummaryRuleSpec:
             "evidence_metric_keys": self.evidence_metric_keys,
             "pass_status": self.pass_status,
             "fail_status": self.fail_status,
-            "default_status": self.default_status,
         }
         if self.rule_kind == "summary_metric_min":
             criterion_math = criterion_math_for_lower_bound(
@@ -449,9 +447,7 @@ class SummaryRuleSpec:
         if self.rule_kind == "summary_metric_status_map":
             return SummaryRuleCase(
                 **base_kwargs,
-                pass_values=self.pass_values,
-                warn_values=self.warn_values,
-                fail_values=self.fail_values,
+                status_map_policy=self.status_map_policy,
             )
         raise ValueError(f"Unsupported summary rule kind {self.rule_kind!r}")
 

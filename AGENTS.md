@@ -726,7 +726,12 @@ contract for future sessions.
     path on the shared typed scalar layer in
     `olfactorybulb.neuronunit.scalar_observations` instead of rebuilding raw
     dict bundles for metric maps, group pairs, or grouped scalar sets in each
-    rule family. Keep protocol metric rows and grouped numeric summaries on the
+    rule family. When a scalar rule needs status-coded discrete values such as
+    `summary_metric_status_map`, route that through one typed
+    `ScalarStatusMapPolicy` instead of threading parallel `pass_values` /
+    `warn_values` / `fail_values` lists across the declarative parser, suite
+    case, score builder, and adapted evidence. Keep protocol metric rows and
+    grouped numeric summaries on the
     shared typed metric-table layer in
     `olfactorybulb.neuronunit.metric_tables` rather than passing fresh
     `list[dict]` / `dict[group][metric]` bundles through the protocol result,

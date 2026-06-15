@@ -308,6 +308,15 @@ Remove this file when the listed items are either:
         grouped-value predictions
       - the overhaul import gate and dedicated regression coverage now include
         that shared scalar layer
+- [x] Move `summary_metric_status_map` onto one typed scalar status-map policy
+      instead of threading parallel pass/warn/fail value lists through the
+      parser, case, scorer, and adapted evidence.
+      - added `ScalarStatusMapPolicy` to
+        `olfactorybulb.neuronunit.scalar_observations`
+      - `SummaryRuleSpec` now compiles that one typed policy for
+        `summary_metric_status_map`
+      - the summary suite and adapted maintained evidence now consume the
+        typed policy rather than raw tuple/list plumbing
 - [x] Lift case-level statistical diagnostics into a typed suite-overview
       summary so migrated series suites no longer flatten the p-value layer to
       norm scores only.

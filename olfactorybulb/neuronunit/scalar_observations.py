@@ -13,6 +13,16 @@ from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resol
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value
 
 
+def _normalized_scalar_value_tuple(values: Any) -> tuple[float, ...]:
+    normalized: list[float] = []
+    for value in values or ():
+        number = numeric_value(value) if isinstance(value, pq.Quantity) else float(value)
+        if not math.isfinite(number):
+            raise ValueError("Scalar status-map values must be finite numeric values")
+        normalized.append(float(number))
+    return tuple(sorted(dict.fromkeys(normalized)))
+
+
 def is_finite_scalar(value: Any) -> bool:
     if isinstance(value, bool) or value is None:
         return False
@@ -21,6 +31,78 @@ def is_finite_scalar(value: Any) -> bool:
     except (TypeError, ValueError):
         return False
     return math.isfinite(number)
+
+
+@dataclass(frozen=True)
+class ScalarStatusMapPolicy:
+    pass_values: tuple[float, ...] = ()
+    warn_values: tuple[float, ...] = ()
+    fail_values: tuple[float, ...] = ()
+    pass_status: str = "PASS"
+    warn_status: str = "WARN"
+    fail_status: str = "FAIL"
+    default_status: str = "FAIL"
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "pass_values", _normalized_scalar_value_tuple(self.pass_values))
+        object.__setattr__(self, "warn_values", _normalized_scalar_value_tuple(self.warn_values))
+        object.__setattr__(self, "fail_values", _normalized_scalar_value_tuple(self.fail_values))
+        object.__setattr__(self, "pass_status", str(self.pass_status or "PASS").strip().upper() or "PASS")
+        object.__setattr__(self, "warn_status", str(self.warn_status or "WARN").strip().upper() or "WARN")
+        object.__setattr__(self, "fail_status", str(self.fail_status or "FAIL").strip().upper() or "FAIL")
+        object.__setattr__(self, "default_status", str(self.default_status or "FAIL").strip().upper() or "FAIL")
+        memberships: dict[float, str] = {}
+        for label, values in (
+            ("pass", self.pass_values),
+            ("warn", self.warn_values),
+            ("fail", self.fail_values),
+        ):
+            for value in values:
+                existing = memberships.get(value)
+                if existing is not None and existing != label:
+                    raise ValueError(
+                        f"Scalar status-map value {value:g} is assigned to both {existing} and {label}"
+                    )
+                memberships[value] = label
+
+    @classmethod
+    def from_mapping(cls, mapping: dict[str, Any]) -> "ScalarStatusMapPolicy":
+        return cls(
+            pass_values=tuple(mapping.get("pass_values", []) or ()),
+            warn_values=tuple(mapping.get("warn_values", []) or ()),
+            fail_values=tuple(mapping.get("fail_values", []) or ()),
+            pass_status=str(mapping.get("pass_status", "PASS")),
+            warn_status=str(mapping.get("warn_status", "WARN")),
+            fail_status=str(mapping.get("fail_status", "FAIL")),
+            default_status=str(mapping.get("default_status", "FAIL")),
+        )
+
+    def status_for(self, value: Any) -> str:
+        if not is_finite_scalar(value):
+            return self.fail_status
+        number = numeric_value(value) if isinstance(value, pq.Quantity) else float(value)
+        if number in self.pass_values:
+            return self.pass_status
+        if number in self.warn_values:
+            return self.warn_status
+        if number in self.fail_values:
+            return self.fail_status
+        return self.default_status
+
+    def observation_payload(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "pass_values": list(self.pass_values),
+            "warn_values": list(self.warn_values),
+            "fail_values": list(self.fail_values),
+            "default_status": self.default_status,
+        }
+        if self.pass_status != "PASS":
+            payload["pass_status"] = self.pass_status
+        if self.warn_status != "WARN":
+            payload["warn_status"] = self.warn_status
+        if self.fail_status != "FAIL":
+            payload["fail_status"] = self.fail_status
+        return payload
 
 
 @dataclass(frozen=True)

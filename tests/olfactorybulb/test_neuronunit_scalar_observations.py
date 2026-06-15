@@ -10,6 +10,7 @@ from olfactorybulb.neuronunit.scalar_observations import (
     ScalarGroupValueSet,
     ScalarMetricValue,
     ScalarMetricValueMap,
+    ScalarStatusMapPolicy,
     is_finite_scalar,
 )
 
@@ -69,6 +70,24 @@ group_values = ScalarGroupValueSet(
 assert group_values.numeric_group_values() == {"MC": 100.0, "TC": 0.0}
 assert group_values.failing_positive_groups() == ["TC"]
 assert group_values.metadata()["metric_observed_symbol"] == r"\bar{I}_{\mathrm{rh}}"
+
+status_map_policy = ScalarStatusMapPolicy(
+    pass_values=(2.0, 2.0),
+    warn_values=(1.0,),
+    fail_values=(0.0,),
+)
+assert status_map_policy.pass_values == (2.0,)
+assert status_map_policy.status_for(2.0) == "PASS"
+assert status_map_policy.status_for(1.0 * pq.dimensionless) == "WARN"
+assert status_map_policy.status_for(0.0) == "FAIL"
+assert status_map_policy.status_for(7.0) == "FAIL"
+assert status_map_policy.observation_payload()["default_status"] == "FAIL"
+try:
+    ScalarStatusMapPolicy(pass_values=(1.0,), warn_values=(1.0,))
+except ValueError as exc:
+    assert "assigned to both" in str(exc)
+else:
+    raise AssertionError("Expected overlapping scalar status-map values to fail")
 
 assert is_finite_scalar(5.0)
 assert is_finite_scalar(2.0 * pq.ms)

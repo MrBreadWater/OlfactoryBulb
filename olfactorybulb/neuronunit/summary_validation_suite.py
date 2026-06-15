@@ -17,7 +17,11 @@ from olfactorybulb.neuronunit.metric_quantities import (
 )
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
-from olfactorybulb.neuronunit.scalar_observations import ScalarMetricValue, is_finite_scalar
+from olfactorybulb.neuronunit.scalar_observations import (
+    ScalarMetricValue,
+    ScalarStatusMapPolicy,
+    is_finite_scalar,
+)
 from olfactorybulb.neuronunit.suite_presentation import (
     audit_item_adapter_spec_from_case,
     suite_case_result_from_spec,
@@ -59,16 +63,17 @@ class SummaryRuleCase:
     evidence_metric_keys: list[str] = field(default_factory=list)
     minimum: float | None = None
     maximum: float | None = None
-    pass_values: tuple[float, ...] = ()
-    warn_values: tuple[float, ...] = ()
-    fail_values: tuple[float, ...] = ()
+    pass_status: str = "PASS"
+    fail_status: str = "FAIL"
+    status_map_policy: ScalarStatusMapPolicy | None = None
 
     def __post_init__(self) -> None:
         if self.metric_quantity is None:
             object.__setattr__(self, "metric_quantity", resolve_metric_quantity(self.metric_key))
-    pass_status: str = "PASS"
-    fail_status: str = "FAIL"
-    default_status: str = "FAIL"
+        object.__setattr__(self, "pass_status", str(self.pass_status or "PASS").strip().upper() or "PASS")
+        object.__setattr__(self, "fail_status", str(self.fail_status or "FAIL").strip().upper() or "FAIL")
+        if self.rule_kind == "summary_metric_status_map" and self.status_map_policy is None:
+            raise ValueError("summary_metric_status_map cases require a status_map_policy")
 
 
 class SummaryRuleScore(sciunit.Score):
@@ -116,12 +121,8 @@ class SummaryRuleTest(sciunit.Test):
             observation["minimum"] = case.minimum
         if case.maximum is not None:
             observation["maximum"] = case.maximum
-        if case.pass_values:
-            observation["pass_values"] = case.pass_values
-        if case.warn_values:
-            observation["warn_values"] = case.warn_values
-        if case.fail_values:
-            observation["fail_values"] = case.fail_values
+        if case.status_map_policy is not None:
+            observation.update(case.status_map_policy.observation_payload())
         super().__init__(observation=observation, name=case.title)
 
     def validate_observation(self, observation: dict[str, Any]) -> None:
@@ -169,16 +170,7 @@ class SummaryRuleTest(sciunit.Test):
             status = self.case.pass_status if passed else self.case.fail_status
             return SummaryRuleScore(distance, status=status, observed=prediction, case=self.case)
         if self.case.rule_kind == "summary_metric_status_map":
-            if not is_finite_scalar(observed_numeric):
-                status = "FAIL"
-            elif observed_numeric in self.case.pass_values:
-                status = "PASS"
-            elif observed_numeric in self.case.warn_values:
-                status = "WARN"
-            elif observed_numeric in self.case.fail_values:
-                status = "FAIL"
-            else:
-                status = self.case.default_status
+            status = self.case.status_map_policy.status_for(observed_numeric) if self.case.status_map_policy else "FAIL"
             return SummaryRuleScore(observed_numeric, status=status, observed=prediction, case=self.case)
         raise ValueError(f"Unsupported summary rule kind {self.case.rule_kind!r}")
 
@@ -230,9 +222,7 @@ def _summary_score_payload(case: SummaryRuleCase, score: SummaryRuleScore) -> Su
         prediction["minimum"] = case.minimum
         prediction["maximum"] = case.maximum
     elif case.rule_kind == "summary_metric_status_map":
-        prediction["pass_values"] = list(case.pass_values)
-        prediction["warn_values"] = list(case.warn_values)
-        prediction["fail_values"] = list(case.fail_values)
+        prediction.update(case.status_map_policy.observation_payload() if case.status_map_policy else {})
     return SuiteCaseScorePayload(
         score_kind=case.rule_kind,
         score_value=numeric_value(score.score),
@@ -280,9 +270,7 @@ def audit_items_from_summary_rule_suite(
             base["minimum"] = case.minimum
             base["maximum"] = case.maximum
         elif case.rule_kind == "summary_metric_status_map":
-            base["pass_values"] = sorted(case.pass_values)
-            base["warn_values"] = sorted(case.warn_values)
-            base["fail_values"] = sorted(case.fail_values)
+            base.update(case.status_map_policy.observation_payload() if case.status_map_policy else {})
         for metric_key in case.evidence_metric_keys:
             base[metric_key] = compiled.model.summary.get(case.group, {}).get(metric_key, float("nan"))
         spec = audit_item_adapter_spec_from_case(case)

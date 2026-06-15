@@ -2143,6 +2143,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     left/right group pairs, or grouped scalar value sets through their score
     builders, and that shared scalar metadata now carries the resolved
     observed symbol as well as the unit/name contract
+  - the remaining discrete scalar status-code path in
+    `summary_metric_status_map` now also compiles through one typed
+    `ScalarStatusMapPolicy`, so the declarative parser, summary-suite case,
+    scorer, and maintained evidence no longer have to keep three parallel
+    pass/warn/fail value lists in sync by hand
   - protocol metric rows and grouped numeric summaries now also share one
     typed contract in `olfactorybulb.neuronunit.metric_tables`, so the
     protocol result, validation context, runtime plan, and migrated
