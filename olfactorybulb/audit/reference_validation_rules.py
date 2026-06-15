@@ -1121,10 +1121,24 @@ def _series_comparison_case(
         x_match_tolerance = float(rule["x_match_tolerance"])
     else:
         x_match_tolerance = None
+    pvalue_aggregation = str(rule.get("pvalue_aggregation", "auto")).strip()
     if score_family in {"welch_only", "hybrid_residual_welch"}:
-        pvalue_aggregation = _required_rule_choice(rule, "pvalue_aggregation")
+        equivalence_margin = None
+    elif score_family in {"equivalence_only", "hybrid_residual_equivalence"}:
+        if "equivalence_margin" in rule and rule.get("equivalence_margin") is not None:
+            equivalence_margin = float(rule["equivalence_margin"])
+        else:
+            equivalence_margin = None
+            if not (
+                isinstance(rule.get("maximum_mae"), (int, float))
+                and math.isfinite(float(rule["maximum_mae"]))
+            ):
+                raise ValueError(
+                    f"reference_curve_match score family {score_family!r} requires explicit 'equivalence_margin' "
+                    "or a finite 'maximum_mae' fallback"
+                )
     else:
-        pvalue_aggregation = str(rule.get("pvalue_aggregation", "median")).strip()
+        equivalence_margin = None
     observation = SeriesDistributionObservation(
         protocol_evidence_key=str(rule.get("protocol_evidence_key", "fi_curve_rows")),
         reference_rows=reference_rows,
@@ -1159,6 +1173,8 @@ def _series_comparison_case(
                 if "minimum_median_welch_pvalue" in rule and rule.get("minimum_median_welch_pvalue") is not None
                 else None
             ),
+            equivalence_margin=equivalence_margin,
+            equivalence_alpha=float(rule.get("equivalence_alpha", 0.05)),
             x_precision_digits=int(rule.get("current_precision_digits", 6)),
             alignment_policy=alignment_policy,
             x_match_tolerance=x_match_tolerance,

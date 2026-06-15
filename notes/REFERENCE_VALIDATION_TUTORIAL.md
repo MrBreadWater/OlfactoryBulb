@@ -1597,7 +1597,7 @@ x_quantity_name = "Injected current"
 y_quantity_name = "Firing rate"
 alignment_policy = "exact_transformed_x"
 distribution_kind = "empirical_by_x"
-score_family = "residual_only"
+score_family = "hybrid_residual_equivalence"
 maximum_mae = 25.0
 maximum_rmse = 35.0
 minimum_point_count = 10
@@ -1624,14 +1624,25 @@ Important details:
   duplicate x values as a response distribution instead of collapsing them
   before comparison
 - `score_family = "residual_only"` gates on MAE/RMSE thresholds only
-- `score_family = "welch_only"` gates on the configured
+- `score_family = "equivalence_only"` gates on per-bin TOST-style equivalence
+  tests only
+- `score_family = "hybrid_residual_equivalence"` requires both the residual and
+  equivalence gates to pass
+- equivalence score families use two-sample Welch TOST when both the reference
+  and model bins have replication, and one-sample TOST when only one side has
+  replication
+- if both sides are singleton at a matched x bin, the current maintained path
+  does not pretend a statistical equivalence claim is supported there
+- `equivalence_margin` is optional for equivalence score families; when it is
+  omitted, the maintained path falls back to `maximum_mae`
+- `pvalue_aggregation` is optional; `auto` resolves to `max` for equivalence
+  score families so every matched bin must satisfy the equivalence gate
+- `score_family = "welch_only"` and `score_family = "hybrid_residual_welch"`
+  remain available as legacy difference-test diagnostics only
+- only legacy Welch-based score families should declare
   `minimum_median_welch_pvalue`
-- `score_family = "hybrid_residual_welch"` requires both the residual and
-  Welch gates to pass
-- only Welch-based score families should declare
-  `minimum_median_welch_pvalue`
-- Welch-based score families should also declare
-  `pvalue_aggregation = "median"` explicitly
+- omitting `pvalue_aggregation` in a legacy Welch family resolves `auto` to
+  `median`; the emitted evidence records the resolved choice
 - `alignment_policy = "nearest_within_tolerance"` should also declare
   `x_match_tolerance` explicitly in the comparison x-axis units
 - if the model x-axis is not expressed in the same physical quantity as the

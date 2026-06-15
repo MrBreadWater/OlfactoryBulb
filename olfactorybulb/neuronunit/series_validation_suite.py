@@ -9,6 +9,7 @@ from typing import Any
 
 import numpy as np
 import quantities as pq
+from scipy.stats import t as student_t
 from scipy.stats import ttest_ind
 import sciunit
 
@@ -58,6 +59,175 @@ def _welch_pvalue(reference_values: list[float], model_values: list[float]) -> f
     if not np.isfinite(pvalue):
         return float("nan")
     return float(pvalue)
+
+
+def _aggregate_pvalues(pvalues: list[float], *, method: str) -> float:
+    if not pvalues:
+        return float("nan")
+    if method == "max":
+        return float(np.max(np.asarray(pvalues, dtype=float)))
+    if method == "median":
+        return float(np.median(np.asarray(pvalues, dtype=float)))
+    raise ValueError(f"Unsupported p-value aggregation method {method!r}")
+
+
+SERIES_SCORE_FAMILIES = {
+    "residual_only",
+    "equivalence_only",
+    "hybrid_residual_equivalence",
+    "welch_only",
+    "hybrid_residual_welch",
+}
+
+EQUIVALENCE_SERIES_SCORE_FAMILIES = {
+    "equivalence_only",
+    "hybrid_residual_equivalence",
+}
+
+LEGACY_WELCH_SERIES_SCORE_FAMILIES = {
+    "welch_only",
+    "hybrid_residual_welch",
+}
+
+
+def _resolved_pvalue_aggregation(policy: "SeriesComparisonPolicy", *, equivalence_family: bool) -> tuple[str, str]:
+    declared = str(policy.pvalue_aggregation or "auto").strip().lower()
+    if declared in {"", "auto"}:
+        return ("max" if equivalence_family else "median"), "auto_default"
+    if declared not in {"max", "median"}:
+        raise ValueError(
+            f"Unsupported series p-value aggregation {policy.pvalue_aggregation!r}; "
+            "the current bridge only supports max or median aggregation"
+        )
+    return declared, "explicit"
+
+
+def _resolved_equivalence_margin(
+    policy: "SeriesComparisonPolicy",
+    *,
+    equivalence_family: bool,
+) -> tuple[float | None, str | None]:
+    if not equivalence_family:
+        return None, None
+    if _is_finite_number(policy.equivalence_margin):
+        return float(policy.equivalence_margin), "explicit"
+    if _is_finite_number(policy.maximum_mae):
+        return float(policy.maximum_mae), "maximum_mae_default"
+    return None, None
+
+
+def _deterministic_equivalence_pvalue(mean_difference: float, *, equivalence_margin: float) -> float:
+    if abs(mean_difference) < float(equivalence_margin):
+        return 0.0
+    return 1.0
+
+
+def _welch_satterthwaite_df(variance_a_over_n: float, variance_b_over_n: float, *, n_a: int, n_b: int) -> float:
+    numerator = float(variance_a_over_n + variance_b_over_n) ** 2
+    denominator = 0.0
+    if n_a > 1 and variance_a_over_n > 0.0:
+        denominator += float(variance_a_over_n**2) / float(n_a - 1)
+    if n_b > 1 and variance_b_over_n > 0.0:
+        denominator += float(variance_b_over_n**2) / float(n_b - 1)
+    if denominator <= 0.0:
+        return float("nan")
+    return numerator / denominator
+
+
+def _one_sample_tost_pvalue(sample_values: list[float], point_target: float, *, equivalence_margin: float) -> float:
+    if len(sample_values) < 2:
+        return float("nan")
+    sample_array = np.asarray(sample_values, dtype=float)
+    if not np.all(np.isfinite(sample_array)):
+        return float("nan")
+    sample_mean = float(np.mean(sample_array))
+    sample_sd = _sample_sd([float(value) for value in sample_array])
+    mean_difference = sample_mean - float(point_target)
+    if sample_sd <= 0.0:
+        return _deterministic_equivalence_pvalue(mean_difference, equivalence_margin=equivalence_margin)
+    standard_error = sample_sd / math.sqrt(float(len(sample_array)))
+    if standard_error <= 0.0:
+        return _deterministic_equivalence_pvalue(mean_difference, equivalence_margin=equivalence_margin)
+    df = float(len(sample_array) - 1)
+    lower_statistic = (mean_difference + float(equivalence_margin)) / standard_error
+    upper_statistic = (mean_difference - float(equivalence_margin)) / standard_error
+    lower_pvalue = 1.0 - float(student_t.cdf(lower_statistic, df))
+    upper_pvalue = float(student_t.cdf(upper_statistic, df))
+    return max(lower_pvalue, upper_pvalue)
+
+
+def _two_sample_welch_tost_pvalue(
+    sample_a_values: list[float],
+    sample_b_values: list[float],
+    *,
+    equivalence_margin: float,
+) -> float:
+    if len(sample_a_values) < 2 or len(sample_b_values) < 2:
+        return float("nan")
+    sample_a = np.asarray(sample_a_values, dtype=float)
+    sample_b = np.asarray(sample_b_values, dtype=float)
+    if not np.all(np.isfinite(sample_a)) or not np.all(np.isfinite(sample_b)):
+        return float("nan")
+    mean_difference = float(np.mean(sample_a) - np.mean(sample_b))
+    variance_a = float(np.var(sample_a, ddof=1))
+    variance_b = float(np.var(sample_b, ddof=1))
+    variance_a_over_n = variance_a / float(len(sample_a))
+    variance_b_over_n = variance_b / float(len(sample_b))
+    standard_error = math.sqrt(max(variance_a_over_n + variance_b_over_n, 0.0))
+    if standard_error <= 0.0:
+        return _deterministic_equivalence_pvalue(mean_difference, equivalence_margin=equivalence_margin)
+    df = _welch_satterthwaite_df(
+        variance_a_over_n,
+        variance_b_over_n,
+        n_a=len(sample_a),
+        n_b=len(sample_b),
+    )
+    if not _is_finite_number(df) or float(df) <= 0.0:
+        return float("nan")
+    lower_statistic = (mean_difference + float(equivalence_margin)) / standard_error
+    upper_statistic = (mean_difference - float(equivalence_margin)) / standard_error
+    lower_pvalue = 1.0 - float(student_t.cdf(lower_statistic, float(df)))
+    upper_pvalue = float(student_t.cdf(upper_statistic, float(df)))
+    return max(lower_pvalue, upper_pvalue)
+
+
+def _equivalence_test_result(
+    reference_values: list[float],
+    model_values: list[float],
+    *,
+    equivalence_margin: float,
+) -> dict[str, Any]:
+    if len(reference_values) >= 2 and len(model_values) >= 2:
+        return {
+            "supported": True,
+            "test_kind": "welch_tost",
+            "pvalue": _two_sample_welch_tost_pvalue(
+                reference_values,
+                model_values,
+                equivalence_margin=equivalence_margin,
+            ),
+        }
+    if len(reference_values) >= 2 and len(model_values) >= 1:
+        return {
+            "supported": True,
+            "test_kind": "one_sample_reference_tost",
+            "pvalue": _one_sample_tost_pvalue(
+                reference_values,
+                float(np.mean(np.asarray(model_values, dtype=float))),
+                equivalence_margin=equivalence_margin,
+            ),
+        }
+    if len(model_values) >= 2 and len(reference_values) >= 1:
+        return {
+            "supported": True,
+            "test_kind": "one_sample_model_tost",
+            "pvalue": _one_sample_tost_pvalue(
+                model_values,
+                float(np.mean(np.asarray(reference_values, dtype=float))),
+                equivalence_margin=equivalence_margin,
+            ),
+        }
+    return {"supported": False, "test_kind": "unsupported", "pvalue": float("nan")}
 
 
 @dataclass(frozen=True)
@@ -157,12 +327,14 @@ class SeriesComparisonPolicy:
     maximum_mae: float = float("inf")
     maximum_rmse: float = float("inf")
     minimum_median_welch_pvalue: float | None = None
+    equivalence_margin: float | None = None
+    equivalence_alpha: float = 0.05
     x_precision_digits: int = 6
     alignment_policy: str = "exact_transformed_x"
     x_match_tolerance: float | None = None
     distribution_kind: str = "empirical_by_x"
     score_family: str = "residual_only"
-    pvalue_aggregation: str = "median"
+    pvalue_aggregation: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -434,6 +606,8 @@ class SeriesComparisonTest(sciunit.Test):
             "model_y_key": case.observation.model_y_key,
             "comparison_x_unit_text": case.observation.comparison_x_unit_text,
             "comparison_y_unit_text": case.observation.comparison_y_unit_text,
+            "equivalence_margin": case.observation.policy.equivalence_margin,
+            "equivalence_alpha": case.observation.policy.equivalence_alpha,
             "alignment_policy": case.observation.policy.alignment_policy,
             "x_match_tolerance": case.observation.policy.x_match_tolerance,
             "distribution_kind": case.observation.policy.distribution_kind,
@@ -451,6 +625,8 @@ class SeriesComparisonTest(sciunit.Test):
             "model_y_key",
             "comparison_x_unit_text",
             "comparison_y_unit_text",
+            "equivalence_margin",
+            "equivalence_alpha",
             "alignment_policy",
             "x_match_tolerance",
             "distribution_kind",
@@ -489,17 +665,23 @@ class SeriesComparisonTest(sciunit.Test):
                 f"Unsupported series distribution kind {obs.policy.distribution_kind!r}; "
                 "the current bridge only supports empirical per-x distributions"
             )
-        if obs.policy.pvalue_aggregation != "median":
-            raise ValueError(
-                f"Unsupported series p-value aggregation {obs.policy.pvalue_aggregation!r}; "
-                "the current bridge only supports median aggregation"
-            )
-        if obs.policy.score_family not in {"residual_only", "welch_only", "hybrid_residual_welch"}:
+        if obs.policy.score_family not in SERIES_SCORE_FAMILIES:
             raise ValueError(
                 f"Unsupported series score family {obs.policy.score_family!r}; "
-                "expected one of residual_only, welch_only, hybrid_residual_welch"
+                "expected one of residual_only, equivalence_only, hybrid_residual_equivalence, "
+                "welch_only, hybrid_residual_welch"
             )
-        if obs.policy.score_family in {"welch_only", "hybrid_residual_welch"} and (
+        equivalence_family = obs.policy.score_family in EQUIVALENCE_SERIES_SCORE_FAMILIES
+        legacy_welch_family = obs.policy.score_family in LEGACY_WELCH_SERIES_SCORE_FAMILIES
+        resolved_pvalue_aggregation, pvalue_aggregation_source = _resolved_pvalue_aggregation(
+            obs.policy,
+            equivalence_family=equivalence_family,
+        )
+        resolved_equivalence_margin, equivalence_margin_source = _resolved_equivalence_margin(
+            obs.policy,
+            equivalence_family=equivalence_family,
+        )
+        if legacy_welch_family and (
             obs.policy.minimum_median_welch_pvalue is None
         ):
             raise ValueError(
@@ -510,6 +692,23 @@ class SeriesComparisonTest(sciunit.Test):
             raise ValueError(
                 "Series score family 'residual_only' should not also declare "
                 "'minimum_median_welch_pvalue'; use a Welch-based score family instead"
+            )
+        if equivalence_family and obs.policy.minimum_median_welch_pvalue is not None:
+            raise ValueError(
+                f"Series score family {obs.policy.score_family!r} should not declare "
+                "'minimum_median_welch_pvalue'; use equivalence settings instead"
+            )
+        if equivalence_family and (not _is_finite_number(resolved_equivalence_margin) or float(resolved_equivalence_margin) <= 0.0):
+            raise ValueError(
+                f"Series score family {obs.policy.score_family!r} requires a positive finite equivalence margin"
+            )
+        if equivalence_family and (not _is_finite_number(obs.policy.equivalence_alpha) or not (0.0 < float(obs.policy.equivalence_alpha) < 1.0)):
+            raise ValueError(
+                f"Series score family {obs.policy.score_family!r} requires equivalence alpha in (0, 1)"
+            )
+        if not equivalence_family and _is_finite_number(obs.policy.equivalence_margin):
+            raise ValueError(
+                f"Series score family {obs.policy.score_family!r} should not declare an equivalence margin"
             )
         reference_bins = _series_bins(
             obs.reference_rows,
@@ -565,12 +764,6 @@ class SeriesComparisonTest(sciunit.Test):
             else float("nan")
         )
         max_abs = float(np.max(absolute_differences)) if absolute_differences else float("nan")
-        welch_pvalues = [
-            _welch_pvalue(reference_bins[reference_x], model_bins[model_x])
-            for reference_x, model_x in aligned_pairs
-        ]
-        finite_welch_pvalues = [value for value in welch_pvalues if _is_finite_number(value)]
-        median_welch_pvalue = float(np.median(finite_welch_pvalues)) if finite_welch_pvalues else float("nan")
         residual_gate_passed = (
             len(aligned_pairs) >= int(obs.policy.minimum_point_count)
             and _is_finite_number(mae)
@@ -578,17 +771,79 @@ class SeriesComparisonTest(sciunit.Test):
             and _is_finite_number(rmse)
             and rmse <= float(obs.policy.maximum_rmse)
         )
-        pvalue_gate_passed = (
-            _is_finite_number(median_welch_pvalue)
-            and obs.policy.minimum_median_welch_pvalue is not None
-            and median_welch_pvalue >= float(obs.policy.minimum_median_welch_pvalue)
-        )
+        welch_pvalues: list[float] = []
+        finite_welch_pvalues: list[float] = []
+        median_welch_pvalue = float("nan")
+        legacy_difference_gate_passed = False
+        if legacy_welch_family:
+            welch_pvalues = [
+                _welch_pvalue(reference_bins[reference_x], model_bins[model_x])
+                for reference_x, model_x in aligned_pairs
+            ]
+            finite_welch_pvalues = [value for value in welch_pvalues if _is_finite_number(value)]
+            median_welch_pvalue = _aggregate_pvalues(
+                finite_welch_pvalues,
+                method=resolved_pvalue_aggregation,
+            ) if finite_welch_pvalues else float("nan")
+            legacy_difference_gate_passed = (
+                len(aligned_pairs) >= int(obs.policy.minimum_point_count)
+                and _is_finite_number(median_welch_pvalue)
+                and obs.policy.minimum_median_welch_pvalue is not None
+                and median_welch_pvalue >= float(obs.policy.minimum_median_welch_pvalue)
+            )
+        statistical_pvalues: list[float | None] = []
+        statistical_test_kinds: list[str] = []
+        aggregate_statistical_pvalue = float("nan")
+        supported_statistical_bin_count = 0
+        unsupported_statistical_x_values: list[float] = []
+        statistical_gate_passed = False
+        if equivalence_family:
+            equivalence_results = [
+                _equivalence_test_result(
+                    reference_bins[reference_x],
+                    model_bins[model_x],
+                    equivalence_margin=float(resolved_equivalence_margin),
+                )
+                for reference_x, model_x in aligned_pairs
+            ]
+            statistical_test_kinds = [str(result["test_kind"]) for result in equivalence_results]
+            statistical_pvalues = [
+                rounded(float(result["pvalue"])) if _is_finite_number(result["pvalue"]) else None
+                for result in equivalence_results
+            ]
+            finite_statistical_pvalues = [
+                float(result["pvalue"])
+                for result in equivalence_results
+                if bool(result["supported"]) and _is_finite_number(result["pvalue"])
+            ]
+            supported_statistical_bin_count = len(finite_statistical_pvalues)
+            unsupported_statistical_x_values = [
+                float(reference_x)
+                for (reference_x, _model_x), result in zip(aligned_pairs, equivalence_results, strict=False)
+                if not bool(result["supported"]) or not _is_finite_number(result["pvalue"])
+            ]
+            if supported_statistical_bin_count == len(aligned_pairs) and finite_statistical_pvalues:
+                aggregate_statistical_pvalue = _aggregate_pvalues(
+                    finite_statistical_pvalues,
+                    method=resolved_pvalue_aggregation,
+                )
+            statistical_gate_passed = (
+                len(aligned_pairs) >= int(obs.policy.minimum_point_count)
+                and supported_statistical_bin_count == len(aligned_pairs)
+                and _is_finite_number(aggregate_statistical_pvalue)
+                and aggregate_statistical_pvalue <= float(obs.policy.equivalence_alpha)
+            )
+        pvalue_gate_passed = legacy_difference_gate_passed if legacy_welch_family else statistical_gate_passed
         if obs.policy.score_family == "residual_only":
             passed = residual_gate_passed
+        elif obs.policy.score_family == "equivalence_only":
+            passed = statistical_gate_passed
+        elif obs.policy.score_family == "hybrid_residual_equivalence":
+            passed = residual_gate_passed and statistical_gate_passed
         elif obs.policy.score_family == "welch_only":
-            passed = len(aligned_pairs) >= int(obs.policy.minimum_point_count) and pvalue_gate_passed
+            passed = len(aligned_pairs) >= int(obs.policy.minimum_point_count) and legacy_difference_gate_passed
         else:
-            passed = residual_gate_passed and pvalue_gate_passed
+            passed = residual_gate_passed and legacy_difference_gate_passed
         evidence = {
             obs.visual_x_key: _rounded_list(visual_x_values),
             "reference_matched_x_values": _rounded_list(reference_x_values),
@@ -611,6 +866,7 @@ class SeriesComparisonTest(sciunit.Test):
             if _is_finite_number(obs.policy.maximum_rmse)
             else obs.policy.maximum_rmse,
             "score_family": obs.policy.score_family,
+            "declared_pvalue_aggregation": str(obs.policy.pvalue_aggregation or "auto"),
             "welch_pvalues": _rounded_list(finite_welch_pvalues)
             if len(finite_welch_pvalues) == len(welch_pvalues)
             else [rounded(float(value)) if _is_finite_number(value) else None for value in welch_pvalues],
@@ -621,9 +877,34 @@ class SeriesComparisonTest(sciunit.Test):
             if _is_finite_number(obs.policy.minimum_median_welch_pvalue)
             else obs.policy.minimum_median_welch_pvalue,
             "finite_welch_pvalue_count": len(finite_welch_pvalues),
-            "pvalue_aggregation": obs.policy.pvalue_aggregation,
+            "equivalence_margin_Hz": rounded(float(resolved_equivalence_margin))
+            if _is_finite_number(resolved_equivalence_margin)
+            else resolved_equivalence_margin,
+            "declared_equivalence_margin_Hz": rounded(float(obs.policy.equivalence_margin))
+            if _is_finite_number(obs.policy.equivalence_margin)
+            else obs.policy.equivalence_margin,
+            "equivalence_margin_source": equivalence_margin_source,
+            "equivalence_alpha": rounded(float(obs.policy.equivalence_alpha))
+            if _is_finite_number(obs.policy.equivalence_alpha)
+            else obs.policy.equivalence_alpha,
+            "statistical_test_family": (
+                "equivalence_tost"
+                if equivalence_family
+                else ("legacy_welch_difference" if legacy_welch_family else "none")
+            ),
+            "statistical_test_kinds": statistical_test_kinds,
+            "statistical_pvalues": statistical_pvalues,
+            "aggregate_statistical_pvalue": rounded(float(aggregate_statistical_pvalue))
+            if _is_finite_number(aggregate_statistical_pvalue)
+            else aggregate_statistical_pvalue,
+            "supported_statistical_bin_count": supported_statistical_bin_count,
+            "unsupported_statistical_bin_count": len(unsupported_statistical_x_values),
+            "unsupported_statistical_x_values": _rounded_list(unsupported_statistical_x_values),
+            "pvalue_aggregation": resolved_pvalue_aggregation,
+            "pvalue_aggregation_source": pvalue_aggregation_source,
             "residual_gate_passed": residual_gate_passed,
             "pvalue_gate_passed": pvalue_gate_passed,
+            "statistical_gate_passed": statistical_gate_passed if equivalence_family else legacy_difference_gate_passed,
             "alignment_policy": obs.policy.alignment_policy,
             "x_match_tolerance": rounded(float(obs.policy.x_match_tolerance))
             if _is_finite_number(obs.policy.x_match_tolerance)
@@ -657,7 +938,12 @@ class SeriesComparisonTest(sciunit.Test):
             ),
         }
         status = self.case.pass_status if passed else self.case.fail_status
-        if obs.policy.score_family == "welch_only":
+        if obs.policy.score_family == "equivalence_only":
+            if _is_finite_number(aggregate_statistical_pvalue):
+                score_value = float(aggregate_statistical_pvalue) - float(obs.policy.equivalence_alpha)
+            else:
+                score_value = float("inf")
+        elif obs.policy.score_family == "welch_only":
             if _is_finite_number(median_welch_pvalue) and obs.policy.minimum_median_welch_pvalue is not None:
                 score_value = float(obs.policy.minimum_median_welch_pvalue) - float(median_welch_pvalue)
             else:

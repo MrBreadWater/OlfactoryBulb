@@ -297,10 +297,18 @@ validation_design_review_status = "pending"
 # alignment_policy = "nearest_within_tolerance"
 # x_match_tolerance = 0.5
 # distribution_kind = "empirical_by_x"
-# score_family = "residual_only"
-# Optional when using a Welch-based score family:
-# pvalue_aggregation = "median"
+# score_family = "hybrid_residual_equivalence"
+# Optional for equivalence score families; if omitted, the maintained path falls
+# back to maximum_mae.
+# equivalence_margin = 20.0
+# Optional; auto resolves to max for equivalence score families and median for
+# the legacy Welch score families.
+# pvalue_aggregation = "auto"
+# Optional when using the legacy Welch score families:
 # minimum_median_welch_pvalue = 0.05
+# score_family = "residual_only"
+# score_family = "welch_only"
+# score_family = "hybrid_residual_welch"
 # Optional explicit transforms when the model and reference x/y quantities are
 # not already expressed in the same unit or not the same physical quantity.
 # model_x_transform = { kind = "affine", scale = 1000.0, offset = 0.0, output_unit_text = "pA" }

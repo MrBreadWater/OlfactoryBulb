@@ -39,6 +39,8 @@ Remove this file when the listed items are either:
       policy and residual statistics.
 - [x] Keep the door open to standard statistical tests or p-value based scores,
       but do not force the first version to pretend precision we do not have.
+- [x] Replace the misleading "large Welch p-value implies similarity" shortcut
+      with an actual statistical equivalence path.
 - [x] The first design should be able to express both:
       - deterministic example-cell comparisons
       - literature-derived distributions or pooled repeated-current datasets
@@ -56,10 +58,21 @@ Remove this file when the listed items are either:
 - [x] Decide the first score family:
       - supported v1 score families:
         - `residual_only`
-        - `welch_only`
-        - `hybrid_residual_welch`
+        - `equivalence_only`
+        - `hybrid_residual_equivalence`
+        - `welch_only` (legacy difference-test diagnostic)
+        - `hybrid_residual_welch` (legacy difference-test diagnostic)
       - current maintained EPL-FSI use:
         - `residual_only`
+- [x] Decide the first statistical semantics:
+      - per-bin Welch TOST for replicated reference/model bins
+      - per-bin one-sample TOST when only one side has replication
+      - explicit no-claim / failure when both sides are singleton at a matched
+        x bin
+      - ergonomic defaults:
+        - `equivalence_margin` may fall back to `maximum_mae`
+        - `pvalue_aggregation = "auto"` resolves to `max` for equivalence
+          families and `median` otherwise
 - [x] Decide what provenance belongs on the series observation object:
       source rows, source file/location/url, protocol ids, extraction method,
       sample scope, rate definition, note ids, alignment policy, transform
@@ -80,3 +93,13 @@ Remove this file when the listed items are either:
       series-comparison path end-to-end.
 - [x] Update the overhaul assessment note once the series-comparison contract is
       concrete enough to describe precisely.
+
+## Next priorities
+
+- [ ] Broaden transform policies beyond identity / affine when a maintained
+      series comparison really needs them.
+- [ ] Extend alignment policies beyond exact shared transformed x bins and
+      monotone nearest-within-tolerance matching when a real validation needs
+      something better justified than those first two choices.
+- [ ] Improve result presentation for the migrated NeuronUnit-backed suite
+      outputs without moving repo-level meta checks out of the audit shell.

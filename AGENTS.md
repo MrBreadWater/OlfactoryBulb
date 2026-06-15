@@ -6,6 +6,17 @@ contract for future sessions.
 
 ## 0. Maintenance duty and reproducibility
 
+- Treat codebase ergonomicity as a top-priority product surface.
+  - The codebase itself is part of the product.
+  - Prefer APIs, helpers, config authoring paths, and internal module boundaries
+    that are neat, low-ceremony, readable, and easy for a new contributor to
+    understand.
+  - When a durable default can remove repetitive boilerplate without hiding the
+    actual behavior, prefer encoding that default once in a shared helper,
+    builder, or contract layer instead of forcing every caller to restate it.
+  - Do not confuse ergonomics with implicit drift: keep the real behavior
+    inspectable in code, evidence, tests, and docs.
+
 - Maintain `AGENTS.md` as a stable operating contract, not a session journal.
   Update it when a lesson is durable enough to guide future agents across
   tasks; do not record every UI tweak, bug fix, command run, or temporary
@@ -585,6 +596,8 @@ contract for future sessions.
     maintained path silently fall back to hidden series-comparison semantics.
     If the alignment policy uses tolerance-based matching, declare
     `x_match_tolerance` explicitly too.
+    Secondary statistical knobs may use documented ergonomic defaults when the
+    default is stable and the emitted evidence records the resolved choice.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
 

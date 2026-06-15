@@ -410,13 +410,34 @@ Current maintained series-comparison policy choices are:
   - treat duplicate x values as an empirical response distribution at each x
 - `score_family`
   - `residual_only`
-  - `welch_only`
-  - `hybrid_residual_welch`
+  - `equivalence_only`
+  - `hybrid_residual_equivalence`
+  - `welch_only` (legacy difference-test diagnostic)
+  - `hybrid_residual_welch` (legacy difference-test diagnostic)
 
-Use `minimum_median_welch_pvalue` only with a Welch-based `score_family`.
-When you use a Welch-based `score_family`, also declare
-`pvalue_aggregation = "median"` explicitly so the aggregation rule is part of
-the config rather than an implicit implementation detail.
+Use the equivalence families for an actual statistical similarity claim. They
+run per-bin TOST-style equivalence tests:
+
+- replicated reference plus replicated model bins -> two-sample Welch TOST
+- replicated one side plus singleton other side -> one-sample TOST against the
+  singleton point target
+- singleton vs singleton bins -> no statistical equivalence claim; the
+  statistical gate fails because the data do not support it
+
+For equivalence families:
+
+- `equivalence_margin` is optional; if omitted, the maintained path falls back
+  to the configured `maximum_mae`
+- `equivalence_alpha` defaults to `0.05`
+- `pvalue_aggregation` is optional; `auto` resolves to `max`, which means every
+  matched bin must satisfy the equivalence gate
+
+Use `minimum_median_welch_pvalue` only with a legacy Welch-based
+`score_family`. Those Welch families remain available for backward-compatible
+diagnostics, but a large two-sample Welch p-value is not evidence of
+equivalence. When `pvalue_aggregation` is omitted there, `auto` resolves to
+`median` and the emitted evidence records that resolved choice.
+
 When you use `alignment_policy = "nearest_within_tolerance"`, declare
 `x_match_tolerance` explicitly in the comparison x-axis units.
 The current maintained EPL-FSI example-cell comparison uses

@@ -490,14 +490,34 @@ python tools/run_audit.py validation_design_review_status
 <li>treat duplicate x values as an empirical response distribution at each x</li>
 <li><code>score_family</code></li>
 <li><code>residual_only</code></li>
-<li><code>welch_only</code></li>
-<li><code>hybrid_residual_welch</code></li>
+<li><code>equivalence_only</code></li>
+<li><code>hybrid_residual_equivalence</code></li>
+<li><code>welch_only</code> (legacy difference-test diagnostic)</li>
+<li><code>hybrid_residual_welch</code> (legacy difference-test diagnostic)</li>
 </ul>
-<p>Use <code>minimum_median_welch_pvalue</code> only with a Welch-based <code>score_family</code>.
-When you use a Welch-based <code>score_family</code>, also declare
-<code>pvalue_aggregation = "median"</code> explicitly so the aggregation rule is part of
-the config rather than an implicit implementation detail.
-When you use <code>alignment_policy = "nearest_within_tolerance"</code>, declare
+<p>Use the equivalence families for an actual statistical similarity claim. They
+run per-bin TOST-style equivalence tests:</p>
+<ul>
+<li>replicated reference plus replicated model bins -&gt; two-sample Welch TOST</li>
+<li>replicated one side plus singleton other side -&gt; one-sample TOST against the
+  singleton point target</li>
+<li>singleton vs singleton bins -&gt; no statistical equivalence claim; the
+  statistical gate fails because the data do not support it</li>
+</ul>
+<p>For equivalence families:</p>
+<ul>
+<li><code>equivalence_margin</code> is optional; if omitted, the maintained path falls back
+  to the configured <code>maximum_mae</code></li>
+<li><code>equivalence_alpha</code> defaults to <code>0.05</code></li>
+<li><code>pvalue_aggregation</code> is optional; <code>auto</code> resolves to <code>max</code>, which means every
+  matched bin must satisfy the equivalence gate</li>
+</ul>
+<p>Use <code>minimum_median_welch_pvalue</code> only with a legacy Welch-based
+<code>score_family</code>. Those Welch families remain available for backward-compatible
+diagnostics, but a large two-sample Welch p-value is not evidence of
+equivalence. When <code>pvalue_aggregation</code> is omitted there, <code>auto</code> resolves to
+<code>median</code> and the emitted evidence records that resolved choice.</p>
+<p>When you use <code>alignment_policy = "nearest_within_tolerance"</code>, declare
 <code>x_match_tolerance</code> explicitly in the comparison x-axis units.
 The current maintained EPL-FSI example-cell comparison uses
 <code>score_family = "residual_only"</code> because the model side usually exposes one

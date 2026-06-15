@@ -1973,23 +1973,32 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
 - distribution policy: empirical per-x response distributions
 - score-family choices:
   - `residual_only`
-  - `welch_only`
-  - `hybrid_residual_welch`
+  - `equivalence_only`
+  - `hybrid_residual_equivalence`
+  - `welch_only` (legacy difference-test diagnostic)
+  - `hybrid_residual_welch` (legacy difference-test diagnostic)
 - emitted evidence:
   - aligned mean-series arrays for plotting
   - residual diagnostics
-  - optional Welch-test diagnostics
+  - resolved statistical-policy defaults such as `pvalue_aggregation` and
+    `equivalence_margin` when those were not declared explicitly
+  - equivalence-test diagnostics
+  - optional legacy Welch-test diagnostics
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle
 
 The remaining open questions are now narrower:
 
-- richer statistical score semantics beyond the current MAE/RMSE-plus-diagnostics
-  plus optional Welch-gate first pass
+- whether the next statistical layer should stay with per-bin equivalence gates
+  plus residual diagnostics or grow into richer suite-level score composition
 - broader transform policies beyond exact transformed x-bin alignment
+- broader alignment policies beyond exact transformed x bins and monotone
+  nearest-within-tolerance matching
 - more explicit provenance-bearing series observation objects if future
   validations need more than the current EPL-FSI example-cell path
+- how much NeuronUnit-native result presentation should grow before it starts
+  competing with the maintained audit shell instead of feeding it
 
 ## Source Pointers
 
