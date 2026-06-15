@@ -711,6 +711,12 @@ now come from the shared typed layer in
 <code>olfactorybulb.neuronunit.provenance</code>. If you need to extend the emitted
 reference/model provenance payload, do it there first and let the suite bridge
 adapt the typed object back into audit evidence.</p>
+<p>Within the scorer itself, bound series rows plus transform/context metadata
+should now move through the shared <code>SeriesObservedDataset</code> layer in
+<code>olfactorybulb.neuronunit.series_validation_suite</code>. If a change affects how
+the reference or model side computes bins, interpolated paths, or provenance,
+extend that typed dataset contract instead of pairing fresh <code>rows + spec +
+context</code> bundles ad hoc inside each scoring branch.</p>
 <p>Likewise, protocol runners that emit graphable row collections should register
 those bundles through the typed <code>olfactorybulb.audit.protocol_evidence</code> layer.
 <code>protocol_executed</code> now consumes that explicit row-source contract rather than

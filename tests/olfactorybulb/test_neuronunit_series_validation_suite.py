@@ -21,6 +21,7 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     SeriesComparisonPolicy,
     SeriesDataSpec,
     SeriesDistributionObservation,
+    SeriesPredictionBundle,
     SeriesVisualContract,
     audit_items_from_series_comparison_suite,
     compile_series_comparison_suite,
@@ -546,6 +547,22 @@ equivalence_observation = SeriesDistributionObservation(
         score_family="hybrid_residual_equivalence",
     ),
 )
+equivalence_reference_dataset = equivalence_observation.reference_dataset()
+assert equivalence_reference_dataset.x_key == "current_pA"
+assert equivalence_reference_dataset.y_key == "firing_rate_Hz"
+assert equivalence_reference_dataset.provenance_summary() == SeriesProvenanceSummary.from_rows(
+    equivalence_reference_rows,
+    series_id_key="cell_id",
+    x_key="current_pA",
+    y_key="firing_rate_Hz",
+    x_unit_text="pA",
+    y_unit_text="Hz",
+)
+equivalence_model_dataset = equivalence_observation.model_dataset(
+    SeriesPredictionBundle(rows=equivalence_model_rows, context={"fi_curve_rows": equivalence_model_rows}),
+)
+assert equivalence_model_dataset.series_id_key == "cell_name"
+assert equivalence_model_dataset.exclude_provenance_context_keys == ("fi_curve_rows",)
 
 equivalence_case = SeriesComparisonCase(
     check_id="synthetic_series_equivalence",

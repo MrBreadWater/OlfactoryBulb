@@ -325,6 +325,12 @@ Remove this file when the listed items are either:
       - grouped validations may now declare `suite_statistical_policy`
       - explicit rollups such as `median` now surface as `rollup_source =
         "explicit"` in the emitted suite statistical summary
+- [x] Bind reference/model series rows through one typed observed-dataset
+      contract before the scorer computes bins, paths, or provenance.
+      - added `SeriesObservedDataset`
+      - `SeriesDistributionObservation` now produces typed reference/model
+        datasets instead of making the scorer pair raw `rows + spec + context`
+        repeatedly
 - [x] Lift protocol metric rows and grouped numeric summaries onto one typed
       shared contract instead of reintroducing fresh raw `list[dict]` /
       `dict[group][metric]` bundles at the protocol, plan, context, and

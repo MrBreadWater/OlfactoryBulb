@@ -645,6 +645,12 @@ contract for future sessions.
     `olfactorybulb.neuronunit.provenance` and then adapt it into evidence,
     rather than growing more one-off dict-building helpers inside
     `series_validation_suite.py`.
+    Keep bound series rows, transforms, comparison units, and provenance
+    context on the shared `SeriesObservedDataset` layer instead of repeatedly
+    pairing raw `rows`, `SeriesDataSpec`, and `context` dicts late inside the
+    score path. `SeriesDistributionObservation` should produce those typed
+    datasets for the reference and model sides before bins, paths, or
+    provenance are computed.
     Likewise, keep protocol evidence bundled through the typed
     `olfactorybulb.audit.protocol_evidence` layer instead of threading a raw
     `protocol_evidence` dict plus a separate `evidence_series_specs` tuple

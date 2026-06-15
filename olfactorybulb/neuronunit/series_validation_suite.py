@@ -709,6 +709,82 @@ class SeriesVisualContract:
 
 
 @dataclass(frozen=True)
+class SeriesObservedDataset:
+    rows: list[dict[str, Any]]
+    spec: SeriesDataSpec
+    comparison_x_unit_text: str
+    comparison_y_unit_text: str
+    context: dict[str, Any] = field(default_factory=dict)
+    exclude_provenance_context_keys: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "rows", list(self.rows))
+        object.__setattr__(self, "context", dict(self.context))
+        object.__setattr__(
+            self,
+            "exclude_provenance_context_keys",
+            tuple(
+                str(key).strip()
+                for key in self.exclude_provenance_context_keys
+                if str(key).strip()
+            ),
+        )
+
+    @property
+    def x_key(self) -> str:
+        return self.spec.x_key
+
+    @property
+    def y_key(self) -> str:
+        return self.spec.y_key
+
+    @property
+    def x_unit_text(self) -> str:
+        return self.spec.x_unit_text
+
+    @property
+    def y_unit_text(self) -> str:
+        return self.spec.y_unit_text
+
+    @property
+    def series_id_key(self) -> str:
+        return self.spec.series_id_key
+
+    @property
+    def x_transform(self) -> AxisTransform:
+        return self.spec.x_transform
+
+    @property
+    def y_transform(self) -> AxisTransform:
+        return self.spec.y_transform
+
+    def bins(self, *, precision_digits: int) -> dict[float, list[float]]:
+        return self.spec.bins(
+            self.rows,
+            comparison_x_unit_text=self.comparison_x_unit_text,
+            comparison_y_unit_text=self.comparison_y_unit_text,
+            precision_digits=precision_digits,
+            context=self.context or None,
+        )
+
+    def paths(self, *, precision_digits: int) -> dict[str, list[tuple[float, float]]]:
+        return self.spec.paths(
+            self.rows,
+            comparison_x_unit_text=self.comparison_x_unit_text,
+            comparison_y_unit_text=self.comparison_y_unit_text,
+            precision_digits=precision_digits,
+            context=self.context or None,
+        )
+
+    def provenance_summary(self) -> SeriesProvenanceSummary:
+        return self.spec.provenance_summary(
+            self.rows,
+            context=self.context or None,
+            exclude_context_keys=set(self.exclude_provenance_context_keys) or None,
+        )
+
+
+@dataclass(frozen=True)
 class SeriesDistributionObservation:
     protocol_evidence_key: str
     reference_rows: list[dict[str, Any]]
@@ -792,6 +868,24 @@ class SeriesDistributionObservation:
     @property
     def visual_kind(self) -> str:
         return self.visual_contract.kind
+
+    def reference_dataset(self) -> SeriesObservedDataset:
+        return SeriesObservedDataset(
+            rows=self.reference_rows,
+            spec=self.reference_spec,
+            comparison_x_unit_text=self.comparison_x_unit_text,
+            comparison_y_unit_text=self.comparison_y_unit_text,
+        )
+
+    def model_dataset(self, prediction: "SeriesPredictionBundle") -> SeriesObservedDataset:
+        return SeriesObservedDataset(
+            rows=prediction.rows,
+            spec=self.model_spec,
+            comparison_x_unit_text=self.comparison_x_unit_text,
+            comparison_y_unit_text=self.comparison_y_unit_text,
+            context=prediction.context,
+            exclude_provenance_context_keys=(self.protocol_evidence_key,),
+        )
 
 
 @dataclass(frozen=True)
@@ -1209,11 +1303,9 @@ class SeriesComparisonTest(sciunit.Test):
     def compute_score(self, observation: dict[str, Any], prediction: SeriesPredictionBundle) -> SeriesComparisonScore:
         del observation
         obs = self.case.observation
-        reference_spec = obs.reference_spec
-        model_spec = obs.model_spec
         visual_contract = obs.visual_contract
-        prediction_rows = list(prediction.rows)
-        prediction_context = dict(prediction.context)
+        reference_dataset = obs.reference_dataset()
+        model_dataset = obs.model_dataset(prediction)
         if obs.policy.alignment_policy not in SERIES_ALIGNMENT_POLICIES:
             raise ValueError(
                 f"Unsupported series alignment policy {obs.policy.alignment_policy!r}; "
@@ -1284,35 +1376,13 @@ class SeriesComparisonTest(sciunit.Test):
             raise ValueError(
                 f"Series score family {obs.policy.score_family!r} should not declare an equivalence margin"
             )
-        reference_bins = reference_spec.bins(
-            obs.reference_rows,
-            comparison_x_unit_text=obs.comparison_x_unit_text,
-            comparison_y_unit_text=obs.comparison_y_unit_text,
-            precision_digits=obs.policy.x_precision_digits,
-        )
-        model_bins = model_spec.bins(
-            prediction_rows,
-            comparison_x_unit_text=obs.comparison_x_unit_text,
-            comparison_y_unit_text=obs.comparison_y_unit_text,
-            precision_digits=obs.policy.x_precision_digits,
-            context=prediction_context,
-        )
+        reference_bins = reference_dataset.bins(precision_digits=obs.policy.x_precision_digits)
+        model_bins = model_dataset.bins(precision_digits=obs.policy.x_precision_digits)
         cluster_metadata: dict[float, dict[str, list[float]]] = {}
         resampling_metadata: dict[str, Any] = {}
         if obs.policy.alignment_policy == "resampled_grid":
-            reference_paths = reference_spec.paths(
-                obs.reference_rows,
-                comparison_x_unit_text=obs.comparison_x_unit_text,
-                comparison_y_unit_text=obs.comparison_y_unit_text,
-                precision_digits=obs.policy.x_precision_digits,
-            )
-            model_paths = model_spec.paths(
-                prediction_rows,
-                comparison_x_unit_text=obs.comparison_x_unit_text,
-                comparison_y_unit_text=obs.comparison_y_unit_text,
-                precision_digits=obs.policy.x_precision_digits,
-                context=prediction_context,
-            )
+            reference_paths = reference_dataset.paths(precision_digits=obs.policy.x_precision_digits)
+            model_paths = model_dataset.paths(precision_digits=obs.policy.x_precision_digits)
             if not reference_paths:
                 raise ValueError(
                     "Alignment policy 'resampled_grid' requires non-empty reference series ids; "
@@ -1505,14 +1575,8 @@ class SeriesComparisonTest(sciunit.Test):
             statistical_norm_score=statistical_norm_score,
             fallback_status=status,
         )
-        reference_provenance_summary = reference_spec.provenance_summary(
-            obs.reference_rows,
-        )
-        model_provenance_summary = model_spec.provenance_summary(
-            prediction_rows,
-            context=prediction_context,
-            exclude_context_keys={obs.protocol_evidence_key},
-        )
+        reference_provenance_summary = reference_dataset.provenance_summary()
+        model_provenance_summary = model_dataset.provenance_summary()
         evidence = {
             visual_contract.x_key: _rounded_list(visual_x_values),
             "reference_matched_x_values": _rounded_list(reference_x_values),
@@ -1625,20 +1689,20 @@ class SeriesComparisonTest(sciunit.Test):
             "y_quantity_name": obs.y_quantity_name,
             "comparison_x_unit_text": obs.comparison_x_unit_text,
             "comparison_y_unit_text": obs.comparison_y_unit_text,
-            "reference_x_key": reference_spec.x_key,
-            "reference_y_key": reference_spec.y_key,
-            "reference_x_unit_text": reference_spec.x_unit_text,
-            "reference_y_unit_text": reference_spec.y_unit_text,
-            "reference_series_id_key": reference_spec.series_id_key,
-            "model_x_key": model_spec.x_key,
-            "model_y_key": model_spec.y_key,
-            "model_x_unit_text": model_spec.x_unit_text,
-            "model_y_unit_text": model_spec.y_unit_text,
-            "model_series_id_key": model_spec.series_id_key,
+            "reference_x_key": reference_dataset.x_key,
+            "reference_y_key": reference_dataset.y_key,
+            "reference_x_unit_text": reference_dataset.x_unit_text,
+            "reference_y_unit_text": reference_dataset.y_unit_text,
+            "reference_series_id_key": reference_dataset.series_id_key,
+            "model_x_key": model_dataset.x_key,
+            "model_y_key": model_dataset.y_key,
+            "model_x_unit_text": model_dataset.x_unit_text,
+            "model_y_unit_text": model_dataset.y_unit_text,
+            "model_series_id_key": model_dataset.series_id_key,
             "reference_series_count": reference_provenance_summary.series_count,
             "model_series_count": model_provenance_summary.series_count,
-            "reference_x_transform": reference_spec.x_transform.description(),
-            "model_x_transform": model_spec.x_transform.description(),
+            "reference_x_transform": reference_dataset.x_transform.description(),
+            "model_x_transform": model_dataset.x_transform.description(),
             "reference_provenance": reference_provenance_summary.to_dict(),
             "model_provenance": model_provenance_summary.to_dict(),
         }
@@ -1846,6 +1910,7 @@ __all__ = [
     "SeriesComparisonPolicy",
     "SeriesComparisonScore",
     "SeriesComparisonTest",
+    "SeriesObservedDataset",
     "SeriesPredictionBundle",
     "SeriesDistributionObservation",
     "SeriesVisualContract",

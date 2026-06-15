@@ -2160,6 +2160,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     `SuiteStatisticalPolicy`, so grouped validations can override the default
     suite-level p-value rollup declaratively instead of baking it into one
     suite adapter or the dashboard
+  - the bound reference/model series data now also live on a typed
+    `SeriesObservedDataset` layer, so bins, interpolated paths, transforms,
+    and provenance summaries no longer have to rediscover `rows + spec +
+    context` tuples at each scoring step
   - the typed suite-aggregation layer now supports a richer
     `weighted_mean` norm rollup when a migrated suite family emits a
     principled per-case weight; the maintained series-comparison suite
