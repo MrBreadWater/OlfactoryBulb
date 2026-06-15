@@ -27,6 +27,7 @@ assert completed.returncode in {0, 1}, completed
 payload = json.loads(completed.stdout)
 protocol_item = next(item for item in payload["items"] if item["check_id"] == "epl_fsi_protocol_executed")
 curve_item = next(item for item in payload["items"] if item["check_id"] == "epl_fsi_reference_curve_match")
+series_overview = next(item for item in payload["items"] if item["check_id"] == "epl_fsi_intrinsic_validation.series_rules.overview")
 
 assert payload["audit_id"] == "epl_fsi_intrinsic_validation"
 assert any(item["check_id"] == "epl_fsi_protocol_executed" for item in payload["items"])
@@ -38,6 +39,7 @@ assert protocol_item["series_visuals"][0]["series_id_key"] == "cell_name"
 assert "fi_curve_rows" in protocol_item["evidence"]
 assert any(item["check_id"] == "epl_fsi_protocol_caveats" for item in payload["items"])
 assert any(item["check_id"] == "epl_fsi_reference_curve_match" for item in payload["items"])
+assert series_overview["evidence"]["suite_case_check_ids"] == ["epl_fsi_reference_curve_match"]
 assert curve_item["evidence"]["score_family"] == "residual_only"
 assert curve_item["evidence"]["alignment_policy"] == "exact_transformed_x"
 assert curve_item["evidence"]["distribution_kind"] == "empirical_by_x"

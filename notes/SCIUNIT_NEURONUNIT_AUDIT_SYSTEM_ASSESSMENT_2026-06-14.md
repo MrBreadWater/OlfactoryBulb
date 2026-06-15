@@ -2211,6 +2211,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     contract explicitly through `ProvidesProtocolEvidenceBundle`, so migrated
     suites that need the full payload do not have to reconstruct bundles from
     a looser map/row pair
+  - grouped suite default ids are now family-scoped consistently across the
+    migrated scientific rule families, so series-suite overview items no
+    longer reuse the bare validation id while summary/comparison suites use
+    family-specific ids
   - suite-level statistical rollups now also consume an explicit typed
     `SuiteCaseStatisticalPayload` from case scores instead of inferring
     p-value meaning from generic `observation` / `prediction` dict fragments,

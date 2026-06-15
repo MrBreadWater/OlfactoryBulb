@@ -1174,6 +1174,7 @@ finally:
     rules_module._load_rows = original_load_rows
 
 assert len(equivalence_rule_items) == 2
+assert equivalence_rule_items[0].check_id == "synthetic_series_validation.series_rules.overview"
 assert equivalence_rule_items[1].status == "PASS"
 assert equivalence_rule_items[1].evidence["score_family"] == "hybrid_residual_equivalence"
 assert equivalence_rule_items[1].evidence["pvalue_aggregation"] == "max"

@@ -593,7 +593,7 @@ def _build_series_rule_items(
         raw_candidate_ids = []
     descriptor = _grouped_suite_descriptor(
         [rule.raw_rule for rule in rules],
-        default_suite_id=context.validation_id or "validation",
+        default_suite_id=f"{context.validation_id or 'validation'}.series_rules",
         suite_kind_label="Series-comparison suite",
         candidate_ids=[str(candidate_id) for candidate_id in raw_candidate_ids if str(candidate_id).strip()],
     )

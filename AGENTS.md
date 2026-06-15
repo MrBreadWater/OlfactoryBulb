@@ -999,6 +999,10 @@ contract for future sessions.
       carry that on an explicit typed statistical payload attached to
       `SuiteCaseScorePayload` rather than reverse-engineering it from generic
       `observation` / `prediction` dict fragments
+    - keep grouped-suite default ids family-scoped (`summary_rules`,
+      `comparison_rules`, `series_rules`, etc.) instead of reusing the bare
+      validation id, so overview items stay mechanically distinct on the
+      maintained report path
     - cache hits/misses should stay visible in emitted protocol evidence under
       `protocol_cache`; do not hide them behind silent control flow
 

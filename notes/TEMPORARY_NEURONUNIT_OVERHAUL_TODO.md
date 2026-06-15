@@ -440,6 +440,13 @@ Remove this file when the listed items are either:
       - `ReferenceValidationModel` now exposes `get_protocol_evidence_bundle()`
       - the series suite now consumes that explicit capability instead of
         reconstructing a bundle from `get_protocol_evidence_map()`
+- [x] Keep grouped suite default ids family-scoped instead of reusing the
+      bare validation id.
+      - the default series-suite id now follows the same
+        `<validation>.series_rules` pattern as the summary/comparison grouped
+        families
+      - the maintained EPL-FSI audit smoke test now asserts that the series
+        overview item is exposed through that distinct check id
 - [x] Keep suite-level statistical rollups on an explicit typed case payload
       instead of inferring them from raw `case_score` dict fragments.
       - added `SuiteCaseStatisticalPayload`
