@@ -591,6 +591,12 @@ contract for future sessions.
     branch or the loader must be redirected to a committed dataset output.
     Clean worktrees must not depend on borrowing untracked local reference CSVs
     from some other checkout.
+  - keep the loaded literature-row boundary on the shared typed
+    `olfactorybulb.audit.reference_rows` layer instead of rediscovering raw
+    CSV-style dict rows in each rule/spec helper. `_load_rows` / `_filter_rows`
+    and the `reference_band_rows` / `reference_curve_match` spec entrypoints
+    should use that wrapper, while outer tests may still hand raw rows to the
+    coercion boundary for convenience.
   - `reference_curve_match` now has an explicit unit/transform contract.
     Do not infer series-comparison compatibility from field names alone.
     Maintained validations should declare reference/model axis units,

@@ -23,6 +23,11 @@ from olfactorybulb.audit.reference_data import (
     load_normalized_legacy_mc_tc_rows,
 )
 from olfactorybulb.audit.reference_notes import load_notes, notes_for_rows
+from olfactorybulb.audit.reference_rows import (
+    ReferenceRowRecord,
+    ReferenceRowTable,
+    coerce_reference_row_table,
+)
 from olfactorybulb.audit.reference_validation_specs import (
     ComparisonRuleSpec,
     NotePresenceRuleSpec,
@@ -453,13 +458,13 @@ def _arg_values(value: Any) -> list[str]:
     return [text] if text else []
 
 
-def _load_rows(loader_spec: str) -> list[dict[str, Any]]:
+def _load_rows(loader_spec: str) -> ReferenceRowTable:
     if loader_spec.startswith("csv:"):
         path_text = loader_spec.split(":", 1)[1]
         path = Path(path_text)
         if not path.is_absolute():
             path = REPO_ROOT / path
-        return csv_rows(path)
+        return coerce_reference_row_table(csv_rows(path))
     if loader_spec.startswith("dataset:"):
         try:
             _prefix, dataset_id, output_key = loader_spec.split(":", 2)
@@ -467,22 +472,22 @@ def _load_rows(loader_spec: str) -> list[dict[str, Any]]:
             raise ValueError(
                 "Dataset loader specs must look like 'dataset:<dataset_id>:<output_key>'"
             ) from exc
-        return load_dataset_output_rows(dataset_id=dataset_id, output_key=output_key)
+        return coerce_reference_row_table(load_dataset_output_rows(dataset_id=dataset_id, output_key=output_key))
     try:
         loader = REFERENCE_ROW_LOADERS[loader_spec]
     except KeyError as exc:
         known = ", ".join(sorted(REFERENCE_ROW_LOADERS))
         raise KeyError(f"Unknown reference-row loader {loader_spec!r}. Known loaders: {known}") from exc
-    return loader()
+    return coerce_reference_row_table(loader())
 
 
 def _filter_rows(
-    rows: list[dict[str, Any]],
+    rows: ReferenceRowTable | list[ReferenceRowRecord | Mapping[str, Any]],
     spec: Mapping[str, object],
     *,
     args: Any | None = None,
-) -> list[dict[str, Any]]:
-    filtered = list(rows)
+) -> ReferenceRowTable:
+    filtered = list(coerce_reference_row_table(rows))
     filters = list(spec.get("filters", []))
     if spec.get("filter_field") and spec.get("filter_value") is not None:
         filters.append({"field": spec["filter_field"], "value": spec["filter_value"]})
@@ -510,7 +515,7 @@ def _filter_rows(
             if not allowed:
                 continue
             filtered = [row for row in filtered if str(row.get(field, "")).strip() in allowed]
-    return filtered
+    return ReferenceRowTable(filtered)
 
 
 def _group_mean(summary: dict[str, dict[str, float]], group: str, metric_key: str) -> float:
@@ -704,7 +709,7 @@ def _build_note_presence_items(
     spec: NotePresenceRuleSpec,
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
-    rows: list[dict[str, Any]] = []
+    rows: list[ReferenceRowRecord | Mapping[str, Any]] = []
     for row_context in spec.row_contexts:
         context_rows = _filter_rows(_load_rows(row_context.loader), row_context.to_filter_spec(), args=context.args)
         if row_context.as_protocol_context:
@@ -719,16 +724,17 @@ def _build_note_presence_items(
                     }
                 )
         else:
-            rows.extend(context_rows)
+            rows.extend(list(context_rows))
     for synthetic in spec.synthetic_contexts:
         rows.append(dict(synthetic))
+    row_table = coerce_reference_row_table(rows)
     notes_path = _notes_path(rule, context)
-    matched_notes = notes_for_rows(rows, scope=spec.scope, notes=load_notes(notes_path) if notes_path else None)
+    matched_notes = notes_for_rows(row_table.to_rows(), scope=spec.scope, notes=load_notes(notes_path) if notes_path else None)
     evidence = {
         "protocol_ids_in_scope": sorted(
             {
                 str(row.get("protocol_id", "")).strip()
-                for row in rows
+                for row in row_table
                 if str(row.get("protocol_id", "")).strip()
             }
         ),

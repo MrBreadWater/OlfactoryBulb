@@ -19,6 +19,11 @@ from olfactorybulb.audit.criterion_math import (
 )
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceSeriesSpec
+from olfactorybulb.audit.reference_rows import (
+    ReferenceRowRecord,
+    ReferenceRowTable,
+    coerce_reference_row_table,
+)
 from olfactorybulb.audit.reference_validation_contracts import ValidationRuleContextLike
 from olfactorybulb.neuronunit.reference_bands import sigma_phrase as _sigma_phrase
 from olfactorybulb.neuronunit.reference_bands import (
@@ -842,10 +847,11 @@ class ReferenceBandRuleSpec:
     def build_cases(
         self,
         *,
-        rows: list[dict[str, Any]],
+        rows: ReferenceRowTable | list[ReferenceRowRecord | Mapping[str, Any]],
     ) -> list[ReferenceBandCase]:
+        row_table = coerce_reference_row_table(rows)
         cases: list[ReferenceBandCase] = []
-        for row in rows:
+        for row in row_table:
             if self.reference_source and str(row.get("Source", "")).strip() != self.reference_source:
                 continue
             property_name = str(row.get("Property", "")).strip()
@@ -1004,10 +1010,14 @@ class SeriesComparisonRuleSpec:
             policy=parser.policy(),
         )
 
-    def to_case(self, *, reference_rows: list[dict[str, Any]]) -> SeriesComparisonCase:
+    def to_case(
+        self,
+        *,
+        reference_rows: ReferenceRowTable | list[ReferenceRowRecord | Mapping[str, Any]],
+    ) -> SeriesComparisonCase:
         observation = SeriesDistributionObservation(
             protocol_evidence_key=self.protocol_evidence_key,
-            reference_rows=reference_rows,
+            reference_rows=coerce_reference_row_table(reference_rows),
             reference_spec=self.reference_spec,
             model_spec=self.model_spec,
             comparison_x_unit_text=self.comparison_x_unit_text,

@@ -17,6 +17,7 @@ import sciunit
 from olfactorybulb.audit import series_visual_spec
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
+from olfactorybulb.audit.reference_rows import ReferenceRowTable, coerce_reference_row_table
 from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceBundle,
 )
@@ -852,7 +853,7 @@ class SeriesObservedDataset:
 @dataclass(frozen=True)
 class SeriesDistributionObservation:
     protocol_evidence_key: str
-    reference_rows: list[dict[str, Any]]
+    reference_rows: ReferenceRowTable
     reference_spec: SeriesDataSpec
     model_spec: SeriesDataSpec
     comparison_x_unit_text: str
@@ -861,6 +862,9 @@ class SeriesDistributionObservation:
     y_quantity_name: str = "series y-value"
     visual_contract: SeriesVisualContract = field(default_factory=SeriesVisualContract)
     policy: SeriesComparisonPolicy = field(default_factory=SeriesComparisonPolicy)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "reference_rows", coerce_reference_row_table(self.reference_rows))
 
     @property
     def reference_x_key(self) -> str:

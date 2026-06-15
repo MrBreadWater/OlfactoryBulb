@@ -549,6 +549,14 @@ Remove this file when the listed items are either:
       - outer helpers still coerce raw rows at the boundary so tests and
         thin wrappers stay concise without reintroducing raw list/dict unions
         into the runtime plan/context seam
+- [x] Keep the literature-row loading/filtering seam on a shared typed wrapper
+      instead of rediscovering raw CSV-style dict rows inside each rule/spec
+      helper.
+      - added `olfactorybulb.audit.reference_rows`
+      - `_load_rows`, `_filter_rows`, and the `reference_band_rows` /
+        `reference_curve_match` spec entrypoints now use that typed layer
+      - tests still may hand raw rows to the coercion boundary, but the
+        maintained rule/spec runtime no longer advertises fresh raw row lists
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

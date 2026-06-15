@@ -25,6 +25,7 @@ REPO_IMPORTS = [
     "olfactorybulb.audit.protocol_evidence",
     "olfactorybulb.audit.reference_validation_document",
     "olfactorybulb.audit.reference_validation_contracts",
+    "olfactorybulb.audit.reference_rows",
     "olfactorybulb.audit.reference_validation_rule_records",
     "olfactorybulb.audit.reference_validation_protocol_core",
     "olfactorybulb.audit.reference_validation_plan",

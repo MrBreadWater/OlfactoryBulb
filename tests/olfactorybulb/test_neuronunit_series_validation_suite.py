@@ -6,6 +6,7 @@ from argparse import Namespace
 from types import SimpleNamespace
 
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, intrinsic_fi_curve_series_spec
+from olfactorybulb.audit.reference_rows import ReferenceRowTable
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
@@ -1206,7 +1207,8 @@ assert parsed_rule_spec.policy.alignment_policy == "exact_transformed_x"
 parsed_case = parsed_rule_spec.to_case(reference_rows=reference_rows)
 assert parsed_case.check_id == "synthetic_series_match"
 assert parsed_case.observation.protocol_evidence_key == "fi_curve_rows"
-assert parsed_case.observation.reference_rows == reference_rows
+assert isinstance(parsed_case.observation.reference_rows, ReferenceRowTable)
+assert parsed_case.observation.reference_rows.to_rows() == reference_rows
 assert parsed_case.observation.model_spec.x_key == "current_flux"
 
 fallback_rule = dict(rule)
