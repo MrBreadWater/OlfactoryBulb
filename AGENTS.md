@@ -859,6 +859,10 @@ contract for future sessions.
   - The maintained runtime should compile that raw config into the typed
     `ReferenceValidationPlan` in `olfactorybulb.audit.reference_validation_plan`
     before the engine, CLI, or maintained audit wrappers consume it.
+  - That plan should also own the precompiled rule-dispatch sequence for the
+    validation. Do not make the runtime regroup contiguous summary/comparison/
+    series rule families from raw rule dicts on every execution once the plan
+    has already been built.
   - The runtime rule layer should consume a typed `ValidationRuleContext`
     carrying explicit fields such as `validation_id`, `notes_path`,
     `default_group`, and typed review defaults; do not reintroduce a generic

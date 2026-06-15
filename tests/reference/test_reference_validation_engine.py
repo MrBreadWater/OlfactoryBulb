@@ -22,6 +22,7 @@ from olfactorybulb.audit.reference_validation_specs import (
     ProtocolExecutedRuleSpec,
 )
 from olfactorybulb.audit.reference_validation_protocols import get_validation_protocol_spec
+from olfactorybulb.audit.reference_validation_rules import GroupedRuleDispatch, SingleRuleDispatch
 
 
 assert "burton_urban_fi" in list_reference_validation_ids()
@@ -51,6 +52,8 @@ assert burton_plan.design_review_defaults.status == "pending"
 assert burton_plan.skip_item is not None
 assert burton_plan.skip_item.check_id == "burton_urban_fi_skipped"
 assert burton_plan.rules[0]["kind"] == "note_presence"
+assert isinstance(burton_plan.rule_dispatches[0], SingleRuleDispatch)
+assert any(isinstance(entry, GroupedRuleDispatch) for entry in burton_plan.rule_dispatches)
 
 listed_validations = subprocess.run(
     [sys.executable, "tools/run_reference_validation.py", "--list-validations"],
@@ -268,6 +271,8 @@ with tempfile.TemporaryDirectory() as tmpdir:
         assert temp_document.extension_specs == ("temp_validation_extension:register",)
         assert temp_plan.title == "Temporary validation"
         assert temp_plan.protocol_spec.title == "Temporary custom protocol"
+        assert isinstance(temp_plan.rule_dispatches[0], SingleRuleDispatch)
+        assert isinstance(temp_plan.rule_dispatches[1], SingleRuleDispatch)
         assert temp_plan.skip_item is not None
         skip_item = temp_plan.build_skip_item(args=argparse.Namespace(custom_score=4.5, reference_sigma_multiplier=2.0))
         assert skip_item is not None

@@ -102,6 +102,8 @@ At runtime, keep those layers distinct:
   `ReferenceValidationDocument`
 - `reference_validation_plan.py` compiles that typed document into one typed
   `ReferenceValidationPlan`
+- the plan also precompiles the grouped/single rule-dispatch sequence, so the
+  runtime does not need to rediscover contiguous suite families on every run
 - `reference_validation_engine.py` and the maintained audit/CLI entrypoints
   should consume the typed plan rather than passing loose config dicts and
   parallel accessor calls around at runtime

@@ -20,8 +20,10 @@ from olfactorybulb.audit.reference_validation_protocols import (
     get_validation_protocol_spec,
 )
 from olfactorybulb.audit.reference_validation_rules import (
+    ValidationRuleDispatch,
     ValidationRuleContext,
     build_rule_items,
+    compile_rule_dispatches,
     summarize_numeric_metrics,
 )
 
@@ -71,6 +73,7 @@ class ReferenceValidationPlan:
     defaults: dict[str, Any]
     protocol_defaults: dict[str, Any]
     rules: tuple[dict[str, Any], ...]
+    rule_dispatches: tuple[ValidationRuleDispatch, ...]
     protocol_runner_id: str
     protocol_spec: ValidationProtocolSpec
     design_review_defaults: ValidationDesignReviewDefaultsSpec
@@ -91,6 +94,7 @@ class ReferenceValidationPlan:
             defaults=dict(document.defaults),
             protocol_defaults=dict(document.protocol_defaults),
             rules=tuple(dict(rule) for rule in document.rules),
+            rule_dispatches=compile_rule_dispatches(document.rules),
             protocol_runner_id=document.protocol_runner_id,
             protocol_spec=get_validation_protocol_spec(document.protocol_runner_id),
             design_review_defaults=document.design_review_defaults,
@@ -136,7 +140,7 @@ class ReferenceValidationPlan:
             design_review_defaults=self.design_review_defaults,
             protocol_result=protocol_result,
         )
-        return build_rule_items([dict(rule) for rule in self.rules], context)
+        return build_rule_items(self.rule_dispatches, context)
 
     def build_skip_item(self, *, args: argparse.Namespace) -> AuditItem | None:
         if self.skip_item is None:

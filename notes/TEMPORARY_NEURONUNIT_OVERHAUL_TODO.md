@@ -223,3 +223,10 @@ Remove this file when the listed items are either:
       - `reference_validation_rules.py` and
         `reference_validation_specs.py` no longer depend on a catch-all
         `context.config` tunnel for those values
+- [x] Precompile the rule-dispatch sequence inside `ReferenceValidationPlan`
+      instead of regrouping contiguous suite families at runtime on every run.
+      - the plan now carries grouped/single dispatch entries
+      - the runtime executes that compiled sequence directly
+      - contiguous summary/comparison/series family grouping is now a
+        validation-plan compilation concern instead of a per-run buffering
+        concern

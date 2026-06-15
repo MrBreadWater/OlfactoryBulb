@@ -71,6 +71,20 @@ class _GroupedRuleFamily:
     build_items: Callable[[list[dict[str, Any]], ValidationRuleContext], list[AuditItem]]
 
 
+@dataclass(frozen=True)
+class SingleRuleDispatch:
+    rule: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class GroupedRuleDispatch:
+    family_id: str
+    rules: tuple[dict[str, Any], ...]
+
+
+ValidationRuleDispatch = SingleRuleDispatch | GroupedRuleDispatch
+
+
 RULE_HANDLERS: dict[str, RuleHandler] = {}
 SUMMARY_RULE_KINDS = {
     "summary_metric_min",
@@ -142,41 +156,58 @@ def summarize_numeric_metrics(
 
 
 def build_rule_items(
-    rules: list[dict[str, Any]],
+    dispatches: list[ValidationRuleDispatch] | tuple[ValidationRuleDispatch, ...],
     context: ValidationRuleContext,
 ) -> list[AuditItem]:
     items: list[AuditItem] = []
+    for dispatch in dispatches:
+        if isinstance(dispatch, GroupedRuleDispatch):
+            grouped_rules = [dict(rule) for rule in dispatch.rules if _rule_enabled(rule, context.args)]
+            if not grouped_rules:
+                continue
+            family = GROUPED_RULE_FAMILIES_BY_ID[dispatch.family_id]
+            generated_items = family.build_items(grouped_rules, context)
+            _append_grouped_suite_items(items, generated_items, grouped_rules, context)
+            continue
+        rule = dict(dispatch.rule)
+        if not _rule_enabled(rule, context.args):
+            continue
+        kind = str(rule.get("kind") or "").strip()
+        if not kind:
+            raise ValueError("Validation rule is missing required 'kind'")
+        try:
+            handler = RULE_HANDLERS[kind]
+        except KeyError as exc:
+            known = ", ".join(sorted(RULE_HANDLERS))
+            raise KeyError(f"Unknown validation rule kind {kind!r}. Known rule kinds: {known}") from exc
+        rule_items = handler(rule, context)
+        _apply_rule_level_validation_design_review(rule_items, rule, context)
+        items.extend(rule_items)
+    return items
+
+
+def compile_rule_dispatches(
+    rules: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+) -> tuple[ValidationRuleDispatch, ...]:
+    dispatches: list[ValidationRuleDispatch] = []
     pending_family: _GroupedRuleFamily | None = None
     pending_rules: list[dict[str, Any]] = []
-
-    def _append_grouped_suite_items(
-        generated_items: list[AuditItem],
-        source_rules: list[dict[str, Any]],
-    ) -> None:
-        if not generated_items:
-            return
-        detail_items = list(generated_items)
-        if bool(detail_items[0].summary_rollup_exempt) and str(detail_items[0].detail_level or "detail") != "detail":
-            items.append(detail_items[0])
-            detail_items = detail_items[1:]
-        for rule, item in zip(source_rules, detail_items, strict=False):
-            _apply_rule_level_validation_design_review([item], rule, context)
-            items.append(item)
-        if len(detail_items) > len(source_rules):
-            items.extend(detail_items[len(source_rules):])
 
     def flush_pending_rules() -> None:
         nonlocal pending_family, pending_rules
         if pending_family is None or not pending_rules:
             return
-        generated_items = pending_family.build_items(pending_rules, context)
-        _append_grouped_suite_items(generated_items, pending_rules)
+        dispatches.append(
+            GroupedRuleDispatch(
+                family_id=pending_family.family_id,
+                rules=tuple(dict(rule) for rule in pending_rules),
+            )
+        )
         pending_family = None
         pending_rules = []
 
-    for rule in rules:
-        if not _rule_enabled(rule, context.args):
-            continue
+    for raw_rule in rules:
+        rule = dict(raw_rule)
         kind = str(rule.get("kind") or "").strip()
         if not kind:
             raise ValueError("Validation rule is missing required 'kind'")
@@ -188,16 +219,28 @@ def build_rule_items(
             pending_rules.append(rule)
             continue
         flush_pending_rules()
-        try:
-            handler = RULE_HANDLERS[kind]
-        except KeyError as exc:
-            known = ", ".join(sorted(RULE_HANDLERS))
-            raise KeyError(f"Unknown validation rule kind {kind!r}. Known rule kinds: {known}") from exc
-        rule_items = handler(rule, context)
-        _apply_rule_level_validation_design_review(rule_items, rule, context)
-        items.extend(rule_items)
+        dispatches.append(SingleRuleDispatch(rule=rule))
     flush_pending_rules()
-    return items
+    return tuple(dispatches)
+
+
+def _append_grouped_suite_items(
+    items: list[AuditItem],
+    generated_items: list[AuditItem],
+    source_rules: list[dict[str, Any]],
+    context: ValidationRuleContext,
+) -> None:
+    if not generated_items:
+        return
+    detail_items = list(generated_items)
+    if bool(detail_items[0].summary_rollup_exempt) and str(detail_items[0].detail_level or "detail") != "detail":
+        items.append(detail_items[0])
+        detail_items = detail_items[1:]
+    for rule, item in zip(source_rules, detail_items, strict=False):
+        _apply_rule_level_validation_design_review([item], rule, context)
+        items.append(item)
+    if len(detail_items) > len(source_rules):
+        items.extend(detail_items[len(source_rules):])
 
 
 def _resolved_rule_validation_design_review(
@@ -530,6 +573,11 @@ GROUPED_RULE_FAMILIES_BY_KIND: dict[str, _GroupedRuleFamily] = {
     **{kind: COMPARISON_RULE_FAMILY for kind in COMPARISON_RULE_KINDS},
     **{kind: SERIES_RULE_FAMILY for kind in SERIES_RULE_KINDS},
 }
+GROUPED_RULE_FAMILIES_BY_ID: dict[str, _GroupedRuleFamily] = {
+    SUMMARY_RULE_FAMILY.family_id: SUMMARY_RULE_FAMILY,
+    COMPARISON_RULE_FAMILY.family_id: COMPARISON_RULE_FAMILY,
+    SERIES_RULE_FAMILY.family_id: SERIES_RULE_FAMILY,
+}
 
 
 def _grouped_rule_family_for_kind(kind: str) -> _GroupedRuleFamily | None:
@@ -684,11 +732,14 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
 
 
 __all__ = [
+    "GroupedRuleDispatch",
     "REFERENCE_ROW_LOADERS",
     "RULE_HANDLERS",
     "ReferenceAcceptanceBand",
+    "SingleRuleDispatch",
     "ValidationRuleContext",
     "build_rule_items",
+    "compile_rule_dispatches",
     "compute_reference_acceptance_band",
     "register_validation_rule",
     "summarize_numeric_metrics",

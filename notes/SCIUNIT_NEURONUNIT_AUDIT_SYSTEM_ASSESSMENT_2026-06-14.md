@@ -2065,6 +2065,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     explicit runtime fields such as validation id, notes path, default group,
     and typed validation-design-review defaults instead of one generic config
     dict leaking through the rule engine
+  - `ReferenceValidationPlan` now also carries a precompiled rule-dispatch
+    sequence, so the runtime no longer has to rediscover contiguous grouped
+    suite families from raw rule dicts after the plan has already been built
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle
