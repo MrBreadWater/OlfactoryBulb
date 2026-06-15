@@ -236,6 +236,11 @@ validation that uses one registered protocol runner:</p>
   <code>ReferenceValidationDocument</code></li>
 <li><code>reference_validation_plan.py</code> compiles that typed document into one typed
   <code>ReferenceValidationPlan</code></li>
+<li>the plan also precompiles the grouped/single rule-dispatch sequence, so the
+  runtime does not need to rediscover contiguous suite families on every run</li>
+<li>the raw <code>checks</code> list stays with the typed document layer; the runtime plan
+  should carry the compiled dispatch sequence instead of another duplicate raw
+  rule copy</li>
 <li><code>reference_validation_engine.py</code> and the maintained audit/CLI entrypoints
   should consume the typed plan rather than passing loose config dicts and
   parallel accessor calls around at runtime</li>

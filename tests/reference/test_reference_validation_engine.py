@@ -51,7 +51,6 @@ assert burton_plan.skip_neuron_mode == "short_circuit"
 assert burton_plan.design_review_defaults.status == "pending"
 assert burton_plan.skip_item is not None
 assert burton_plan.skip_item.check_id == "burton_urban_fi_skipped"
-assert burton_plan.rules[0]["kind"] == "note_presence"
 assert isinstance(burton_plan.rule_dispatches[0], SingleRuleDispatch)
 assert any(isinstance(entry, GroupedRuleDispatch) for entry in burton_plan.rule_dispatches)
 

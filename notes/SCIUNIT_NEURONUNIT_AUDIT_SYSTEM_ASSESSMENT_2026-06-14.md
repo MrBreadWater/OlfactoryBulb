@@ -2067,7 +2067,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     dict leaking through the rule engine
   - `ReferenceValidationPlan` now also carries a precompiled rule-dispatch
     sequence, so the runtime no longer has to rediscover contiguous grouped
-    suite families from raw rule dicts after the plan has already been built
+    suite families from raw rule dicts after the plan has already been built;
+    correspondingly, the raw `checks` list is staying with the typed document
+    layer rather than being duplicated yet again inside the runtime plan
   - compact reference/model provenance summaries
   - model-side protocol context when that metadata is available in the
     protocol-evidence bundle

@@ -230,3 +230,9 @@ Remove this file when the listed items are either:
       - contiguous summary/comparison/series family grouping is now a
         validation-plan compilation concern instead of a per-run buffering
         concern
+- [x] Remove the duplicate raw-rule copy from the runtime plan now that the
+      typed document owns raw rules and the typed plan owns compiled dispatches.
+      - `ReferenceValidationDocument` remains the home of the raw `checks`
+        list
+      - `ReferenceValidationPlan` now carries the compiled dispatch sequence
+        instead of both dispatches and a second raw-rule tuple

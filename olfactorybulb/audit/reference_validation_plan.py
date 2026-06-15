@@ -72,7 +72,6 @@ class ReferenceValidationPlan:
     skip_neuron_mode: str
     defaults: dict[str, Any]
     protocol_defaults: dict[str, Any]
-    rules: tuple[dict[str, Any], ...]
     rule_dispatches: tuple[ValidationRuleDispatch, ...]
     protocol_runner_id: str
     protocol_spec: ValidationProtocolSpec
@@ -93,7 +92,6 @@ class ReferenceValidationPlan:
             skip_neuron_mode=document.skip_neuron_mode,
             defaults=dict(document.defaults),
             protocol_defaults=dict(document.protocol_defaults),
-            rules=tuple(dict(rule) for rule in document.rules),
             rule_dispatches=compile_rule_dispatches(document.rules),
             protocol_runner_id=document.protocol_runner_id,
             protocol_spec=get_validation_protocol_spec(document.protocol_runner_id),

@@ -862,7 +862,9 @@ contract for future sessions.
   - That plan should also own the precompiled rule-dispatch sequence for the
     validation. Do not make the runtime regroup contiguous summary/comparison/
     series rule families from raw rule dicts on every execution once the plan
-    has already been built.
+    has already been built. The raw rule list belongs to the typed document
+    layer; do not keep duplicating it inside the runtime plan unless a real
+    runtime consumer actually needs it.
   - The runtime rule layer should consume a typed `ValidationRuleContext`
     carrying explicit fields such as `validation_id`, `notes_path`,
     `default_group`, and typed review defaults; do not reintroduce a generic
