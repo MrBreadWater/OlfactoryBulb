@@ -495,6 +495,27 @@ python tools/run_audit.py validation_design_review_status
 <li>secondary knobs may still use stable ergonomic defaults when the emitted
   evidence records the resolved choice</li>
 </ul>
+<p>When the protocol runner already declares a typed protocol-evidence series spec
+for the selected <code>protocol_evidence_key</code>, the maintained path may use that
+contract for model-side ergonomics:</p>
+<ul>
+<li><code>model_current_key</code></li>
+<li><code>model_value_key</code></li>
+<li><code>model_series_id_key</code></li>
+<li><code>model_x_unit_text</code></li>
+<li><code>model_y_unit_text</code></li>
+<li><code>x_quantity_name</code></li>
+<li><code>y_quantity_name</code></li>
+</ul>
+<p>If those fields are omitted and a matching protocol-evidence series spec is
+available, the emitted evidence records the resolved model-side keys and units.
+Do not use that ergonomic path to hide the scientific comparison contract:</p>
+<ul>
+<li>keep <code>reference_x_unit_text</code> / <code>reference_y_unit_text</code> explicit</li>
+<li>keep <code>comparison_x_unit_text</code> / <code>comparison_y_unit_text</code> explicit</li>
+<li>keep transforms explicit whenever the comparison space differs from the raw
+  model space</li>
+</ul>
 <p>Current maintained series-comparison policy choices are:</p>
 <ul>
 <li><code>alignment_policy = "exact_transformed_x"</code></li>
@@ -568,6 +589,11 @@ now come from the shared typed layer in
 <code>olfactorybulb.neuronunit.provenance</code>. If you need to extend the emitted
 reference/model provenance payload, do it there first and let the suite bridge
 adapt the typed object back into audit evidence.</p>
+<p>Likewise, protocol runners that emit graphable row collections should register
+those bundles through the typed <code>olfactorybulb.audit.protocol_evidence</code> layer.
+<code>protocol_executed</code> now consumes that explicit row-source contract rather than
+special-casing <code>fi_curve_rows</code>, and the dashboard can render those row bundles
+without guessing the x/y semantics from the evidence key alone.</p>
 <p>Likewise, the declarative <code>reference_curve_match</code> builder now compiles the
 reference/model axis bundles into typed <code>SeriesDataSpec</code> plus
 <code>SeriesVisualContract</code> objects before it constructs the observation. If you

@@ -136,6 +136,18 @@ Remove this file when the listed items are either:
 - [x] Extract the typed declarative compiler specs into a dedicated
       `olfactorybulb.audit.reference_validation_specs` module so the rule
       handler file stays orchestration-focused.
+- [x] Move graphable protocol-evidence row bundles onto a typed contract so
+      `protocol_executed`, `reference_curve_match`, and the dashboard do not
+      keep special-casing `fi_curve_rows`.
+      - added `olfactorybulb.audit.protocol_evidence`
+      - registered typed intrinsic f-I evidence specs in the maintained GC and
+        EPL-FSI protocol runners
+      - `protocol_executed` now consumes those explicit row-series specs
+      - `reference_curve_match` can now use the matching protocol series spec
+        for model-side default keys/units/labels while keeping reference-side
+        and comparison-space units explicit
+      - the dashboard can now render explicit row-source series visuals without
+        flattening every row bundle into one guessed synthetic series
 - [x] Decide whether the next alignment generalization should be interpolation /
       resampling or whether the current distribution-first clustering policy is
       the right stopping point.

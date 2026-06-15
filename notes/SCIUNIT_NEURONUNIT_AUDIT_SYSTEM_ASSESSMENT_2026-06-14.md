@@ -2026,6 +2026,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
   - the declarative parser for that rule now lives in one typed
     `SeriesComparisonRuleSpec` path instead of a growing pile of unrelated
     helper calls
+  - graphable protocol-evidence row bundles now have their own typed contract
+    in `olfactorybulb.audit.protocol_evidence`, so `protocol_executed`, the
+    dashboard, and `reference_curve_match` no longer need to special-case
+    `fi_curve_rows`; the model-side defaults can come from the protocol
+    contract while reference-side and comparison-space units stay explicit
   - the declarative `reference_band_rows` path now also compiles through typed
     `ReferenceBandRuleSpec` / `ReferenceBandPropertyRuleSpec` objects instead
     of keeping bounds, quantile-field selection, and review parsing sprawled

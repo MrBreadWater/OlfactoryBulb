@@ -31,6 +31,10 @@ curve_item = next(item for item in payload["items"] if item["check_id"] == "epl_
 assert payload["audit_id"] == "epl_fsi_intrinsic_validation"
 assert any(item["check_id"] == "epl_fsi_protocol_executed" for item in payload["items"])
 assert protocol_item["series_visuals"][0]["keys"] == ["fi_curve_rows"]
+assert protocol_item["series_visuals"][0]["row_source_key"] == "fi_curve_rows"
+assert protocol_item["series_visuals"][0]["x_key"] == "current_pA"
+assert protocol_item["series_visuals"][0]["y_keys"] == ["firing_rate_Hz"]
+assert protocol_item["series_visuals"][0]["series_id_key"] == "cell_name"
 assert "fi_curve_rows" in protocol_item["evidence"]
 assert any(item["check_id"] == "epl_fsi_protocol_caveats" for item in payload["items"])
 assert any(item["check_id"] == "epl_fsi_reference_curve_match" for item in payload["items"])
@@ -39,6 +43,10 @@ assert curve_item["evidence"]["alignment_policy"] == "exact_transformed_x"
 assert curve_item["evidence"]["distribution_kind"] == "empirical_by_x"
 assert curve_item["evidence"]["error_unit_text"] == "Hz"
 assert curve_item["evidence"]["mean_absolute_error"] is not None
+assert curve_item["evidence"]["model_x_key"] == "current_pA"
+assert curve_item["evidence"]["model_y_key"] == "firing_rate_Hz"
+assert curve_item["evidence"]["model_x_unit_text"] == "pA"
+assert curve_item["evidence"]["model_y_unit_text"] == "Hz"
 assert curve_item["evidence"]["reference_provenance"]["sources"] == ["Burton, Malyshko & Urban (2024)"]
 assert curve_item["evidence"]["model_provenance"]["protocol_context"]["cell_models"] == ["PVCRH_FSI1"]
 

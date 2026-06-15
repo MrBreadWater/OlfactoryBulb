@@ -417,6 +417,27 @@ For `reference_curve_match`, treat axis metadata as part of the rule contract:
 - secondary knobs may still use stable ergonomic defaults when the emitted
   evidence records the resolved choice
 
+When the protocol runner already declares a typed protocol-evidence series spec
+for the selected `protocol_evidence_key`, the maintained path may use that
+contract for model-side ergonomics:
+
+- `model_current_key`
+- `model_value_key`
+- `model_series_id_key`
+- `model_x_unit_text`
+- `model_y_unit_text`
+- `x_quantity_name`
+- `y_quantity_name`
+
+If those fields are omitted and a matching protocol-evidence series spec is
+available, the emitted evidence records the resolved model-side keys and units.
+Do not use that ergonomic path to hide the scientific comparison contract:
+
+- keep `reference_x_unit_text` / `reference_y_unit_text` explicit
+- keep `comparison_x_unit_text` / `comparison_y_unit_text` explicit
+- keep transforms explicit whenever the comparison space differs from the raw
+  model space
+
 Current maintained series-comparison policy choices are:
 
 - `alignment_policy = "exact_transformed_x"`
@@ -495,6 +516,12 @@ now come from the shared typed layer in
 `olfactorybulb.neuronunit.provenance`. If you need to extend the emitted
 reference/model provenance payload, do it there first and let the suite bridge
 adapt the typed object back into audit evidence.
+
+Likewise, protocol runners that emit graphable row collections should register
+those bundles through the typed `olfactorybulb.audit.protocol_evidence` layer.
+`protocol_executed` now consumes that explicit row-source contract rather than
+special-casing `fi_curve_rows`, and the dashboard can render those row bundles
+without guessing the x/y semantics from the evidence key alone.
 
 Likewise, the declarative `reference_curve_match` builder now compiles the
 reference/model axis bundles into typed `SeriesDataSpec` plus

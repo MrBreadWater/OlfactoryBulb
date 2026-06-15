@@ -1216,6 +1216,8 @@ shape of a valid example.
 Definition:
 
 - passes when the protocol runner produced at least one metric row
+- if the protocol runner registers typed graphable row bundles, reuses that
+  contract to render the protocol evidence instead of guessing from a magic key
 
 Use it for:
 
@@ -1585,6 +1587,8 @@ Use it for:
   values should be treated as a distribution rather than silently averaged
 - comparisons where the model and reference axes may need an explicit declared
   transform
+- comparisons where the protocol runner already declares the model-side row
+  shape and units through a typed protocol-evidence series spec
 
 Example:
 
@@ -1596,16 +1600,19 @@ loader = "csv:research_context/EXAMPLE_fI_curve.csv"
 protocol_evidence_key = "fi_curve_rows"
 reference_current_key = "current_pA"
 reference_value_key = "firing_rate_Hz"
-model_current_key = "current_pA"
-model_value_key = "firing_rate_Hz"
 reference_x_unit_text = "pA"
 reference_y_unit_text = "Hz"
-model_x_unit_text = "pA"
-model_y_unit_text = "Hz"
 comparison_x_unit_text = "pA"
 comparison_y_unit_text = "Hz"
-x_quantity_name = "Injected current"
-y_quantity_name = "Firing rate"
+# Optional when the selected protocol runner does not already register the
+# model-side row shape for fi_curve_rows:
+# model_current_key = "current_pA"
+# model_value_key = "firing_rate_Hz"
+# model_x_unit_text = "pA"
+# model_y_unit_text = "Hz"
+# model_series_id_key = "cell_name"
+# x_quantity_name = "Injected current"
+# y_quantity_name = "Firing rate"
 alignment_policy = "exact_transformed_x"
 distribution_kind = "empirical_by_x"
 score_family = "hybrid_residual_equivalence"
@@ -1797,7 +1804,8 @@ Several maintained rule paths already render structured visuals:
 - `reference_curve_match`
   - explicit current-versus-rate series graph
 - `protocol_executed`
-  - current-rate series graph when protocol evidence includes `fi_curve_rows`
+  - current-rate or other row-series graph when the protocol runner registers a
+    typed protocol-evidence series spec
 
 These do not need extra TOML visualization fields; the rule handlers emit them.
 
@@ -1930,6 +1938,9 @@ def example_status_reason_rule(rule, context):
 
 - extra structured evidence emitted by the protocol runner and surfaced in the
   resulting audit item
+- graphable row bundles should be registered through a typed
+  protocol-evidence series spec so downstream rule builders and dashboards do
+  not have to guess the x/y semantics from the evidence key alone
 
 ### row context
 

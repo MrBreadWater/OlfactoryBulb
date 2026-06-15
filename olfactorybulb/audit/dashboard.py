@@ -528,6 +528,7 @@ def _series_graph_payload(
     evidence: dict[str, Any],
     *,
     exclude_keys: set[str] | None = None,
+    spec: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], set[str]] | tuple[None, set[str]]:
     exclude = set(exclude_keys or set())
     if not evidence:
@@ -539,8 +540,64 @@ def _series_graph_payload(
     series_entries: list[dict[str, Any]] = []
     used_keys: set[str] = set()
 
+    explicit_row_source_key = str(spec.get("row_source_key") or "").strip() if isinstance(spec, dict) else ""
+    explicit_x_key = str(spec.get("x_key") or "").strip() if isinstance(spec, dict) else ""
+    explicit_series_id_key = str(spec.get("series_id_key") or "").strip() if isinstance(spec, dict) else ""
+    explicit_y_keys: list[str] = []
+    if isinstance(spec, dict):
+        raw_y_keys = spec.get("y_keys")
+        if isinstance(raw_y_keys, str):
+            explicit_y_keys = [raw_y_keys.strip()] if raw_y_keys.strip() else []
+        elif isinstance(raw_y_keys, (list, tuple)):
+            explicit_y_keys = [str(value).strip() for value in raw_y_keys if str(value).strip()]
+        elif str(spec.get("y_key") or "").strip():
+            explicit_y_keys = [str(spec.get("y_key")).strip()]
+
+    if explicit_row_source_key and explicit_x_key and explicit_y_keys:
+        explicit_rows = evidence.get(explicit_row_source_key)
+        if isinstance(explicit_rows, list) and explicit_rows:
+            grouped_points: dict[tuple[str, str], dict[str, Any]] = {}
+            for row in explicit_rows:
+                if not isinstance(row, dict):
+                    continue
+                x_value = _float_or_none(row.get(explicit_x_key))
+                if x_value is None:
+                    continue
+                series_id = str(row.get(explicit_series_id_key, "")).strip() if explicit_series_id_key else ""
+                for y_key in explicit_y_keys:
+                    y_value = _float_or_none(row.get(y_key))
+                    if y_value is None:
+                        continue
+                    group_key = (series_id, y_key)
+                    label = series_id or _evidence_label(y_key)
+                    if series_id and len(explicit_y_keys) > 1:
+                        label = f"{series_id} - {_evidence_label(y_key)}"
+                    entry = grouped_points.setdefault(
+                        group_key,
+                        {
+                            "key": f"{series_id}:{y_key}" if series_id else y_key,
+                            "label": label,
+                            "points": [],
+                        },
+                    )
+                    entry["points"].append((x_value, y_value))
+            if grouped_points:
+                x_key = explicit_x_key
+                for entry in grouped_points.values():
+                    entry["points"].sort(key=lambda pair: pair[0])
+                    series_entries.append(entry)
+                x_values = [point[0] for entry in series_entries for point in entry["points"]]
+                used_keys.add(explicit_row_source_key)
+                if not series_kind:
+                    has_rate_series = any(
+                        y_key.lower().endswith("_hz") or "rate" in y_key.lower()
+                        for y_key in explicit_y_keys
+                    )
+                    if "current" in explicit_x_key.lower() and has_rate_series:
+                        series_kind = "f-i curve"
+
     row_source = evidence.get("fi_curve_rows")
-    if isinstance(row_source, list) and row_source:
+    if not series_entries and isinstance(row_source, list) and row_source:
         row_points: list[tuple[float, float]] = []
         for row in row_source:
             if not isinstance(row, dict):
@@ -794,7 +851,7 @@ def _render_series_graph_matplotlib(
             {x_key, y_key},
         )
 
-    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude_keys)
+    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude_keys, spec=spec)
     if payload is None:
         return "", set()
 
@@ -964,67 +1021,15 @@ def _render_series_graph(
     series_entries: list[dict[str, Any]] = []
     used_keys: set[str] = set()
 
-    row_source = evidence.get("fi_curve_rows")
-    if isinstance(row_source, list) and row_source:
-        row_points: list[tuple[float, float]] = []
-        for row in row_source:
-            if not isinstance(row, dict):
-                continue
-            x_value = _float_or_none(row.get("current_pA"))
-            y_value = _float_or_none(row.get("firing_rate_Hz"))
-            if x_value is None or y_value is None:
-                continue
-            row_points.append((x_value, y_value))
-        if row_points:
-            row_points.sort(key=lambda pair: pair[0])
-            x_values = [point[0] for point in row_points]
-            x_key = "current_pA"
-            series_entries.append(
-                {
-                    "key": "firing_rate_Hz",
-                    "label": _evidence_label("firing_rate_Hz"),
-                    "points": row_points,
-                }
-            )
-            used_keys.add("fi_curve_rows")
-            used_keys.add("current_pA")
-            used_keys.add("firing_rate_Hz")
-            if not series_kind:
-                series_kind = "f-i curve"
-
-    if x_values is None:
-        for candidate in _SERIES_X_KEY_CANDIDATES:
-            if candidate in exclude or candidate == "fi_curve_rows":
-                continue
-            candidate_values = _float_list_or_none(evidence.get(candidate))
-            if candidate_values is not None and len(candidate_values) >= 2:
-                x_key = candidate
-                x_values = candidate_values
-                used_keys.add(candidate)
-                break
-
-    if x_values is None:
+    payload, used_keys = _series_graph_payload(evidence, exclude_keys=exclude, spec=spec)
+    if payload is None:
         return "", set()
 
-    x_len = len(x_values)
-    for candidate in _SERIES_Y_KEY_CANDIDATES:
-        if candidate in exclude or candidate == x_key:
-            continue
-        candidate_values = _float_list_or_none(evidence.get(candidate))
-        if candidate_values is None or len(candidate_values) != x_len:
-            continue
-        ordered_pairs = sorted(zip(x_values, candidate_values), key=lambda pair: pair[0])
-        series_entries.append(
-            {
-                "key": candidate,
-                "label": _evidence_label(candidate),
-                "points": ordered_pairs,
-            }
-        )
-        used_keys.add(candidate)
-
-    if not series_entries:
-        return "", set()
+    series_kind = str(payload["series_kind"]).strip()
+    x_key = str(payload["x_key"]).strip()
+    x_values = list(payload["x_values"])
+    series_entries = list(payload["series_entries"])
+    used_keys = set(used_keys)
 
     x_domain = _series_domain([point[0] for series in series_entries for point in series["points"]])
     y_domain = _series_domain([point[1] for series in series_entries for point in series["points"]])

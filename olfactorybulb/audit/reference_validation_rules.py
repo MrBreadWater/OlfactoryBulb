@@ -14,6 +14,7 @@ from olfactorybulb.audit.criterion_math import (
     criterion_math_for_reference_band,
 )
 from olfactorybulb.audit.core import rounded
+from olfactorybulb.audit.protocol_evidence import protocol_series_spec_map
 from olfactorybulb.audit.reference_data import (
     REPO_ROOT,
     csv_rows,
@@ -547,11 +548,20 @@ def _build_series_rule_items(
     if not rules:
         return []
     protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
+    evidence_series_specs = protocol_series_spec_map(
+        getattr(context.protocol_result, "evidence_series_specs", ()) or ()
+    )
     cases = []
     for rule in rules:
         loader = str(rule["loader"])
         reference_rows = _filter_rows(_load_rows(loader), rule, args=context.args)
-        cases.append(_series_comparison_case(rule, reference_rows))
+        cases.append(
+            _series_comparison_case(
+                rule,
+                reference_rows,
+                evidence_series_specs=evidence_series_specs,
+            )
+        )
     suite_name = (
         str(rules[0].get("suite_name", context.config.get("validation_id", "validation"))).strip()
         or "validation"
@@ -580,18 +590,22 @@ def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | 
 def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
     protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
     series_visuals: list[dict[str, Any]] = []
-    fi_curve_rows = protocol_evidence.get("fi_curve_rows")
-    if isinstance(fi_curve_rows, list) and fi_curve_rows:
-        series_visuals.append(
-            series_visual_spec(
-                keys=["fi_curve_rows"],
-                style={
-                    "line_width": 1.8,
-                    "marker_size": 3.2,
-                    "legend_loc": "lower center",
-                },
+    evidence_series_specs = tuple(getattr(context.protocol_result, "evidence_series_specs", ()) or ())
+    for spec in evidence_series_specs:
+        series_visuals.append(spec.to_visual_spec())
+    if not series_visuals:
+        fi_curve_rows = protocol_evidence.get("fi_curve_rows")
+        if isinstance(fi_curve_rows, list) and fi_curve_rows:
+            series_visuals.append(
+                series_visual_spec(
+                    keys=["fi_curve_rows"],
+                    style={
+                        "line_width": 1.8,
+                        "marker_size": 3.2,
+                        "legend_loc": "lower center",
+                    },
+                )
             )
-        )
     return [
         _rule_item(
             rule,
@@ -806,8 +820,14 @@ def _reference_curve_match(rule: dict[str, Any], context: ValidationRuleContext)
 def _series_comparison_case(
     rule: dict[str, Any],
     reference_rows: list[dict[str, Any]],
+    *,
+    evidence_series_specs: dict[str, Any] | None = None,
 ) -> SeriesComparisonCase:
-    spec = SeriesComparisonRuleSpec.from_rule(rule)
+    protocol_series_spec = None
+    if evidence_series_specs:
+        protocol_evidence_key = str(rule.get("protocol_evidence_key", "fi_curve_rows")).strip()
+        protocol_series_spec = evidence_series_specs.get(protocol_evidence_key)
+    spec = SeriesComparisonRuleSpec.from_rule(rule, protocol_series_spec=protocol_series_spec)
     observation = SeriesDistributionObservation(
         protocol_evidence_key=spec.protocol_evidence_key,
         reference_rows=reference_rows,

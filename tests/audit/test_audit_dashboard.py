@@ -93,6 +93,41 @@ sample_report = AuditReport(
             group_title="Audit gamma",
         ),
         AuditItem(
+            check_id="audit_gamma.gamma_row_curve",
+            status="PASS",
+            title="Gamma row curve",
+            criterion="Protocol row collections should render through an explicit row-source contract.",
+            description="Description",
+            acceptable="Acceptable",
+            acceptable_basis="Configured",
+            evidence={
+                "protocol_rows": [
+                    {"cell_name": "Cell A", "current_pA": 0.0, "firing_rate_Hz": 0.0},
+                    {"cell_name": "Cell A", "current_pA": 50.0, "firing_rate_Hz": 2.0},
+                    {"cell_name": "Cell A", "current_pA": 100.0, "firing_rate_Hz": 5.0},
+                    {"cell_name": "Cell B", "current_pA": 0.0, "firing_rate_Hz": 0.0},
+                    {"cell_name": "Cell B", "current_pA": 50.0, "firing_rate_Hz": 2.6},
+                    {"cell_name": "Cell B", "current_pA": 100.0, "firing_rate_Hz": 5.8},
+                ],
+            },
+            series_visuals=[
+                series_visual_spec(
+                    keys=["protocol_rows"],
+                    row_source_key="protocol_rows",
+                    x_key="current_pA",
+                    y_keys=["firing_rate_Hz"],
+                    series_id_key="cell_name",
+                    style={
+                        "x_label": "Injected current (pA)",
+                        "y_label": "Firing rate (Hz)",
+                        "title": "Protocol f-I curve",
+                    },
+                ),
+            ],
+            group_id="audit_gamma",
+            group_title="Audit gamma",
+        ),
+        AuditItem(
             check_id="audit_gamma.gamma_nonfunction_curve",
             status="PASS",
             title="Gamma nonfunction curve",
@@ -306,6 +341,9 @@ with TemporaryDirectory() as tmp:
     assert "Firing rate (Hz)" in html
     assert "Injected current (pA)" in html
     assert "Membrane voltage (mV)" in html
+    assert "Protocol f-I curve" in html
+    assert "Cell A" in html
+    assert "Cell B" in html
     assert html.count("series-graph-meta") >= 1
     assert html.count("<text") >= 8
     assert html.count("<path") >= 1

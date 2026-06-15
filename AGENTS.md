@@ -591,6 +591,14 @@ contract for future sessions.
     Do not infer series-comparison compatibility from field names alone.
     Maintained validations should declare reference/model axis units,
     comparison units, and any needed axis transform explicitly.
+    When a protocol runner already knows the shape of a graphable row bundle,
+    register that once through the typed
+    `olfactorybulb.audit.protocol_evidence` layer instead of repeating the
+    model-side x/y keys and units at each consumer. `protocol_executed`
+    should consume that contract instead of special-casing `fi_curve_rows`,
+    and `reference_curve_match` may use it for ergonomic model-side defaults
+    only. Keep reference-side and comparison-space units explicit in the
+    validation config.
   - `reference_curve_match` should also declare `alignment_policy`,
     `distribution_kind`, and `score_family` explicitly; do not let the
     maintained path silently fall back to hidden series-comparison semantics.
@@ -640,6 +648,10 @@ contract for future sessions.
     inline at the rule-builder callsite. Keep the declarative parsing itself
     centralized in the typed `SeriesComparisonRuleSpec` path rather than
     scattering axis/policy/visual parsing across several unrelated helpers.
+    Apply the same rule to protocol evidence presentation: the dashboard
+    should consume an explicit row-source series contract from
+    `olfactorybulb.audit.protocol_evidence` rather than guessing graph
+    semantics from a magic evidence key.
   - When a maintained validation rule family compiles into a SciUnit-backed
     suite and also emits per-case `AuditItem`s, add one shared suite-overview
     item through `olfactorybulb.neuronunit.suite_presentation` rather than

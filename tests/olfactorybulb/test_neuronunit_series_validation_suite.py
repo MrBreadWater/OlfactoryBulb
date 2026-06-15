@@ -5,6 +5,7 @@ from __future__ import annotations
 from argparse import Namespace
 from types import SimpleNamespace
 
+from olfactorybulb.audit.protocol_evidence import intrinsic_fi_curve_series_spec
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import (
     SeriesComparisonRuleSpec,
@@ -798,6 +799,25 @@ assert parsed_rule_spec.visual_contract.kind == "fi_curve"
 assert parsed_rule_spec.policy.score_family == "hybrid_residual_welch"
 assert parsed_rule_spec.policy.alignment_policy == "exact_transformed_x"
 
+fallback_rule = dict(rule)
+del fallback_rule["model_current_key"]
+del fallback_rule["model_value_key"]
+del fallback_rule["model_x_unit_text"]
+del fallback_rule["model_y_unit_text"]
+fallback_rule.pop("x_quantity_name", None)
+fallback_rule.pop("y_quantity_name", None)
+fallback_rule_spec = SeriesComparisonRuleSpec.from_rule(
+    fallback_rule,
+    protocol_series_spec=intrinsic_fi_curve_series_spec(),
+)
+assert fallback_rule_spec.model_spec.x_key == "current_pA"
+assert fallback_rule_spec.model_spec.y_key == "firing_rate_Hz"
+assert fallback_rule_spec.model_spec.x_unit_text == "pA"
+assert fallback_rule_spec.model_spec.y_unit_text == "Hz"
+assert fallback_rule_spec.model_spec.series_id_key == "cell_name"
+assert fallback_rule_spec.x_quantity_name == "Injected current"
+assert fallback_rule_spec.y_quantity_name == "Firing rate"
+
 context = ValidationRuleContext(
     metrics=[],
     summary={},
@@ -809,7 +829,8 @@ context = ValidationRuleContext(
             "cell_models": ["SyntheticModel1", "SyntheticModel2"],
             "step_duration_ms": 500.0,
             "target_vm_mV": -60.0,
-        }
+        },
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     ),
 )
 
@@ -832,6 +853,7 @@ assert items[1].evidence["pvalue_aggregation"] == "median"
 assert items[1].evidence["pvalue_aggregation_source"] == "auto_default"
 assert items[1].evidence["reference_provenance"]["protocol_ids"] == ["SYNTHETIC_PROTOCOL"]
 assert items[1].evidence["model_provenance"]["protocol_context"]["target_vm_mV"] == -60.0
+assert items[1].evidence["model_x_key"] == "current_flux"
 
 residual_only_rule = dict(rule)
 residual_only_rule["score_family"] = "residual_only"
@@ -882,7 +904,8 @@ equivalence_context = ValidationRuleContext(
     args=Namespace(),
     config={"validation_id": "synthetic_series_validation"},
     protocol_result=SimpleNamespace(
-        protocol_evidence={"fi_curve_rows": equivalence_model_rows}
+        protocol_evidence={"fi_curve_rows": equivalence_model_rows},
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
     ),
 )
 rules_module._load_rows = (
@@ -1020,7 +1043,10 @@ resampled_context = ValidationRuleContext(
     summary={},
     args=Namespace(),
     config={"validation_id": "synthetic_series_validation"},
-    protocol_result=SimpleNamespace(protocol_evidence={"fi_curve_rows": resampled_model_rows}),
+    protocol_result=SimpleNamespace(
+        protocol_evidence={"fi_curve_rows": resampled_model_rows},
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    ),
 )
 rules_module._load_rows = (
     lambda loader_spec: resampled_reference_rows
@@ -1038,6 +1064,32 @@ assert resampled_rule_items[1].evidence["resampling_grid_source"] == "explicit_g
 assert resampled_rule_items[1].evidence["declared_resampling_grid_values"] == [150.0, 250.0]
 assert resampled_rule_items[1].evidence["currents_pA"] == [150.0, 250.0]
 assert resampled_rule_items[1].evidence["matched_point_count"] == 2
+
+protocol_default_rule = dict(equivalence_rule)
+protocol_default_rule["loader"] = "csv:/tmp/equivalence.csv"
+del protocol_default_rule["model_current_key"]
+del protocol_default_rule["model_value_key"]
+del protocol_default_rule["model_x_unit_text"]
+del protocol_default_rule["model_y_unit_text"]
+protocol_default_rule.pop("x_quantity_name", None)
+protocol_default_rule.pop("y_quantity_name", None)
+rules_module._load_rows = (
+    lambda loader_spec: equivalence_reference_rows
+    if loader_spec == "csv:/tmp/equivalence.csv"
+    else original_load_rows(loader_spec)
+)
+try:
+    protocol_default_items = build_rule_items([protocol_default_rule], equivalence_context)
+finally:
+    rules_module._load_rows = original_load_rows
+
+assert protocol_default_items[1].status == "PASS"
+assert protocol_default_items[1].evidence["model_x_key"] == "current_pA"
+assert protocol_default_items[1].evidence["model_y_key"] == "firing_rate_Hz"
+assert protocol_default_items[1].evidence["model_x_unit_text"] == "pA"
+assert protocol_default_items[1].evidence["model_y_unit_text"] == "Hz"
+assert protocol_default_items[1].evidence["x_quantity_name"] == "Injected current"
+assert protocol_default_items[1].evidence["y_quantity_name"] == "Firing rate"
 
 missing_units_rule = dict(rule)
 del missing_units_rule["reference_x_unit_text"]

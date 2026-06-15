@@ -14,6 +14,10 @@ from typing import Any, Callable, Sequence
 import numpy as np
 
 from fi_curve_utils import find_spike_times_milliseconds
+from olfactorybulb.audit.protocol_evidence import (
+    ProtocolEvidenceSeriesSpec,
+    intrinsic_fi_curve_series_spec,
+)
 from prev_ob_models.cell_registry import get_cell_model_spec, load_cell_class
 
 
@@ -22,6 +26,7 @@ class ProtocolRunResult:
     metrics: list[dict[str, Any]]
     protocol_evidence: dict[str, Any]
     group_field: str = "cell_type"
+    evidence_series_specs: tuple[ProtocolEvidenceSeriesSpec, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1164,7 +1169,12 @@ def _run_registered_gc_protocol(args: argparse.Namespace, protocol_config: dict[
         "reference_gc_subtypes": group_values,
         "fi_curve_rows": fi_curve_rows,
     }
-    return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="gc_subtype")
+    return ProtocolRunResult(
+        metrics=metrics,
+        protocol_evidence=protocol_evidence,
+        group_field="gc_subtype",
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    )
 
 
 def _epl_fsi_protocol_cli_args(parser: argparse.ArgumentParser) -> None:
@@ -1194,7 +1204,12 @@ def _run_registered_epl_fsi_protocol(args: argparse.Namespace, protocol_config: 
         "cell_models": [label for label, _cell_spec, _cell_type in cell_specs],
         "fi_curve_rows": fi_curve_rows,
     }
-    return ProtocolRunResult(metrics=metrics, protocol_evidence=protocol_evidence, group_field="cell_type")
+    return ProtocolRunResult(
+        metrics=metrics,
+        protocol_evidence=protocol_evidence,
+        group_field="cell_type",
+        evidence_series_specs=(intrinsic_fi_curve_series_spec(),),
+    )
 
 
 def _epli_correctness_cli_args(parser: argparse.ArgumentParser) -> None:

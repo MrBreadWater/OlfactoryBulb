@@ -279,17 +279,23 @@ validation_design_review_status = "pending"
 # loader = "csv:research_context/EXAMPLE_fI_curve.csv"
 # filter_field = "protocol_id"
 # filter_value = "EXAMPLE_PROTOCOL"
+# If the selected protocol runner registers a matching typed protocol-evidence
+# series spec for this key, the maintained path can fill in the model-side
+# x/y keys, units, and quantity labels from that protocol contract.
 # protocol_evidence_key = "fi_curve_rows"
 # reference_current_key = "current_pA"
 # reference_value_key = "firing_rate_Hz"
-# model_current_key = "current_pA"
-# model_value_key = "firing_rate_Hz"
 # reference_x_unit_text = "pA"
 # reference_y_unit_text = "Hz"
-# model_x_unit_text = "pA"
-# model_y_unit_text = "Hz"
 # comparison_x_unit_text = "pA"
 # comparison_y_unit_text = "Hz"
+# If the protocol contract does not already provide these model-side fields,
+# declare them explicitly:
+# model_current_key = "current_pA"
+# model_value_key = "firing_rate_Hz"
+# model_x_unit_text = "pA"
+# model_y_unit_text = "Hz"
+# model_series_id_key = "cell_name"
 # x_quantity_name = "Injected current"
 # y_quantity_name = "Firing rate"
 # alignment_policy = "exact_transformed_x"

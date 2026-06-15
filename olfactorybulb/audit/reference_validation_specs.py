@@ -15,6 +15,7 @@ from olfactorybulb.audit.criterion_math import (
     criterion_math_for_upper_bound,
     group_mean_symbol,
 )
+from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceSeriesSpec
 from olfactorybulb.neuronunit.reference_bands import sigma_phrase as _sigma_phrase
 from olfactorybulb.neuronunit.comparison_validation_suite import ComparisonRuleCase
 from olfactorybulb.neuronunit.series_validation_suite import (
@@ -579,16 +580,29 @@ class SeriesComparisonRuleSpec:
     policy: SeriesComparisonPolicy
 
     @classmethod
-    def from_rule(cls, rule: dict[str, Any]) -> "SeriesComparisonRuleSpec":
-        parser = _SeriesComparisonRuleParser(rule)
+    def from_rule(
+        cls,
+        rule: dict[str, Any],
+        *,
+        protocol_series_spec: ProtocolEvidenceSeriesSpec | None = None,
+    ) -> "SeriesComparisonRuleSpec":
+        parser = _SeriesComparisonRuleParser(rule, protocol_series_spec=protocol_series_spec)
         return cls(
             protocol_evidence_key=parser.string("protocol_evidence_key", "fi_curve_rows"),
             reference_spec=parser.data_spec("reference"),
             model_spec=parser.data_spec("model"),
             comparison_x_unit_text=parser.required_unit_text("comparison_x_unit_text"),
             comparison_y_unit_text=parser.required_unit_text("comparison_y_unit_text"),
-            x_quantity_name=parser.string("x_quantity_name", "Injected current"),
-            y_quantity_name=parser.string("y_quantity_name", "Firing rate"),
+            x_quantity_name=parser.string_with_fallback(
+                "x_quantity_name",
+                "Injected current",
+                fallback=parser.protocol_series_string("x_quantity_name"),
+            ),
+            y_quantity_name=parser.string_with_fallback(
+                "y_quantity_name",
+                "Firing rate",
+                fallback=parser.protocol_series_string("y_quantity_name"),
+            ),
             visual_contract=parser.visual_contract(),
             policy=parser.policy(),
         )
@@ -597,9 +611,23 @@ class SeriesComparisonRuleSpec:
 @dataclass(frozen=True)
 class _SeriesComparisonRuleParser:
     rule: dict[str, Any]
+    protocol_series_spec: ProtocolEvidenceSeriesSpec | None = None
 
     def string(self, key: str, default: str) -> str:
         return str(self.rule.get(key, default))
+
+    def string_with_fallback(self, key: str, default: str, *, fallback: str = "") -> str:
+        if key in self.rule:
+            return str(self.rule.get(key, default))
+        if fallback:
+            return str(fallback)
+        return str(default)
+
+    def protocol_series_string(self, key: str) -> str:
+        if self.protocol_series_spec is None:
+            return ""
+        value = getattr(self.protocol_series_spec, key, "")
+        return str(value or "").strip()
 
     def required_unit_text(self, key: str) -> str:
         if key not in self.rule:
@@ -653,6 +681,17 @@ class _SeriesComparisonRuleParser:
             extrapolation_mode=str(raw.get("extrapolation_mode", "forbid")).strip(),
         )
 
+    def _unit_text(self, key: str, *, fallback: str = "", explicit_required: bool = True) -> str:
+        if key in self.rule:
+            return str(self.rule.get(key, "")).strip()
+        if fallback:
+            return str(fallback).strip()
+        if explicit_required:
+            raise ValueError(
+                f"reference_curve_match requires explicit {key!r}; do not infer series-comparison units from field names"
+            )
+        return ""
+
     def data_spec(self, side: str) -> SeriesDataSpec:
         side_prefix = str(side).strip().lower()
         if side_prefix not in {"reference", "model"}:
@@ -662,14 +701,42 @@ class _SeriesComparisonRuleParser:
             "model": ("current_pA", "firing_rate_Hz", "cell_name"),
         }
         default_x_key, default_y_key, default_series_id_key = defaults[side_prefix]
+        protocol_series_spec = self.protocol_series_spec if side_prefix == "model" else None
+        fallback_x_key = protocol_series_spec.x_key if protocol_series_spec is not None else ""
+        fallback_y_key = (
+            protocol_series_spec.y_keys[0]
+            if protocol_series_spec is not None and protocol_series_spec.y_keys
+            else ""
+        )
+        fallback_series_id_key = protocol_series_spec.series_id_key if protocol_series_spec is not None else ""
         return SeriesDataSpec(
-            x_key=self.string(f"{side_prefix}_current_key", default_x_key),
-            y_key=self.string(f"{side_prefix}_value_key", default_y_key),
-            x_unit_text=self.required_unit_text(f"{side_prefix}_x_unit_text"),
-            y_unit_text=self.required_unit_text(f"{side_prefix}_y_unit_text"),
+            x_key=self.string_with_fallback(
+                f"{side_prefix}_current_key",
+                default_x_key,
+                fallback=fallback_x_key,
+            ),
+            y_key=self.string_with_fallback(
+                f"{side_prefix}_value_key",
+                default_y_key,
+                fallback=fallback_y_key,
+            ),
+            x_unit_text=self._unit_text(
+                f"{side_prefix}_x_unit_text",
+                fallback=protocol_series_spec.x_unit_text if protocol_series_spec is not None else "",
+                explicit_required=True,
+            ),
+            y_unit_text=self._unit_text(
+                f"{side_prefix}_y_unit_text",
+                fallback=protocol_series_spec.y_unit_text if protocol_series_spec is not None else "",
+                explicit_required=True,
+            ),
             x_transform=self.axis_transform(f"{side_prefix}_x_transform"),
             y_transform=self.axis_transform(f"{side_prefix}_y_transform"),
-            series_id_key=self.string(f"{side_prefix}_series_id_key", default_series_id_key),
+            series_id_key=self.string_with_fallback(
+                f"{side_prefix}_series_id_key",
+                default_series_id_key,
+                fallback=fallback_series_id_key,
+            ),
         )
 
     def visual_contract(self) -> SeriesVisualContract:
