@@ -999,6 +999,11 @@ lookup_items = audit_items_from_series_comparison_suite(lookup_compiled)
 assert lookup_items[1].status == "PASS"
 assert lookup_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert lookup_items[1].evidence["model_x_transform"].startswith("affine_lookup(")
+assert lookup_items[1].evidence["transform_provenance"]["model_x"]["scale_lookup"] == {
+    "lookup_key": "unit_conversions.flux_to_pA_scale",
+    "scopes": ["context"],
+    "distinct_values": [1000.0],
+}
 
 metadata_piecewise_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -1068,6 +1073,15 @@ assert metadata_piecewise_items[1].evidence["currents_pA"] == [100.0, 210.0, 330
 assert metadata_piecewise_items[1].evidence["model_x_transform"].startswith(
     "piecewise_linear(points_lookup=unit_conversions.flux_to_pA_points"
 )
+assert metadata_piecewise_items[1].evidence["transform_provenance"]["model_x"]["points_lookup"] == {
+    "lookup_key": "unit_conversions.flux_to_pA_points",
+    "scopes": ["context"],
+    "distinct_point_sets": [[
+        {"input": 0.1, "output": 100.0},
+        {"input": 0.2, "output": 210.0},
+        {"input": 0.3, "output": 330.0},
+    ]],
+}
 
 pipeline_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -1998,6 +2012,11 @@ assert lookup_rule_spec.model_spec.x_transform.scale_lookup_key == "unit_convers
 assert lookup_rule_items[1].status == "PASS"
 assert lookup_rule_items[1].evidence["currents_pA"] == [100.0, 200.0]
 assert lookup_rule_items[1].evidence["model_x_transform"].startswith("affine_lookup(")
+assert lookup_rule_items[1].evidence["transform_provenance"]["model_x"]["scale_lookup"] == {
+    "lookup_key": "unit_conversions.flux_to_pA_scale",
+    "scopes": ["context"],
+    "distinct_values": [1000.0],
+}
 
 metadata_piecewise_rule = dict(residual_only_rule)
 metadata_piecewise_rule["loader"] = "csv:/tmp/metadata-piecewise.csv"
@@ -2047,6 +2066,15 @@ assert metadata_piecewise_rule_items[1].evidence["currents_pA"] == [100.0, 210.0
 assert metadata_piecewise_rule_items[1].evidence["model_x_transform"].startswith(
     "piecewise_linear(points_lookup=unit_conversions.flux_to_pA_points"
 )
+assert metadata_piecewise_rule_items[1].evidence["transform_provenance"]["model_x"]["points_lookup"] == {
+    "lookup_key": "unit_conversions.flux_to_pA_points",
+    "scopes": ["context"],
+    "distinct_point_sets": [[
+        {"input": 0.1, "output": 100.0},
+        {"input": 0.2, "output": 210.0},
+        {"input": 0.3, "output": 330.0},
+    ]],
+}
 
 pipeline_rule = dict(residual_only_rule)
 pipeline_rule["loader"] = "csv:/tmp/pipeline.csv"
@@ -2103,6 +2131,16 @@ assert pipeline_rule_spec.model_spec.x_transform.steps[1].kind == "piecewise_lin
 assert pipeline_rule_items[1].status == "PASS"
 assert pipeline_rule_items[1].evidence["currents_pA"] == [100.0, 210.0, 330.0]
 assert pipeline_rule_items[1].evidence["model_x_transform"].startswith("pipeline(")
+assert pipeline_rule_items[1].evidence["transform_provenance"]["model_x"]["steps"][0]["scale_lookup"] == {
+    "lookup_key": "unit_conversions.flux_to_nA_scale",
+    "scopes": ["context"],
+    "distinct_values": [0.1],
+}
+assert pipeline_rule_items[1].evidence["transform_provenance"]["model_x"]["steps"][0]["scale_lookup"] == {
+    "lookup_key": "unit_conversions.flux_to_nA_scale",
+    "scopes": ["context"],
+    "distinct_values": [0.1],
+}
 
 cluster_rule = dict(residual_only_rule)
 cluster_rule["loader"] = "csv:/tmp/cluster.csv"

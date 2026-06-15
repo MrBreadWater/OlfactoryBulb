@@ -1758,6 +1758,9 @@ Important details:
   `intersection`, `reference`, and `model`
 - emitted evidence for resampled-grid comparisons now includes compact per-bin
   support provenance, not just aligned-support counts
+- emitted evidence for non-identity series transforms now also includes typed
+  transform-lineage summaries, so metadata-backed lookup keys do not disappear
+  into a flat transform description string
 - if `resampling_grid_source = "explicit_grid"`, also declare
   `resampling_grid_values = [ ... ]`
 - if `resampling_grid_source = "lookup_grid"`, also declare

@@ -279,6 +279,111 @@ class ResolvedResamplingGrid:
 
 
 @dataclass(frozen=True)
+class TransformNumericLookupProvenance:
+    lookup_key: str = ""
+    scopes: tuple[str, ...] = ()
+    distinct_values: tuple[float, ...] = ()
+
+    def is_meaningful(self) -> bool:
+        return bool(self.lookup_key)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "lookup_key": self.lookup_key,
+            "scopes": list(self.scopes),
+            "distinct_values": _rounded_list(list(self.distinct_values)),
+        }
+
+
+@dataclass(frozen=True)
+class TransformPointLookupProvenance:
+    lookup_key: str = ""
+    scopes: tuple[str, ...] = ()
+    distinct_point_sets: tuple[tuple[tuple[float, float], ...], ...] = ()
+
+    def is_meaningful(self) -> bool:
+        return bool(self.lookup_key)
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "lookup_key": self.lookup_key,
+            "scopes": list(self.scopes),
+            "distinct_point_sets": [
+                [
+                    {
+                        "input": _rounded_float_or_raw(point[0]),
+                        "output": _rounded_float_or_raw(point[1]),
+                    }
+                    for point in point_set
+                ]
+                for point_set in self.distinct_point_sets
+            ],
+        }
+
+
+@dataclass(frozen=True)
+class AxisTransformProvenance:
+    kind: str = "identity"
+    description: str = "identity"
+    input_unit_text: str = ""
+    output_unit_text: str = ""
+    extrapolation_mode: str = ""
+    scale_lookup: TransformNumericLookupProvenance = field(default_factory=TransformNumericLookupProvenance)
+    offset_lookup: TransformNumericLookupProvenance = field(default_factory=TransformNumericLookupProvenance)
+    points_lookup: TransformPointLookupProvenance = field(default_factory=TransformPointLookupProvenance)
+    steps: tuple["AxisTransformProvenance", ...] = ()
+
+    def is_meaningful(self) -> bool:
+        return bool(self.kind and self.kind != "identity")
+
+    def to_dict(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "kind": self.kind,
+            "description": self.description,
+            "input_unit_text": self.input_unit_text,
+            "output_unit_text": self.output_unit_text,
+        }
+        if self.extrapolation_mode:
+            payload["extrapolation_mode"] = self.extrapolation_mode
+        if self.scale_lookup.is_meaningful():
+            payload["scale_lookup"] = self.scale_lookup.to_dict()
+        if self.offset_lookup.is_meaningful():
+            payload["offset_lookup"] = self.offset_lookup.to_dict()
+        if self.points_lookup.is_meaningful():
+            payload["points_lookup"] = self.points_lookup.to_dict()
+        if self.steps:
+            payload["steps"] = [step.to_dict() for step in self.steps]
+        return payload
+
+
+@dataclass(frozen=True)
+class SeriesTransformProvenance:
+    reference_x: AxisTransformProvenance = field(default_factory=AxisTransformProvenance)
+    reference_y: AxisTransformProvenance = field(default_factory=AxisTransformProvenance)
+    model_x: AxisTransformProvenance = field(default_factory=AxisTransformProvenance)
+    model_y: AxisTransformProvenance = field(default_factory=AxisTransformProvenance)
+
+    def is_meaningful(self) -> bool:
+        return any(
+            transform.is_meaningful()
+            for transform in (
+                self.reference_x,
+                self.reference_y,
+                self.model_x,
+                self.model_y,
+            )
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "reference_x": self.reference_x.to_dict(),
+            "reference_y": self.reference_y.to_dict(),
+            "model_x": self.model_x.to_dict(),
+            "model_y": self.model_y.to_dict(),
+        }
+
+
+@dataclass(frozen=True)
 class SeriesResampledSupportEntry:
     x_value: float
     reference_series_ids: tuple[str, ...] = ()
@@ -838,6 +943,104 @@ def _lookup_transform_points(
     )
 
 
+def _lookup_numeric_provenance(
+    lookup_key: str,
+    *,
+    rows: Sequence[Mapping[str, object]],
+    context: Mapping[str, object] | None,
+) -> TransformNumericLookupProvenance:
+    normalized_key = str(lookup_key or "").strip()
+    if not normalized_key:
+        return TransformNumericLookupProvenance()
+    scopes: set[str] = set()
+    values: set[float] = set()
+    for row in rows:
+        candidate = _nested_mapping_value(row, normalized_key)
+        if candidate is None or isinstance(candidate, bool):
+            continue
+        try:
+            numeric = numeric_value(candidate) if isinstance(candidate, pq.Quantity) else float(candidate)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Transform lookup key {normalized_key!r} resolved from row metadata "
+                "but did not contain a finite numeric value"
+            ) from None
+        if not math.isfinite(numeric):
+            raise ValueError(
+                f"Transform lookup key {normalized_key!r} resolved from row metadata "
+                "but did not contain a finite numeric value"
+            )
+        scopes.add("row")
+        values.add(float(numeric))
+    candidate = _nested_mapping_value(context, normalized_key)
+    if candidate is not None and not isinstance(candidate, bool):
+        try:
+            numeric = numeric_value(candidate) if isinstance(candidate, pq.Quantity) else float(candidate)
+        except (TypeError, ValueError):
+            raise ValueError(
+                f"Transform lookup key {normalized_key!r} resolved from context metadata "
+                "but did not contain a finite numeric value"
+            ) from None
+        if not math.isfinite(numeric):
+            raise ValueError(
+                f"Transform lookup key {normalized_key!r} resolved from context metadata "
+                "but did not contain a finite numeric value"
+            )
+        scopes.add("context")
+        values.add(float(numeric))
+    if not scopes:
+        raise ValueError(
+            f"Transform lookup key {normalized_key!r} was not found in the available row/context metadata"
+        )
+    return TransformNumericLookupProvenance(
+        lookup_key=normalized_key,
+        scopes=tuple(sorted(scopes)),
+        distinct_values=tuple(sorted(values)),
+    )
+
+
+def _lookup_point_provenance(
+    lookup_key: str,
+    *,
+    rows: Sequence[Mapping[str, object]],
+    context: Mapping[str, object] | None,
+) -> TransformPointLookupProvenance:
+    normalized_key = str(lookup_key or "").strip()
+    if not normalized_key:
+        return TransformPointLookupProvenance()
+    scopes: set[str] = set()
+    point_sets: set[tuple[tuple[float, float], ...]] = set()
+    for row in rows:
+        candidate = _nested_mapping_value(row, normalized_key)
+        if candidate in (None, ""):
+            continue
+        scopes.add("row")
+        point_sets.add(
+            _normalized_transform_points(
+                candidate,
+                source_label=f"Transform lookup key {normalized_key!r} resolved from row metadata",
+            )
+        )
+    candidate = _nested_mapping_value(context, normalized_key)
+    if candidate not in (None, ""):
+        scopes.add("context")
+        point_sets.add(
+            _normalized_transform_points(
+                candidate,
+                source_label=f"Transform lookup key {normalized_key!r} resolved from context metadata",
+            )
+        )
+    if not scopes:
+        raise ValueError(
+            f"Transform lookup key {normalized_key!r} was not found in the available row/context metadata"
+        )
+    return TransformPointLookupProvenance(
+        lookup_key=normalized_key,
+        scopes=tuple(sorted(scopes)),
+        distinct_point_sets=tuple(sorted(point_sets)),
+    )
+
+
 def _normalized_resampling_grid_values(
     raw_values: object,
     *,
@@ -1073,6 +1276,85 @@ class AxisTransform:
         return kind
 
 
+def _resolved_transform_output_unit_text(transform: AxisTransform, source_unit_text: str) -> str:
+    kind = str(transform.kind or "identity").strip().lower()
+    if kind == "pipeline" and transform.steps:
+        current_source_unit_text = str(source_unit_text or "").strip()
+        for step in transform.steps:
+            current_source_unit_text = _resolved_transform_output_unit_text(step, current_source_unit_text)
+        return current_source_unit_text
+    return transform._resolved_output_unit_text(source_unit_text)
+
+
+def _axis_transform_provenance(
+    transform: AxisTransform,
+    *,
+    rows: Sequence[Mapping[str, object]],
+    context: Mapping[str, object] | None,
+    source_unit_text: str,
+) -> AxisTransformProvenance:
+    kind = str(transform.kind or "identity").strip().lower() or "identity"
+    input_unit_text = str(transform.input_unit_text or source_unit_text or "").strip()
+    output_unit_text = _resolved_transform_output_unit_text(transform, source_unit_text)
+    if kind == "pipeline":
+        current_source_unit_text = str(source_unit_text or "").strip()
+        steps: list[AxisTransformProvenance] = []
+        for step in transform.steps:
+            step_provenance = _axis_transform_provenance(
+                step,
+                rows=rows,
+                context=context,
+                source_unit_text=current_source_unit_text,
+            )
+            steps.append(step_provenance)
+            current_source_unit_text = _resolved_transform_output_unit_text(step, current_source_unit_text)
+        return AxisTransformProvenance(
+            kind=kind,
+            description=transform.description(),
+            input_unit_text=input_unit_text,
+            output_unit_text=current_source_unit_text,
+            steps=tuple(steps),
+        )
+    return AxisTransformProvenance(
+        kind=kind,
+        description=transform.description(),
+        input_unit_text=input_unit_text,
+        output_unit_text=output_unit_text,
+        extrapolation_mode=(
+            str(transform.extrapolation_mode or "").strip()
+            if kind == "piecewise_linear"
+            else ""
+        ),
+        scale_lookup=(
+            _lookup_numeric_provenance(
+                transform.scale_lookup_key,
+                rows=rows,
+                context=context,
+            )
+            if str(transform.scale_lookup_key or "").strip()
+            else TransformNumericLookupProvenance()
+        ),
+        offset_lookup=(
+            _lookup_numeric_provenance(
+                transform.offset_lookup_key,
+                rows=rows,
+                context=context,
+            )
+            if str(transform.offset_lookup_key or "").strip()
+            else TransformNumericLookupProvenance()
+        ),
+        points_lookup=(
+            _lookup_point_provenance(
+                transform.points_lookup_key,
+                rows=rows,
+                context=context,
+            )
+            if str(transform.points_lookup_key or "").strip()
+            else TransformPointLookupProvenance()
+        ),
+    )
+
+
 def _coerce_to_comparison_unit(
     measurement: float | pq.Quantity,
     *,
@@ -1298,6 +1580,22 @@ class SeriesObservedDataset:
             exclude_context_keys=set(self.exclude_provenance_context_keys) or None,
         )
 
+    def transform_provenance(self) -> tuple[AxisTransformProvenance, AxisTransformProvenance]:
+        return (
+            _axis_transform_provenance(
+                self.x_transform,
+                rows=self.rows,
+                context=self.context or None,
+                source_unit_text=self.x_unit_text,
+            ),
+            _axis_transform_provenance(
+                self.y_transform,
+                rows=self.rows,
+                context=self.context or None,
+                source_unit_text=self.y_unit_text,
+            ),
+        )
+
 
 @dataclass(frozen=True)
 class SeriesObservedDatasetPair:
@@ -1308,6 +1606,16 @@ class SeriesObservedDatasetPair:
         return SeriesObservationProvenance(
             reference=self.reference.provenance_summary(),
             model=self.model.provenance_summary(),
+        )
+
+    def transform_provenance(self) -> SeriesTransformProvenance:
+        reference_x, reference_y = self.reference.transform_provenance()
+        model_x, model_y = self.model.transform_provenance()
+        return SeriesTransformProvenance(
+            reference_x=reference_x,
+            reference_y=reference_y,
+            model_x=model_x,
+            model_y=model_y,
         )
 
 
@@ -1684,6 +1992,7 @@ class SeriesComparisonEvidencePayload:
     reference_x_transform: str = ""
     model_x_transform: str = ""
     series_provenance: SeriesObservationProvenance = field(default_factory=SeriesObservationProvenance)
+    transform_provenance: SeriesTransformProvenance = field(default_factory=SeriesTransformProvenance)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "visual_x_key", str(self.visual_x_key).strip())
@@ -2057,6 +2366,8 @@ class SeriesComparisonEvidencePayload:
             "model_x_transform": self.model_x_transform,
             "series_provenance": self.series_provenance.to_dict(),
         }
+        if self.transform_provenance.is_meaningful():
+            evidence["transform_provenance"] = self.transform_provenance.to_dict()
         return _with_legacy_hz_aliases(
             evidence,
             comparison_y_unit_text=self.comparison_y_unit_text,
@@ -3163,6 +3474,7 @@ class SeriesComparisonTest(sciunit.Test):
             fallback_status=status,
         )
         series_provenance = bound_datasets.provenance()
+        transform_provenance = bound_datasets.transform_provenance()
         evidence_payload = SeriesComparisonEvidencePayload(
             visual_x_key=visual_contract.x_key,
             visual_reference_y_key=visual_contract.reference_y_key,
@@ -3291,6 +3603,7 @@ class SeriesComparisonTest(sciunit.Test):
             reference_x_transform=reference_dataset.x_transform.description(),
             model_x_transform=model_dataset.x_transform.description(),
             series_provenance=series_provenance,
+            transform_provenance=transform_provenance,
         )
         if obs.policy.score_family == "equivalence_only":
             if _is_finite_number(aggregate_statistical_pvalue):
@@ -3417,6 +3730,7 @@ def audit_items_from_series_comparison_suite(
 
 __all__ = [
     "AxisTransform",
+    "AxisTransformProvenance",
     "CompiledSeriesComparisonSuite",
     "SERIES_ALIGNMENT_POLICIES",
     "SERIES_INTERPOLATION_METHODS",
@@ -3437,8 +3751,11 @@ __all__ = [
     "SeriesPredictionBundle",
     "SeriesResampledSupportEntry",
     "SeriesResamplingMetadata",
+    "SeriesTransformProvenance",
     "SeriesDistributionObservation",
     "SeriesVisualContract",
+    "TransformNumericLookupProvenance",
+    "TransformPointLookupProvenance",
     "audit_items_from_series_comparison_suite",
     "compile_series_comparison_suite",
 ]

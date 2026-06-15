@@ -2358,6 +2358,12 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     from maintained protocol/model metadata with the
     `resampling_grid_*_lookup_key` fields instead of repeating those values
     in each validation TOML
+  - transform lineage is more explicit now too: emitted series evidence no
+    longer has to stop at flat `reference_x_transform` / `model_x_transform`
+    description strings when metadata-backed transforms are involved, because
+    the bridge now emits typed transform-provenance summaries with lookup
+    keys, lookup scopes, distinct resolved lookup values/point sets, and
+    recursive pipeline-step lineage
   - series provenance is richer too: the shared typed provenance payload now
     carries compact per-series summaries when explicit series ids are present,
     so future example-cell validations can inspect source identity without
@@ -2394,8 +2400,9 @@ The remaining open questions are now narrower:
   `uniform_step`; `linear`, `nearest`, `pchip`, `step_hold`;
   `allow_partial_support`, `intersection`, `reference`, `model`)
 - more explicit provenance-bearing series observation objects if future
-  validations need more than the current aggregate/per-series summaries plus
-  the new aligned-bin resampling-support provenance
+  validations need more than the current aggregate/per-series summaries, the
+  new aligned-bin resampling-support provenance, and the current transform
+  lineage summaries
 - how much NeuronUnit-native result presentation should grow before it starts
   competing with the maintained audit shell instead of feeding it
 

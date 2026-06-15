@@ -673,7 +673,10 @@ contract for future sessions.
     same transform. Do the same for regular resampling grids: when a
     `uniform_step` comparison lattice belongs in maintained protocol/model
     metadata, prefer the explicit `resampling_grid_*_lookup_key` forms over
-    copying step or bound constants into every validation TOML.
+    copying step or bound constants into every validation TOML. When a
+    series-comparison change depends on non-identity transforms, keep the
+    emitted evidence provenance-bearing enough to show the resolved transform
+    lineage, not just a flat transform description string.
     Keep reusable provenance structure out of ad hoc evidence-dict assembly:
     when a series-comparison change affects reference/model provenance payloads
     or compact protocol-context summaries, extend the shared typed layer in

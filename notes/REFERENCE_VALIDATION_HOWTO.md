@@ -793,6 +793,10 @@ If you need a different grid, declare one of:
   - when the min/max bounds are omitted, the maintained path derives them from
     the overall observed x-range and records the resolved bounds in the
     emitted evidence
+- emitted series evidence now also carries typed transform-lineage summaries
+  when a declared series transform is non-identity, including metadata lookup
+  keys, lookup scopes, distinct resolved lookup values or point sets, and
+  recursive pipeline-step lineage
 
 If you need the resampled grid clipped before interpolation support is counted,
 declare one of:

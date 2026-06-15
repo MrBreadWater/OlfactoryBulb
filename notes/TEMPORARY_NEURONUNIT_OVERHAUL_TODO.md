@@ -758,3 +758,11 @@ Remove this file when the listed items are either:
         with the matching lookup key on the same rule
       - direct suite coverage and rule-level coverage now prove the
         metadata-backed uniform-step path
+- [x] Keep non-identity series transform lineage inspectable instead of
+      collapsing metadata-backed conversions into flat description strings.
+      - emitted series evidence now carries typed transform provenance
+        summaries with lookup keys, lookup scopes, distinct resolved lookup
+        values/point sets, and recursive pipeline-step lineage
+      - direct suite coverage and rule-level coverage now assert the new
+        transform-lineage payloads for affine lookup, metadata-backed
+        piecewise lookup, and transform pipelines
