@@ -30,7 +30,7 @@ from olfactorybulb.audit.reference_validation_rules import (
     compile_rule_dispatches,
     summarize_numeric_metrics,
 )
-from olfactorybulb.neuronunit.metric_tables import MetricTable
+from olfactorybulb.neuronunit.metric_tables import MetricTable, coerce_metric_table
 
 
 def _skip_item_to_audit_item(
@@ -134,16 +134,20 @@ class ReferenceValidationPlan:
     def build_rule_items(
         self,
         *,
-        metrics: MetricTable | list[dict[str, Any]],
+        metrics: MetricTable,
         args: argparse.Namespace,
         protocol_result: ProtocolRunResult | None,
     ) -> list[AuditItem]:
-        summary = summarize_numeric_metrics(
+        resolved_metrics = coerce_metric_table(
             metrics,
             group_field=self.resolved_group_field(protocol_result),
         )
+        summary = summarize_numeric_metrics(
+            resolved_metrics,
+            group_field=self.resolved_group_field(protocol_result),
+        )
         context = ValidationRuleContext(
-            metrics=metrics,
+            metrics=resolved_metrics,
             summary=summary,
             args=args,
             validation_id=self.validation_id,

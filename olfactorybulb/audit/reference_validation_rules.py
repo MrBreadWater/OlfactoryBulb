@@ -63,8 +63,8 @@ from olfactorybulb.neuronunit.metric_tables import (
 
 @dataclass(frozen=True)
 class ValidationRuleContext:
-    metrics: MetricTable | list[dict[str, Any]]
-    summary: MetricSummaryTable | dict[str, dict[str, float]]
+    metrics: MetricTable
+    summary: MetricSummaryTable
     args: Any
     validation_id: str
     default_group: str
@@ -173,7 +173,7 @@ def register_validation_rule(kind: str) -> Callable[[RuleHandler], RuleHandler]:
 
 
 def summarize_numeric_metrics(
-    metrics: MetricTable | list[dict[str, Any]],
+    metrics: MetricTable,
     *,
     group_field: str = "cell_type",
 ) -> MetricSummaryTable:

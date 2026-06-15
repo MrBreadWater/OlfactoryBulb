@@ -2233,6 +2233,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     item evidence through a shared typed
     `olfactorybulb.neuronunit.validation_evidence` layer instead of
     hand-assembling the same dict shapes inline in each suite adapter
+  - the runtime metric-table seam is tighter too: `ProtocolRunResult`,
+    `ReferenceValidationPlan`, and `ValidationRuleContext` now treat
+    `MetricTable` / `MetricSummaryTable` as the maintained post-protocol
+    contract, while outer helpers still coerce raw rows for ergonomic tests
+    and legacy call sites at the boundary
   - the central protocol-evidence seam now follows the same pattern through a
     shared `FrozenMappingPayload` layer, so `ProtocolEvidenceBundle.values`
     and `ProtocolEvidenceSeriesSpec.style` stop carrying mutable raw maps

@@ -541,6 +541,14 @@ Remove this file when the listed items are either:
         evidence keys stable
       - direct payload coverage plus existing suite tests guard the shared
         contract
+- [x] Keep the runtime validation plan/context typed on metric-table
+      abstractions once protocol execution has crossed the boundary.
+      - `ProtocolRunResult`, `ReferenceValidationPlan`, and
+        `ValidationRuleContext` now use `MetricTable` /
+        `MetricSummaryTable` as the maintained post-protocol contract
+      - outer helpers still coerce raw rows at the boundary so tests and
+        thin wrappers stay concise without reintroducing raw list/dict unions
+        into the runtime plan/context seam
 - [x] Finish the summary-range math cleanup so maintained closed intervals use
       the shared absolute-residual form instead of raw endpoint notation.
       - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite

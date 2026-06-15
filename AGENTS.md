@@ -753,7 +753,11 @@ contract for future sessions.
     shared typed metric-table layer in
     `olfactorybulb.neuronunit.metric_tables` rather than passing fresh
     `list[dict]` / `dict[group][metric]` bundles through the protocol result,
-    validation context, and NeuronUnit suite/model seams. When a suite
+    validation context, and NeuronUnit suite/model seams. After a protocol has
+    crossed the execution boundary, keep the runtime plan/context typed on
+    `MetricTable` / `MetricSummaryTable`; outer engine helpers may still
+    coerce raw rows for ergonomic tests, but the maintained runtime contract
+    should not keep advertising raw list/dict unions past that boundary. When a suite
     aggregate policy uses `norm_rollup = "weighted_mean"`, only do so
     for a suite family that emits a principled per-case weight through the
     shared suite-case contract. In the maintained branch that currently means

@@ -14,7 +14,7 @@ from olfactorybulb.audit.reference_validation_protocols import (
     ProtocolRunResult,
     ValidationProtocolSpec,
 )
-from olfactorybulb.neuronunit.metric_tables import MetricTable
+from olfactorybulb.neuronunit.metric_tables import MetricTable, coerce_metric_table
 
 
 def add_reference_validation_common_args(parser: argparse.ArgumentParser) -> None:
@@ -41,13 +41,17 @@ def apply_validation_defaults(args: argparse.Namespace, *, validation: Reference
 
 def build_reference_validation_items(
     *,
-    metrics: MetricTable | list[dict[str, Any]],
+    metrics: MetricTable,
     args: argparse.Namespace,
     validation: ReferenceValidationPlan,
     protocol_result: ProtocolRunResult | None,
 ) -> list:
+    resolved_metrics = coerce_metric_table(
+        metrics,
+        group_field=validation.resolved_group_field(protocol_result),
+    )
     return validation.build_rule_items(
-        metrics=metrics,
+        metrics=resolved_metrics,
         args=args,
         protocol_result=protocol_result,
     )
