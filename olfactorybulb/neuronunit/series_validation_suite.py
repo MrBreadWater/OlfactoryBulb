@@ -249,6 +249,139 @@ class SeriesResamplingMetadata:
         return 0
 
 
+@dataclass(frozen=True)
+class SeriesAlignedBin:
+    reference_key: float
+    model_key: float
+    visual_x: float
+    reference_x: float
+    model_x: float
+    x_difference: float
+    reference_values: tuple[float, ...]
+    model_values: tuple[float, ...]
+    reference_mean: float
+    model_mean: float
+    reference_sd: float
+    model_sd: float
+    reference_count: int
+    model_count: int
+    reference_cluster_x_values: tuple[float, ...] = ()
+    model_cluster_x_values: tuple[float, ...] = ()
+    reference_resampled_support_count: int = 0
+    model_resampled_support_count: int = 0
+
+    @property
+    def absolute_difference(self) -> float:
+        return abs(float(self.model_mean) - float(self.reference_mean))
+
+
+@dataclass(frozen=True)
+class SeriesAlignmentSummary:
+    bins: tuple[SeriesAlignedBin, ...]
+    reference_bin_count: int
+    model_bin_count: int
+    minimum_point_count: int
+    minimum_reference_coverage_fraction: float | None
+    minimum_model_coverage_fraction: float | None
+    point_count_gate_passed: bool
+    reference_coverage_fraction: float | None
+    model_coverage_fraction: float | None
+    coverage_gate_passed: bool
+    alignment_support_gate_passed: bool
+    alignment_support_norm_score: float | None
+    resampling_metadata: SeriesResamplingMetadata = field(default_factory=SeriesResamplingMetadata)
+
+    @property
+    def matched_point_count(self) -> int:
+        return len(self.bins)
+
+    @property
+    def reference_matched_x_values(self) -> tuple[float, ...]:
+        return tuple(item.reference_x for item in self.bins)
+
+    @property
+    def model_matched_x_values(self) -> tuple[float, ...]:
+        return tuple(item.model_x for item in self.bins)
+
+    @property
+    def visual_x_values(self) -> tuple[float, ...]:
+        return tuple(item.visual_x for item in self.bins)
+
+    @property
+    def matched_x_differences(self) -> tuple[float, ...]:
+        return tuple(item.x_difference for item in self.bins)
+
+    @property
+    def reference_cluster_x_groups(self) -> tuple[tuple[float, ...], ...]:
+        if not any(item.reference_cluster_x_values for item in self.bins):
+            return ()
+        return tuple(item.reference_cluster_x_values for item in self.bins)
+
+    @property
+    def model_cluster_x_groups(self) -> tuple[tuple[float, ...], ...]:
+        if not any(item.model_cluster_x_values for item in self.bins):
+            return ()
+        return tuple(item.model_cluster_x_values for item in self.bins)
+
+    @property
+    def reference_values(self) -> tuple[float, ...]:
+        return tuple(item.reference_mean for item in self.bins)
+
+    @property
+    def model_values(self) -> tuple[float, ...]:
+        return tuple(item.model_mean for item in self.bins)
+
+    @property
+    def reference_sd_values(self) -> tuple[float, ...]:
+        return tuple(item.reference_sd for item in self.bins)
+
+    @property
+    def model_sd_values(self) -> tuple[float, ...]:
+        return tuple(item.model_sd for item in self.bins)
+
+    @property
+    def reference_count_values(self) -> tuple[int, ...]:
+        return tuple(item.reference_count for item in self.bins)
+
+    @property
+    def model_count_values(self) -> tuple[int, ...]:
+        return tuple(item.model_count for item in self.bins)
+
+    @property
+    def reference_resampled_support_counts(self) -> tuple[int, ...]:
+        if not self.resampling_metadata.target_grid:
+            return ()
+        return tuple(item.reference_resampled_support_count for item in self.bins)
+
+    @property
+    def model_resampled_support_counts(self) -> tuple[int, ...]:
+        if not self.resampling_metadata.target_grid:
+            return ()
+        return tuple(item.model_resampled_support_count for item in self.bins)
+
+    @property
+    def absolute_differences(self) -> tuple[float, ...]:
+        return tuple(item.absolute_difference for item in self.bins)
+
+    @property
+    def mean_absolute_error(self) -> float:
+        if not self.bins:
+            return float("nan")
+        return float(np.mean(np.asarray(self.absolute_differences, dtype=float)))
+
+    @property
+    def root_mean_square_error(self) -> float:
+        if not self.bins:
+            return float("nan")
+        return float(np.sqrt(np.mean(np.square(np.asarray(self.absolute_differences, dtype=float)))))
+
+    @property
+    def max_absolute_error(self) -> float:
+        if not self.bins:
+            return float("nan")
+        return float(np.max(np.asarray(self.absolute_differences, dtype=float)))
+
+
 def _deterministic_equivalence_pvalue(mean_difference: float, *, equivalence_margin: float) -> float:
     if abs(mean_difference) < float(equivalence_margin):
         return 0.0
@@ -1720,6 +1853,109 @@ def _tolerance_cluster_bins(
     return clustered_reference_bins, clustered_model_bins, cluster_metadata
 
 
+def _series_alignment_summary(
+    *,
+    aligned_pairs: list[tuple[float, float]],
+    reference_bins: dict[float, list[float]],
+    model_bins: dict[float, list[float]],
+    cluster_metadata: Mapping[float, SeriesClusterMembers],
+    resampling_metadata: SeriesResamplingMetadata,
+    minimum_point_count: int,
+    minimum_reference_coverage_fraction: float | None,
+    minimum_model_coverage_fraction: float | None,
+) -> SeriesAlignmentSummary:
+    bins: list[SeriesAlignedBin] = []
+    for reference_key, model_key in aligned_pairs:
+        cluster_members = cluster_metadata.get(reference_key)
+        if cluster_members is not None:
+            reference_x = float(np.mean(np.asarray(cluster_members.reference_x_values, dtype=float)))
+            model_x = float(np.mean(np.asarray(cluster_members.model_x_values, dtype=float)))
+            visual_x = float(reference_key)
+            reference_cluster_x_values = cluster_members.reference_x_values
+            model_cluster_x_values = cluster_members.model_x_values
+        else:
+            reference_x = float(reference_key)
+            model_x = float(model_key)
+            visual_x = reference_x
+            reference_cluster_x_values = ()
+            model_cluster_x_values = ()
+
+        reference_values = tuple(float(value) for value in reference_bins[reference_key])
+        model_values = tuple(float(value) for value in model_bins[model_key])
+        bins.append(
+            SeriesAlignedBin(
+                reference_key=float(reference_key),
+                model_key=float(model_key),
+                visual_x=visual_x,
+                reference_x=reference_x,
+                model_x=model_x,
+                x_difference=abs(float(model_x) - float(reference_x)),
+                reference_values=reference_values,
+                model_values=model_values,
+                reference_mean=float(np.mean(np.asarray(reference_values, dtype=float))),
+                model_mean=float(np.mean(np.asarray(model_values, dtype=float))),
+                reference_sd=_sample_sd(list(reference_values)),
+                model_sd=_sample_sd(list(model_values)),
+                reference_count=len(reference_values),
+                model_count=len(model_values),
+                reference_cluster_x_values=reference_cluster_x_values,
+                model_cluster_x_values=model_cluster_x_values,
+                reference_resampled_support_count=resampling_metadata.support_count(float(reference_key), side="reference"),
+                model_resampled_support_count=resampling_metadata.support_count(float(reference_key), side="model"),
+            )
+        )
+
+    reference_bin_count = len(reference_bins)
+    model_bin_count = len(model_bins)
+    matched_point_count = len(bins)
+    point_count_gate_passed = matched_point_count >= int(minimum_point_count)
+    reference_coverage_fraction = _coverage_fraction(
+        matched_point_count=matched_point_count,
+        total_point_count=reference_bin_count,
+    )
+    model_coverage_fraction = _coverage_fraction(
+        matched_point_count=matched_point_count,
+        total_point_count=model_bin_count,
+    )
+    coverage_gate_passed = True
+    if minimum_reference_coverage_fraction is not None:
+        coverage_gate_passed = (
+            coverage_gate_passed
+            and reference_coverage_fraction is not None
+            and reference_coverage_fraction >= float(minimum_reference_coverage_fraction)
+        )
+    if minimum_model_coverage_fraction is not None:
+        coverage_gate_passed = (
+            coverage_gate_passed
+            and model_coverage_fraction is not None
+            and model_coverage_fraction >= float(minimum_model_coverage_fraction)
+        )
+    alignment_support_gate_passed = point_count_gate_passed and coverage_gate_passed
+    alignment_support_norm_score = _series_alignment_support_norm_score(
+        matched_point_count=matched_point_count,
+        minimum_point_count=int(minimum_point_count),
+        reference_coverage_fraction=reference_coverage_fraction,
+        minimum_reference_coverage_fraction=minimum_reference_coverage_fraction,
+        model_coverage_fraction=model_coverage_fraction,
+        minimum_model_coverage_fraction=minimum_model_coverage_fraction,
+    )
+    return SeriesAlignmentSummary(
+        bins=tuple(bins),
+        reference_bin_count=reference_bin_count,
+        model_bin_count=model_bin_count,
+        minimum_point_count=int(minimum_point_count),
+        minimum_reference_coverage_fraction=minimum_reference_coverage_fraction,
+        minimum_model_coverage_fraction=minimum_model_coverage_fraction,
+        point_count_gate_passed=point_count_gate_passed,
+        reference_coverage_fraction=reference_coverage_fraction,
+        model_coverage_fraction=model_coverage_fraction,
+        coverage_gate_passed=coverage_gate_passed,
+        alignment_support_gate_passed=alignment_support_gate_passed,
+        alignment_support_norm_score=alignment_support_norm_score,
+        resampling_metadata=resampling_metadata,
+    )
+
+
 def _series_bins(
     rows: Sequence[Mapping[str, object]],
     *,
@@ -2227,75 +2463,21 @@ class SeriesComparisonTest(sciunit.Test):
             alignment_policy=obs.policy.alignment_policy,
             x_match_tolerance=obs.policy.x_match_tolerance,
         )
-        matched_point_count = len(aligned_pairs)
-        reference_bin_count = len(reference_bins)
-        model_bin_count = len(model_bins)
-        point_count_gate_passed = matched_point_count >= int(obs.policy.minimum_point_count)
-        reference_coverage_fraction = _coverage_fraction(
-            matched_point_count=matched_point_count,
-            total_point_count=reference_bin_count,
+        alignment_summary = _series_alignment_summary(
+            aligned_pairs=aligned_pairs,
+            reference_bins=reference_bins,
+            model_bins=model_bins,
+            cluster_metadata=cluster_metadata,
+            resampling_metadata=resampling_metadata,
+            minimum_point_count=int(obs.policy.minimum_point_count),
+            minimum_reference_coverage_fraction=obs.policy.minimum_reference_coverage_fraction,
+            minimum_model_coverage_fraction=obs.policy.minimum_model_coverage_fraction,
         )
-        model_coverage_fraction = _coverage_fraction(
-            matched_point_count=matched_point_count,
-            total_point_count=model_bin_count,
-        )
-        coverage_gate_passed = True
-        if obs.policy.minimum_reference_coverage_fraction is not None:
-            coverage_gate_passed = (
-                coverage_gate_passed
-                and reference_coverage_fraction is not None
-                and reference_coverage_fraction >= float(obs.policy.minimum_reference_coverage_fraction)
-            )
-        if obs.policy.minimum_model_coverage_fraction is not None:
-            coverage_gate_passed = (
-                coverage_gate_passed
-                and model_coverage_fraction is not None
-                and model_coverage_fraction >= float(obs.policy.minimum_model_coverage_fraction)
-            )
-        alignment_support_gate_passed = point_count_gate_passed and coverage_gate_passed
-        aligned_reference_keys = [reference_x for reference_x, _model_x in aligned_pairs]
-        aligned_model_keys = [model_x for _reference_x, model_x in aligned_pairs]
-        if cluster_metadata:
-            reference_x_values = [
-                float(np.mean(np.asarray(cluster_metadata[cluster_center].reference_x_values, dtype=float)))
-                for cluster_center in aligned_reference_keys
-            ]
-            model_x_values = [
-                float(np.mean(np.asarray(cluster_metadata[cluster_center].model_x_values, dtype=float)))
-                for cluster_center in aligned_reference_keys
-            ]
-            visual_x_values = [cluster_center for cluster_center in aligned_reference_keys]
-            matched_x_differences = [
-                abs(model_x - reference_x)
-                for reference_x, model_x in zip(reference_x_values, model_x_values, strict=False)
-            ]
-        else:
-            reference_x_values = list(aligned_reference_keys)
-            model_x_values = list(aligned_model_keys)
-            visual_x_values = list(reference_x_values)
-            matched_x_differences = [
-                abs(model_x - reference_x)
-                for reference_x, model_x in aligned_pairs
-            ]
-        reference_mean_values = [float(np.mean(reference_bins[reference_x])) for reference_x in aligned_reference_keys]
-        model_mean_values = [float(np.mean(model_bins[model_x])) for model_x in aligned_model_keys]
-        reference_sd_values = [_sample_sd(reference_bins[reference_x]) for reference_x in aligned_reference_keys]
-        model_sd_values = [_sample_sd(model_bins[model_x]) for model_x in aligned_model_keys]
-        reference_count_values = [len(reference_bins[reference_x]) for reference_x in aligned_reference_keys]
-        model_count_values = [len(model_bins[model_x]) for model_x in aligned_model_keys]
-        absolute_differences = [
-            abs(model_mean - reference_mean)
-            for reference_mean, model_mean in zip(reference_mean_values, model_mean_values, strict=False)
-        ]
-        mae = float(np.mean(absolute_differences)) if absolute_differences else float("nan")
-        rmse = (
-            float(np.sqrt(np.mean(np.square(np.asarray(absolute_differences, dtype=float)))))
-            if absolute_differences
-            else float("nan")
-        )
-        max_abs = float(np.max(absolute_differences)) if absolute_differences else float("nan")
+        mae = alignment_summary.mean_absolute_error
+        rmse = alignment_summary.root_mean_square_error
+        max_abs = alignment_summary.max_absolute_error
         residual_gate_passed = (
-            alignment_support_gate_passed
+            alignment_summary.alignment_support_gate_passed
             and _is_finite_number(mae)
             and mae <= float(obs.policy.maximum_mae)
             and _is_finite_number(rmse)
@@ -2307,8 +2489,8 @@ class SeriesComparisonTest(sciunit.Test):
         legacy_difference_gate_passed = False
         if legacy_welch_family:
             welch_pvalues = [
-                _welch_pvalue(reference_bins[reference_x], model_bins[model_x])
-                for reference_x, model_x in aligned_pairs
+                _welch_pvalue(list(item.reference_values), list(item.model_values))
+                for item in alignment_summary.bins
             ]
             finite_welch_pvalues = [value for value in welch_pvalues if _is_finite_number(value)]
             median_welch_pvalue = _aggregate_pvalues(
@@ -2316,7 +2498,7 @@ class SeriesComparisonTest(sciunit.Test):
                 method=resolved_pvalue_aggregation,
             ) if finite_welch_pvalues else float("nan")
             legacy_difference_gate_passed = (
-                alignment_support_gate_passed
+                alignment_summary.alignment_support_gate_passed
                 and _is_finite_number(median_welch_pvalue)
                 and obs.policy.minimum_median_welch_pvalue is not None
                 and median_welch_pvalue >= float(obs.policy.minimum_median_welch_pvalue)
@@ -2330,11 +2512,11 @@ class SeriesComparisonTest(sciunit.Test):
         if equivalence_family:
             equivalence_results = [
                 _equivalence_test_result(
-                    reference_bins[reference_x],
-                    model_bins[model_x],
+                    list(item.reference_values),
+                    list(item.model_values),
                     equivalence_margin=float(resolved_equivalence_margin),
                 )
-                for reference_x, model_x in aligned_pairs
+                for item in alignment_summary.bins
             ]
             statistical_test_kinds = [str(result.test_kind) for result in equivalence_results]
             statistical_pvalues = [
@@ -2348,18 +2530,18 @@ class SeriesComparisonTest(sciunit.Test):
             ]
             supported_statistical_bin_count = len(finite_statistical_pvalues)
             unsupported_statistical_x_values = [
-                float(reference_x)
-                for (reference_x, _model_x), result in zip(aligned_pairs, equivalence_results, strict=False)
+                float(item.reference_x)
+                for item, result in zip(alignment_summary.bins, equivalence_results, strict=False)
                 if not bool(result.supported) or not _is_finite_number(result.pvalue)
             ]
-            if supported_statistical_bin_count == len(aligned_pairs) and finite_statistical_pvalues:
+            if supported_statistical_bin_count == alignment_summary.matched_point_count and finite_statistical_pvalues:
                 aggregate_statistical_pvalue = _aggregate_pvalues(
                     finite_statistical_pvalues,
                     method=resolved_pvalue_aggregation,
                 )
             statistical_gate_passed = (
-                alignment_support_gate_passed
-                and supported_statistical_bin_count == len(aligned_pairs)
+                alignment_summary.alignment_support_gate_passed
+                and supported_statistical_bin_count == alignment_summary.matched_point_count
                 and _is_finite_number(aggregate_statistical_pvalue)
                 and aggregate_statistical_pvalue <= float(obs.policy.equivalence_alpha)
             )
@@ -2371,18 +2553,11 @@ class SeriesComparisonTest(sciunit.Test):
         elif obs.policy.score_family == "hybrid_residual_equivalence":
             passed = residual_gate_passed and statistical_gate_passed
         elif obs.policy.score_family == "welch_only":
-            passed = alignment_support_gate_passed and legacy_difference_gate_passed
+            passed = alignment_summary.alignment_support_gate_passed and legacy_difference_gate_passed
         else:
             passed = residual_gate_passed and legacy_difference_gate_passed
         status = self.case.pass_status if passed else self.case.fail_status
-        alignment_support_norm_score = _series_alignment_support_norm_score(
-            matched_point_count=matched_point_count,
-            minimum_point_count=int(obs.policy.minimum_point_count),
-            reference_coverage_fraction=reference_coverage_fraction,
-            minimum_reference_coverage_fraction=obs.policy.minimum_reference_coverage_fraction,
-            model_coverage_fraction=model_coverage_fraction,
-            minimum_model_coverage_fraction=obs.policy.minimum_model_coverage_fraction,
-        )
+        alignment_support_norm_score = alignment_summary.alignment_support_norm_score
         residual_norm_score = _residual_norm_score(
             mae=mae,
             maximum_mae=obs.policy.maximum_mae,
@@ -2408,36 +2583,26 @@ class SeriesComparisonTest(sciunit.Test):
             visual_x_key=visual_contract.x_key,
             visual_reference_y_key=visual_contract.reference_y_key,
             visual_model_y_key=visual_contract.model_y_key,
-            visual_x_values=tuple(visual_x_values),
-            reference_matched_x_values=tuple(reference_x_values),
-            model_matched_x_values=tuple(model_x_values),
-            matched_x_differences=tuple(matched_x_differences),
-            reference_cluster_x_groups=tuple(
-                tuple(cluster_metadata[cluster_center].reference_x_values)
-                for cluster_center in aligned_reference_keys
-            )
-            if cluster_metadata
-            else (),
-            model_cluster_x_groups=tuple(
-                tuple(cluster_metadata[cluster_center].model_x_values)
-                for cluster_center in aligned_reference_keys
-            )
-            if cluster_metadata
-            else (),
-            reference_values=tuple(reference_mean_values),
-            model_values=tuple(model_mean_values),
-            reference_sd_values=tuple(reference_sd_values),
-            model_sd_values=tuple(model_sd_values),
-            reference_count_values=tuple(reference_count_values),
-            model_count_values=tuple(model_count_values),
-            reference_bin_count=reference_bin_count,
-            model_bin_count=model_bin_count,
-            reference_coverage_fraction=reference_coverage_fraction,
-            model_coverage_fraction=model_coverage_fraction,
+            visual_x_values=alignment_summary.visual_x_values,
+            reference_matched_x_values=alignment_summary.reference_matched_x_values,
+            model_matched_x_values=alignment_summary.model_matched_x_values,
+            matched_x_differences=alignment_summary.matched_x_differences,
+            reference_cluster_x_groups=alignment_summary.reference_cluster_x_groups,
+            model_cluster_x_groups=alignment_summary.model_cluster_x_groups,
+            reference_values=alignment_summary.reference_values,
+            model_values=alignment_summary.model_values,
+            reference_sd_values=alignment_summary.reference_sd_values,
+            model_sd_values=alignment_summary.model_sd_values,
+            reference_count_values=alignment_summary.reference_count_values,
+            model_count_values=alignment_summary.model_count_values,
+            reference_bin_count=alignment_summary.reference_bin_count,
+            model_bin_count=alignment_summary.model_bin_count,
+            reference_coverage_fraction=alignment_summary.reference_coverage_fraction,
+            model_coverage_fraction=alignment_summary.model_coverage_fraction,
             minimum_point_count=int(obs.policy.minimum_point_count),
             minimum_reference_coverage_fraction=obs.policy.minimum_reference_coverage_fraction,
             minimum_model_coverage_fraction=obs.policy.minimum_model_coverage_fraction,
-            matched_point_count=matched_point_count,
+            matched_point_count=alignment_summary.matched_point_count,
             mean_absolute_error=mae,
             root_mean_square_error=rmse,
             max_absolute_error=max_abs,
@@ -2470,9 +2635,9 @@ class SeriesComparisonTest(sciunit.Test):
             unsupported_statistical_x_values=tuple(unsupported_statistical_x_values),
             pvalue_aggregation=resolved_pvalue_aggregation,
             pvalue_aggregation_source=pvalue_aggregation_source,
-            minimum_point_count_gate_passed=point_count_gate_passed,
-            coverage_gate_passed=coverage_gate_passed,
-            alignment_support_gate_passed=alignment_support_gate_passed,
+            minimum_point_count_gate_passed=alignment_summary.point_count_gate_passed,
+            coverage_gate_passed=alignment_summary.coverage_gate_passed,
+            alignment_support_gate_passed=alignment_summary.alignment_support_gate_passed,
             residual_gate_passed=residual_gate_passed,
             pvalue_gate_passed=pvalue_gate_passed,
             statistical_gate_passed=(statistical_gate_passed if equivalence_family else legacy_difference_gate_passed),
@@ -2489,25 +2654,15 @@ class SeriesComparisonTest(sciunit.Test):
             resampling_domain_policy=resolved_resampling_domain_policy,
             resampling_domain_policy_origin=resampling_domain_policy_origin,
             declared_resampling_grid_values=tuple(obs.policy.resampling_grid_values),
-            resampling_grid_values=tuple(resampling_metadata.target_grid),
-            resampling_excluded_x_values=tuple(resampling_metadata.excluded_grid),
-            reference_resampling_domain_min_x=resampling_metadata.reference_min_x,
-            reference_resampling_domain_max_x=resampling_metadata.reference_max_x,
-            model_resampling_domain_min_x=resampling_metadata.model_min_x,
-            model_resampling_domain_max_x=resampling_metadata.model_max_x,
+            resampling_grid_values=tuple(alignment_summary.resampling_metadata.target_grid),
+            resampling_excluded_x_values=tuple(alignment_summary.resampling_metadata.excluded_grid),
+            reference_resampling_domain_min_x=alignment_summary.resampling_metadata.reference_min_x,
+            reference_resampling_domain_max_x=alignment_summary.resampling_metadata.reference_max_x,
+            model_resampling_domain_min_x=alignment_summary.resampling_metadata.model_min_x,
+            model_resampling_domain_max_x=alignment_summary.resampling_metadata.model_max_x,
             interpolation_method=obs.policy.interpolation_method,
-            reference_resampled_support_counts=tuple(
-                resampling_metadata.support_count(float(target_x), side="reference")
-                for target_x in aligned_reference_keys
-            )
-            if resampling_metadata.target_grid
-            else (),
-            model_resampled_support_counts=tuple(
-                resampling_metadata.support_count(float(target_x), side="model")
-                for target_x in aligned_reference_keys
-            )
-            if resampling_metadata.target_grid
-            else (),
+            reference_resampled_support_counts=alignment_summary.reference_resampled_support_counts,
+            model_resampled_support_counts=alignment_summary.model_resampled_support_counts,
             distribution_kind=obs.policy.distribution_kind,
             x_quantity_name=obs.x_quantity_name,
             y_quantity_name=obs.y_quantity_name,
@@ -2658,6 +2813,8 @@ __all__ = [
     "SERIES_RESAMPLING_GRID_SOURCES",
     "SeriesComparisonCase",
     "SeriesComparisonEvidencePayload",
+    "SeriesAlignedBin",
+    "SeriesAlignmentSummary",
     "SeriesClusterMembers",
     "SeriesDataSpec",
     "SeriesEquivalenceTestResult",
