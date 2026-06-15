@@ -55,6 +55,12 @@ contract for future sessions.
 - When a change alters the day-to-day workflow that future agents will touch
   again, update the relevant HOWTO/docs in the same task and add a short
   contract note here if the rule needs to persist across chats.
+- When a long-lived side branch or alternate worktree develops a durable
+  repo-wide agent contract, mirror that policy back into the main workspace's
+  `AGENTS.md` once the rule is safe to state generically. Do not leave the main
+  contract stale just because the work first happened elsewhere.
+- Do not mirror branch-only implementation contracts into the main workspace
+  before the corresponding main-workspace code/docs actually match them.
 - Keep non-obvious external operational state discoverable.
   - If a task creates or depends on a directory, worktree, alternate checkout,
     or other easy-to-forget local artifact outside the repo root, record it in
@@ -585,6 +591,11 @@ contract for future sessions.
   - human review status belongs in validation metadata
   - default behavior should preserve separation across incompatible targets
     rather than silently pooling them
+  - if a maintained validation or audit still reads a concrete
+    `research_context/*.csv` file directly, that file must be committed in the
+    branch or the loader must be redirected to a committed dataset output.
+    Clean worktrees must not depend on borrowing untracked local reference CSVs
+    from some other checkout.
 
 ## 5b. Reusable infrastructure extraction rules
 
