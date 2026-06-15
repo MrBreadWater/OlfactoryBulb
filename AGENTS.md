@@ -563,6 +563,10 @@ contract for future sessions.
     `group_abs_diff_max`, `group_positive`, and `all_exact_metric`, emit the
     inequality or equality directly in `criterion_latex` instead of hiding it
     in prose.
+  - For `summary_metric_range`, keep finite closed intervals in the shared
+    absolute-residual form `|x - c| \leq r` and collapse semi-bounded ranges
+    to one-sided inequalities instead of rendering `-\infty \leq x \leq U`
+    or hand-writing endpoint notation in each validation.
   - The dashboard should still surface `criterion_formulae` when a rule only
     supplies supporting math rows.
 

@@ -489,6 +489,15 @@ quantity per rule:
 Those resolved choices now flow through the NeuronUnit-backed scalar cases,
 their typed `case_score` payloads, and the maintained dashboard/CLI evidence.
 
+For `summary_metric_range`, the shared criterion-math builder now renders:
+
+- finite closed intervals as an absolute-residual constraint such as
+  `|x - 9.6| <= 0.7`
+- semi-bounded ranges as one-sided inequalities such as `x <= 30`
+
+Keep `minimum` / `maximum` as the source of truth and let the shared builder
+derive that math instead of hand-writing endpoint notation per rule.
+
 For grouped SciUnit-backed suites, `suite_aggregate_policy` may now use:
 
 - `minimum`

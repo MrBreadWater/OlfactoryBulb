@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
+import math
 import re
 
 
@@ -218,7 +219,37 @@ def criterion_math_for_closed_range(
     *,
     definitions: list[dict[str, Any]] | None = None,
 ) -> CriterionMath:
+    definition_rows = list(definitions or [])
+    if math.isfinite(float(minimum)) and math.isfinite(float(maximum)):
+        if float(minimum) == float(maximum):
+            return CriterionMath(
+                latex=rf"{observed_symbol} = {latex_number(minimum)}",
+                definitions=definition_rows,
+            )
+        center = (float(minimum) + float(maximum)) / 2.0
+        radius = (float(maximum) - float(minimum)) / 2.0
+        if center == 0.0:
+            return CriterionMath(
+                latex=rf"\left|{observed_symbol}\right| \leq {latex_number(radius)}",
+                definitions=definition_rows,
+            )
+        return CriterionMath(
+            latex=rf"\left|{observed_symbol} - {latex_number(center)}\right| \leq {latex_number(radius)}",
+            definitions=definition_rows,
+        )
+    if math.isfinite(float(minimum)):
+        return criterion_math_for_lower_bound(
+            observed_symbol,
+            minimum,
+            definitions=definition_rows,
+        )
+    if math.isfinite(float(maximum)):
+        return criterion_math_for_upper_bound(
+            observed_symbol,
+            maximum,
+            definitions=definition_rows,
+        )
     return CriterionMath(
-        latex=rf"{latex_number(minimum)} \leq {observed_symbol} \leq {latex_number(maximum)}",
-        definitions=list(definitions or []),
+        latex=rf"{observed_symbol} \in \mathbb{{R}}",
+        definitions=definition_rows,
     )

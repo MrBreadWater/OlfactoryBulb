@@ -2147,6 +2147,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     protocol result, validation context, runtime plan, and migrated
     NeuronUnit model/suite bridges no longer have to exchange fresh raw
     `list[dict]` / `dict[group][metric]` scientific payloads at every seam
+  - finite closed `summary_metric_range` rules now render through the shared
+    absolute-residual criterion builder, while semi-bounded ranges collapse to
+    one-sided inequalities, so the maintained validation math no longer falls
+    back to endpoint notation or `-\infty \leq x \leq U` artifacts
   - suite overviews can now also carry a typed `suite_statistical_summary`
     when detailed cases expose compatible equivalence or Welch diagnostics, so
     the overview layer no longer flattens that statistical evidence down to

@@ -1507,6 +1507,12 @@ acceptable = "The observed diameter falls within 8.9 to 10.3 micrometers."
 acceptable_basis = "The accepted interval is declared directly in config."
 ```
 
+The shared criterion-math builder now renders finite `summary_metric_range`
+intervals in absolute-residual form when possible, so the example above shows
+`|\bar{x} - 9.6| \leq 0.7` in the maintained dashboard/CLI rather than raw
+endpoint notation. If one side is open, the same builder collapses it to a
+one-sided inequality such as `\bar{x} \leq 30`.
+
 ### `summary_metric_status_map`
 
 Definition:

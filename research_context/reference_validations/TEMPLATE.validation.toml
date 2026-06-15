@@ -205,6 +205,8 @@ validation_design_review_status = "pending"
 # title = "Soma diameter stays inside the accepted range"
 # criterion = "Explain the accepted numeric band."
 # This rule auto-generates criterion math from `minimum` and `maximum`.
+# Finite closed intervals render in absolute-residual form such as
+# `|x - 10| <= 2`; semi-bounded ranges collapse to one-sided inequalities.
 # Add explicit `criterion_latex`, `criterion_formulae`, or
 # `criterion_definitions` only for custom rule kinds that do not generate
 # their own math.

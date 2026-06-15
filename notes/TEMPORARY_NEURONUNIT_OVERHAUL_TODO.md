@@ -324,6 +324,16 @@ Remove this file when the listed items are either:
         layer
       - added focused regression coverage for mapping compatibility,
         grouped-summary generation, and protocol/context boundary coercion
+- [x] Finish the summary-range math cleanup so maintained closed intervals use
+      the shared absolute-residual form instead of raw endpoint notation.
+      - `criterion_math_for_closed_range` now emits `|x - c| <= r` for finite
+        closed intervals, one-sided inequalities for semi-bounded intervals,
+        and exact equality for zero-width ranges
+      - `epli_correctness` now shows forms such as
+        `|\bar{x}_{\mathrm{EPLI}} - 9.6| \leq 0.7` and
+        `\bar{x}_{\mathrm{EPLI}} \leq 30` on the live maintained path
+      - updated the maintained HOWTO/tutorial/template contract to make that
+        rendering rule explicit
 - [x] Move the Burton MC/TC legacy summary CSV dependency behind the same
       declarative reference-dataset contract used by the other maintained
       literature bundles.
