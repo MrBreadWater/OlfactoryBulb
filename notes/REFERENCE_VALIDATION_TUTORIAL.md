@@ -1705,6 +1705,10 @@ Important details:
   payload in addition to `suite_norm_score_summary`, so the dashboard can show
   the configured aggregate rollup instead of reconstructing it from raw
   detailed evidence
+- grouped SciUnit-backed rule families can override that rollup with
+  `suite_aggregate_policy = { norm_rollup = "mean" | "median" }`; the
+  maintained default remains `worst_case` status plus `minimum` normalized
+  score
 - reference/model provenance summaries for series comparisons now come from a
   shared typed provenance contract rather than bespoke dict assembly in the
   rule bridge

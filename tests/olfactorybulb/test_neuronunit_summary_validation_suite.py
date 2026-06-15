@@ -120,6 +120,8 @@ rules = [
         "acceptable": "Counts are nonzero.",
         "acceptable_basis": "Synthetic basis.",
         "evidence_metric_keys": ["baseline_MCs_count", "baseline_TCs_count", "baseline_GCs_count"],
+        "suite_name": "synthetic_summary_policy_demo",
+        "suite_aggregate_policy": {"norm_rollup": "mean"},
     },
     {
         "kind": "summary_metric_status_map",
@@ -133,6 +135,7 @@ rules = [
         "description": "Synthetic status-map suite test.",
         "acceptable": "Code 1 should warn.",
         "acceptable_basis": "Synthetic basis.",
+        "suite_aggregate_policy": {"norm_rollup": "mean"},
     },
     {
         "kind": "summary_metric_range",
@@ -150,12 +153,13 @@ rules = [
 ]
 items = build_rule_items(rules, context)
 assert [item.check_id for item in items] == [
-    "epli_correctness.summary_rules.overview",
+    "synthetic_summary_policy_demo.overview",
     "baseline_slice_population_counts",
     "epli_target_pattern_specificity",
 ]
 assert [item.status for item in items] == ["WARN", "PASS", "WARN"]
 assert items[0].detail_level == "summary"
+assert items[0].evidence["suite_aggregate_score"]["score_text"] == "worst WARN, mean norm 0.75"
 assert items[1].criterion_latex == r"\bar{x}_{\mathrm{ungrouped}} \geq 1"
 assert items[2].evidence["warn_values"] == [1.0]
 
@@ -168,7 +172,7 @@ non_skip_context = ValidationRuleContext(
 )
 items_non_skip = build_rule_items(rules, non_skip_context)
 assert [item.check_id for item in items_non_skip] == [
-    "epli_correctness.summary_rules.overview",
+    "synthetic_summary_policy_demo.overview",
     "baseline_slice_population_counts",
     "epli_target_pattern_specificity",
     "synthetic_soma_diameter",

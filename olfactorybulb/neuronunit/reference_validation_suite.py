@@ -287,13 +287,19 @@ def _reference_band_case_result(case: ReferenceBandCase, score: ReferenceBandSco
     )
 
 
-def audit_items_from_reference_band_suite(compiled: CompiledReferenceBandSuite) -> list[AuditItem]:
+def audit_items_from_reference_band_suite(
+    compiled: CompiledReferenceBandSuite,
+    *,
+    descriptor: SuiteDescriptor | None = None,
+) -> list[AuditItem]:
     judged = compiled.judge()
-    return suite_items_from_judged(
-        descriptor=SuiteDescriptor(
+    if descriptor is None:
+        descriptor = SuiteDescriptor(
             suite_id=str(compiled.suite.name or "reference-band-suite"),
             suite_kind_label="Reference-band suite",
-        ),
+        )
+    return suite_items_from_judged(
+        descriptor=descriptor,
         judged=judged,
         result_builder=_reference_band_case_result,
     )

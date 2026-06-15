@@ -164,6 +164,8 @@ validation_design_review_status = "pending"
 # acceptable = "The observed value is at least the configured minimum."
 # acceptable_basis = "The threshold is declared directly in the validation config."
 # evidence_metric_keys = ["candidate_entry_count", "candidate_group_count"]
+# Optional suite rollup override for grouped SciUnit-backed rules:
+# suite_aggregate_policy = { norm_rollup = "mean" }
 
 # [[checks]]
 # kind = "summary_metric_range"
@@ -299,6 +301,8 @@ validation_design_review_status = "pending"
 # x_quantity_name = "Injected current"
 # y_quantity_name = "Firing rate"
 # alignment_policy = "exact_transformed_x"
+# Optional suite rollup override for contiguous grouped curve checks:
+# suite_aggregate_policy = { norm_rollup = "mean" }
 # For slightly unaligned extracted/model x bins:
 # alignment_policy = "nearest_within_tolerance"
 # x_match_tolerance = 0.5

@@ -205,8 +205,17 @@ def _summary_score_text(case: SummaryRuleCase, score: SummaryRuleScore) -> str:
     return f"observed {rounded(float(observed)):g}"
 
 
-def audit_items_from_summary_rule_suite(compiled: CompiledSummaryRuleSuite) -> list[AuditItem]:
+def audit_items_from_summary_rule_suite(
+    compiled: CompiledSummaryRuleSuite,
+    *,
+    descriptor: SuiteDescriptor | None = None,
+) -> list[AuditItem]:
     judged = compiled.judge()
+    if descriptor is None:
+        descriptor = SuiteDescriptor(
+            suite_id=str(compiled.suite.name or "summary-rule-suite"),
+            suite_kind_label="Summary-rule suite",
+        )
     def _result_builder(case: SummaryRuleCase, score: SummaryRuleScore):
         observed = numeric_value(score.observed)
         base: dict[str, Any] = {"group": case.group, "observed": observed}
@@ -244,10 +253,7 @@ def audit_items_from_summary_rule_suite(compiled: CompiledSummaryRuleSuite) -> l
         )
 
     return suite_items_from_judged(
-        descriptor=SuiteDescriptor(
-            suite_id=str(compiled.suite.name or "summary-rule-suite"),
-            suite_kind_label="Summary-rule suite",
-        ),
+        descriptor=descriptor,
         judged=judged,
         result_builder=_result_builder,
     )

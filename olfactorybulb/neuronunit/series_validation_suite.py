@@ -1606,12 +1606,23 @@ def _series_score_text(case: SeriesComparisonCase, score: SeriesComparisonScore)
     return residual_text or statistical_text
 
 
-def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonSuite) -> list[AuditItem]:
+def audit_items_from_series_comparison_suite(
+    compiled: CompiledSeriesComparisonSuite,
+    *,
+    descriptor: SuiteDescriptor | None = None,
+) -> list[AuditItem]:
     judged = compiled.judge()
     protocol_context = compiled.model.get_protocol_evidence_map()
     candidate_ids = protocol_context.get("cell_models", [])
     if not isinstance(candidate_ids, list):
         candidate_ids = []
+
+    if descriptor is None:
+        descriptor = SuiteDescriptor(
+            suite_id=str(compiled.suite.name or "series-comparison-suite"),
+            suite_kind_label="Series-comparison suite",
+            candidate_ids=tuple(str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()),
+        )
 
     def _result_builder(case: SeriesComparisonCase, score: SeriesComparisonScore):
         obs = case.observation
@@ -1648,11 +1659,7 @@ def audit_items_from_series_comparison_suite(compiled: CompiledSeriesComparisonS
         )
 
     return suite_items_from_judged(
-        descriptor=SuiteDescriptor(
-            suite_id=str(compiled.suite.name or "series-comparison-suite"),
-            suite_kind_label="Series-comparison suite",
-            candidate_ids=tuple(str(candidate_id) for candidate_id in candidate_ids if str(candidate_id).strip()),
-        ),
+        descriptor=descriptor,
         judged=judged,
         result_builder=_result_builder,
     )

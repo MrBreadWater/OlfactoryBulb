@@ -27,6 +27,7 @@ from olfactorybulb.audit.reference_validation_specs import (
     ReferenceBandRuleSpec,
     SeriesComparisonRuleSpec,
     SummaryRuleSpec,
+    grouped_suite_descriptor as _grouped_suite_descriptor,
     optional_float as _optional_float,
     property_band_modes as _property_band_modes,
     property_override as _property_override,
@@ -519,9 +520,13 @@ def _build_summary_rule_items(
     if not rules:
         return []
     cases = [SummaryRuleSpec.from_rule(rule, context).to_case() for rule in rules]
-    suite_name = f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.summary_rules"
-    compiled = compile_summary_rule_suite(cases=cases, summary=context.summary, suite_name=suite_name)
-    return audit_items_from_summary_rule_suite(compiled)
+    descriptor = _grouped_suite_descriptor(
+        rules,
+        default_suite_id=f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.summary_rules",
+        suite_kind_label="Summary-rule suite",
+    )
+    compiled = compile_summary_rule_suite(cases=cases, summary=context.summary, suite_name=descriptor.suite_id)
+    return audit_items_from_summary_rule_suite(compiled, descriptor=descriptor)
 
 
 def _build_comparison_rule_items(
@@ -531,14 +536,18 @@ def _build_comparison_rule_items(
     if not rules:
         return []
     cases = [ComparisonRuleSpec.from_rule(rule).to_case() for rule in rules]
-    suite_name = f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.comparison_rules"
+    descriptor = _grouped_suite_descriptor(
+        rules,
+        default_suite_id=f"{str(context.config.get('validation_id', 'validation')).strip() or 'validation'}.comparison_rules",
+        suite_kind_label="Comparison-rule suite",
+    )
     compiled = compile_comparison_rule_suite(
         cases=cases,
         summary=context.summary,
         metrics=context.metrics,
-        suite_name=suite_name,
+        suite_name=descriptor.suite_id,
     )
-    return audit_items_from_comparison_rule_suite(compiled)
+    return audit_items_from_comparison_rule_suite(compiled, descriptor=descriptor)
 
 
 def _build_series_rule_items(
@@ -562,18 +571,23 @@ def _build_series_rule_items(
                 evidence_series_specs=evidence_series_specs,
             )
         )
-    suite_name = (
-        str(rules[0].get("suite_name", context.config.get("validation_id", "validation"))).strip()
-        or "validation"
+    raw_candidate_ids = protocol_evidence.get("cell_models", [])
+    if not isinstance(raw_candidate_ids, list):
+        raw_candidate_ids = []
+    descriptor = _grouped_suite_descriptor(
+        rules,
+        default_suite_id=str(context.config.get("validation_id", "validation")).strip() or "validation",
+        suite_kind_label="Series-comparison suite",
+        candidate_ids=[str(candidate_id) for candidate_id in raw_candidate_ids if str(candidate_id).strip()],
     )
     compiled = compile_series_comparison_suite(
         cases=cases,
         summary=context.summary,
         metrics=context.metrics,
         protocol_evidence=protocol_evidence,
-        suite_name=suite_name,
+        suite_name=descriptor.suite_id,
     )
-    return audit_items_from_series_comparison_suite(compiled)
+    return audit_items_from_series_comparison_suite(compiled, descriptor=descriptor)
 
 
 def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | None:

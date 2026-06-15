@@ -225,6 +225,16 @@ specific adapter. Use the typed `SuiteDescriptor` there to carry the suite id,
 suite kind label, candidate/model ids, and aggregate-policy choice as one
 bundle instead of threading those fields through several helper calls.
 
+If you want a non-default suite rollup for one of those grouped suite families,
+declare it explicitly on every contiguous rule in the block:
+
+```toml
+suite_aggregate_policy = { norm_rollup = "mean" }
+```
+
+The maintained default is still `norm_rollup = "minimum"` with
+`status_rollup = "worst_case"`.
+
 One consequence of that split is that **reference-band assumptions belong in
 config**, not hidden in Python defaults. A metric such as membrane resting
 voltage can often tolerate a symmetric arithmetic band, while a metric such as

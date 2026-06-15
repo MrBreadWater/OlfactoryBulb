@@ -26,6 +26,11 @@ from olfactorybulb.neuronunit.series_validation_suite import (
     SeriesVisualContract,
 )
 from olfactorybulb.neuronunit.summary_validation_suite import SummaryRuleCase
+from olfactorybulb.neuronunit.suite_scores import (
+    DEFAULT_SUITE_AGGREGATE_POLICY,
+    SuiteAggregatePolicy,
+    SuiteDescriptor,
+)
 
 
 def optional_float(value: Any) -> float | None:
@@ -158,6 +163,66 @@ def summary_group(rule: dict[str, Any], context: Any) -> str:
     if len(context.summary) == 1:
         return next(iter(context.summary))
     return str(context.config.get("default_group", "ungrouped"))
+
+
+def suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAggregatePolicy:
+    raw_policy = rule.get("suite_aggregate_policy")
+    if raw_policy in (None, ""):
+        return DEFAULT_SUITE_AGGREGATE_POLICY
+    if not isinstance(raw_policy, dict):
+        raise ValueError("suite_aggregate_policy must be a table when provided")
+    status_rollup = str(raw_policy.get("status_rollup", DEFAULT_SUITE_AGGREGATE_POLICY.status_rollup)).strip()
+    norm_rollup = str(raw_policy.get("norm_rollup", DEFAULT_SUITE_AGGREGATE_POLICY.norm_rollup)).strip()
+    return SuiteAggregatePolicy(
+        status_rollup=status_rollup or DEFAULT_SUITE_AGGREGATE_POLICY.status_rollup,
+        norm_rollup=norm_rollup or DEFAULT_SUITE_AGGREGATE_POLICY.norm_rollup,
+    )
+
+
+def _explicit_suite_aggregate_policy_from_rule(rule: dict[str, Any]) -> SuiteAggregatePolicy | None:
+    raw_policy = rule.get("suite_aggregate_policy")
+    if raw_policy in (None, ""):
+        return None
+    return suite_aggregate_policy_from_rule(rule)
+
+
+def grouped_suite_descriptor(
+    rules: list[dict[str, Any]],
+    *,
+    default_suite_id: str,
+    suite_kind_label: str,
+    candidate_ids: list[str] | tuple[str, ...] = (),
+) -> SuiteDescriptor:
+    if not rules:
+        raise ValueError("grouped_suite_descriptor requires at least one rule")
+    explicit_suite_names = {
+        str(rule.get("suite_name", "")).strip()
+        for rule in rules
+        if str(rule.get("suite_name", "")).strip()
+    }
+    if len(explicit_suite_names) > 1:
+        raise ValueError(
+            "Grouped SciUnit-backed rules require a consistent suite_name when compiled together; "
+            f"got {sorted(explicit_suite_names)!r}"
+        )
+    explicit_policies = {
+        policy
+        for rule in rules
+        for policy in [_explicit_suite_aggregate_policy_from_rule(rule)]
+        if policy is not None
+    }
+    if len(explicit_policies) > 1:
+        raise ValueError(
+            "Grouped SciUnit-backed rules require a consistent suite_aggregate_policy when compiled together"
+        )
+    suite_id = next(iter(explicit_suite_names), default_suite_id)
+    aggregate_policy = next(iter(explicit_policies), DEFAULT_SUITE_AGGREGATE_POLICY)
+    return SuiteDescriptor(
+        suite_id=suite_id,
+        suite_kind_label=suite_kind_label,
+        candidate_ids=tuple(candidate_ids),
+        aggregate_policy=aggregate_policy,
+    )
 
 
 @dataclass(frozen=True)

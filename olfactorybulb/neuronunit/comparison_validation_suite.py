@@ -282,8 +282,17 @@ def _comparison_score_text(case: ComparisonRuleCase, score: ComparisonRuleScore)
     return ""
 
 
-def audit_items_from_comparison_rule_suite(compiled: CompiledComparisonRuleSuite) -> list[AuditItem]:
+def audit_items_from_comparison_rule_suite(
+    compiled: CompiledComparisonRuleSuite,
+    *,
+    descriptor: SuiteDescriptor | None = None,
+) -> list[AuditItem]:
     judged = compiled.judge()
+    if descriptor is None:
+        descriptor = SuiteDescriptor(
+            suite_id=str(compiled.suite.name or "comparison-rule-suite"),
+            suite_kind_label="Comparison-rule suite",
+        )
     def _result_builder(case: ComparisonRuleCase, score: ComparisonRuleScore):
         item = AuditItem(
             check_id=case.check_id,
@@ -306,10 +315,7 @@ def audit_items_from_comparison_rule_suite(compiled: CompiledComparisonRuleSuite
         )
 
     return suite_items_from_judged(
-        descriptor=SuiteDescriptor(
-            suite_id=str(compiled.suite.name or "comparison-rule-suite"),
-            suite_kind_label="Comparison-rule suite",
-        ),
+        descriptor=descriptor,
         judged=judged,
         result_builder=_result_builder,
     )
