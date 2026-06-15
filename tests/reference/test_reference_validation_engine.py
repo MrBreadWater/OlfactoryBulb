@@ -17,6 +17,10 @@ from olfactorybulb.audit.reference_validation_config import (
     validation_protocol_runner_id,
     validation_title,
 )
+from olfactorybulb.audit.reference_validation_specs import (
+    NotePresenceRuleSpec,
+    ProtocolExecutedRuleSpec,
+)
 from olfactorybulb.audit.reference_validation_protocols import get_validation_protocol_spec
 
 
@@ -44,6 +48,40 @@ assert "gc_intrinsic_validation" in listed_validations.stdout
 assert "epl_fsi_intrinsic_validation" in listed_validations.stdout
 assert "epli_correctness" in listed_validations.stdout
 assert "TEMPLATE" not in listed_validations.stdout
+
+protocol_rule_spec = ProtocolExecutedRuleSpec.from_rule({})
+assert protocol_rule_spec.fallback_series_key == "fi_curve_rows"
+protocol_rule_spec = ProtocolExecutedRuleSpec.from_rule({"fallback_series_key": "custom_rows"})
+assert protocol_rule_spec.fallback_series_key == "custom_rows"
+
+note_rule_spec = NotePresenceRuleSpec.from_rule(
+    {
+        "scope": "gc",
+        "row_contexts": [
+            {
+                "loader": "csv:synthetic.csv",
+                "as_protocol_context": True,
+                "property_name": "Synthetic Protocol",
+                "filter_field": "protocol_id",
+                "filter_value_arg": "protocol_id",
+                "filters": [{"field": "sample_scope", "value": "example_cell"}],
+            }
+        ],
+        "synthetic_contexts": [{"protocol_id": "SYNTH", "Property": "Synthetic Protocol"}],
+    }
+)
+assert note_rule_spec.scope == "gc"
+assert len(note_rule_spec.row_contexts) == 1
+assert note_rule_spec.row_contexts[0].loader == "csv:synthetic.csv"
+assert note_rule_spec.row_contexts[0].as_protocol_context is True
+assert note_rule_spec.row_contexts[0].property_name == "Synthetic Protocol"
+assert note_rule_spec.row_contexts[0].to_filter_spec() == {
+    "loader": "csv:synthetic.csv",
+    "filter_field": "protocol_id",
+    "filter_value_arg": "protocol_id",
+    "filters": [{"field": "sample_scope", "value": "example_cell"}],
+}
+assert note_rule_spec.synthetic_contexts == ({"protocol_id": "SYNTH", "Property": "Synthetic Protocol"},)
 
 listed_protocols = subprocess.run(
     [sys.executable, "tools/run_reference_validation.py", "--validation-id", "burton_urban_fi", "--list-protocols"],

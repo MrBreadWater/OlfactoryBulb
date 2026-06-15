@@ -178,3 +178,7 @@ Remove this file when the listed items are either:
       one consistent rollup path.
       - `ReferenceBandRuleSpec` now carries a `SuiteDescriptor`
       - `reference_band_rows` accepts the same `suite_aggregate_policy` field
+- [x] Move the remaining shell-side rule parsing off raw handler-local dict
+      plumbing without pulling those rules into the NeuronUnit core.
+      - added typed parser specs for `protocol_executed` and `note_presence`
+      - kept those rules in the audit shell as intended

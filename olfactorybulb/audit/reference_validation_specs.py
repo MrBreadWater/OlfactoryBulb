@@ -354,6 +354,84 @@ class SummaryRuleSpec:
 
 
 @dataclass(frozen=True)
+class ProtocolExecutedRuleSpec:
+    fallback_series_key: str = "fi_curve_rows"
+
+    @classmethod
+    def from_rule(cls, rule: dict[str, Any]) -> "ProtocolExecutedRuleSpec":
+        return cls(
+            fallback_series_key=str(rule.get("fallback_series_key", "fi_curve_rows")).strip() or "fi_curve_rows",
+        )
+
+
+@dataclass(frozen=True)
+class NotePresenceRowContextSpec:
+    loader: str
+    as_protocol_context: bool = False
+    property_name: str = "FI Protocol"
+    filter_field: str = ""
+    filter_value: Any = None
+    filter_values: tuple[Any, ...] = ()
+    filter_value_arg: str = ""
+    filter_values_arg: str = ""
+    filters: tuple[dict[str, Any], ...] = ()
+
+    @classmethod
+    def from_rule(cls, raw: dict[str, Any]) -> "NotePresenceRowContextSpec":
+        return cls(
+            loader=str(raw["loader"]),
+            as_protocol_context=bool(raw.get("as_protocol_context")),
+            property_name=str(raw.get("property_name", "FI Protocol")).strip() or "FI Protocol",
+            filter_field=str(raw.get("filter_field", "")).strip(),
+            filter_value=raw.get("filter_value"),
+            filter_values=tuple(raw.get("filter_values", []) or ()),
+            filter_value_arg=str(raw.get("filter_value_arg", "")).strip(),
+            filter_values_arg=str(raw.get("filter_values_arg", "")).strip(),
+            filters=tuple(dict(item) for item in raw.get("filters", []) if isinstance(item, dict)),
+        )
+
+    def to_filter_spec(self) -> dict[str, Any]:
+        spec: dict[str, Any] = {"loader": self.loader}
+        if self.filter_field:
+            spec["filter_field"] = self.filter_field
+        if self.filter_value is not None:
+            spec["filter_value"] = self.filter_value
+        if self.filter_values:
+            spec["filter_values"] = list(self.filter_values)
+        if self.filter_value_arg:
+            spec["filter_value_arg"] = self.filter_value_arg
+        if self.filter_values_arg:
+            spec["filter_values_arg"] = self.filter_values_arg
+        if self.filters:
+            spec["filters"] = [dict(item) for item in self.filters]
+        return spec
+
+
+@dataclass(frozen=True)
+class NotePresenceRuleSpec:
+    scope: str | None
+    row_contexts: tuple[NotePresenceRowContextSpec, ...]
+    synthetic_contexts: tuple[dict[str, Any], ...]
+
+    @classmethod
+    def from_rule(cls, rule: dict[str, Any]) -> "NotePresenceRuleSpec":
+        scope_text = str(rule.get("scope", "")).strip()
+        return cls(
+            scope=scope_text or None,
+            row_contexts=tuple(
+                NotePresenceRowContextSpec.from_rule(raw)
+                for raw in rule.get("row_contexts", [])
+                if isinstance(raw, dict)
+            ),
+            synthetic_contexts=tuple(
+                dict(raw)
+                for raw in rule.get("synthetic_contexts", [])
+                if isinstance(raw, dict)
+            ),
+        )
+
+
+@dataclass(frozen=True)
 class ComparisonRuleSpec:
     rule_kind: str
     check_id: str

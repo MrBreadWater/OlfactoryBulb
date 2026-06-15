@@ -675,6 +675,12 @@ contract for future sessions.
     compiles through a `SuiteDescriptor` and accepts the same
     `suite_aggregate_policy` contract as the grouped summary/comparison/series
     suite families.
+  - Keep shell-side meta rules such as `protocol_executed` and `note_presence`
+    in the audit layer, but do not leave their declarative parsing as raw
+    handler-local dict plumbing. Route their rule-specific config through typed
+    parser objects in `olfactorybulb.audit.reference_validation_specs` so the
+    declarative surface stays uniform even when a rule intentionally remains
+    outside the NeuronUnit scientific core.
 
 ## 5b. Reusable infrastructure extraction rules
 

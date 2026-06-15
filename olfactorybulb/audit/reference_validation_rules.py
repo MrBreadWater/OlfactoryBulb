@@ -24,6 +24,8 @@ from olfactorybulb.audit.reference_data import (
 from olfactorybulb.audit.reference_notes import load_notes, notes_for_rows
 from olfactorybulb.audit.reference_validation_specs import (
     ComparisonRuleSpec,
+    NotePresenceRuleSpec,
+    ProtocolExecutedRuleSpec,
     ReferenceBandRuleSpec,
     SeriesComparisonRuleSpec,
     SummaryRuleSpec,
@@ -602,17 +604,18 @@ def _notes_path(rule: dict[str, Any], context: ValidationRuleContext) -> Path | 
 
 @register_validation_rule("protocol_executed")
 def _protocol_executed(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
+    parsed_spec = ProtocolExecutedRuleSpec.from_rule(rule)
     protocol_evidence = dict(getattr(context.protocol_result, "protocol_evidence", {}) or {})
     series_visuals: list[dict[str, Any]] = []
     evidence_series_specs = tuple(getattr(context.protocol_result, "evidence_series_specs", ()) or ())
-    for spec in evidence_series_specs:
-        series_visuals.append(spec.to_visual_spec())
+    for evidence_spec in evidence_series_specs:
+        series_visuals.append(evidence_spec.to_visual_spec())
     if not series_visuals:
-        fi_curve_rows = protocol_evidence.get("fi_curve_rows")
-        if isinstance(fi_curve_rows, list) and fi_curve_rows:
+        fallback_rows = protocol_evidence.get(parsed_spec.fallback_series_key)
+        if isinstance(fallback_rows, list) and fallback_rows:
             series_visuals.append(
                 series_visual_spec(
-                    keys=["fi_curve_rows"],
+                    keys=[parsed_spec.fallback_series_key],
                     style={
                         "line_width": 1.8,
                         "marker_size": 3.2,
@@ -784,13 +787,12 @@ def _reference_band_rows(rule: dict[str, Any], context: ValidationRuleContext) -
 
 @register_validation_rule("note_presence")
 def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list[AuditItem]:
-    scope = str(rule.get("scope", "")).strip() or None
-    row_contexts = list(rule.get("row_contexts", []))
+    spec = NotePresenceRuleSpec.from_rule(rule)
     rows: list[dict[str, Any]] = []
-    for row_context in row_contexts:
-        context_rows = _filter_rows(_load_rows(str(row_context["loader"])), row_context, args=context.args)
-        if row_context.get("as_protocol_context"):
-            property_name = str(row_context.get("property_name", "FI Protocol"))
+    for row_context in spec.row_contexts:
+        context_rows = _filter_rows(_load_rows(row_context.loader), row_context.to_filter_spec(), args=context.args)
+        if row_context.as_protocol_context:
+            property_name = row_context.property_name
             for row in context_rows:
                 rows.append(
                     {
@@ -802,10 +804,10 @@ def _note_presence(rule: dict[str, Any], context: ValidationRuleContext) -> list
                 )
         else:
             rows.extend(context_rows)
-    for synthetic in list(rule.get("synthetic_contexts", [])):
+    for synthetic in spec.synthetic_contexts:
         rows.append(dict(synthetic))
     notes_path = _notes_path(rule, context)
-    matched_notes = notes_for_rows(rows, scope=scope, notes=load_notes(notes_path) if notes_path else None)
+    matched_notes = notes_for_rows(rows, scope=spec.scope, notes=load_notes(notes_path) if notes_path else None)
     evidence = {
         "protocol_ids_in_scope": sorted(
             {

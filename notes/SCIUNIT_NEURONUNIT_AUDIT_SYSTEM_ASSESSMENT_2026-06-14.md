@@ -2054,6 +2054,9 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     as well as the grouped summary/comparison/series suite families, so the
     declarative suite contract is uniform across the migrated scientific rule
     surface
+  - the remaining shell-side meta checks such as `protocol_executed` and
+    `note_presence` now parse through typed config specs too, while still
+    remaining outside the NeuronUnit scientific-core layer
 
 The remaining open questions are now narrower:
 
