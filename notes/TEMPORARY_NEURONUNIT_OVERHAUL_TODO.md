@@ -313,6 +313,17 @@ Remove this file when the listed items are either:
       - suite overviews and the status-matrix header now surface a compact
         statistical summary when the detailed cases expose compatible
         equivalence or Welch diagnostics
+- [x] Lift protocol metric rows and grouped numeric summaries onto one typed
+      shared contract instead of reintroducing fresh raw `list[dict]` /
+      `dict[group][metric]` bundles at the protocol, plan, context, and
+      migrated-suite seams.
+      - added `olfactorybulb.neuronunit.metric_tables`
+      - `ProtocolRunResult`, `ValidationRuleContext`,
+        `ReferenceValidationPlan`, `ReferenceValidationModel`, and the
+        migrated suite compilers now coerce through that shared metric-table
+        layer
+      - added focused regression coverage for mapping compatibility,
+        grouped-summary generation, and protocol/context boundary coercion
 - [x] Move the Burton MC/TC legacy summary CSV dependency behind the same
       declarative reference-dataset contract used by the other maintained
       literature bundles.

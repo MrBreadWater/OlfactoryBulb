@@ -10,6 +10,7 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricSummary
+from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable
 from olfactorybulb.neuronunit.metric_quantities import (
     MetricQuantitySpec,
     resolve_metric_quantity,
@@ -200,7 +201,7 @@ class CompiledSummaryRuleSuite:
 def compile_summary_rule_suite(
     *,
     cases: list[SummaryRuleCase],
-    summary: dict[str, dict[str, float]],
+    summary: MetricSummaryTable | dict[str, dict[str, float]],
     suite_name: str,
 ) -> CompiledSummaryRuleSuite:
     tests = [SummaryRuleTest(case) for case in cases]

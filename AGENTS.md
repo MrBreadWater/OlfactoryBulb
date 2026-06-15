@@ -706,7 +706,12 @@ contract for future sessions.
     path on the shared typed scalar layer in
     `olfactorybulb.neuronunit.scalar_observations` instead of rebuilding raw
     dict bundles for metric maps, group pairs, or grouped scalar sets in each
-    rule family. When a suite aggregate policy uses `norm_rollup = "weighted_mean"`, only do so
+    rule family. Keep protocol metric rows and grouped numeric summaries on the
+    shared typed metric-table layer in
+    `olfactorybulb.neuronunit.metric_tables` rather than passing fresh
+    `list[dict]` / `dict[group][metric]` bundles through the protocol result,
+    validation context, and NeuronUnit suite/model seams. When a suite
+    aggregate policy uses `norm_rollup = "weighted_mean"`, only do so
     for a suite family that emits a principled per-case weight through the
     shared suite-case contract. In the maintained branch that currently means
     the series-comparison suite family, which uses matched-point count as its

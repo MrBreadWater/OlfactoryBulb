@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 import math
 
-import numpy as np
-
 from olfactorybulb.audit import AuditItem, series_visual_spec
 from olfactorybulb.audit.protocol_evidence import protocol_evidence_bundle_from_resultish
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
@@ -50,18 +48,29 @@ from olfactorybulb.neuronunit.summary_validation_suite import (
     audit_items_from_summary_rule_suite,
     compile_summary_rule_suite,
 )
+from olfactorybulb.neuronunit.metric_tables import (
+    MetricSummaryTable,
+    MetricTable,
+    coerce_metric_summary_table,
+    coerce_metric_table,
+)
 
 
 @dataclass(frozen=True)
 class ValidationRuleContext:
-    metrics: list[dict[str, Any]]
-    summary: dict[str, dict[str, float]]
+    metrics: MetricTable | list[dict[str, Any]]
+    summary: MetricSummaryTable | dict[str, dict[str, float]]
     args: Any
     validation_id: str
     default_group: str
     notes_path: str
     design_review_defaults: ValidationDesignReviewDefaultsSpec
     protocol_result: Any | None = None
+
+    def __post_init__(self) -> None:
+        group_field = str(getattr(self.protocol_result, "group_field", "cell_type") or "cell_type")
+        object.__setattr__(self, "metrics", coerce_metric_table(self.metrics, group_field=group_field))
+        object.__setattr__(self, "summary", coerce_metric_summary_table(self.summary))
 
 
 RuleHandler = Callable[[dict[str, Any], ValidationRuleContext], list[AuditItem]]
@@ -134,29 +143,11 @@ def register_validation_rule(kind: str) -> Callable[[RuleHandler], RuleHandler]:
 
 
 def summarize_numeric_metrics(
-    metrics: list[dict[str, Any]],
+    metrics: MetricTable | list[dict[str, Any]],
     *,
     group_field: str = "cell_type",
-) -> dict[str, dict[str, float]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for metric in metrics:
-        group = str(metric.get(group_field, "")).strip() or "ungrouped"
-        grouped.setdefault(group, []).append(metric)
-
-    summary: dict[str, dict[str, float]] = {}
-    for group, rows in grouped.items():
-        numeric_keys: set[str] = set()
-        for row in rows:
-            for key, value in row.items():
-                if isinstance(value, (bool, list, tuple, dict, str)) or value is None:
-                    continue
-                if isinstance(value, (int, float, np.integer, np.floating)):
-                    numeric_keys.add(str(key))
-        summary[group] = {
-            key: _mean_metric(rows, key)
-            for key in sorted(numeric_keys)
-        }
-    return summary
+) -> MetricSummaryTable:
+    return coerce_metric_table(metrics, group_field=group_field).summarize(group_field=group_field)
 
 
 def build_rule_items(
@@ -342,17 +333,6 @@ def _rule_item(
 
 def _rule_status(rule: dict[str, Any], passed: bool) -> str:
     return str(rule.get("pass_status", "PASS") if passed else rule.get("fail_status", "FAIL"))
-
-
-def _mean_metric(rows: list[dict[str, Any]], key: str) -> float:
-    values = [
-        float(value)
-        for value in (row.get(key) for row in rows)
-        if _is_finite_number(value)
-    ]
-    if not values:
-        return float("nan")
-    return float(np.mean(values))
 
 
 def _is_finite_number(value: Any) -> bool:

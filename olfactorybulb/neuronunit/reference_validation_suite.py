@@ -17,6 +17,12 @@ from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceMap,
     ProvidesProtocolEvidenceRows,
 )
+from olfactorybulb.neuronunit.metric_tables import (
+    MetricSummaryTable,
+    MetricTable,
+    coerce_metric_summary_table,
+    coerce_metric_table,
+)
 from olfactorybulb.neuronunit.reference_bands import (
     ReferenceBandObservation,
     measurement_with_unit,
@@ -60,18 +66,18 @@ class ReferenceValidationModel(
     def __init__(
         self,
         *,
-        summary: dict[str, dict[str, float]],
-        metrics: list[dict[str, Any]] | None = None,
+        summary: MetricSummaryTable | dict[str, dict[str, float]],
+        metrics: MetricTable | list[dict[str, Any]] | None = None,
         protocol_evidence: ProtocolEvidenceBundle | dict[str, Any] | None = None,
         name: str = "reference-validation-summary-model",
     ) -> None:
         super().__init__(name=name)
-        self.summary = summary
-        self.metrics = list(metrics or [])
+        self.summary = coerce_metric_summary_table(summary)
+        self.metrics = coerce_metric_table(metrics or [])
         self.protocol_evidence = coerce_protocol_evidence_bundle(protocol_evidence)
 
     def get_metric_summary(self, group: str, metric_key: str, *, unit_text: str = "") -> float | pq.Quantity:
-        value = float(self.summary.get(group, {}).get(metric_key, float("nan")))
+        value = self.summary.metric_value(group, metric_key)
         return measurement_with_unit(value, unit_text)
 
     def get_metric_value_map(
@@ -82,9 +88,7 @@ class ReferenceValidationModel(
         unit_text: str = "",
     ) -> dict[str, Any]:
         values: dict[str, Any] = {}
-        for index, row in enumerate(self.metrics):
-            entity = str(row.get(entity_key, f"row_{index}"))
-            value = row.get(metric_key)
+        for entity, value in self.metrics.metric_value_map(metric_key, entity_key=entity_key).items():
             if isinstance(value, bool) or value is None:
                 values[entity] = value
                 continue
@@ -224,7 +228,7 @@ class CompiledReferenceBandSuite:
 def compile_reference_band_suite(
     *,
     cases: list[ReferenceBandCase],
-    summary: dict[str, dict[str, float]],
+    summary: MetricSummaryTable | dict[str, dict[str, float]],
     suite_name: str,
 ) -> CompiledReferenceBandSuite:
     tests = [ReferenceBandTest(case) for case in cases]

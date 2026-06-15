@@ -19,6 +19,7 @@ from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceMap,
     ProvidesProtocolEvidenceRows,
 )
+from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.provenance import SeriesProvenanceSummary
 from olfactorybulb.neuronunit.reference_bands import measurement_with_unit, numeric_value, quantity_unit_for_text
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
@@ -1678,8 +1679,8 @@ class CompiledSeriesComparisonSuite:
 def compile_series_comparison_suite(
     *,
     cases: list[SeriesComparisonCase],
-    summary: dict[str, dict[str, float]],
-    metrics: list[dict[str, Any]],
+    summary: MetricSummaryTable | dict[str, dict[str, float]],
+    metrics: MetricTable | list[dict[str, Any]],
     protocol_evidence: dict[str, Any],
     suite_name: str,
 ) -> CompiledSeriesComparisonSuite:

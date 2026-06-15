@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
 from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle, coerce_protocol_evidence_bundle
+from olfactorybulb.neuronunit.metric_tables import MetricTable, coerce_metric_table
 
 
 def _normalize_cache_value(value: Any) -> Any:
@@ -66,13 +67,13 @@ class ProtocolExecutionCacheInfo:
 
 @dataclass(frozen=True)
 class ProtocolRunResult:
-    metrics: list[dict[str, Any]]
+    metrics: MetricTable | list[dict[str, Any]]
     protocol_evidence: ProtocolEvidenceBundle | dict[str, Any]
     group_field: str = "cell_type"
     cache_info: ProtocolExecutionCacheInfo | None = None
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, "metrics", copy.deepcopy(list(self.metrics)))
+        object.__setattr__(self, "metrics", coerce_metric_table(self.metrics, group_field=self.group_field))
         object.__setattr__(self, "protocol_evidence", coerce_protocol_evidence_bundle(self.protocol_evidence))
 
 

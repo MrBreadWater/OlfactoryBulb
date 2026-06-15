@@ -27,6 +27,7 @@ from olfactorybulb.audit.reference_validation_rules import (
     compile_rule_dispatches,
     summarize_numeric_metrics,
 )
+from olfactorybulb.neuronunit.metric_tables import MetricTable
 
 
 def _skip_item_to_audit_item(
@@ -128,7 +129,7 @@ class ReferenceValidationPlan:
     def build_rule_items(
         self,
         *,
-        metrics: list[dict[str, Any]],
+        metrics: MetricTable | list[dict[str, Any]],
         args: argparse.Namespace,
         protocol_result: Any | None,
     ) -> list[AuditItem]:

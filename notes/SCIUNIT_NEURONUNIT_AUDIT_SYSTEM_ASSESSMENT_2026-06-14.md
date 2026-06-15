@@ -2142,6 +2142,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     tests no longer have to shuttle raw dict bundles for metric maps,
     left/right group pairs, or grouped scalar value sets through their score
     builders
+  - protocol metric rows and grouped numeric summaries now also share one
+    typed contract in `olfactorybulb.neuronunit.metric_tables`, so the
+    protocol result, validation context, runtime plan, and migrated
+    NeuronUnit model/suite bridges no longer have to exchange fresh raw
+    `list[dict]` / `dict[group][metric]` scientific payloads at every seam
   - suite overviews can now also carry a typed `suite_statistical_summary`
     when detailed cases expose compatible equivalence or Welch diagnostics, so
     the overview layer no longer flattens that statistical evidence down to

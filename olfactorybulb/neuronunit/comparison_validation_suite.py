@@ -10,6 +10,7 @@ import sciunit
 
 from olfactorybulb.audit.core import rounded
 from olfactorybulb.neuronunit.capabilities import ProvidesMetricRows, ProvidesMetricSummary
+from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable
 from olfactorybulb.neuronunit.metric_quantities import MetricQuantitySpec, resolve_metric_quantity
 from olfactorybulb.neuronunit.reference_bands import numeric_value
 from olfactorybulb.neuronunit.reference_validation_suite import ReferenceValidationModel
@@ -293,8 +294,8 @@ class CompiledComparisonRuleSuite:
 def compile_comparison_rule_suite(
     *,
     cases: list[ComparisonRuleCase],
-    summary: dict[str, dict[str, float]],
-    metrics: list[dict[str, Any]],
+    summary: MetricSummaryTable | dict[str, dict[str, float]],
+    metrics: MetricTable | list[dict[str, Any]],
     suite_name: str,
 ) -> CompiledComparisonRuleSuite:
     tests = [ComparisonRuleTest(case) for case in cases]

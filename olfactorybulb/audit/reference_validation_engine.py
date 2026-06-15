@@ -10,6 +10,7 @@ from olfactorybulb.audit.reference_validation_plan import (
     ReferenceValidationPlan,
     load_reference_validation_plan,
 )
+from olfactorybulb.neuronunit.metric_tables import MetricTable
 
 
 def add_reference_validation_common_args(parser: argparse.ArgumentParser) -> None:
@@ -36,7 +37,7 @@ def apply_validation_defaults(args: argparse.Namespace, *, validation: Reference
 
 def build_reference_validation_items(
     *,
-    metrics: list[dict[str, Any]],
+    metrics: MetricTable | list[dict[str, Any]],
     args: argparse.Namespace,
     validation: ReferenceValidationPlan,
     protocol_result: Any | None,
