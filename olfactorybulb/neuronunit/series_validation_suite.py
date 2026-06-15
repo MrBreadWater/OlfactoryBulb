@@ -251,6 +251,14 @@ class SeriesResamplingMetadata:
                 return len(series_ids)
         return 0
 
+    def support_ids(self, target_x: float, *, side: str) -> tuple[str, ...]:
+        support_entries = self.reference_support_ids if side == "reference" else self.model_support_ids
+        target_value = float(target_x)
+        for entry_x, series_ids in support_entries:
+            if np.isclose(float(entry_x), target_value):
+                return tuple(str(series_id) for series_id in series_ids)
+        return ()
+
 
 @dataclass(frozen=True)
 class ResolvedResamplingGrid:
@@ -262,6 +270,13 @@ class ResolvedResamplingGrid:
     resolved_max_x: float | None = None
     max_x_origin: str = ""
     lookup_scope: str = ""
+
+
+@dataclass(frozen=True)
+class SeriesResampledSupportEntry:
+    x_value: float
+    reference_series_ids: tuple[str, ...] = ()
+    model_series_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -284,6 +299,8 @@ class SeriesAlignedBin:
     model_cluster_x_values: tuple[float, ...] = ()
     reference_resampled_support_count: int = 0
     model_resampled_support_count: int = 0
+    reference_resampled_support_series_ids: tuple[str, ...] = ()
+    model_resampled_support_series_ids: tuple[str, ...] = ()
 
     @property
     def absolute_difference(self) -> float:
@@ -373,6 +390,19 @@ class SeriesAlignmentSummary:
         if not self.resampling_metadata.target_grid:
             return ()
         return tuple(item.model_resampled_support_count for item in self.bins)
+
+    @property
+    def resampled_support_provenance(self) -> tuple[SeriesResampledSupportEntry, ...]:
+        if not self.resampling_metadata.target_grid:
+            return ()
+        return tuple(
+            SeriesResampledSupportEntry(
+                x_value=item.visual_x,
+                reference_series_ids=item.reference_resampled_support_series_ids,
+                model_series_ids=item.model_resampled_support_series_ids,
+            )
+            for item in self.bins
+        )
 
     @property
     def absolute_differences(self) -> tuple[float, ...]:
@@ -1464,6 +1494,39 @@ def _coerced_int_sequence(values: list[int] | tuple[int, ...]) -> tuple[int, ...
     return tuple(result)
 
 
+def _coerced_resampled_support_entries(
+    values: Sequence[SeriesResampledSupportEntry | Mapping[str, object]],
+) -> tuple[SeriesResampledSupportEntry, ...]:
+    entries: list[SeriesResampledSupportEntry] = []
+    for value in values:
+        if isinstance(value, SeriesResampledSupportEntry):
+            entries.append(value)
+            continue
+        if not isinstance(value, Mapping):
+            continue
+        x_value = _coerced_float(value.get("x_value"))
+        if x_value is None:
+            continue
+        reference_series_ids = tuple(
+            str(series_id).strip()
+            for series_id in value.get("reference_series_ids", ())
+            if str(series_id).strip()
+        )
+        model_series_ids = tuple(
+            str(series_id).strip()
+            for series_id in value.get("model_series_ids", ())
+            if str(series_id).strip()
+        )
+        entries.append(
+            SeriesResampledSupportEntry(
+                x_value=float(x_value),
+                reference_series_ids=reference_series_ids,
+                model_series_ids=model_series_ids,
+            )
+        )
+    return tuple(entries)
+
+
 def _rounded_float_or_raw(value: float | None) -> float | None:
     if value is None:
         return None
@@ -1565,6 +1628,7 @@ class SeriesComparisonEvidencePayload:
     interpolation_method: str = "linear"
     reference_resampled_support_counts: tuple[int, ...] = ()
     model_resampled_support_counts: tuple[int, ...] = ()
+    resampled_support_provenance: tuple[SeriesResampledSupportEntry, ...] = ()
     distribution_kind: str = "empirical_by_x"
     x_quantity_name: str = "series x-value"
     y_quantity_name: str = "series y-value"
@@ -1684,6 +1748,11 @@ class SeriesComparisonEvidencePayload:
         object.__setattr__(self, "interpolation_method", str(self.interpolation_method).strip())
         object.__setattr__(self, "reference_resampled_support_counts", _coerced_int_sequence(self.reference_resampled_support_counts))
         object.__setattr__(self, "model_resampled_support_counts", _coerced_int_sequence(self.model_resampled_support_counts))
+        object.__setattr__(
+            self,
+            "resampled_support_provenance",
+            _coerced_resampled_support_entries(self.resampled_support_provenance),
+        )
         object.__setattr__(self, "distribution_kind", str(self.distribution_kind).strip())
         object.__setattr__(self, "x_quantity_name", str(self.x_quantity_name).strip())
         object.__setattr__(self, "y_quantity_name", str(self.y_quantity_name).strip())
@@ -1906,6 +1975,14 @@ class SeriesComparisonEvidencePayload:
             "interpolation_method": self.interpolation_method,
             "reference_resampled_support_counts": list(self.reference_resampled_support_counts),
             "model_resampled_support_counts": list(self.model_resampled_support_counts),
+            "resampled_support_provenance": [
+                {
+                    "x_value": rounded(float(entry.x_value)),
+                    "reference_series_ids": list(entry.reference_series_ids),
+                    "model_series_ids": list(entry.model_series_ids),
+                }
+                for entry in self.resampled_support_provenance
+            ],
             "distribution_kind": self.distribution_kind,
             "x_quantity_name": self.x_quantity_name,
             "y_quantity_name": self.y_quantity_name,
@@ -2122,6 +2199,14 @@ def _series_alignment_summary(
                 model_cluster_x_values=model_cluster_x_values,
                 reference_resampled_support_count=resampling_metadata.support_count(float(reference_key), side="reference"),
                 model_resampled_support_count=resampling_metadata.support_count(float(reference_key), side="model"),
+                reference_resampled_support_series_ids=resampling_metadata.support_ids(
+                    float(reference_key),
+                    side="reference",
+                ),
+                model_resampled_support_series_ids=resampling_metadata.support_ids(
+                    float(reference_key),
+                    side="model",
+                ),
             )
         )
 
@@ -3017,6 +3102,7 @@ class SeriesComparisonTest(sciunit.Test):
             interpolation_method=obs.policy.interpolation_method,
             reference_resampled_support_counts=alignment_summary.reference_resampled_support_counts,
             model_resampled_support_counts=alignment_summary.model_resampled_support_counts,
+            resampled_support_provenance=alignment_summary.resampled_support_provenance,
             distribution_kind=obs.policy.distribution_kind,
             x_quantity_name=obs.x_quantity_name,
             y_quantity_name=obs.y_quantity_name,
@@ -3179,6 +3265,7 @@ __all__ = [
     "SeriesObservedDataset",
     "SeriesObservedDatasetPair",
     "SeriesPredictionBundle",
+    "SeriesResampledSupportEntry",
     "SeriesResamplingMetadata",
     "SeriesDistributionObservation",
     "SeriesVisualContract",

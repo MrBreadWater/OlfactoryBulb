@@ -1756,6 +1756,8 @@ Important details:
   and `step_hold`
 - supported `resampling_domain_policy` values are `allow_partial_support`,
   `intersection`, `reference`, and `model`
+- emitted evidence for resampled-grid comparisons now includes compact per-bin
+  support provenance, not just aligned-support counts
 - if `resampling_grid_source = "explicit_grid"`, also declare
   `resampling_grid_values = [ ... ]`
 - if `resampling_grid_source = "lookup_grid"`, also declare

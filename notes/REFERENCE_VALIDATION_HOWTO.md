@@ -803,7 +803,9 @@ declare one of:
 
 The emitted evidence records both the resolved policy and the filtered-out
 grid points, so the domain choice stays visible instead of hiding behind a
-coverage fraction alone.
+coverage fraction alone. For resampled-grid comparisons it also records
+compact per-bin support provenance, so you can see which reference/model
+series ids actually supported each aligned grid x value.
 
 For transforms, start with:
 

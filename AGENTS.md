@@ -637,7 +637,10 @@ contract for future sessions.
     reused from protocol/model metadata, prefer
     `resampling_grid_source = "lookup_grid"` plus
     `resampling_grid_lookup_key = "..."` over copying the same explicit grid
-    values into multiple validation rules.
+    values into multiple validation rules. When a resampled-grid comparison is
+    used, keep the emitted support provenance inspectable too: aligned support
+    counts are not enough when future reviewers need to know which concrete
+    series ids actually supported each grid x value.
     Series-comparison evidence should keep the chosen score family plus compact
     reference/model provenance summaries visible in the emitted item payload.
     When a side has explicit series ids, keep per-series provenance summaries

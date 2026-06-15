@@ -740,3 +740,10 @@ Remove this file when the listed items are either:
         grid values, uniform-step settings, or explicit grid min/max bounds
       - direct suite coverage and rule-level coverage now prove a maintained
         metadata-backed grid path
+- [x] Keep aligned resampled-grid support provenance explicit instead of
+      exposing only support counts.
+      - series evidence now emits compact per-bin support provenance showing
+        which reference/model series ids actually supported each aligned grid
+        x value
+      - direct suite coverage and rule-level coverage now assert those
+        support-provenance payloads

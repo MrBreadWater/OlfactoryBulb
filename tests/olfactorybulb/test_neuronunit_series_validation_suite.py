@@ -1256,6 +1256,12 @@ assert resampled_items[1].evidence["currents_pA"] == [125.0, 200.0, 225.0, 300.0
 assert resampled_items[1].evidence["matched_point_count"] == 4
 assert resampled_items[1].evidence["reference_resampled_support_counts"] == [2, 2, 2, 2]
 assert resampled_items[1].evidence["model_resampled_support_counts"] == [2, 2, 2, 2]
+assert resampled_items[1].evidence["resampled_support_provenance"] == [
+    {"x_value": 125.0, "reference_series_ids": ["RsRef1", "RsRef2"], "model_series_ids": ["RsModel1", "RsModel2"]},
+    {"x_value": 200.0, "reference_series_ids": ["RsRef1", "RsRef2"], "model_series_ids": ["RsModel1", "RsModel2"]},
+    {"x_value": 225.0, "reference_series_ids": ["RsRef1", "RsRef2"], "model_series_ids": ["RsModel1", "RsModel2"]},
+    {"x_value": 300.0, "reference_series_ids": ["RsRef1", "RsRef2"], "model_series_ids": ["RsModel1", "RsModel2"]},
+]
 assert resampled_items[1].evidence["mean_absolute_error"] == 0.0
 assert resampled_items[1].evidence["mean_absolute_error_Hz"] == 0.0
 
@@ -1457,6 +1463,11 @@ assert uniform_step_resampled_items[1].evidence["resampling_grid_max_x_origin"] 
 assert uniform_step_resampled_items[1].evidence["currents_pA"] == [125.0, 150.0, 175.0, 200.0, 225.0, 250.0, 275.0, 300.0]
 assert uniform_step_resampled_items[1].evidence["resampling_excluded_x_values"] == [100.0, 325.0]
 assert uniform_step_resampled_items[1].evidence["matched_point_count"] == 8
+assert uniform_step_resampled_items[1].evidence["resampled_support_provenance"][0] == {
+    "x_value": 125.0,
+    "reference_series_ids": ["RsRef1", "RsRef2"],
+    "model_series_ids": ["RsModel1", "RsModel2"],
+}
 
 lookup_grid_resampled_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -1522,6 +1533,11 @@ assert lookup_grid_resampled_items[1].evidence["resampling_grid_lookup_key"] == 
 assert lookup_grid_resampled_items[1].evidence["resampling_grid_lookup_scope"] == "context"
 assert lookup_grid_resampled_items[1].evidence["currents_pA"] == [150.0, 200.0, 250.0, 300.0]
 assert lookup_grid_resampled_items[1].evidence["matched_point_count"] == 4
+assert lookup_grid_resampled_items[1].evidence["resampled_support_provenance"][-1] == {
+    "x_value": 300.0,
+    "reference_series_ids": ["RsRef1", "RsRef2"],
+    "model_series_ids": ["RsModel1", "RsModel2"],
+}
 
 coverage_observation = SeriesDistributionObservation(
     protocol_evidence_key="fi_curve_rows",
@@ -2171,6 +2187,11 @@ assert lookup_grid_rule_items[1].status == "PASS"
 assert lookup_grid_rule_items[1].evidence["resampling_grid_source"] == "lookup_grid"
 assert lookup_grid_rule_items[1].evidence["resampling_grid_lookup_key"] == "comparison_grid_pA"
 assert lookup_grid_rule_items[1].evidence["currents_pA"] == [150.0, 200.0, 250.0, 300.0]
+assert lookup_grid_rule_items[1].evidence["resampled_support_provenance"][0] == {
+    "x_value": 150.0,
+    "reference_series_ids": ["RsRef1", "RsRef2"],
+    "model_series_ids": ["RsModel1", "RsModel2"],
+}
 
 coverage_rule = dict(resampled_rule)
 coverage_rule["check_id"] = "synthetic_resampled_series_coverage_gate"

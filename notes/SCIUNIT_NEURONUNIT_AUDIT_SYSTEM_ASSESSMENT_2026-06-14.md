@@ -2357,6 +2357,10 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     carries compact per-series summaries when explicit series ids are present,
     so future example-cell validations can inspect source identity without
     re-parsing raw row bundles
+  - aligned resampled-grid support provenance is more explicit too: emitted
+    series evidence now carries compact per-bin support provenance showing
+    which reference/model series ids actually supported each aligned grid x
+    value, not just the support counts
   - the suite-level statistical-support contract is now visible in the
     migrated presentation layer too: when a suite matrix has only partial
     statistical support or fails its declared support gate, the dashboard
@@ -2385,8 +2389,8 @@ The remaining open questions are now narrower:
   `uniform_step`; `linear`, `nearest`, `pchip`, `step_hold`;
   `allow_partial_support`, `intersection`, `reference`, `model`)
 - more explicit provenance-bearing series observation objects if future
-  validations need more than the current aggregate-plus-per-series source
-  summaries
+  validations need more than the current aggregate/per-series summaries plus
+  the new aligned-bin resampling-support provenance
 - how much NeuronUnit-native result presentation should grow before it starts
   competing with the maintained audit shell instead of feeding it
 

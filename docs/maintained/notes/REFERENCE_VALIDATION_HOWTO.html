@@ -855,7 +855,9 @@ declare one of:</p>
 </ul>
 <p>The emitted evidence records both the resolved policy and the filtered-out
 grid points, so the domain choice stays visible instead of hiding behind a
-coverage fraction alone.</p>
+coverage fraction alone. For resampled-grid comparisons it also records
+compact per-bin support provenance, so you can see which reference/model
+series ids actually supported each aligned grid x value.</p>
 <p>For transforms, start with:</p>
 <ul>
 <li><code>kind = "identity"</code> when the source axis is already expressed in the desired
