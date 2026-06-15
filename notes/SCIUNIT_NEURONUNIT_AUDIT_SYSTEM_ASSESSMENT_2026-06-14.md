@@ -2243,6 +2243,11 @@ far to generalize it next. The branch now treats the maintained v1 contract as:
     on one shared frozen `ScalarValueMapPayload` instead of advertising fresh
     mutable dict seams after the scalar prediction has crossed into the
     NeuronUnit-side scientific core
+  - the runtime per-entity metric-map seam is tighter too: `MetricTable` and
+    `ReferenceValidationModel` now expose one shared frozen
+    `MetricValueMapPayload` instead of building fresh mutable dicts and then
+    immediately re-coercing them again in the scalar comparison/exactness
+    helper layer
   - the literature-row seam is tighter too: `_load_rows`, `_filter_rows`, and
     the `reference_band_rows` / `reference_curve_match` spec entrypoints now
     pass through a shared typed `olfactorybulb.audit.reference_rows` layer

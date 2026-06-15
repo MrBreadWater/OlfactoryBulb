@@ -564,6 +564,15 @@ Remove this file when the listed items are either:
         payload while preserving the low-ceremony helper constructors
       - direct scalar-observation coverage now asserts those stored maps are
         typed payloads
+- [x] Keep the runtime per-entity metric-map seam typed instead of returning
+      fresh dicts from the metric-table/model boundary and then re-coercing
+      them in the scalar helper layer.
+      - added `MetricValueMapPayload`
+      - `MetricTable.metric_value_map(...)` and
+        `ReferenceValidationModel.get_metric_value_map(...)` now return that
+        shared frozen payload
+      - direct metric-table, comparison-suite, and reference-model coverage
+        now assert the maintained accessor returns the typed payload
 - [x] Keep the literature-row loading/filtering seam on a shared typed wrapper
       instead of rediscovering raw CSV-style dict rows inside each rule/spec
       helper.

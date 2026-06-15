@@ -705,6 +705,11 @@ contract for future sessions.
     core, store per-entity or per-group values on a shared frozen mapping
     payload instead of leaving `ScalarMetricValueMap` /
     `ScalarGroupValueSet` to advertise fresh mutable dict seams.
+    Keep the runtime per-entity metric-map seam typed too. Once a maintained
+    `MetricTable` or `ReferenceValidationModel` exposes a per-entity metric
+    map, return one shared frozen `MetricValueMapPayload` instead of
+    rediscovering a fresh mutable dict and then re-coercing it again in the
+    scalar helper layer.
     Inside the series-comparison core itself, prefer the typed
     `SeriesDataSpec` / `SeriesVisualContract` layer over repeating raw
     x-key/y-key/unit/transform parameter bundles across bins, paths,

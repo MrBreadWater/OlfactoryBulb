@@ -23,6 +23,7 @@ from olfactorybulb.neuronunit.capabilities import (
     ProvidesProtocolEvidenceRows,
 )
 from olfactorybulb.neuronunit.metric_tables import (
+    MetricValueMapPayload,
     MetricRowRecord,
     MetricSummaryRecord,
     MetricSummaryTable,
@@ -117,7 +118,7 @@ class ReferenceValidationModel(
         entity_key: str = "cell_name",
         *,
         unit_text: str = "",
-    ) -> dict[str, Any]:
+    ) -> MetricValueMapPayload:
         values: dict[str, Any] = {}
         for entity, value in self.metrics.metric_value_map(metric_key, entity_key=entity_key).items():
             if isinstance(value, bool) or value is None:
@@ -129,7 +130,7 @@ class ReferenceValidationModel(
                 values[entity] = value
                 continue
             values[entity] = measurement_with_unit(numeric, unit_text)
-        return values
+        return MetricValueMapPayload.from_mapping(values)
 
     def get_protocol_evidence_rows(self, evidence_key: str) -> ProtocolEvidenceRowTable:
         return self.protocol_evidence.row_table(evidence_key)

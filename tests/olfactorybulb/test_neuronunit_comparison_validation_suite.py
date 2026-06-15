@@ -8,6 +8,7 @@ from olfactorybulb.audit.reference_validation_document import ValidationDesignRe
 from olfactorybulb.audit.core import AuditReport
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext, build_rule_items
 from olfactorybulb.audit.reference_validation_rules import compile_rule_dispatches
+from olfactorybulb.neuronunit.metric_tables import MetricValueMapPayload
 from olfactorybulb.neuronunit.comparison_validation_suite import (
     ComparisonRuleCase,
     audit_items_from_comparison_rule_suite,
@@ -173,6 +174,9 @@ compiled = compile_comparison_rule_suite(
 assert compiled.model.runtime_data.summary is compiled.model.summary
 assert compiled.model.runtime_data.metrics is compiled.model.metrics
 assert len(compiled.model.runtime_data.metrics.rows) == 2
+metric_value_map = compiled.model.get_metric_value_map("zero_step_rate_Hz")
+assert isinstance(metric_value_map, MetricValueMapPayload)
+assert metric_value_map.to_dict() == {"MC1": 0.0, "TC1": 0.0}
 assert cases[0].observation_payload() == {
     "rule_kind": "all_exact_metric",
     "metric_key": "zero_step_rate_Hz",

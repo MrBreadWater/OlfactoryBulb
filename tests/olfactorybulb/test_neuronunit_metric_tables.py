@@ -8,7 +8,12 @@ from olfactorybulb.audit.protocol_evidence import ProtocolEvidenceBundle
 from olfactorybulb.audit.reference_validation_document import ValidationDesignReviewDefaultsSpec
 from olfactorybulb.audit.reference_validation_protocol_core import ProtocolRunResult
 from olfactorybulb.audit.reference_validation_rules import ValidationRuleContext
-from olfactorybulb.neuronunit.metric_tables import MetricSummaryTable, MetricTable, coerce_metric_table
+from olfactorybulb.neuronunit.metric_tables import (
+    MetricSummaryTable,
+    MetricTable,
+    MetricValueMapPayload,
+    coerce_metric_table,
+)
 
 
 rows = [
@@ -41,7 +46,9 @@ assert isinstance(metric_table, MetricTable)
 assert len(metric_table) == 3
 assert metric_table[0]["cell_name"] == "MC1"
 assert metric_table[0].get("rheobase_pA") == 100.0
-assert metric_table.metric_value_map("rheobase_pA") == {
+metric_value_map = metric_table.metric_value_map("rheobase_pA")
+assert isinstance(metric_value_map, MetricValueMapPayload)
+assert metric_value_map.to_dict() == {
     "MC1": 100.0,
     "MC2": 110.0,
     "TC1": 90.0,

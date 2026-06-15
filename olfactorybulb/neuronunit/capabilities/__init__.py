@@ -67,7 +67,9 @@ class ProvidesMetricRows(sciunit.Capability):
         """
         Return a mapping from audited-row identity to the requested metric value.
 
-        Implementations may return either naked floats or quantities values.
+        The maintained runtime/model seam may return a typed frozen mapping
+        payload rather than a fresh mutable dict. Values may be naked floats or
+        quantities values.
         """
         raise NotImplementedError()
 

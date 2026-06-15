@@ -8,6 +8,8 @@ from typing import Any, Iterable, Iterator, Mapping, Sequence
 
 import numpy as np
 
+from olfactorybulb.neuronunit.frozen_payloads import FrozenMappingPayload, coerce_mapping_payload
+
 
 def _is_numeric_metric_value(value: Any) -> bool:
     if isinstance(value, (bool, str)) or value is None:
@@ -50,6 +52,10 @@ class MetricRowRecord(Mapping[str, Any]):
 
     def to_dict(self) -> dict[str, Any]:
         return copy.deepcopy(dict(self.values))
+
+
+class MetricValueMapPayload(FrozenMappingPayload):
+    """Frozen per-entity metric-value map used by the runtime/model seam."""
 
 
 @dataclass(frozen=True)
@@ -190,12 +196,12 @@ class MetricTable(Sequence[MetricRowRecord]):
         metric_key: str,
         *,
         entity_key: str = "cell_name",
-    ) -> dict[str, Any]:
+    ) -> MetricValueMapPayload:
         values: dict[str, Any] = {}
         for index, row in enumerate(self.rows):
             entity = str(row.get(entity_key, f"row_{index}"))
             values[entity] = row.get(metric_key)
-        return values
+        return coerce_mapping_payload(values, payload_type=MetricValueMapPayload)
 
     @staticmethod
     def _mean_metric(rows: Iterable[MetricRowRecord], key: str) -> float:
@@ -230,6 +236,7 @@ def coerce_metric_summary_table(
 
 
 __all__ = [
+    "MetricValueMapPayload",
     "MetricRowRecord",
     "MetricSummaryRecord",
     "MetricSummaryTable",

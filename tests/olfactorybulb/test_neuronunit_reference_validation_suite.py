@@ -34,6 +34,7 @@ from olfactorybulb.neuronunit.reference_validation_suite import (
     audit_items_from_reference_band_suite,
     compile_reference_band_suite,
 )
+from olfactorybulb.neuronunit.metric_tables import MetricValueMapPayload
 from olfactorybulb.neuronunit.suite_scores import SuiteDescriptor, SuiteAggregatePolicy
 
 
@@ -135,6 +136,9 @@ assert protocol_rows.to_rows() == [{"cell_name": "SyntheticCell", "current_pA": 
 assert bundle_model.model.get_protocol_evidence_map() == {
     "fi_curve_rows": [{"cell_name": "SyntheticCell", "current_pA": 100.0}]
 }
+metric_value_map = bundle_model.model.get_metric_value_map("input_resistance_MOhm")
+assert isinstance(metric_value_map, MetricValueMapPayload)
+assert metric_value_map.to_dict() == {}
 
 adapted_items = audit_items_from_reference_band_suite(compiled)
 assert len(adapted_items) == 2
